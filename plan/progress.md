@@ -34,7 +34,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 29 | identifiability | done | done | done |
 | 30 | constrained-lp | done | done | done |
 | 31 | diffusion-explicit | done | done | done |
-| 32 | diffusion-implicit | done | running | |
+| 32 | diffusion-implicit | done | done | done |
 | 33 | steady-state-2d | done | done | done |
 | 34 | advection-diffusion | done | running | |
 | 35 | reaction-diffusion | running | | |
