@@ -185,22 +185,14 @@ legend("bottomright", c("Lie splitting (slope 1)", "Strang splitting (slope 2)",
 dev.off()
 
 ## ---- fig05: temperature step ----------------------------------------------------------
-## Assumed: in the warm (27 °C) half, k is 2x and D is 1.2x their 20 °C values.
+## Assumed: in the warm (27 °C) half, k is 2x its 20 °C value; D and the
+## influx j are unchanged (the ~20 % change of D is ignored, see the notes).
 
-Dloc <- function(N, Dx, kx) {           # variable D: flux form, ghost points
-  dx <- L / N; xn <- (0:N) * dx; Dm <- Dx((xn[-1] + xn[-(N + 1)]) / 2)   # D at midpoints
-  lo <- c(0, -Dm[-N] / dx^2, -2 * Dm[N] / dx^2)
-  up <- c(-2 * Dm[1] / dx^2, -Dm[-1] / dx^2, 0)
-  di <- c(2 * Dm[1], Dm[-N] + Dm[-1], 2 * Dm[N]) / dx^2 + kx(xn)
-  rhs <- c(2 * j / dx, rep(0, N))
-  list(x = xn, c = thomas(lo, di, up, rhs))
-}
-N5 <- 500
-cold <- function(x) rep(1, length(x)); warm <- function(x) rep(1, length(x))
-s_cold <- Dloc(N5, function(x) D + 0 * x, function(x) k + 0 * x)
-s_warm <- Dloc(N5, function(x) 1.2 * D + 0 * x, function(x) 2 * k + 0 * x)
-s_pw <- Dloc(N5, function(x) ifelse(x < L / 2, D, 1.2 * D), function(x) ifelse(x < L / 2, k, 2 * k))
-s_aw <- Dloc(N5, function(x) ifelse(x < L / 2, 1.2 * D, D), function(x) ifelse(x < L / 2, 2 * k, k))
+N5 <- 500; x5 <- (0:N5) * L / N5
+s_cold <- steady(N5, 0.01)
+s_warm <- steady(N5, 0.02)
+s_pw <- steady(N5, ifelse(x5 < L / 2, 0.01, 0.02))
+s_aw <- steady(N5, ifelse(x5 < L / 2, 0.02, 0.01))
 xT <- function(s, thr = 0.1) approx(s$c, s$x, thr)$y
 cat("threshold 0.1 at: cold", xT(s_cold), "warm", xT(s_warm), "post warm", xT(s_pw), "ant warm", xT(s_aw), "\n")
 svg("fig05-tstep.svg", width = 10, height = 5.2)

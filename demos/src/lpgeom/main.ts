@@ -65,6 +65,14 @@ const fmt = (v: number, d = 3): string => {
 };
 const pt = (v: Vec): string => `(${fmt(v[0], 2)}, ${fmt(v[1], 2)})`;
 
+/** A shadow price from the one-sided slopes [below, above]; a kink shows both. */
+function priceStr([l, r]: [number, number]): string {
+  if (Number.isNaN(l) && Number.isNaN(r)) return "–";
+  if (Number.isNaN(l)) return `${fmt(r)} (infeasible below)`;
+  if (Number.isNaN(r)) return `${fmt(l)} (infeasible above)`;
+  return Math.abs(l - r) < 1e-6 ? fmt(r) : `${fmt(l)} below / ${fmt(r)} above (kink)`;
+}
+
 // ---- the limits of the ATP LP ----
 interface Limit { key: string; name: string; label: string; a: Vec; ge: boolean; min: number; max: number; step: number; def: number; col: string; dash: string }
 const LIMITS: Limit[] = [
@@ -159,7 +167,7 @@ function buildLp(box: HTMLElement, uid: number, presetKey: string): void {
   const scanRow = htmlEl("div", "lg-row", "", right);
   htmlEl("span", "", "scan:", scanRow);
   const fBtns = presets(scanRow, LIMITS.map((L, k) => ({ label: L.name, apply: () => { st.focus = k; draw(); } })));
-  const SW = 350, SH = 230;
+  const SW = 350, SH = 210;
   const scan = svgEl("svg", { viewBox: `0 0 ${SW} ${SH}`, role: "img", "aria-label": "Best ATP against one limit" }, right);
   scan.style.width = "100%"; scan.style.height = "auto";
 
@@ -416,7 +424,7 @@ function buildLp(box: HTMLElement, uid: number, presetKey: string): void {
       LIMITS.forEach((L, k) => {
         if (!st.on[k]) return;
         const [l, r] = price(k);
-        const s = Math.abs(l - r) < 1e-6 ? fmt(r) : `${fmt(l)} below / ${fmt(r)} above (kink)`;
+        const s = priceStr([l, r]);
         items.push(`${L.name} <b>${s}</b>`);
       });
       line(`shadow prices (ATP per unit of limit): ${items.join("; ")}`);
@@ -424,7 +432,10 @@ function buildLp(box: HTMLElement, uid: number, presetKey: string): void {
     if (pathMsg.length) {
       const d = htmlEl("div", "", "", ro);
       d.style.borderTop = "1px solid #ccc"; d.style.paddingTop = ".2em";
-      pathMsg.forEach((m, i) => { const p = htmlEl("div", "", "", d); p.textContent = `${i}. ${m}`; });
+      const sol2 = solve2(halfPlanes(), st.c);
+      const verts = path.map(i => isFar(sol2.poly[i]) ? "∞" : pt(sol2.poly[i]));
+      htmlEl("div", "", `simplex path (${path.length - 1} step${path.length === 2 ? "" : "s"}): ${verts.join(" → ")}`, d).style.fontWeight = "600";
+      htmlEl("div", "", pathMsg[pathMsg.length - 1], d);
     } else if (sol.status !== "infeasible") line("<i>step ▶ walks the simplex path from (0, 0)</i>");
 
     drawScan();
@@ -479,7 +490,7 @@ function buildLp(box: HTMLElement, uid: number, presetKey: string): void {
     if (cur.status === "optimal" || cur.status === "tie") {
       svgEl("circle", { cx: px(st.b[k]), cy: py(cur.z), r: 7, fill: OI.red, stroke: "#fff", "stroke-width": 2 }, scan);
       const [pl, pr] = price(k);
-      const txt = Math.abs(pl - pr) < 1e-6 ? `slope ${fmt(pr)}` : `slope ${fmt(pl)} | ${fmt(pr)}`;
+      const txt = Number.isNaN(pl) || Number.isNaN(pr) || Math.abs(pl - pr) < 1e-6 ? `slope ${fmt(Number.isNaN(pr) ? pl : pr)}` : `slope ${fmt(pl)} | ${fmt(pr)}`;
       const right = px(st.b[k]) < (l + r) / 2;
       const tt = svgEl("text", { x: px(st.b[k]) + (right ? 10 : -10), y: Math.max(t + 30, Math.min(bt - 10, py(cur.z) + (cur.z > zmax * 0.6 ? 26 : -12))), "text-anchor": right ? "start" : "end", "font-weight": 600 }, scan);
       tt.style.fill = OI.red; tt.style.paintOrder = "stroke"; tt.style.stroke = "#fff"; tt.style.strokeWidth = "4px";
@@ -531,7 +542,6 @@ function buildFba(box: HTMLElement, uid: number): void {
     const z0 = z(st[which]);
     return [(z0 - z(st[which] - h)) / h, (z(st[which] + h) - z0) / h];
   };
-  const pstr = ([l, r]: [number, number]) => Number.isNaN(l) || Math.abs(l - r) < 1e-6 ? fmt(r) : `${fmt(l)} below / ${fmt(r)} above`;
 
   function draw(): void {
     const sol = fba(st);
@@ -609,7 +619,7 @@ function buildFba(box: HTMLElement, uid: number): void {
     if (sol.status !== "optimal") { line(`<b>${sol.status}</b>`, "lg-bad"); return; }
     line(`<b>growth (BIO) ${fmt(sol.z)}</b>${sol.z < 1e-9 ? " — lethal" : ""}`, "lg-ok");
     line(`glucose used ${fmt(sol.x[0])}, oxygen used ${fmt(sol.x[1])}, acetate secreted ${fmt(sol.x[7])}`);
-    line(`shadow prices: glucose <b>${pstr(price("glc"))}</b>, oxygen <b>${pstr(price("o2"))}</b>`);
+    line(`shadow prices: glucose <b>${priceStr(price("glc"))}</b>, oxygen <b>${priceStr(price("o2"))}</b>`);
     line(`max |S v| = ${sol.x.length ? maxResidual(sol.x).toExponential(1) : "–"} (steady state)`);
     if (ranges) {
       const free = RXN.filter((_, j) => ranges[j][1] - ranges[j][0] > 1e-6);

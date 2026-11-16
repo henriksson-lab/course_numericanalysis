@@ -157,7 +157,7 @@ function mount(host: HTMLElement): void {
     lastL2D = st.L * st.L / st.D; lastLabel = label();
   }
   let lastL2D = 0, lastLabel = "";
-  const label = () => `${st.bc === "wall" ? "wall, " : ""}D ${sigD(st.D)}, L ${st.L}`;
+  const label = () => `D ${sigD(st.D)} · L ${st.L} · N ${st.N} · r ${st.r}${st.bc === "wall" ? " · wall" : ""}`;
   const tauEnd = () => (st.bc === "sink" ? 1.0 : 3.5);
 
   /** One FTCS step: interior from old values, wall update with the ghost point. */
@@ -242,10 +242,10 @@ function mount(host: HTMLElement): void {
   svgB.style.width = `calc(${(100 * WB / WT).toFixed(2)}% - 4px)`;
   const ro = htmlEl("div", "qb-readout fd-read", "", host);
 
-  const top = 36, bot = H - 48;
+  const top = 64, bot = H - 48;
   // (a): x in µm, c in [-0.2, 1.2]
   const AX0 = 92, AX1 = WA - 46;
-  const ay = scale(-0.2, 1.2, bot, top);
+  const ay = scale(-0.15, 1.12, bot, top);
   // (b): log10 t (s) in [-0.5, 5], log10 distance in [-5, 1]
   const BX0 = 70, BX1 = WB - 14, LT0 = -0.5, LT1 = 5, LD0 = -5, LD1 = 1;
   const bx = scale(LT0, LT1, BX0, BX1), by = scale(LD0, LD1, bot, top);
@@ -273,13 +273,17 @@ function mount(host: HTMLElement): void {
     svgEl("text", { x: 16, y: ym, "text-anchor": "middle", transform: `rotate(-90 16 ${ym})` }, svg).textContent = "concentration c";
     // reservoirs / wall
     svgEl("rect", { x: AX0 - 24, y: ay(1), width: 20, height: ay(0) - ay(1), fill: "#0072B233", stroke: COL.ftcs, "stroke-width": 2 }, svg);
-    svgEl("text", { x: AX0 - 14, y: ay(1) - 6, "text-anchor": "middle", class: "sm" }, svg).textContent = "source";
+    const vlab = (x: number, txt: string) => {
+      const yy = (ay(0) + ay(1)) / 2;
+      svgEl("text", { x, y: yy + 6, "text-anchor": "middle", transform: `rotate(-90 ${x} ${yy})`, class: "sm" }, svg).textContent = txt;
+    };
+    vlab(AX0 - 14, "source");
     if (st.bc === "sink") {
       svgEl("rect", { x: AX1 + 4, y: ay(1), width: 20, height: ay(0) - ay(1), fill: "#f2f2f2", stroke: COL.grey, "stroke-width": 2 }, svg);
-      svgEl("text", { x: AX1 + 14, y: ay(1) - 6, "text-anchor": "middle", class: "sm" }, svg).textContent = "sink";
+      vlab(AX1 + 14, "sink");
     } else {
-      svgEl("rect", { x: AX1 + 4, y: ay(1.15), width: 12, height: ay(-0.15) - ay(1.15), fill: "#555" }, svg);
-      svgEl("text", { x: AX1 + 10, y: ay(1.15) - 6, "text-anchor": "middle", class: "sm" }, svg).textContent = "wall";
+      svgEl("rect", { x: AX1 + 4, y: ay(1.1), width: 12, height: ay(-0.1) - ay(1.1), fill: "#555" }, svg);
+      svgEl("text", { x: AX1 + 10, y: ay(1.1) - 6, "text-anchor": "middle", class: "sm" }, svg).textContent = "wall";
     }
     // steady state
     const ss = st.bc === "sink" ? [[0, 1], [L, 0]] : [[0, 1], [L, 1]];
@@ -300,7 +304,7 @@ function mount(host: HTMLElement): void {
     const cp = svgEl("clipPath", { id: clipId }, svg);
     svgEl("rect", { x: AX0 - 8, y: top - 8, width: AX1 - AX0 + 16, height: bot - top + 16 }, cp);
     const g = svgEl("g", { "clip-path": `url(#${clipId})` }, svg);
-    const clampC = (v: number) => (Number.isFinite(v) ? Math.max(-0.4, Math.min(1.4, v)) : (v > 0 ? 1.4 : -0.4));
+    const clampC = (v: number) => (Number.isFinite(v) ? Math.max(-0.14, Math.min(1.11, v)) : (v > 0 ? 1.11 : -0.14));
     const pts = Array.from(c, (v, i) => `${ax(i * dx).toFixed(1)},${ay(clampC(v)).toFixed(1)}`).join(" ");
     svgEl("polyline", { points: pts, fill: "none", stroke: COL.ftcs, "stroke-width": 1.8, opacity: 0.7 }, g);
     const rad = N <= 60 ? 4.5 : N <= 120 ? 3 : 2;
@@ -309,14 +313,8 @@ function mount(host: HTMLElement): void {
       svgEl("circle", { cx: ax(i * dx), cy: ay(clampC(v)), r: rad, fill: out ? COL.warn : COL.ftcs }, g);
     });
     // legend
-    let ly = top + 22;
-    const leg = (txt: string, col: string) => {
-      const e = svgEl("text", { x: AX1 - 4, y: ly, "text-anchor": "end", "font-weight": 600 }, svg);
-      e.style.fill = col; e.textContent = txt; ly += 22;
-    };
-    leg("● FTCS", COL.ftcs);
-    if (st.exact) leg("— exact series", COL.exact);
-    leg(st.bc === "sink" ? "- - steady: 1 − x/L" : "- - steady: c = 1", "#666");
+    legend(svg, AX0 - 60, [["● FTCS", COL.ftcs], ...(st.exact ? [["— exact series", COL.exact]] : []),
+      [st.bc === "sink" ? "- - steady 1 − x/L" : "- - steady c = 1", "#666"]] as [string, string][]);
     // instability warning
     let lo = Infinity, hi = -Infinity;
     for (const v of c) { if (v < lo || Number.isNaN(v)) lo = v; if (v > hi || Number.isNaN(v)) hi = v; }
@@ -326,6 +324,15 @@ function mount(host: HTMLElement): void {
       w.textContent = blown ? "overflow: values reached ±∞ — unstable"
         : `outside [0, 1]: c from ${sci(lo)} to ${sci(hi)}`;
     }
+  }
+
+  /** One-line legend under the panel title. */
+  function legend(svg: SVGSVGElement, x: number, items: [string, string][]): void {
+    const e = svgEl("text", { x, y: 50, "font-weight": 600 }, svg);
+    items.forEach(([txt, col], i) => {
+      const t = svgEl("tspan", { dx: i ? 18 : 0 }, e);
+      t.style.fill = col; t.textContent = txt;
+    });
   }
 
   function drawDist(): void {
@@ -363,7 +370,7 @@ function mount(host: HTMLElement): void {
       path(gh.pts, gh.col, 3, "", 0.8);
       const X = bx(Math.log10(gh.l2d));
       svgEl("line", { x1: X, x2: X, y1: by(LD1), y2: by(LD1) + 18, stroke: gh.col, "stroke-width": 3 }, g);
-      const e = svgEl("text", { x: BX1 - 6, y: gy, "text-anchor": "end", "font-weight": 600 }, svg);
+      const e = svgEl("text", { x: BX0 + 8, y: gy, "font-weight": 600 }, svg);
       e.style.fill = gh.col; e.textContent = gh.label; gy -= 22;
     }
     // exact distance for the current D, L
@@ -387,7 +394,7 @@ function mount(host: HTMLElement): void {
       const ld = Math.log10(Math.max(last[1], 1e-30));
       svgEl("circle", { cx: bx(Math.max(LT0, Math.min(LT1, Math.log10(last[0])))), cy: by(cy(ld)), r: 6, fill: COL.ftcs, stroke: "#fff", "stroke-width": 1.5 }, svg);
       if (ld > LD1) {
-        const e = svgEl("text", { x: BX0 + 6, y: top + 40, "font-weight": 600 }, svg);
+        const e = svgEl("text", { x: BX0 + 6, y: top + 44, "font-weight": 600 }, svg);
         e.style.fill = COL.warn; e.textContent = `↑ off scale: ${sci(last[1])}`;
       }
     }
@@ -395,12 +402,8 @@ function mount(host: HTMLElement): void {
       const X5 = bx(Math.log10(t5));
       svgEl("circle", { cx: X5, cy: by(Math.log10(0.05)), r: 6, fill: "none", stroke: COL.ink, "stroke-width": 2 }, g);
     }
-    const lg = svgEl("text", { x: BX1 - 6, y: top + 44, "text-anchor": "end", "font-weight": 600 }, svg);
-    lg.style.fill = COL.ftcs; lg.textContent = "— FTCS (this run)";
-    if (st.exact) {
-      const e = svgEl("text", { x: BX1 - 6, y: top + 66, "text-anchor": "end", "font-weight": 600 }, svg);
-      e.style.fill = COL.exact; e.textContent = "- - exact";
-    }
+    legend(svg, BX0 - 40, [["— FTCS, this run", COL.ftcs], ...(st.exact ? [["- - exact", COL.exact]] : []),
+      ["│ L²/D", COL.green]] as [string, string][]);
   }
 
   function draw(): void {
@@ -447,7 +450,7 @@ function mount(host: HTMLElement): void {
     while (nstep * dt < target - 1e-12 * dt && k < maxSteps && !blown) { step(); k++; }
     record();
     const tau = nstep * dt * st.D / (st.L * st.L);
-    if (blown || tau >= tauEnd() || Math.log10(nstep * dt) > LT1) { finished = true; playing = false; }
+    if (blown || (tau >= tauEnd() && st.r <= 0.5 + 1e-9) || Math.log10(nstep * dt) > LT1) { finished = true; playing = false; }
     draw();
     if (playing) raf = window.requestAnimationFrame(tick);
   }

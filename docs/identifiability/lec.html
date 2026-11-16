@@ -389,40 +389,13 @@ Numerical analysis for biologists
 <section id="structural-2-the-flip-flop" class="slide level2 smaller">
 <h2>Structural (2): the flip-flop</h2>
 
-<img data-src="fig02-flipflop.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:88.0%"><p>Swap <span class="math inline">k_a \leftrightarrow k_e</span> and set <span class="math inline">V' = V\,k_e/k_a</span>: the formula gives <strong>the same</strong> <span class="math inline">C(t)</span> for every <span class="math inline">t</span>.</p>
+<img data-src="fig02-flipflop.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:88.0%"><p>Recap from <em>Nonlinear least squares and ODE fitting</em>: swap <span class="math inline">k_a \leftrightarrow k_e</span>, set <span class="math inline">V' = V\,k_e/k_a</span>, and <span class="math inline">C(t)</span> is <strong>identical</strong> for every <span class="math inline">t</span>.</p>
 <ul>
-<li>Two exact minima with the same SSE: <span class="math inline">(1.015, 0.191, 20.2)</span> and <span class="math inline">(0.191, 1.015, 3.80)</span>. Each is <strong>locally</strong> identifiable; globally the data cannot choose.</li>
-<li>Right: fix <span class="math inline">k_a</span>, re-fit the rest, plot the rise in SSE. Two wells of equal depth.</li>
+<li>Two exact minima, same SSE (<span class="math inline">0.066467</span>): <span class="math inline">(1.015, 0.191, 20.2)</span> and <span class="math inline">(0.191, 1.015, 3.80)</span>. Each is <strong>locally</strong> identifiable (right: fix <span class="math inline">k_a</span>, re-fit the rest: two wells of equal depth); globally the data cannot choose.</li>
+<li><strong>Check:</strong> multistart. Equal SSE at different parameters = a symmetry, not a convergence problem. <strong>Fix:</strong> outside knowledge: an IV dose gives <span class="math inline">k_e</span>; or impose <span class="math inline">k_a &gt; k_e</span> by fitting <span class="math inline">k_a = k_e + e^{\delta}</span>.</li>
 </ul>
 <aside class="notes">
-<p>Check the algebra: with ka and ke swapped the prefactor becomes ke/(V’(ke-ka)) and the bracket changes sign, so the curve is unchanged if ke/V’ = ka/V. Biologically: is the drug absorbed fast and eliminated slowly, or absorbed slowly and eliminated fast? The concentration curve alone cannot say. Slow-release formulations really do show “flip-flop kinetics” (absorption slower than elimination), so this is not only a mathematical curiosity. The right panel is a profile, which we define properly later: for each fixed ka, re-fit ke and V and record the SSE. The hump between the wells is what keeps an optimiser on one side: which minimum you get depends on the starting values.</p>
-<style type="text/css">
-        span.MJX_Assistive_MathML {
-          position:absolute!important;
-          clip: rect(1px, 1px, 1px, 1px);
-          padding: 1px 0 0 0!important;
-          border: 0!important;
-          height: 1px!important;
-          width: 1px!important;
-          overflow: hidden!important;
-          display:block!important;
-      }</style></aside>
-</section>
-<section id="the-flip-flop-in-practice" class="slide level2">
-<h2>The flip-flop in practice</h2>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>fit2 <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="fl">0.1</span>, <span class="at">ke =</span> <span class="fl">0.5</span>, <span class="at">V =</span> <span class="dv">5</span>))</span>
-<span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">coef</span>(fit2)</span>
-<span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        ka        ke         V</span></span>
-<span id="cb3-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.1906156 1.0150718 3.7963082</span></span>
-<span id="cb3-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="fu">deviance</span>(fit), <span class="fu">deviance</span>(fit2))</span>
-<span id="cb3-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.06646744 0.06646744</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<ul>
-<li>Same residuals, different parameters. Neither run warns.</li>
-<li><strong>Check:</strong> multistart (previous unit). Equal-SSE minima at different parameter values mean a structural problem, not a convergence problem.</li>
-<li><strong>Fix:</strong> use outside knowledge. An IV dose gives <span class="math inline">k_e</span> directly; or impose <span class="math inline">k_a &gt; k_e</span> by fitting <span class="math inline">k_a = k_e + e^{\delta}</span>.</li>
-</ul>
-<aside class="notes">
-<p>The multistart check from the previous unit was a guard against local minima. Here it finds two minima with identical SSE to all printed digits, which is the signature of a symmetry in the model. The second solution has V = 3.8 L, which is physiologically odd for many drugs, but only outside knowledge can say that. Constraining ka &gt; ke is a modelling decision: make it explicitly and say so.</p>
+<p>The previous unit found the two minima with a multistart and checked the algebra: with ka and ke swapped the prefactor becomes ke/(V’(ke-ka)) and the bracket changes sign, so the curve is unchanged if ke/V’ = ka/V. What is new here is the classification and the right-hand panel. It is a profile, which we define properly later: for each fixed ka, re-fit ke and V and record the rise in SSE. The two wells have exactly equal depth; the hump between them is what keeps an optimiser on one side, so which minimum you get depends on the start (and, exercise C2 shows, on the algorithm). Slow-release formulations really do show flip-flop kinetics, so the constraint ka &gt; ke is a modelling decision: make it explicitly and say so.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -463,14 +436,14 @@ Numerical analysis for biologists
 <h2>Standard errors from the Jacobian</h2>
 <p>If the noise is independent with variance <span class="math inline">\sigma^2</span>, the estimate is approximately normal with</p>
 <p><span class="math display">\operatorname{Cov}(\hat\theta) \approx \sigma^2 (J^TJ)^{-1}, \qquad \hat\sigma^2 = s^2 = \frac{S(\hat\theta)}{n - p} = \frac{0.06647}{12 - 3} = 0.00739</span></p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a>th <span class="ot">&lt;-</span> <span class="fu">coef</span>(fit)</span>
-<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a>J  <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(p) <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>]), th)   <span class="co"># 12 x 3</span></span>
-<span id="cb4-3"><a aria-hidden="true" tabindex="-1"></a>s2 <span class="ot">&lt;-</span> <span class="fu">deviance</span>(fit) <span class="sc">/</span> (<span class="fu">length</span>(y) <span class="sc">-</span> <span class="dv">3</span>)</span>
-<span id="cb4-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(s2 <span class="sc">*</span> <span class="fu">solve</span>(<span class="fu">crossprod</span>(J))))          <span class="co"># standard errors by hand</span></span>
-<span id="cb4-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.06243155 0.01040041 0.71647066</span></span>
-<span id="cb4-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">vcov</span>(fit)))                         <span class="co"># what nls reports</span></span>
-<span id="cb4-7"><a aria-hidden="true" tabindex="-1"></a><span class="co">#         ka         ke          V</span></span>
-<span id="cb4-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.06243155 0.01040041 0.71647070</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>th <span class="ot">&lt;-</span> <span class="fu">coef</span>(fit)</span>
+<span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a>J  <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(p) <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>]), th)   <span class="co"># 12 x 3</span></span>
+<span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a>s2 <span class="ot">&lt;-</span> <span class="fu">deviance</span>(fit) <span class="sc">/</span> (<span class="fu">length</span>(y) <span class="sc">-</span> <span class="dv">3</span>)</span>
+<span id="cb3-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(s2 <span class="sc">*</span> <span class="fu">solve</span>(<span class="fu">crossprod</span>(J))))          <span class="co"># standard errors by hand</span></span>
+<span id="cb3-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.06243155 0.01040041 0.71647066</span></span>
+<span id="cb3-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">vcov</span>(fit)))                         <span class="co"># what nls reports</span></span>
+<span id="cb3-7"><a aria-hidden="true" tabindex="-1"></a><span class="co">#         ka         ke          V</span></span>
+<span id="cb3-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.06243155 0.01040041 0.71647070</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>The same formula as for linear regression, with <span class="math inline">J</span> in place of the design matrix.</li>
 </ul>
@@ -490,15 +463,15 @@ Numerical analysis for biologists
 </section>
 <section id="the-hessian-and-the-fisher-information" class="slide level2 smaller">
 <h2>The Hessian and the Fisher information</h2>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a aria-hidden="true" tabindex="-1"></a>sse <span class="ot">&lt;-</span> <span class="cf">function</span>(p) <span class="fu">sum</span>((y <span class="sc">-</span> <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>]))<span class="sc">^</span><span class="dv">2</span>)</span>
-<span id="cb5-2"><a aria-hidden="true" tabindex="-1"></a>H <span class="ot">&lt;-</span> <span class="fu">hessian</span>(sse, th)                         <span class="co"># numDeriv: full second derivatives</span></span>
-<span id="cb5-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(H, <span class="dv">2</span>)                                   <span class="co"># round(2 * crossprod(J), 2):</span></span>
-<span id="cb5-4"><a aria-hidden="true" tabindex="-1"></a><span class="co">#       [,1]   [,2]  [,3]                     #       [,1]   [,2]  [,3]</span></span>
-<span id="cb5-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,] 20.84  -6.08 -1.72                     # [1,] 20.78  -6.08 -1.72</span></span>
-<span id="cb5-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,] -6.08 823.98 11.42                     # [2,] -6.08 825.40 11.42</span></span>
-<span id="cb5-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [3,] -1.72  11.42  0.32                     # [3,] -1.72  11.42  0.32</span></span>
-<span id="cb5-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="dv">2</span> <span class="sc">*</span> s2 <span class="sc">*</span> <span class="fu">solve</span>(H)))</span>
-<span id="cb5-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.06216416 0.01040070 0.71504108</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a>sse <span class="ot">&lt;-</span> <span class="cf">function</span>(p) <span class="fu">sum</span>((y <span class="sc">-</span> <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>]))<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a>H <span class="ot">&lt;-</span> <span class="fu">hessian</span>(sse, th)                         <span class="co"># numDeriv: full second derivatives</span></span>
+<span id="cb4-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(H, <span class="dv">2</span>)                                   <span class="co"># round(2 * crossprod(J), 2):</span></span>
+<span id="cb4-4"><a aria-hidden="true" tabindex="-1"></a><span class="co">#       [,1]   [,2]  [,3]                     #       [,1]   [,2]  [,3]</span></span>
+<span id="cb4-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,] 20.84  -6.08 -1.72                     # [1,] 20.78  -6.08 -1.72</span></span>
+<span id="cb4-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,] -6.08 823.98 11.42                     # [2,] -6.08 825.40 11.42</span></span>
+<span id="cb4-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [3,] -1.72  11.42  0.32                     # [3,] -1.72  11.42  0.32</span></span>
+<span id="cb4-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="dv">2</span> <span class="sc">*</span> s2 <span class="sc">*</span> <span class="fu">solve</span>(H)))</span>
+<span id="cb4-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.06216416 0.01040070 0.71504108</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li><span class="math inline">H</span> and <span class="math inline">2J^TJ</span> agree to 0.3 %: the Gauss–Newton approximation is good here.</li>
 <li>In likelihood language: <span class="math inline">-\log L = S/(2\sigma^2) + \text{const}</span>, so the <strong>Fisher information</strong> is <span class="math inline">\mathcal I = J^TJ/\sigma^2</span> and <span class="math inline">\operatorname{Cov} \approx \mathcal I^{-1}</span>. For a general likelihood: invert the Hessian of <span class="math inline">-\log L</span> (<code>optim(..., hessian = TRUE)</code>).</li>
@@ -520,11 +493,11 @@ Numerical analysis for biologists
 <section id="the-correlation-matrix" class="slide level2">
 <h2>The correlation matrix</h2>
 <p><span class="math display">r_{jk} = \frac{\operatorname{Cov}_{jk}}{\sqrt{\operatorname{Cov}_{jj}\operatorname{Cov}_{kk}}}</span></p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">cov2cor</span>(<span class="fu">vcov</span>(fit)), <span class="dv">2</span>)</span>
-<span id="cb6-2"><a aria-hidden="true" tabindex="-1"></a><span class="co">#       ka    ke     V</span></span>
-<span id="cb6-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.00 -0.82  0.90</span></span>
-<span id="cb6-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke -0.82  1.00 -0.91</span></span>
-<span id="cb6-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V   0.90 -0.91  1.00</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">cov2cor</span>(<span class="fu">vcov</span>(fit)), <span class="dv">2</span>)</span>
+<span id="cb5-2"><a aria-hidden="true" tabindex="-1"></a><span class="co">#       ka    ke     V</span></span>
+<span id="cb5-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.00 -0.82  0.90</span></span>
+<span id="cb5-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke -0.82  1.00 -0.91</span></span>
+<span id="cb5-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V   0.90 -0.91  1.00</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li><span class="math inline">r(k_a, V) = 0.90</span>: a larger <span class="math inline">k_a</span> can be compensated by a larger <span class="math inline">V</span>. The bowl is a <strong>tilted, elongated valley</strong>.</li>
 <li><span class="math inline">|r| &gt; 0.95</span> is a warning; <span class="math inline">|r| \to 1</span> means one parameter can replace another.</li>
@@ -547,14 +520,14 @@ Numerical analysis for biologists
 <section id="the-svd-of-j-which-combinations-are-determined" class="slide level2 smaller">
 <h2>The SVD of <span class="math inline">J</span>: which combinations are determined</h2>
 <p>Scale the columns (<span class="math inline">\partial C/\partial \log\theta_j = \theta_j\,\partial C/\partial\theta_j</span>) so all parameters are compared in <strong>relative</strong> terms:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a>Jl <span class="ot">&lt;-</span> J <span class="sc">%*%</span> <span class="fu">diag</span>(th)                  <span class="co"># sensitivities to log ka, log ke, log V</span></span>
-<span id="cb7-2"><a aria-hidden="true" tabindex="-1"></a>sv <span class="ot">&lt;-</span> <span class="fu">svd</span>(Jl)</span>
-<span id="cb7-3"><a aria-hidden="true" tabindex="-1"></a>sv<span class="sc">$</span>d</span>
-<span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 8.779119 3.478099 1.005166</span></span>
-<span id="cb7-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(sv<span class="sc">$</span>v[, <span class="dv">3</span>], <span class="dv">2</span>)                   <span class="co"># the worst direction</span></span>
-<span id="cb7-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -0.69  0.60 -0.40</span></span>
-<span id="cb7-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(s2) <span class="sc">/</span> sv<span class="sc">$</span>d                       <span class="co"># SE along each direction (log units)</span></span>
-<span id="cb7-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.009788864 0.024708208 0.085495889</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a>Jl <span class="ot">&lt;-</span> J <span class="sc">%*%</span> <span class="fu">diag</span>(th)                  <span class="co"># sensitivities to log ka, log ke, log V</span></span>
+<span id="cb6-2"><a aria-hidden="true" tabindex="-1"></a>sv <span class="ot">&lt;-</span> <span class="fu">svd</span>(Jl)</span>
+<span id="cb6-3"><a aria-hidden="true" tabindex="-1"></a>sv<span class="sc">$</span>d</span>
+<span id="cb6-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 8.779119 3.478099 1.005166</span></span>
+<span id="cb6-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(sv<span class="sc">$</span>v[, <span class="dv">3</span>], <span class="dv">2</span>)                   <span class="co"># the worst direction</span></span>
+<span id="cb6-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -0.69  0.60 -0.40</span></span>
+<span id="cb6-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(s2) <span class="sc">/</span> sv<span class="sc">$</span>d                       <span class="co"># SE along each direction (log units)</span></span>
+<span id="cb6-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.009788864 0.024708208 0.085495889</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>As in <em>The SVD, rank deficiency and regularisation</em>: noise along <span class="math inline">v_i</span> is amplified by <span class="math inline">1/\sigma_i</span>. Here the SE along <span class="math inline">v_3</span> is <span class="math inline">s/\sigma_3 = 0.085</span>, about <strong>9 %</strong>.</li>
 <li><span class="math inline">v_3</span>: increase <span class="math inline">k_a</span>, decrease <span class="math inline">k_e</span>, increase <span class="math inline">V</span> together (the sign of <span class="math inline">v_3</span> is arbitrary). The data barely notice.</li>
@@ -575,12 +548,12 @@ Numerical analysis for biologists
 </section>
 <section id="scaling-and-conditioning" class="slide level2 smaller">
 <h2>Scaling and conditioning</h2>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(J, <span class="at">exact =</span> <span class="cn">TRUE</span>)                <span class="co"># columns in 1/h, 1/h and L</span></span>
-<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 169.9302</span></span>
-<span id="cb8-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(Jl, <span class="at">exact =</span> <span class="cn">TRUE</span>)               <span class="co"># columns per unit log-parameter</span></span>
-<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 8.733995</span></span>
-<span id="cb8-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(<span class="fu">crossprod</span>(J), <span class="at">exact =</span> <span class="cn">TRUE</span>)     <span class="co"># forming J^T J squares kappa</span></span>
-<span id="cb8-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 28876.26</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(J, <span class="at">exact =</span> <span class="cn">TRUE</span>)                <span class="co"># columns in 1/h, 1/h and L</span></span>
+<span id="cb7-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 169.9302</span></span>
+<span id="cb7-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(Jl, <span class="at">exact =</span> <span class="cn">TRUE</span>)               <span class="co"># columns per unit log-parameter</span></span>
+<span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 8.733995</span></span>
+<span id="cb7-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(<span class="fu">crossprod</span>(J), <span class="at">exact =</span> <span class="cn">TRUE</span>)     <span class="co"># forming J^T J squares kappa</span></span>
+<span id="cb7-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 28876.26</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>Part of a large <span class="math inline">\kappa(J)</span> is just <strong>units</strong> (<span class="math inline">V</span> in litres vs rates per hour). Log-parameters remove that part; what is left is real.</li>
 <li>As in <em>Pivoting, norms and conditioning</em>: solving with <span class="math inline">J^TJ</span> loses about <span class="math inline">\log_{10}\kappa(J)^2</span> digits. <code>vcov</code> uses the QR factor <span class="math inline">R</span> of <span class="math inline">J</span>: <span class="math inline">(J^TJ)^{-1} = R^{-1}R^{-T}</span>.</li>
@@ -602,19 +575,19 @@ Numerical analysis for biologists
 </section>
 <section id="practical-non-identifiability-samples-from-3-h" class="slide level2 smaller">
 <h2>Practical non-identifiability: samples from 3 h</h2>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a aria-hidden="true" tabindex="-1"></a>late <span class="ot">&lt;-</span> t <span class="sc">&gt;=</span> <span class="dv">3</span>                                    <span class="co"># first sample at 3 h</span></span>
-<span id="cb9-2"><a aria-hidden="true" tabindex="-1"></a>fits <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="dv">1</span>, <span class="at">ke =</span> <span class="fl">0.2</span>, <span class="at">V =</span> <span class="dv">20</span>),</span>
-<span id="cb9-3"><a aria-hidden="true" tabindex="-1"></a>            <span class="at">subset =</span> late)</span>
-<span id="cb9-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(fits)<span class="sc">$</span>coefficients[, <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>]</span>
-<span id="cb9-5"><a aria-hidden="true" tabindex="-1"></a><span class="co">#      Estimate Std. Error</span></span>
-<span id="cb9-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.1220379 0.40551186</span></span>
-<span id="cb9-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke  0.1882042 0.01525188</span></span>
-<span id="cb9-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V  20.1639648 0.76727489</span></span>
-<span id="cb9-9"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">cov2cor</span>(<span class="fu">vcov</span>(fits)), <span class="dv">3</span>)</span>
-<span id="cb9-10"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        ka     ke      V</span></span>
-<span id="cb9-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.000 -0.852  0.522</span></span>
-<span id="cb9-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke -0.852  1.000 -0.835</span></span>
-<span id="cb9-13"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V   0.522 -0.835  1.000</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a aria-hidden="true" tabindex="-1"></a>late <span class="ot">&lt;-</span> t <span class="sc">&gt;=</span> <span class="dv">3</span>                                    <span class="co"># first sample at 3 h</span></span>
+<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a>fits <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="dv">1</span>, <span class="at">ke =</span> <span class="fl">0.2</span>, <span class="at">V =</span> <span class="dv">20</span>),</span>
+<span id="cb8-3"><a aria-hidden="true" tabindex="-1"></a>            <span class="at">subset =</span> late)</span>
+<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(fits)<span class="sc">$</span>coefficients[, <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>]</span>
+<span id="cb8-5"><a aria-hidden="true" tabindex="-1"></a><span class="co">#      Estimate Std. Error</span></span>
+<span id="cb8-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.1220379 0.40551186</span></span>
+<span id="cb8-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke  0.1882042 0.01525188</span></span>
+<span id="cb8-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V  20.1639648 0.76727489</span></span>
+<span id="cb8-9"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">cov2cor</span>(<span class="fu">vcov</span>(fits)), <span class="dv">3</span>)</span>
+<span id="cb8-10"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        ka     ke      V</span></span>
+<span id="cb8-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.000 -0.852  0.522</span></span>
+<span id="cb8-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke -0.852  1.000 -0.835</span></span>
+<span id="cb8-13"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V   0.522 -0.835  1.000</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>After 3 h the curve is <span class="math inline">\approx A\,e^{-k_e t}</span> with <span class="math inline">A = D k_a/(V(k_a - k_e))</span>: only <strong>two</strong> numbers, for three parameters.</li>
 <li>The SE says <span class="math inline">k_a = 1.12 \pm 0.41</span>; Wald 95 % interval <span class="math inline">(0.33, 1.92)</span>. The truth (1.0) is inside, but is this interval right?</li>
@@ -658,16 +631,16 @@ Numerical analysis for biologists
 <h2>The profile likelihood</h2>
 <p>To check one parameter, <strong>fix</strong> it on a grid and <strong>re-optimise all the others</strong>:</p>
 <p><span class="math display">\text{PL}(k_a) = \min_{k_e,\,V} S(k_a, k_e, V), \qquad \text{95 \% interval: } \frac{\text{PL}(k_a) - S(\hat\theta)}{s^2} \le 3.84</span></p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a aria-hidden="true" tabindex="-1"></a>prof <span class="ot">&lt;-</span> <span class="cf">function</span>(ka, t, y) {           <span class="co"># fix ka, re-fit ke and V</span></span>
-<span id="cb10-2"><a aria-hidden="true" tabindex="-1"></a>  f <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ke =</span> <span class="fl">0.2</span>, <span class="at">V =</span> <span class="dv">20</span>))</span>
-<span id="cb10-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">deviance</span>(f)</span>
-<span id="cb10-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb10-5"><a aria-hidden="true" tabindex="-1"></a>crit <span class="ot">&lt;-</span> <span class="cf">function</span>(ka) (<span class="fu">prof</span>(ka, t, y) <span class="sc">-</span> <span class="fu">deviance</span>(fit)) <span class="sc">/</span> s2 <span class="sc">-</span> <span class="fl">3.84</span></span>
-<span id="cb10-6"><a aria-hidden="true" tabindex="-1"></a>ka_hat <span class="ot">&lt;-</span> <span class="fu">coef</span>(fit)[[<span class="st">"ka"</span>]]</span>
-<span id="cb10-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="fu">uniroot</span>(crit, <span class="fu">c</span>(<span class="fl">0.3</span>, ka_hat))<span class="sc">$</span>root, <span class="fu">uniroot</span>(crit, <span class="fu">c</span>(ka_hat, <span class="dv">30</span>))<span class="sc">$</span>root)</span>
-<span id="cb10-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.8971499 1.1417900                         # profile interval</span></span>
-<span id="cb10-9"><a aria-hidden="true" tabindex="-1"></a>ka_hat <span class="sc">+</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">1.96</span>, <span class="fl">1.96</span>) <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">vcov</span>(fit)[<span class="st">"ka"</span>, <span class="st">"ka"</span>])</span>
-<span id="cb10-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.8927063 1.1374380                         # Wald interval</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a aria-hidden="true" tabindex="-1"></a>prof <span class="ot">&lt;-</span> <span class="cf">function</span>(ka, t, y) {           <span class="co"># fix ka, re-fit ke and V</span></span>
+<span id="cb9-2"><a aria-hidden="true" tabindex="-1"></a>  f <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ke =</span> <span class="fl">0.2</span>, <span class="at">V =</span> <span class="dv">20</span>))</span>
+<span id="cb9-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">deviance</span>(f)</span>
+<span id="cb9-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb9-5"><a aria-hidden="true" tabindex="-1"></a>crit <span class="ot">&lt;-</span> <span class="cf">function</span>(ka) (<span class="fu">prof</span>(ka, t, y) <span class="sc">-</span> <span class="fu">deviance</span>(fit)) <span class="sc">/</span> s2 <span class="sc">-</span> <span class="fl">3.84</span></span>
+<span id="cb9-6"><a aria-hidden="true" tabindex="-1"></a>ka_hat <span class="ot">&lt;-</span> <span class="fu">coef</span>(fit)[[<span class="st">"ka"</span>]]</span>
+<span id="cb9-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="fu">uniroot</span>(crit, <span class="fu">c</span>(<span class="fl">0.3</span>, ka_hat))<span class="sc">$</span>root, <span class="fu">uniroot</span>(crit, <span class="fu">c</span>(ka_hat, <span class="dv">30</span>))<span class="sc">$</span>root)</span>
+<span id="cb9-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.8971499 1.1417900                         # profile interval</span></span>
+<span id="cb9-9"><a aria-hidden="true" tabindex="-1"></a>ka_hat <span class="sc">+</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">1.96</span>, <span class="fl">1.96</span>) <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">vcov</span>(fit)[<span class="st">"ka"</span>, <span class="st">"ka"</span>])</span>
+<span id="cb9-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.8927063 1.1374380                         # Wald interval</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li><span class="math inline">3.84 = 1.96^2</span> is the 95 % point of <span class="math inline">\chi^2_1</span>. For a linear model the two intervals are identical.</li>
 </ul>
@@ -814,14 +787,14 @@ Numerical analysis for biologists
 </section>
 <section id="design-in-code-same-cost-earlier-samples" class="slide level2 smaller">
 <h2>Design in code: same cost, earlier samples</h2>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a aria-hidden="true" tabindex="-1"></a>se_design <span class="ot">&lt;-</span> <span class="cf">function</span>(tt, <span class="at">p =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="fl">0.2</span>, <span class="dv">20</span>), <span class="at">sigma =</span> <span class="fl">0.1</span>) {</span>
-<span id="cb11-2"><a aria-hidden="true" tabindex="-1"></a>  J <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(lp) <span class="fu">pk</span>(tt, <span class="fu">exp</span>(lp[<span class="dv">1</span>]), <span class="fu">exp</span>(lp[<span class="dv">2</span>]), <span class="fu">exp</span>(lp[<span class="dv">3</span>])), <span class="fu">log</span>(p))</span>
-<span id="cb11-3"><a aria-hidden="true" tabindex="-1"></a>  sigma <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">solve</span>(<span class="fu">crossprod</span>(J))))   <span class="co"># predicted SE of log ka, log ke, log V</span></span>
-<span id="cb11-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb11-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">se_design</span>(<span class="fu">c</span>(<span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">10</span>, <span class="dv">12</span>)), <span class="dv">3</span>)</span>
-<span id="cb11-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.398 0.115 0.061</span></span>
-<span id="cb11-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">se_design</span>(<span class="fu">c</span>(<span class="fl">0.5</span>, <span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">8</span>, <span class="dv">12</span>)), <span class="dv">3</span>)</span>
-<span id="cb11-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.101 0.087 0.059</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a aria-hidden="true" tabindex="-1"></a>se_design <span class="ot">&lt;-</span> <span class="cf">function</span>(tt, <span class="at">p =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="fl">0.2</span>, <span class="dv">20</span>), <span class="at">sigma =</span> <span class="fl">0.1</span>) {</span>
+<span id="cb10-2"><a aria-hidden="true" tabindex="-1"></a>  J <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(lp) <span class="fu">pk</span>(tt, <span class="fu">exp</span>(lp[<span class="dv">1</span>]), <span class="fu">exp</span>(lp[<span class="dv">2</span>]), <span class="fu">exp</span>(lp[<span class="dv">3</span>])), <span class="fu">log</span>(p))</span>
+<span id="cb10-3"><a aria-hidden="true" tabindex="-1"></a>  sigma <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">solve</span>(<span class="fu">crossprod</span>(J))))   <span class="co"># predicted SE of log ka, log ke, log V</span></span>
+<span id="cb10-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb10-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">se_design</span>(<span class="fu">c</span>(<span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">10</span>, <span class="dv">12</span>)), <span class="dv">3</span>)</span>
+<span id="cb10-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.398 0.115 0.061</span></span>
+<span id="cb10-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">se_design</span>(<span class="fu">c</span>(<span class="fl">0.5</span>, <span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">8</span>, <span class="dv">12</span>)), <span class="dv">3</span>)</span>
+<span id="cb10-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.101 0.087 0.059</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>Six samples either way. Moving three of them before 3 h cuts the SE of <span class="math inline">\log k_a</span> from 0.40 (a factor 1.5) to 0.10 (10 %); <span class="math inline">k_e</span> even improves.</li>
 <li>The guess <span class="math inline">\theta</span> need not be right, only roughly right. Check several guesses.</li>
@@ -866,15 +839,15 @@ Numerical analysis for biologists
 <section id="fix-3-a-prior-is-an-extra-residual" class="slide level2 smaller">
 <h2>Fix 3: a prior is an extra residual</h2>
 <p>Prior knowledge “<span class="math inline">k_a</span> is about 1.2 /h, within a factor <span class="math inline">e^{0.5} = 1.65</span>” becomes one more residual, <span class="math inline">(\log k_a - \log 1.2)/0.5</span>:</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(minpack.lm)</span>
-<span id="cb12-2"><a aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="cf">function</span>(lp, t, y) <span class="fu">c</span>((y <span class="sc">-</span> <span class="fu">pk</span>(t, <span class="fu">exp</span>(lp[<span class="dv">1</span>]), <span class="fu">exp</span>(lp[<span class="dv">2</span>]), <span class="fu">exp</span>(lp[<span class="dv">3</span>]))) <span class="sc">/</span> <span class="fl">0.1</span>,</span>
-<span id="cb12-3"><a aria-hidden="true" tabindex="-1"></a>                            (lp[<span class="dv">1</span>] <span class="sc">-</span> <span class="fu">log</span>(<span class="fl">1.2</span>)) <span class="sc">/</span> <span class="fl">0.5</span>)</span>
-<span id="cb12-4"><a aria-hidden="true" tabindex="-1"></a>fp <span class="ot">&lt;-</span> <span class="fu">nls.lm</span>(<span class="at">par =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="fl">0.2</span>, <span class="dv">20</span>)), <span class="at">fn =</span> res, <span class="at">t =</span> t[late], <span class="at">y =</span> y[late])</span>
-<span id="cb12-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">exp</span>(fp<span class="sc">$</span>par)</span>
-<span id="cb12-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  1.1563835  0.1871582 20.1940289</span></span>
-<span id="cb12-7"><a aria-hidden="true" tabindex="-1"></a>Ja <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(res, fp<span class="sc">$</span>par, <span class="at">t =</span> t[late], <span class="at">y =</span> y[late])   <span class="co"># 7 x 3 (6 data + 1 prior)</span></span>
-<span id="cb12-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">solve</span>(<span class="fu">crossprod</span>(Ja))))                        <span class="co"># SE of log ka, log ke, log V</span></span>
-<span id="cb12-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.34998612 0.08243784 0.04434703</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(minpack.lm)</span>
+<span id="cb11-2"><a aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="cf">function</span>(lp, t, y) <span class="fu">c</span>((y <span class="sc">-</span> <span class="fu">pk</span>(t, <span class="fu">exp</span>(lp[<span class="dv">1</span>]), <span class="fu">exp</span>(lp[<span class="dv">2</span>]), <span class="fu">exp</span>(lp[<span class="dv">3</span>]))) <span class="sc">/</span> <span class="fl">0.1</span>,</span>
+<span id="cb11-3"><a aria-hidden="true" tabindex="-1"></a>                            (lp[<span class="dv">1</span>] <span class="sc">-</span> <span class="fu">log</span>(<span class="fl">1.2</span>)) <span class="sc">/</span> <span class="fl">0.5</span>)</span>
+<span id="cb11-4"><a aria-hidden="true" tabindex="-1"></a>fp <span class="ot">&lt;-</span> <span class="fu">nls.lm</span>(<span class="at">par =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="fl">0.2</span>, <span class="dv">20</span>)), <span class="at">fn =</span> res, <span class="at">t =</span> t[late], <span class="at">y =</span> y[late])</span>
+<span id="cb11-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">exp</span>(fp<span class="sc">$</span>par)</span>
+<span id="cb11-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  1.1563835  0.1871582 20.1940289</span></span>
+<span id="cb11-7"><a aria-hidden="true" tabindex="-1"></a>Ja <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(res, fp<span class="sc">$</span>par, <span class="at">t =</span> t[late], <span class="at">y =</span> y[late])   <span class="co"># 7 x 3 (6 data + 1 prior)</span></span>
+<span id="cb11-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">solve</span>(<span class="fu">crossprod</span>(Ja))))                        <span class="co"># SE of log ka, log ke, log V</span></span>
+<span id="cb11-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.34998612 0.08243784 0.04434703</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>This is <strong>ridge regularisation</strong> (<em>The SVD, rank deficiency and regularisation</em>) on <span class="math inline">\log k_a</span>, and the maximum a posteriori estimate with a log-normal prior.</li>
 <li>SE of <span class="math inline">\log k_a</span>: 0.35, against 0.50 in the prior alone. The data added <strong>little</strong>: the answer is mostly the prior. Say so.</li>
