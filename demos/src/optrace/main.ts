@@ -174,7 +174,7 @@ function mount(host: HTMLElement): void {
   const mapBox = htmlEl("div", "or-map", "", main);
   const right = htmlEl("div", "or-right", "", main);
   const W = 540, H = 470;
-  const L = 82, R = W - 12, T = 34, B = H - 66;
+  const L = 82, R = W - 26, T = 34, B = H - 66;
   const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Contour map with optimiser paths" }, mapBox);
   const defs = svgEl("defs", {}, svg);
   const clip = svgEl("clipPath", { id: `or-clip-${uid}` }, defs);
@@ -183,7 +183,7 @@ function mount(host: HTMLElement): void {
   const gDyn = svgEl("g", { "clip-path": `url(#or-clip-${uid})` }, svg);
   const gTop = svgEl("g", {}, svg);
 
-  const CW = 600, CH = 268, cL = 84, cR = CW - 14, cT = 34, cB = CH - 56;
+  const CW = 600, CH = 276, cL = 84, cR = CW - 30, cT = 46, cB = CH - 56;
   const csvg = svgEl("svg", { viewBox: `0 0 ${CW} ${CH}`, role: "img", "aria-label": "f minus f* against iteration, log scale" }, right);
   const tab = htmlEl("table", "or-tab", "", right);
   const info = htmlEl("div", "or-info", "", right);
@@ -391,13 +391,14 @@ function mount(host: HTMLElement): void {
       htmlEl("td", "", m === 3 ? "–" : fmtInt(t.ng[n]), tr);
       htmlEl("td", "", m === 1 ? fmtInt(t.nh[n]) : "–", tr);
       htmlEl("td", "", sci(Math.max(t.fx[n] - fstar, 0), 2), tr);
-      let s = done ? t.status : "…";
-      if (done && t.shifted && t.shifted[n] > 0) s += `, ${t.shifted[n]}× H+μI`;
+      const s = !done ? "…" : t.status === "converged" ? "✓" : t.status;
       htmlEl("td", "st" + (done && t.status !== "converged" ? " or-warn" : ""), s, tr);
     });
     const x0 = traces[0].x[0];
-    const unit = prob.hessFD ? " H by differences of ∇f (4 ∇f calls each)." : "";
-    info.textContent = `start (${fmtCoord(x0[0])}, ${fmtCoord(x0[1])}) · κ(H) at the minimum = ${sci(kappaStar, 3)} · f* = ${Number(fstar.toPrecision(8))} · iteration ${fmtInt(st.k)} of ${fmtInt(kEnd)}. Click the map to choose a start.${unit}`;
+    const nt = traces[1], ns = nt.shifted ? nt.shifted[upto(nt)] : 0;
+    const shift = ns > 0 ? ` Newton used H + μI in ${ns} step${ns > 1 ? "s" : ""} (H not positive definite).` : "";
+    const unit = prob.hessFD ? " Bottom and top fixed at the best fit; H = central differences of ∇f." : "";
+    info.textContent = `start (${fmtCoord(x0[0])}, ${fmtCoord(x0[1])}) · κ(H) at the minimum = ${sci(kappaStar, 3)} · f* = ${Number(fstar.toPrecision(8))} · iteration ${fmtInt(st.k)} of ${fmtInt(kEnd)}. Click the map to choose a start. ✓ = converged.${shift}${unit}`;
   }
 
   // ---- click to set the start ----

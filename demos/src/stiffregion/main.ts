@@ -377,7 +377,7 @@ function mount(host: HTMLElement): void {
       note = `amplitude after N steps: ${sci(gmax ** n, 3)} (exact: 1)`;
     } else {
       const rf = R(m, Z[1])[0];
-      note = `fast mode: R = ${sci(rf, 3)} per step${rf < 0 ? " (sign flips every step)" : ""}`;
+      note = `fast mode: R = ${sci(rf, 3).replace("-", "−")} per step${rf < 0 ? " (sign flips every step)" : ""}`;
     }
     const nt = txt(svgB, bL + 10, bB - 12, note, { "font-weight": 600 }, noteCol);
     nt.style.paintOrder = "stroke"; nt.style.stroke = "#fff"; nt.style.strokeWidth = "5px";

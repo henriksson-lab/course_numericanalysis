@@ -94,7 +94,7 @@ export const modelLog = (ts: number[]) => (lp: number[]): number[] =>
 export function svd(J: number[][]): { s: number[]; V: number[][] } {
   const n = J.length, p = J[0].length;
   const U = J.map(r => r.slice());
-  const V = Array.from({ length: p }, (_, i) => Array.from({ length: p }, (_, j) => i === j ? 1 : 0));
+  const V = Array.from({ length: p }, (_, i) => Array.from({ length: p }, (_, j): number => (i === j ? 1 : 0)));
   for (let sweep = 0; sweep < 60; sweep++) {
     let off = 0;
     for (let a = 0; a < p - 1; a++) for (let b = a + 1; b < p; b++) {
@@ -137,7 +137,7 @@ export function analyse(ts: number[], ys: number[], noisy: boolean): Analysis {
   const s2 = sEstimated ? f.S / (n - 3) : SIGMA * SIGMA;
   const J = jacobian(modelLog(ts), f.p);                       // n x 3, log-parameters
   const { s: sv, V } = svd(J);
-  const singular = !(sv[2] > 1e-9 * sv[0]);
+  const singular = !(sv[2] > 1e-6 * sv[0]);
   const covLog = V.map((_, a) => V.map((_, b) => s2 * sv.reduce((acc, si, k) => acc + V[a][k] * V[b][k] / (si * si), 0)));
   const cov = covLog.map((row, a) => row.map((v, b) => v * th[a] * th[b]));
   const se = cov.map((row, a) => singular ? Infinity : Math.sqrt(row[a]));

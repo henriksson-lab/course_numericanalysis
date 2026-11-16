@@ -42,6 +42,8 @@ const STYLE = `
 .reveal [data-demo="${NAME}"].qb-demo { font-size: 19px; gap: .25em; }
 .reveal [data-demo="${NAME}"] .gl-land { flex: 0 0 455px; }
 .reveal [data-demo="${NAME}"] table.gl-tab { font-size: 17px; }
+.reveal [data-demo="${NAME}"] .gl-land text { font-size: 20px; }
+.reveal [data-demo="${NAME}"] .gl-land .ttl { font-size: 20px; }
 `;
 
 function injectStyle(): void {

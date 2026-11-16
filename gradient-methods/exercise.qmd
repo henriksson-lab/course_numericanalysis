@@ -286,6 +286,40 @@ Rust prints numbers in its own format (e.g. `1.13e3` rather than `1.13e+03`); th
 
 **C8. Multistart.** Fit the 4PL from the 15 starts bottom = 0, top = 100, EC50 $\in \{0.01, 0.1, 1, 10, 100\}$, hill $\in \{0.5, 1, 3\}$, once with Nelder–Mead and once with BFGS with the analytic gradient. How many reach SSE = 314.92? Do the failures say so?
 
+## Explore {#explore}
+
+The demo below races four optimisers on a function of two variables, in your browser. Left: the contour map, the start (white square), the minimum (black cross) and the path of each method: **steepest descent** with Armijo backtracking, **Newton** with the same line search (if $H$ is not positive definite it adds $\mu I$, as in C4(c)), **BFGS** with $B_0 = I$, and **Nelder–Mead** with R `optim`'s rules (best point dashed, current simplex shaded). All are the algorithms of the lecture slides; the gradient methods stop when $\|\nabla f\| < 10^{-8}$ (bowl, Rosenbrock) or $10^{-4}$ (4PL, as in the lecture), Nelder–Mead when the three corner values agree to a relative $10^{-8}$. Right: $f - f^*$ on a log scale against the iteration, and the number of calls of $f$, $\nabla f$ and $H$. **Click the map** to start from somewhere else; **▶ race** replays the run iteration by iteration. The 4PL presets are the lecture's SSE as a function of EC50 and Hill slope only, with bottom and top fixed at the best fit.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="optrace" data-preset="quad" data-kappa="10"></div>
+<script src="../demos/dist/optrace.js"></script>
+```
+
+**E1. (zig-zag and the condition number)** On the **bowl** $f = \tfrac12(x^2 + \kappa y^2)$, from the default start $(-1.6, 1)$, set $\kappa = 1$, $10$, $100$ and $1000$ and note the iterations and $f$ calls of steepest descent each time (use the **all** button of the iteration axis). What shape does its curve have on the log plot, and how does the number of iterations scale with $\kappa$? How many iterations do Newton and BFGS need?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Steepest descent: $\kappa = 1$: 1 iteration (the gradient points straight at the minimum); $\kappa = 10$: 76 iterations, 255 $f$ calls; $\kappa = 100$: 861 and 5673; $\kappa = 1000$: 9475 and 94 366. The iterations grow about tenfold per tenfold $\kappa$, as $(\kappa - 1)/(\kappa + 1)$ predicts ($\log \varepsilon / \log\frac{\kappa - 1}{\kappa + 1} \approx \tfrac{\kappa}{2}\log\frac1\varepsilon$). On the log plot the curve is a **straight line** after the first steps: linear convergence, with a slope that flattens as $\kappa$ grows. On the map the path zig-zags across the valley. The $f$ calls per iteration also grow (3, 7, 10): the backtracking must halve $\alpha$ until it is below about $2/\kappa$. Newton needs **1** iteration for every $\kappa$ (the quadratic model of a quadratic is exact); BFGS 1, 5, 4, 3, almost independent of $\kappa$.
+:::
+
+**E2. (the banana)** Choose **Rosenbrock** (start $(-1.2, 1)$, minimum $(1, 1)$, $\kappa(H^*) = 2508$) and press **▶ race**. Which method arrives first? Read off the iterations and the $f$, $\nabla f$ and $H$ calls of each method, and describe the tail of the Newton and BFGS curves. If a call of $f$ took a second (an ODE model), which method would you pick?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Newton: 21 iterations, 29 $f$ calls, 21 gradients, 21 Hessians. BFGS: 35 iterations, 55 $f$ calls, 36 gradients. Nelder–Mead: 86 iterations, 163 $f$ calls (stopping at $f - f^* = 1.9\times10^{-8}$). Steepest descent: 19 435 iterations and 193 366 $f$ calls. Newton and BFGS creep along the curved valley at first (the curves are almost flat for 15–30 iterations), then fall off a cliff: Newton's tail bends ever steeper (**quadratic**: $f - f^*$ from about $10^{-5}$ to $10^{-21}$ in 3 steps), BFGS's a little less steep (**superlinear**). Steepest descent is linear and very slow along the valley floor. With costly $f$ and an analytic gradient, BFGS: no second derivatives, and 55 $f$ calls plus 36 gradients. Newton is fewer iterations, but each Hessian costs as much as $n$ extra gradients when it is not available analytically. Nelder–Mead needs no gradient at all, but stops at a lower accuracy.
+:::
+
+**E3. (units)** Choose **4PL, EC50 in µM** (start EC50 = 1, hill = 1), then **4PL, EC50 in nM** (start 1000 nM, hill 1: the same point), then **4PL, log₁₀ EC50**. Compare the maps, $\kappa(H)$ at the minimum, and the iterations of each method. Why is Newton's path the same in µM and nM, and steepest descent's not?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+The maps in µM and nM look identical: only the numbers on the $x$ axis change by a factor 1000. But $\kappa(H)$ goes from $1.03$ (µM) to $1.02\times10^{6}$ (nM): $\partial^2\mathrm{SSE}/\partial\mathrm{EC50}^2$ is divided by $1000^2$. Steepest descent: 70 iterations in µM; in nM it hits the limit of 20 000 iterations with $f - f^* = 147$, stuck near EC50 = 1015 nM: the step that is stable for the Hill direction moves EC50 by almost nothing. Newton: 4 iterations in both, along the same path: the Hessian contains the units, so $H^{-1}\nabla f$ rescales them away. BFGS 8 → 11, Nelder–Mead 27 → 40 (its first simplex has the step $0.1 \times 1000 = 100$ in **both** coordinates, so one corner sits at hill = 101). With $\log_{10}\mathrm{EC50}$: $\kappa = 8.4$, steepest descent 136 iterations, Newton 4, BFGS 7. (The 4-parameter $\kappa = 550$ of the lecture comes mostly from bottom and top, fixed here.) The cure in practice is to rescale (`parscale`) or to fit $\log\mathrm{EC50}$.
+:::
+
+**E4. ("converged" is not "found the minimum")** Stay with **4PL, EC50 in µM** and click the map near EC50 = 3.5, hill = 0.4 (bottom right). Where do steepest descent and BFGS go, what do they report, and what is $f - f^*$? Then try a few starts nearby. Which methods reach the minimum from all of them?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+From $(3.5, 0.4)$ steepest descent and BFGS leave the map upwards: the first step pushes the Hill slope to tens (the curve becomes a step function, and the SSE no longer changes with the parameters). There the gradient is below $10^{-4}$, so both stop with a ✓ "converged", at hill ≈ 36 with $f - f^* = 1.7\times10^3$ (SD, 21 iterations) and $3.6\times10^3$ (BFGS, 8 iterations): a flat plateau, not a minimum. Exact numbers depend on where you click: from $(3.5, 0.5)$ steepest descent runs to its iteration limit on the plateau while BFGS finds the minimum; from $(3.8, 0.3)$ both overflow to `NaN`. Newton (with one $H + \mu I$ step, because $H$ is indefinite there) and Nelder–Mead reach the minimum from all these starts. The lesson is the lecture's: check the SSE and the fitted curve, not the convergence flag, and use multistart (C8).
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — gradients and Hessians by hand (B1, B2)"}

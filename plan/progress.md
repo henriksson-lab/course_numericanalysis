@@ -35,7 +35,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 30 | constrained-lp | done | done | done |
 | 31 | diffusion-explicit | done | running | |
 | 32 | diffusion-implicit | running | | |
-| 33 | steady-state-2d | running | | |
+| 33 | steady-state-2d | done | running | |
 | 34 | advection-diffusion | running | | |
 | 35 | reaction-diffusion | running | | |
 | 36 | fem-outlook | running | (no demo: further reading) | |
@@ -71,3 +71,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - gradient-methods: slides not screenshotted; densest 'What optim, minimize and argmin do', 'When Newton fails'. From memory: optim ndeps=1e-3 central; scipy forward diff step √ε·max(1,|x|); BFGS gtol 1e-5; McKinnon 1998. rust/examples/gradient_methods_shared/defs.rs included via include! (new pattern).
 - identifiability: pk(t, ka, ke, V, D=100) vs NLS unit's bateman() naming — reconcile in pass 2. From memory: Raue 2009, Gutenkunst 2007, DAISY, StructuralIdentifiability.jl. Slides not screenshotted.
 - constrained-lp demo: edge rate at optimum −2/−1 per freed variable vs lecture slide '−3 per unit x₂' — same edge, different unit; consider aligning slide wording.
+- steady-state-2d: [B1] 'mechanics not nutrients' claim from contentplan, not read — verify. Grid conventions: x_i = i h, µm/s/µM, ghost points, k = i + (j−1)nx — reconcile with diffusion-implicit in pass 2.

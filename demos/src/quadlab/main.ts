@@ -602,6 +602,7 @@ export function stepRun(m: Method, f: (x: number) => number, s: RunState): void 
     if (!s.pieces.some(q => q.status === "pending")) { s.done = true; s.note = "every piece accepted"; }
     return;
   }
+  s.note = "";
   let w = 0;
   s.pieces.forEach((p, i) => { if (p.err > s.pieces[w].err) w = i; });
   const p = s.pieces[w], mm = (p.a + p.b) / 2;
@@ -822,7 +823,7 @@ function buildAdaptive(box: HTMLElement, ds: DOMStringMap, uid: number): void {
     const val = total(run), est = errTotal(run), err = Math.abs(val - exact);
     const pend = run.pieces.filter(p => p.status === "pending").length;
     item("status:", run.done ? (run.note.startsWith("maximum") ? "stopped: " : "done: ") + run.note
-      : `step ${run.steps}` + (st.m === "simpson" ? `, ${pend} piece(s) still to check` : ", bisect the piece with the largest error (orange)"));
+      : `step ${run.steps}` + (st.m === "simpson" ? `, ${pend} piece(s) still to check` : `, ${run.note ? run.note + "; " : ""}next: bisect the piece with the largest error (orange)`));
     item("tolerance:", st.m === "simpson" ? "1e-6 (absolute)" : `abs = rel = ${sci(GK_TOL, 3)}`);
     if (st.m === "gk" && run.first) item("first pass (21 points):", `${sci(run.first.val, 4)} ± ${sci(run.first.err, 2)}`);
     item("estimate", fix(val, 7));

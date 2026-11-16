@@ -94,9 +94,7 @@ function fpl(id: string, label: string, unit: "uM" | "nM" | "log"): Problem {
   const toE = (x: number): number => unit === "log" ? 10 ** x : x / s;
   const p: Problem = {
     id, label,
-    formula: unit === "log"
-      ? "SSE(log₁₀ EC50, hill); bottom, top fixed at the best fit"
-      : `SSE(EC50, hill), dose in ${unit === "nM" ? "nM" : "µM"}; bottom, top fixed at the best fit`,
+    formula: unit === "log" ? "4PL: SSE(log₁₀ EC50, hill)" : `4PL: SSE(EC50, hill), EC50 in ${unit === "nM" ? "nM" : "µM"}`,
     xlab: unit === "log" ? "log₁₀ EC50 (EC50 in µM)" : unit === "nM" ? "EC50 (nM)" : "EC50 (µM)",
     ylab: "Hill slope",
     dom: unit === "log" ? [-1.5, 0.75, 0.2, 3.2] : [0.05 * s, 4 * s, 0.2, 3.2],
@@ -193,11 +191,11 @@ export function steepest(p: Problem, x0: Vec, maxit = 20000): Trace {
     const g = k.g(x);
     if (!(norm(g) >= p.gtol)) { t.status = Number.isFinite(norm(g)) ? "converged" : "NaN gradient"; break; }
     const r = armijo(k.f, x, fx, g, [-g[0], -g[1]]);
-    if (!r) { t.status = "line search failed"; break; }
+    if (!r) { t.status = "stalled"; break; }
     x = r.x; fx = r.f;
     push(t, x, fx, k.c);
   }
-  if (!t.status) t.status = "max iterations";
+  if (!t.status) t.status = "maxit";
   return t;
 }
 
@@ -219,12 +217,12 @@ export function newton(p: Problem, x0: Vec, maxit = 200): Trace {
     }
     const s = solve2(H, [-g[0], -g[1]]);
     const r = armijo(k.f, x, fx, g, s);
-    if (!r) { t.status = "line search failed"; break; }
+    if (!r) { t.status = "stalled"; break; }
     x = r.x; fx = r.f;
     push(t, x, fx, k.c);
     t.shifted.push(nshift);
   }
-  if (!t.status) t.status = "max iterations";
+  if (!t.status) t.status = "maxit";
   return t;
 }
 
@@ -237,7 +235,7 @@ export function bfgs(p: Problem, x0: Vec, maxit = 2000): Trace {
     if (!(norm(g) >= p.gtol)) { t.status = Number.isFinite(norm(g)) ? "converged" : "NaN gradient"; break; }
     const d: Vec = [-(B[0] * g[0] + B[1] * g[1]), -(B[2] * g[0] + B[3] * g[1])];
     const r = armijo(k.f, x, fx, g, d);
-    if (!r) { t.status = "line search failed"; break; }
+    if (!r) { t.status = "stalled"; break; }
     const s: Vec = [r.x[0] - x[0], r.x[1] - x[1]];
     x = r.x; fx = r.f;
     const gn = k.g(x);
@@ -254,7 +252,7 @@ export function bfgs(p: Problem, x0: Vec, maxit = 2000): Trace {
     }
     push(t, x, fx, k.c);
   }
-  if (!t.status) t.status = "max iterations";
+  if (!t.status) t.status = "maxit";
   return t;
 }
 
@@ -297,6 +295,6 @@ export function nelderMead(p: Problem, x0: Vec, maxit = 5000, reltol = 1e-8): Tr
     push(t, S[0], F[0], k.c);
     t.simplex.push(S.slice());
   }
-  if (!t.status) t.status = "max iterations";
+  if (!t.status) t.status = "maxit";
   return t;
 }

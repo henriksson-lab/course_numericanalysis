@@ -1,0 +1,1000 @@
+---
+title: "Exercise: iterative linear solvers in depth"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- write **Jacobi** and **Gauss–Seidel** as splittings $\mathbf{x} \leftarrow \mathbf{x} + M^{-1}(\mathbf{b} - A\mathbf{x})$ and run them by hand on a tiny grid,
+- predict their speed from the **spectral radius** of the iteration matrix, and explain why they slow down by a factor 4 each time the grid is refined,
+- count **conjugate gradient** iterations as the grid grows and relate them to $\sqrt{\kappa}$,
+- use a **preconditioner** (diagonal, incomplete Cholesky) and say when it helps,
+- recognise a **nonsymmetric** system, see CG fail on it, and solve it with **GMRES**.
+
+This is an optional further-reading unit, so the exercise is shorter than usual. The by-hand part needs pen and paper (and a calculator for B2–B4). The code part reuses the `jacobi` and `cg` functions you wrote in *Structure: symmetric, banded, sparse* (C8).
+
+## Background
+
+**The chamber.** Oxygen in a 1 mm × 1 mm cell-laden gel, supplied through all four walls (concentration 1 = ambient) and consumed uniformly by the cells. The oxygen deficit $u = 1 - c$ solves $-\Delta u = \Phi$ with $u = 0$ on the walls, $\Phi = 12$. On an $m \times m$ grid of interior points with spacing $h = 1/(m+1)$, multiplied through by $h^2$:
+$$4u_{ij} - u_{i-1,j} - u_{i+1,j} - u_{i,j-1} - u_{i,j+1} = \Phi h^2,$$
+a sparse SPD system $A\mathbf{u} = \mathbf{b}$ with $n = m^2$ unknowns and five non-zeros per row. The unknowns are numbered row by row: $u_{ij}$ is entry $i + m(j-1)$.
+
+**Facts used below:**
+
+1. **Splitting.** With $A = M - N$: $\mathbf{x}_{k+1} = \mathbf{x}_k + M^{-1}(\mathbf{b} - A\mathbf{x}_k)$. Jacobi: $M = D$ (diagonal). Gauss–Seidel: $M$ = lower triangle of $A$ including the diagonal; in a sweep, each point uses the neighbours' newest values.
+2. **Error and spectral radius.** $\mathbf{e}_{k+1} = T\mathbf{e}_k$ with $T = I - M^{-1}A$. The iteration converges for every start if and only if $\rho(T) = \max_i |\lambda_i(T)| < 1$; the error shrinks by about $\rho$ per step, so one digit takes $\ln 10 / (-\ln \rho)$ steps.
+3. **On this grid:** $\rho_J = \cos \pi h$, $\rho_{GS} = \cos^2 \pi h$, and $\kappa(A) = \cot^2(\pi h/2) \approx 4/(\pi^2 h^2)$.
+4. **CG** (SPD only) needs about $\tfrac12\sqrt{\kappa}\,\ln(2/\text{tol})$ iterations at most; in practice the count grows like $\sqrt{\kappa} \sim 1/h$.
+5. **Preconditioned CG** replaces $\mathbf{z} = \mathbf{r}$ by $\mathbf{z} = M^{-1}\mathbf{r}$ with $M \approx A$ SPD. Jacobi: $M = D$. Incomplete Cholesky IC(0): $M = LL^T$ where $L$ has the pattern of the lower triangle of $A$ (fill-in dropped).
+6. **GMRES** finds the $\mathbf{x}_k$ in the Krylov space $\text{span}\{\mathbf{b}, A\mathbf{b}, \dots, A^{k-1}\mathbf{b}\}$ with the smallest residual; it works for nonsymmetric $A$ but stores all $k$ basis vectors.
+7. **Stopping:** in this exercise every method stops when the relative residual $\|\mathbf{b} - A\mathbf{x}\| / \|\mathbf{b}\| < 10^{-6}$.
+
+Building the matrix and solving directly:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+lap1 <- function(m) bandSparse(m, k = -1:1,
+  diagonals = list(rep(-1, m - 1), rep(2, m), rep(-1, m - 1)))
+lap2 <- function(m) { I <- Diagonal(m); T <- lap1(m); kronecker(I, T) + kronecker(T, I) }
+chamber_rhs <- function(m, Phi = 12) rep(Phi / (m + 1)^2, m^2)
+
+m <- 63; A <- lap2(m); b <- chamber_rhs(m)
+c(n = nrow(A), nnz = nnzero(A))
+u <- solve(A, b)                              # sparse direct solve
+1 - u[(m^2 + 1) / 2]                          # oxygen in the centre
+# Output:
+#     n   nnz 
+#  3969 19593 
+# [1] 0.1161138
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
+
+def lap1(m):
+    return sparse.diags([-np.ones(m - 1), 2 * np.ones(m), -np.ones(m - 1)], [-1, 0, 1])
+
+def lap2(m):
+    I, T = sparse.identity(m), lap1(m)
+    return (sparse.kron(I, T) + sparse.kron(T, I)).tocsr()
+
+def chamber_rhs(m, Phi=12):
+    return np.full(m * m, Phi / (m + 1) ** 2)
+
+m = 63; A = lap2(m); b = chamber_rhs(m)
+print(A.shape[0], A.nnz)
+u = spsolve(A, b)                             # sparse direct solve
+print(1 - u[(m * m - 1) // 2])                # oxygen in the centre
+# Output:
+# 3969 19593
+# 0.1161137741104935
+```
+
+### Rust
+
+```rust
+// rust/examples/iterative_solvers_background.rs  —  cargo run --example iterative_solvers_background
+// The chamber matrix in sprs. sprs has no sparse direct solver, so the
+// reference solution comes from (hand-written) CG with a tight tolerance.
+include!("iterative_solvers_shared/defs.rs");
+
+fn main() {
+    let m = 63;
+    let (a, b) = (lap2(m), chamber_rhs(m, 12.0));
+    println!("{} {}", a.rows(), a.nnz());
+    let (u, _) = pcg(&a, &b, |r| r.to_vec(), 1e-12, 10_000);
+    println!("{}", 1.0 - u[(m * m - 1) / 2]);       // oxygen in the centre
+}
+
+// Output:
+// 3969 19593
+// 0.11611377411051838
+```
+
+:::
+
+R's `solve` on a sparse SPD matrix runs a sparse Cholesky with a fill-reducing ordering (Python: [`scipy.sparse.linalg.spsolve`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.spsolve.html), a sparse LU). The Rust crate `sprs` has no sparse direct solver, so the Rust background solves with the hand-written CG of `rust/examples/iterative_solvers_shared/defs.rs` (shared by all Rust files of this exercise: `lap2`, `chamber_rhs`, `matvec`, `dot`, `norm`, `diagonal` and `pcg`) to a tolerance of $10^{-12}$; it agrees with the direct solve to 14 digits.
+
+## By hand
+
+**B1. Jacobi and Gauss–Seidel on four points.** Take $m = 2$ (four interior points, numbered 1 2 in the bottom row and 3 4 in the top row) and $\mathbf{b} = (1, 1, 1, 1)$.
+(a) Write down $A$. Check that $\mathbf{x} = (0.5, 0.5, 0.5, 0.5)$ solves $A\mathbf{x} = \mathbf{b}$.
+(b) Do three Jacobi steps from $\mathbf{x}_0 = \mathbf{0}$. By what factor does the error shrink per step?
+(c) Do two Gauss–Seidel sweeps from $\mathbf{0}$, in the order 1, 2, 3, 4. Give the error of point 4 after each sweep and their ratio.
+(d) Compare (b) and (c) with fact 3 ($h = 1/3$).
+
+**B2. A spectral radius.** For a row of three cells, $A = \begin{pmatrix}2&-1&0\\-1&2&-1\\0&-1&2\end{pmatrix}$.
+(a) Write down the Jacobi iteration matrix $T_J = I - D^{-1}A$. Show that $(1, \sqrt2, 1)$ is an eigenvector and find all three eigenvalues (the trace and the other two eigenvectors $(1, 0, -1)$ and $(1, -\sqrt2, 1)$ help).
+(b) What is $\rho(T_J)$? Compare with $\cos(\pi h)$, $h = 1/4$. How many Jacobi steps per digit?
+(c) For the chamber with $m = 63$: $\rho_J = \cos(\pi/64) = 0.998795$. How many sweeps per digit, and how many for six digits? Gauss–Seidel?
+(d) Why does Jacobi diverge for $\begin{pmatrix}1&2\\2&1\end{pmatrix}$ but converge for $\begin{pmatrix}2&1\\1&2\end{pmatrix}$?
+
+**B3. Cost of refining.** On the chamber, CG took 100 iterations and Jacobi 11 302 sweeps at $m = 63$.
+(a) Predict both counts for $m = 127$ and $m = 255$ (use $1/h = m + 1$).
+(b) One iteration of either costs about $2\,\text{nnz} \approx 10n$ floating-point operations for the matrix–vector product. Estimate the total work of CG and of Jacobi at $m = 255$.
+(c) A 1 mm³ tissue block at 10 µm resolution: $m = 100$ in 3D, $n = 10^6$, seven non-zeros per row. CG's iteration count depends on $h$, not on the dimension. Estimate the iterations, the work, and the memory for $A$ (12 bytes per non-zero) plus four vectors. Compare with the Cholesky factor of about $6\times10^8$ non-zeros.
+
+**B4. A small step is not a small error.** A Jacobi run on the chamber with $\rho = 0.9988$ is stopped when the largest change in one step falls below $10^{-6}$.
+(a) Assume each later step is $\rho$ times the previous one. Sum the geometric series to estimate the distance from the true solution.
+(b) How many more sweeps would it take to make that error 1000 times smaller?
+(c) Why is a test on the residual safer? Why is it still not a test on the error?
+
+**B5. What a diagonal preconditioner can do.**
+(a) $A = \begin{pmatrix}100&1\\1&1\end{pmatrix}$. Compute its eigenvalues and $\kappa(A)$. Then compute $\kappa$ of $D^{-1/2}AD^{-1/2}$, $D = \text{diag}(100, 1)$. (For CG, preconditioning with $D$ is equivalent to running CG on $D^{-1/2}AD^{-1/2}$.)
+(b) For the chamber matrix, $D = 4I$. What does Jacobi preconditioning change?
+
+## In code
+
+**C1. Jacobi and Gauss–Seidel as splittings.** Write `splitting(A, b, M, tol, maxit)` that iterates $\mathbf{x} \leftarrow \mathbf{x} + M^{-1}\mathbf{r}$ and returns the solution, the number of iterations and the history of relative residuals. Run it with $M = D$ and $M$ = lower triangle (R: [`tril`](https://rdrr.io/cran/Matrix/man/band-methods.html); Python: [`scipy.sparse.tril`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.tril.html) and [`spsolve_triangular`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.spsolve_triangular.html)) for $m = 7, 15, 31$. Compare with the predictions $\ln(10^{-6})/\ln(\cos\pi h)$ and half of that. For $m = 31$, print the ratio of the last few successive residuals.
+
+**C2. The spectral radius.** For $m = 7$, form $T_J = I - D^{-1}A$ and $T_{GS} = I - M^{-1}A$ as dense matrices and compute their spectral radii (R: [`eigen`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html); Python: [`np.linalg.eigvals`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvals.html)). Compare with fact 3 and with B2. Also compute $\rho(T_J)$ for the $2\times2$ matrix of B2(d).
+
+**C3. CG against grid size.** Count CG iterations for $m = 31, 63, 127, 255$. In R and Rust use your hand-written CG with a relative tolerance; in Python use [`scipy.sparse.linalg.cg`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.cg.html) with `rtol=1e-6` and a `callback` that counts. Print $\kappa = \cot^2(\pi h / 2)$ and $\sqrt\kappa$ next to the counts, and the oxygen in the centre. Fit the slope of log(iterations) against $\log(m+1)$.
+
+**C4. Preconditioning.** The second chamber has a cell aggregate of radius 0.3 mm in the middle, where $D$ is 10 times lower: $A = -\nabla\cdot(D\nabla\,\cdot)$ with $D$ evaluated between grid points. Use the starter code below. For $m = 63$, on the uniform and the aggregate chamber, count iterations of plain CG, Jacobi-preconditioned CG and IC(0)-preconditioned CG. Print the smallest and largest diagonal entry. Check that $LL^T \ne A$, and that $L$ has as many non-zeros as the lower triangle of $A$. (Python: pass the preconditioner to `cg` as `M=`, a [`LinearOperator`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html) whose `matvec` applies $M^{-1}$.)
+
+::: {.callout-tip collapse="true" title="Starter code for C4: the aggregate chamber and IC(0)"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+lapD <- function(m, Dfun) {                  # -div(D grad u), D on cell faces
+  h <- 1 / (m + 1); I <- Diagonal(m)
+  G1 <- bandSparse(m + 1, m, k = c(0, -1), diagonals = list(rep(1, m), rep(-1, m)))
+  Gx <- kronecker(I, G1); Gy <- kronecker(G1, I)
+  fx <- expand.grid(x = (1:(m + 1) - 0.5) * h, y = (1:m) * h)   # x-faces
+  fy <- expand.grid(x = (1:m) * h, y = (1:(m + 1) - 0.5) * h)   # y-faces
+  t(Gx) %*% Diagonal(x = Dfun(fx$x, fx$y)) %*% Gx +
+    t(Gy) %*% Diagonal(x = Dfun(fy$x, fy$y)) %*% Gy
+}
+aggregate_D <- function(x, y) ifelse((x - 0.5)^2 + (y - 0.5)^2 < 0.3^2, 0.1, 1)
+ic0 <- function(A, m) {                      # incomplete Cholesky, five-point pattern
+  n <- nrow(A); d <- lw <- ls <- numeric(n); dA <- diag(A)
+  w <- c(0, diag(A[-1, -n])); s <- c(rep(0, m), diag(A[-(1:m), -((n - m + 1):n)]))
+  for (k in 1:n) {
+    if (k > 1) lw[k] <- w[k] / d[k - 1]
+    if (k > m) ls[k] <- s[k] / d[k - m]
+    d[k] <- sqrt(dA[k] - lw[k]^2 - ls[k]^2)
+  }
+  bandSparse(n, k = c(0, -1, -m), diagonals = list(d, lw[-1], ls[-(1:m)]))
+}
+```
+
+### Python
+
+```python
+def lapD(m, Dfun):                            # -div(D grad u), D on cell faces
+    h = 1 / (m + 1); I = sparse.identity(m)
+    G1 = sparse.diags([np.ones(m), -np.ones(m)], [0, -1], shape=(m + 1, m))
+    Gx = sparse.kron(I, G1); Gy = sparse.kron(G1, I)
+    faces, nodes = (np.arange(1, m + 2) - 0.5) * h, np.arange(1, m + 1) * h
+    Dx = Dfun(*[g.ravel() for g in np.meshgrid(faces, nodes)])          # x-faces
+    Dy = Dfun(*[g.ravel() for g in np.meshgrid(nodes, faces)])          # y-faces
+    return (Gx.T @ sparse.diags(Dx) @ Gx + Gy.T @ sparse.diags(Dy) @ Gy).tocsr()
+
+def aggregate_D(x, y):
+    return np.where((x - 0.5) ** 2 + (y - 0.5) ** 2 < 0.3 ** 2, 0.1, 1.0)
+
+def ic0(A, m):                                # incomplete Cholesky, five-point pattern
+    n = A.shape[0]; d = np.zeros(n); lw = np.zeros(n); ls = np.zeros(n)
+    dA = A.diagonal(); w = A.diagonal(-1); s = A.diagonal(-m)
+    for k in range(n):
+        if k > 0: lw[k] = w[k - 1] / d[k - 1]
+        if k >= m: ls[k] = s[k - m] / d[k - m]
+        d[k] = np.sqrt(dA[k] - lw[k] ** 2 - ls[k] ** 2)
+    return sparse.diags([d, lw[1:], ls[m:]], [0, -1, -m], format="csr")
+```
+
+### Rust
+
+```rust
+// rust/examples/iterative_solvers_c4.rs  —  cargo run --release --example iterative_solvers_c4
+// The starter functions are lap_d, aggregate_d, ic0 and ic_solve in that file
+// (shown in full in the C4 solution). ic0 returns the diagonal d and the
+// west / south entries lw, ls of L; ic_solve applies (L L^T)^{-1}.
+```
+
+:::
+
+IC(0) for the five-point matrix: row $k$ of $L$ has entries only at $k-1$ (west neighbour), $k-m$ (south neighbour) and $k$. Cholesky's formulas then reduce to $\ell_{k,k-1} = a_{k,k-1}/d_{k-1}$, $\ell_{k,k-m} = a_{k,k-m}/d_{k-m}$, $d_k = \sqrt{a_{kk} - \ell_{k,k-1}^2 - \ell_{k,k-m}^2}$; the products that would create fill-in are never formed.
+:::
+
+**C5. A nonsymmetric system: the perfused chamber.** Medium flows through the chamber from left to right with Péclet number 50. With upwind differences (*Flow plus diffusion*), the row for point $(i, j)$ becomes $(4 + \text{Pe}\,h)u_{ij} - (1 + \text{Pe}\,h)u_{i-1,j} - u_{i+1,j} - u_{i,j-1} - u_{i,j+1} = \Phi h^2$. For $m = 63$:
+(a) Build $A$ and check whether it is symmetric.
+(b) Run plain CG for 50, 100 and 300 iterations and print the true relative residual.
+(c) Solve with GMRES (R: hand-written as on the slide; [`pracma::gmres`](https://rdrr.io/cran/pracma/man/gmres.html) exists but needs a dense matrix. Python: [`scipy.sparse.linalg.gmres`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.gmres.html) with `restart=300` and a `callback` with `callback_type="pr_norm"`). Report iterations and relative residual. In Python, also run with the default `restart=20`.
+(d) Run GMRES on the symmetric chamber and compare the count with C3.
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — Jacobi and Gauss–Seidel by hand (B1)"}
+Each row of $A$ for $m = 2$ has 4 on the diagonal and $-1$ for the two neighbours inside the grid (point 1 touches 2 and 3, point 4 touches 2 and 3). So one update of point $i$ is $x_i = (1 + \text{sum of its two neighbours})/4$. Jacobi uses only old values; Gauss–Seidel overwrites $x_1$ first and uses the new $x_1$ when it updates $x_2$ and $x_3$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — eigenvalues (B2, C2)"}
+Multiply $T_J$ by the vector and see if you get a multiple of it. The eigenvalues of $T_J$ add up to its trace, 0. A $2\times2$ matrix $\begin{pmatrix}0&a\\a&0\end{pmatrix}$ has eigenvalues $\pm a$. In code, `max(Mod(eigen(T)$values))` (R) or `np.max(np.abs(np.linalg.eigvals(T)))` (Python); use `Mod`/`abs` because a nonsymmetric $T$ may have complex eigenvalues.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — scaling (B3)"}
+Doubling $m + 1$ halves $h$. Jacobi's count grows like $1/h^2$, CG's like $1/h$. At $m = 255$, $n = 65\,025$. For memory, 1 GB $= 10^9$ bytes, and a vector of $10^6$ doubles is 8 MB.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — the geometric series (B4)"}
+If the last step was $s$ and every later step is $\rho$ times the previous one, the remaining distance is $s(\rho + \rho^2 + \dots) = s\rho/(1-\rho)$. To shrink the error by a factor $F$ takes $\ln F / (-\ln\rho)$ steps.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — splittings in code (C1)"}
+R: `solve(M, r)` with `M <- Diagonal(x = diag(A))` or `M <- tril(A)` dispatches to a cheap diagonal or triangular solve; wrap it in `as.vector`. Python: for Jacobi use `r / A.diagonal()`; for Gauss–Seidel `spsolve_triangular(sparse.tril(A, format="csr"), r, lower=True)`. Pass the solve as a function so one `splitting` serves both.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — counting iterations (C3, C5)"}
+scipy calls `callback(xk)` once per CG iteration; keep a counter in a list (`count = [0]`, `count[0] += 1`) so the inner function can change it. In scipy 1.12 and later the tolerance argument is `rtol` (formerly `tol`). `info = 0` means converged, `info > 0` means the iteration limit was reached. For `gmres`, `callback_type="pr_norm"` calls the callback once per inner iteration with the residual norm; `maxiter` counts restart cycles.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — preconditioners (C4)"}
+Jacobi: `Minv = function(r) r / d` with `d <- diag(A)`. IC(0): with `L <- ic0(A, m)` and `Lt <- t(L)`, apply $M^{-1} = (LL^T)^{-1}$ by two triangular solves, `solve(Lt, solve(L, r))`. Python: `LinearOperator(A.shape, matvec=lambda r: spsolve_triangular(Lt, spsolve_triangular(L, r, lower=True), lower=False))` with `Lt = L.T.tocsr()`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 8 — the advection matrix (C5)"}
+Add `Pe * h` times a lower bidiagonal matrix (1 on the diagonal, $-1$ below it) to the 1D operator in $x$ only, then combine with the $y$ operator by `kronecker` as in `lap2`. Symmetric? `isSymmetric(A)` (R), `abs(A - A.T).max() == 0` (Python). To see CG fail, compute the residual $\|\mathbf{b} - A\mathbf{x}\|$ from the returned $\mathbf{x}$, not CG's internal residual.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $A = \begin{pmatrix}4&-1&-1&0\\-1&4&0&-1\\-1&0&4&-1\\0&-1&-1&4\end{pmatrix}$. Each row: $4(0.5) - 0.5 - 0.5 = 1$. ✓
+(b) By symmetry all four values stay equal, $x \leftarrow (1 + 2x)/4$: $0 \to 0.25 \to 0.375 \to 0.4375$. Errors $0.5, 0.25, 0.125, 0.0625$: the factor is $\tfrac12$ per step.
+(c) Sweep 1: $x_1 = 1/4 = 0.25$, $x_2 = (1 + 0.25 + 0)/4 = 0.3125$, $x_3 = 0.3125$, $x_4 = (1 + 0.3125 + 0.3125)/4 = 0.40625$. Sweep 2: $x_1 = (1 + 0.625)/4 = 0.40625$, $x_2 = x_3 = (1 + 0.40625 + 0.40625)/4 = 0.453125$, $x_4 = (1 + 0.90625)/4 = 0.4765625$. Errors of point 4: $0.09375$, then $0.0234375$: ratio $\tfrac14$.
+(d) $\cos(\pi/3) = 0.5 = \rho_J$ and $\cos^2(\pi/3) = 0.25 = \rho_{GS}$: one Gauss–Seidel sweep is worth two Jacobi steps.
+
+**B2.**
+(a) $D = 2I$, so $T_J = \begin{pmatrix}0&\frac12&0\\\frac12&0&\frac12\\0&\frac12&0\end{pmatrix}$. $T_J(1, \sqrt2, 1)^T = (\tfrac{\sqrt2}{2}, 1, \tfrac{\sqrt2}{2})^T = \tfrac{1}{\sqrt2}(1, \sqrt2, 1)^T$: eigenvalue $1/\sqrt2$. $(1, 0, -1)$ gives 0, $(1, -\sqrt2, 1)$ gives $-1/\sqrt2$. Sum 0 = trace. ✓
+(b) $\rho = 1/\sqrt2 = 0.7071 = \cos(\pi/4)$. Steps per digit: $\ln 10 / (-\ln 0.7071) = 2.3026 / 0.3466 = 6.6$.
+(c) $-\ln(0.998795) = 0.0012057$, so $2.3026/0.0012057 = 1910$ sweeps per digit, about $11\,460$ for six (the measured count is 11 302). Gauss–Seidel: $\rho^2$, half as many: about 955 per digit, $5730$ for six (measured 5652).
+(d) $\begin{pmatrix}1&2\\2&1\end{pmatrix}$: $T_J = \begin{pmatrix}0&-2\\-2&0\end{pmatrix}$, eigenvalues $\pm2$, $\rho = 2 > 1$: the error doubles each step. $\begin{pmatrix}2&1\\1&2\end{pmatrix}$: $T_J = \begin{pmatrix}0&-\frac12\\-\frac12&0\end{pmatrix}$, $\rho = \tfrac12$. The second matrix is diagonally dominant, the first is not.
+
+**B3.**
+(a) $m = 127$: CG $\approx 200$, Jacobi $\approx 45\,200$. $m = 255$: CG $\approx 400$, Jacobi $\approx 181\,000$. (Measured: CG 203 and 409; Jacobi 45 193 at $m = 127$.)
+(b) $10n = 6.5\times10^5$ operations per iteration. CG: $400 \times 6.5\times10^5 \approx 2.6\times10^8$ (a fraction of a second compiled). Jacobi: $181\,000 \times 6.5\times10^5 \approx 1.2\times10^{11}$, about 500 times more.
+(c) $h = 1/101$, between the 2D runs at $m = 63$ and $127$: about 200 iterations (a run in R gives 203). Work: $200 \times 2 \times 7\times10^6 \approx 3\times10^9$ operations, seconds. Memory: $7\times10^6 \times 12$ bytes $= 84$ MB for $A$, plus $4 \times 8$ MB for vectors: about 120 MB. The Cholesky factor: $6\times10^8 \times 12 \approx 7$ GB, roughly 60 times more.
+
+**B4.**
+(a) $10^{-6} \times 0.9988 / 0.0012 \approx 8.3\times10^{-4}$: the iterate is still about $10^{-3}$ away, 830 times more than the step. (The lecture's run: error $8.29\times10^{-4}$.)
+(b) $\ln 1000 / (-\ln 0.9988) = 6.908/0.0012007 \approx 5750$ more sweeps.
+(c) The residual measures how well the equations are satisfied, independently of how fast the method moves; a slow method has small steps but not a small residual. Still, relative error $\le \kappa(A) \times$ relative residual (*Pivoting, norms and conditioning*), and here $\kappa \approx 1659$, so a residual of $10^{-6}$ guarantees only about $2\times10^{-3}$ relative error in the worst case.
+
+**B5.**
+(a) Trace 101, determinant 99: $\lambda = (101 \pm \sqrt{101^2 - 4\cdot99})/2 = (101 \pm 99.02)/2$, so $100.01$ and $0.990$, $\kappa \approx 101$. $D^{-1/2}AD^{-1/2} = \begin{pmatrix}1&0.1\\0.1&1\end{pmatrix}$, eigenvalues $1.1$ and $0.9$, $\kappa = 1.22$. The diagonal scaling removes the bad scaling of the first unknown.
+(b) $D^{-1/2}AD^{-1/2} = A/4$: same eigenvectors, same $\kappa$. Nothing changes; CG takes exactly the same steps (C4 confirms).
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# lap1(), lap2(), chamber_rhs() as in the Background
+splitting <- function(A, b, M, tol = 1e-6, maxit = 1e5) {
+  x <- numeric(length(b)); nb <- sqrt(sum(b^2)); res <- numeric(0)
+  for (it in 0:maxit) {
+    r <- b - (A %*% x)[, 1]
+    res <- c(res, sqrt(sum(r^2)) / nb)
+    if (res[it + 1] < tol) break
+    x <- x + as.vector(solve(M, r))          # x <- x + M^{-1} r
+  }
+  list(x = x, it = it, res = res)
+}
+for (m in c(7, 15, 31)) {
+  A <- lap2(m); b <- chamber_rhs(m); h <- 1 / (m + 1)
+  jac <- splitting(A, b, Diagonal(x = diag(A)))
+  gs  <- splitting(A, b, tril(A))
+  pred <- log(1e-6) / log(cos(pi * h))
+  cat(m, jac$it, gs$it, round(pred), round(pred / 2), "\n")
+}
+r <- jac$res; round(tail(r, 3) / head(tail(r, 4), 3), 5)   # residual ratios, m = 31
+cos(pi / 32)
+# Output:
+# 7 174 88 174 87 
+# 15 705 354 712 356 
+# 31 2825 1414 2862 1431 
+# [1] 0.99518 0.99518 0.99518
+# [1] 0.9951847
+```
+
+### Python
+
+```python
+# imports, lap1(), lap2(), chamber_rhs() as in the Background
+from scipy.sparse.linalg import spsolve_triangular
+
+def splitting(A, b, Msolve, tol=1e-6, maxit=100000):
+    x = np.zeros(len(b)); nb = np.linalg.norm(b); res = []
+    for it in range(maxit + 1):
+        r = b - A @ x
+        res.append(np.linalg.norm(r) / nb)
+        if res[-1] < tol:
+            break
+        x = x + Msolve(r)                     # x <- x + M^{-1} r
+    return x, it, np.array(res)
+
+for m in [7, 15, 31]:
+    A = lap2(m); b = chamber_rhs(m); h = 1 / (m + 1)
+    d = A.diagonal(); L = sparse.tril(A, format="csr")
+    xj, itj, rj = splitting(A, b, lambda r: r / d)
+    xg, itg, rg = splitting(A, b, lambda r: spsolve_triangular(L, r, lower=True))
+    pred = np.log(1e-6) / np.log(np.cos(np.pi * h))
+    print(m, itj, itg, round(pred), round(pred / 2))
+print(np.round(rj[-3:] / rj[-4:-1], 5))      # residual ratios, m = 31
+print(np.cos(np.pi / 32))
+# Output:
+# 7 174 88 174 87
+# 15 705 354 712 356
+# 31 2825 1414 2862 1431
+# [0.99518 0.99518 0.99518]
+# 0.9951847266721969
+```
+
+### Rust
+
+```rust
+// rust/examples/iterative_solvers_c1.rs  —  cargo run --release --example iterative_solvers_c1
+// C1: Jacobi and Gauss-Seidel as splittings x <- x + M^{-1} (b - A x).
+// Gauss-Seidel's M = lower triangle of A, solved by forward substitution.
+include!("iterative_solvers_shared/defs.rs");
+
+fn splitting(a: &CsMat<f64>, b: &[f64], msolve: impl Fn(&[f64]) -> Vec<f64>,
+             tol: f64, maxit: usize) -> (Vec<f64>, usize, Vec<f64>) {
+    let mut x = vec![0.0; b.len()];
+    let (nb, mut res) = (norm(b), Vec::new());
+    let mut it = 0;
+    loop {
+        let ax = matvec(a, &x);
+        let r: Vec<f64> = b.iter().zip(&ax).map(|(p, q)| p - q).collect();
+        res.push(norm(&r) / nb);
+        if *res.last().unwrap() < tol || it == maxit { break; }
+        let dx = msolve(&r);
+        for i in 0..x.len() { x[i] += dx[i]; }
+        it += 1;
+    }
+    (x, it, res)
+}
+fn forward_solve(a: &CsMat<f64>, r: &[f64]) -> Vec<f64> {   // (lower triangle of A) y = r
+    let mut y = vec![0.0; r.len()];
+    for (i, row) in a.outer_iterator().enumerate() {
+        let (mut s, mut d) = (r[i], 0.0);
+        for (j, v) in row.iter() {
+            if j < i { s -= v * y[j]; } else if j == i { d = *v; }
+        }
+        y[i] = s / d;
+    }
+    y
+}
+
+fn main() {
+    let mut rj = Vec::new();
+    for m in [7, 15, 31] {
+        let (a, b) = (lap2(m), chamber_rhs(m, 12.0));
+        let h = 1.0 / (m + 1) as f64;
+        let d = diagonal(&a);
+        let (_, itj, r) = splitting(&a, &b, |r| r.iter().zip(&d).map(|(p, q)| p / q).collect(), 1e-6, 100_000);
+        let (_, itg, _) = splitting(&a, &b, |r| forward_solve(&a, r), 1e-6, 100_000);
+        let pred = 1e-6_f64.ln() / (std::f64::consts::PI * h).cos().ln();
+        println!("{} {} {} {} {}", m, itj, itg, pred.round(), (pred / 2.0).round());
+        rj = r;
+    }
+    let k = rj.len();
+    let ratios: Vec<f64> = (k - 3..k).map(|i| (rj[i] / rj[i - 1] * 1e5).round() / 1e5).collect();
+    println!("{:?}", ratios);                         // residual ratios, m = 31
+    println!("{}", (std::f64::consts::PI / 32.0).cos());
+}
+
+// Output:
+// 7 174 88 174 87
+// 15 705 354 712 356
+// 31 2825 1414 2862 1431
+// [0.99518, 0.99518, 0.99518]
+// 0.9951847266721969
+```
+
+:::
+
+Jacobi needs $4\times$ more sweeps each time $m + 1$ doubles, Gauss–Seidel exactly half of Jacobi, and the prediction from $\rho$ is within 2 %. The residual ratio settles at $0.99518 = \cos(\pi/32)$: the iteration behaves like power iteration on $T$ (*Power iteration and friends*), and the residual ratio is the spectral radius.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# lap1(), lap2(), chamber_rhs() as in the Background
+m <- 7; A <- as.matrix(lap2(m)); I <- diag(m^2)
+TJ  <- I - diag(1 / diag(A)) %*% A               # Jacobi iteration matrix
+TGS <- I - solve(A * lower.tri(A, diag = TRUE), A)  # Gauss-Seidel
+rho <- function(T) max(Mod(eigen(T, only.values = TRUE)$values))
+c(rho(TJ), cos(pi / 8), rho(TGS), cos(pi / 8)^2)
+log(10) / -log(c(rho(TJ), rho(TGS)))              # iterations per digit
+rho(diag(2) - matrix(c(1, 2, 2, 1), 2))           # the 2 x 2 failure (D = I)
+# Output:
+# [1] 0.9238795 0.9238795 0.8535534 0.8535534
+# [1] 29.08274 14.54137
+# [1] 2
+```
+
+### Python
+
+```python
+# imports, lap1(), lap2(), chamber_rhs() as in the Background
+m = 7; A = lap2(m).toarray(); I = np.eye(m * m)
+TJ = I - np.diag(1 / np.diag(A)) @ A                 # Jacobi iteration matrix
+TGS = I - np.linalg.solve(np.tril(A), A)             # Gauss-Seidel
+rho = lambda T: np.max(np.abs(np.linalg.eigvals(T)))
+print(rho(TJ), np.cos(np.pi / 8), rho(TGS), np.cos(np.pi / 8) ** 2)
+print(np.log(10) / -np.log([rho(TJ), rho(TGS)]))     # iterations per digit
+print(rho(np.eye(2) - np.array([[1.0, 2], [2, 1]])))  # the 2 x 2 failure (D = I)
+# Output:
+# 0.9238795325112874 0.9238795325112867 0.8535533905932753 0.8535533905932737
+# [29.08274132 14.54137066]
+# 2.0000000000000004
+```
+
+### Rust
+
+```rust
+// rust/examples/iterative_solvers_c2.rs  —  cargo run --example iterative_solvers_c2
+// C2: spectral radius of the Jacobi and Gauss-Seidel iteration matrices (dense, nalgebra).
+use nalgebra::DMatrix;
+use std::f64::consts::PI;
+
+fn lap2_dense(m: usize) -> DMatrix<f64> {
+    let n = m * m;
+    DMatrix::from_fn(n, n, |k, l| {
+        let (i, j, p, q) = (k % m, k / m, l % m, l / m);
+        if k == l { 4.0 }
+        else if (i == p && j.abs_diff(q) == 1) || (j == q && i.abs_diff(p) == 1) { -1.0 }
+        else { 0.0 }
+    })
+}
+fn rho(t: &DMatrix<f64>) -> f64 {                   // largest |eigenvalue|
+    t.complex_eigenvalues().iter().map(|z| z.norm()).fold(0.0, f64::max)
+}
+
+fn main() {
+    let m = 7;
+    let a = lap2_dense(m);
+    let id = DMatrix::<f64>::identity(m * m, m * m);
+    let tj = &id - &a / 4.0;                        // I - D^{-1} A, D = 4 I
+    let low = a.lower_triangle();
+    let tgs = &id - low.solve_lower_triangular(&a).unwrap();
+    let (rj, rg) = (rho(&tj), rho(&tgs));
+    println!("{} {} {} {}", rj, (PI / 8.0).cos(), rg, (PI / 8.0).cos().powi(2));
+    println!("{} {}", 10f64.ln() / -rj.ln(), 10f64.ln() / -rg.ln());   // iterations per digit
+    let b2 = DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 2.0, 1.0]);
+    println!("{}", rho(&(DMatrix::<f64>::identity(2, 2) - b2)));     // the 2 x 2 failure
+}
+
+// Output:
+// 0.9238795325112974 0.9238795325112867 0.853553390593282 0.8535533905932737
+// 29.08274132120184 14.541370660599684
+// 1.9999999999999996
+```
+
+:::
+
+Both spectral radii match fact 3 to all printed digits (Rust differs in the 14th digit). Gauss–Seidel needs 14.5 sweeps per digit at $m = 7$, Jacobi 29. The $2\times2$ matrix has $\rho = 2$.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# lap1(), lap2(), chamber_rhs() as in the Background
+cg <- function(A, b, tol = 1e-6, maxit = 1e4) {
+  x <- numeric(length(b)); r <- b; p <- r; rr <- sum(r^2); nb <- sqrt(rr)
+  for (it in 1:maxit) {
+    Ap <- (A %*% p)[, 1]; alpha <- rr / sum(p * Ap)
+    x <- x + alpha * p; r <- r - alpha * Ap
+    rr_new <- sum(r^2)
+    if (sqrt(rr_new) < tol * nb) return(list(x = x, it = it))
+    p <- r + (rr_new / rr) * p; rr <- rr_new
+  }
+  list(x = x, it = NA)
+}
+ms <- c(31, 63, 127, 255); its <- numeric(0)
+for (m in ms) {
+  A <- lap2(m); b <- chamber_rhs(m)
+  t <- system.time(out <- cg(A, b))[3]
+  its <- c(its, out$it)
+  kappa <- 1 / tan(pi / (2 * (m + 1)))^2         # cond(A) = cot^2(pi h / 2)
+  cat(m, out$it, round(kappa), round(sqrt(kappa)), 1 - out$x[(m^2 + 1) / 2], "\n")
+}
+coef(lm(log(its) ~ log(ms + 1)))[2]               # slope: iterations ~ (1/h)^slope
+# Output:
+# 31 50 414 20 0.1166232 
+# 63 100 1659 41 0.1161138 
+# 127 203 6640 81 0.1159863 
+# 255 409 26560 163 0.1159544 
+# log(ms + 1) 
+#    1.011778 
+```
+
+### Python
+
+```python
+# imports, lap1(), lap2(), chamber_rhs() as in the Background
+from scipy.sparse.linalg import cg
+
+ms = [31, 63, 127, 255]; its = []
+for m in ms:
+    A = lap2(m); b = chamber_rhs(m)
+    count = [0]
+    def callback(xk):                          # called once per iteration
+        count[0] += 1
+    x, info = cg(A, b, rtol=1e-6, callback=callback)   # info = 0: converged
+    its.append(count[0])
+    kappa = 1 / np.tan(np.pi / (2 * (m + 1))) ** 2      # cond(A) = cot^2(pi h / 2)
+    print(m, count[0], round(kappa), round(np.sqrt(kappa)), 1 - x[(m * m - 1) // 2], info)
+print(np.polyfit(np.log(np.array(ms) + 1), np.log(its), 1)[0])   # slope
+# Output:
+# 31 50 414 20 0.11662316507538717 0
+# 63 100 1659 41 0.11611379757785456 0
+# 127 203 6640 81 0.11598628740221861 0
+# 255 409 26560 163 0.11595439924028761 0
+# 1.0117782256911525
+```
+
+### Rust
+
+```rust
+// rust/examples/iterative_solvers_c3.rs  —  cargo run --release --example iterative_solvers_c3
+// C3: hand-written CG (pcg with no preconditioner, in the shared defs) on sprs:
+// iterations vs grid size, and the slope on log-log axes.
+include!("iterative_solvers_shared/defs.rs");
+use std::f64::consts::PI;
+
+fn main() {
+    let ms = [31usize, 63, 127, 255];
+    let mut its = Vec::new();
+    for &m in &ms {
+        let (a, b) = (lap2(m), chamber_rhs(m, 12.0));
+        let (x, it) = pcg(&a, &b, |r| r.to_vec(), 1e-6, 10_000);
+        let it = it.unwrap();
+        its.push(it as f64);
+        let kappa = 1.0 / (PI / (2.0 * (m + 1) as f64)).tan().powi(2);   // cot^2(pi h / 2)
+        println!("{} {} {} {} {}", m, it, kappa.round(), kappa.sqrt().round(), 1.0 - x[(m * m - 1) / 2]);
+    }
+    // least-squares slope of log(its) against log(m + 1)
+    let lx: Vec<f64> = ms.iter().map(|&m| ((m + 1) as f64).ln()).collect();
+    let ly: Vec<f64> = its.iter().map(|v| v.ln()).collect();
+    let (mx, my) = (lx.iter().sum::<f64>() / 4.0, ly.iter().sum::<f64>() / 4.0);
+    let sxy: f64 = lx.iter().zip(&ly).map(|(x, y)| (x - mx) * (y - my)).sum();
+    let sxx: f64 = lx.iter().map(|x| (x - mx).powi(2)).sum();
+    println!("{}", sxy / sxx);
+}
+
+// Output:
+// 31 50 414 20 0.11662316507539405
+// 63 100 1659 41 0.1161137975778912
+// 127 203 6640 81 0.11598628740222672
+// 255 409 26560 163 0.11595439924035622
+// 1.0117782256911527
+```
+
+:::
+
+The counts double with $m + 1$ (slope 1.01), and are about $2.5\sqrt\kappa$; the bound of fact 4, $\tfrac12\sqrt\kappa\,\ln(2\times10^6) \approx 7.3\sqrt\kappa$, is pessimistic but has the right slope. scipy's `cg` performs the same iterations as the hand-written version. The oxygen in the centre converges to about 0.1160 as the grid is refined (the discretisation error is $O(h^2)$, a change of $3\times10^{-5}$ from $m = 127$ to 255).
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# lap1(), lap2(), chamber_rhs() as in the Background
+lapD <- function(m, Dfun) {                  # -div(D grad u), D on cell faces
+  h <- 1 / (m + 1); I <- Diagonal(m)
+  G1 <- bandSparse(m + 1, m, k = c(0, -1), diagonals = list(rep(1, m), rep(-1, m)))
+  Gx <- kronecker(I, G1); Gy <- kronecker(G1, I)
+  fx <- expand.grid(x = (1:(m + 1) - 0.5) * h, y = (1:m) * h)   # x-faces
+  fy <- expand.grid(x = (1:m) * h, y = (1:(m + 1) - 0.5) * h)   # y-faces
+  t(Gx) %*% Diagonal(x = Dfun(fx$x, fx$y)) %*% Gx +
+    t(Gy) %*% Diagonal(x = Dfun(fy$x, fy$y)) %*% Gy
+}
+aggregate_D <- function(x, y) ifelse((x - 0.5)^2 + (y - 0.5)^2 < 0.3^2, 0.1, 1)
+ic0 <- function(A, m) {                      # incomplete Cholesky, five-point pattern
+  n <- nrow(A); d <- lw <- ls <- numeric(n); dA <- diag(A)
+  w <- c(0, diag(A[-1, -n])); s <- c(rep(0, m), diag(A[-(1:m), -((n - m + 1):n)]))
+  for (k in 1:n) {
+    if (k > 1) lw[k] <- w[k] / d[k - 1]
+    if (k > m) ls[k] <- s[k] / d[k - m]
+    d[k] <- sqrt(dA[k] - lw[k]^2 - ls[k]^2)
+  }
+  bandSparse(n, k = c(0, -1, -m), diagonals = list(d, lw[-1], ls[-(1:m)]))
+}
+pcg <- function(A, b, Minv = function(r) r, tol = 1e-6, maxit = 1e4) {
+  x <- numeric(length(b)); r <- b; z <- Minv(r); p <- z; rz <- sum(r * z)
+  nb <- sqrt(sum(b^2))
+  for (it in 1:maxit) {
+    Ap <- (A %*% p)[, 1]; alpha <- rz / sum(p * Ap)
+    x <- x + alpha * p; r <- r - alpha * Ap
+    if (sqrt(sum(r^2)) < tol * nb) return(list(x = x, it = it))
+    z <- Minv(r); rz_new <- sum(r * z)
+    p <- z + (rz_new / rz) * p; rz <- rz_new
+  }
+  list(x = x, it = NA)
+}
+m <- 63; b <- chamber_rhs(m)
+for (A in list(lap2(m), lapD(m, aggregate_D))) {
+  d <- diag(A); L <- ic0(A, m); Lt <- t(L)
+  cat(range(d), pcg(A, b)$it, pcg(A, b, function(r) r / d)$it,
+      pcg(A, b, function(r) as.vector(solve(Lt, solve(L, r))))$it, "\n")
+}
+A <- lapD(m, aggregate_D); L <- ic0(A, m)
+nnzero(L); max(abs(L %*% t(L) - A))           # same pattern as A, but not exact
+# Output:
+# 4 4 100 100 40 
+# 0.4 4 197 103 49 
+# [1] 11781
+# [1] 0.4669796
+```
+
+### Python
+
+```python
+# imports, lap1(), lap2(), chamber_rhs() as in the Background
+from scipy.sparse.linalg import cg, LinearOperator, spsolve_triangular
+
+def lapD(m, Dfun):                            # -div(D grad u), D on cell faces
+    h = 1 / (m + 1); I = sparse.identity(m)
+    G1 = sparse.diags([np.ones(m), -np.ones(m)], [0, -1], shape=(m + 1, m))
+    Gx = sparse.kron(I, G1); Gy = sparse.kron(G1, I)
+    faces, nodes = (np.arange(1, m + 2) - 0.5) * h, np.arange(1, m + 1) * h
+    Dx = Dfun(*[g.ravel() for g in np.meshgrid(faces, nodes)])          # x-faces
+    Dy = Dfun(*[g.ravel() for g in np.meshgrid(nodes, faces)])          # y-faces
+    return (Gx.T @ sparse.diags(Dx) @ Gx + Gy.T @ sparse.diags(Dy) @ Gy).tocsr()
+
+def aggregate_D(x, y):
+    return np.where((x - 0.5) ** 2 + (y - 0.5) ** 2 < 0.3 ** 2, 0.1, 1.0)
+
+def ic0(A, m):                                # incomplete Cholesky, five-point pattern
+    n = A.shape[0]; d = np.zeros(n); lw = np.zeros(n); ls = np.zeros(n)
+    dA = A.diagonal(); w = A.diagonal(-1); s = A.diagonal(-m)
+    for k in range(n):
+        if k > 0: lw[k] = w[k - 1] / d[k - 1]
+        if k >= m: ls[k] = s[k - m] / d[k - m]
+        d[k] = np.sqrt(dA[k] - lw[k] ** 2 - ls[k] ** 2)
+    return sparse.diags([d, lw[1:], ls[m:]], [0, -1, -m], format="csr")
+
+def iterations(A, b, M=None):
+    count = [0]
+    def callback(xk): count[0] += 1
+    x, info = cg(A, b, rtol=1e-6, M=M, callback=callback)
+    return count[0]
+
+m = 63; b = chamber_rhs(m)
+for A in [lap2(m), lapD(m, aggregate_D)]:
+    d = A.diagonal(); L = ic0(A, m); Lt = L.T.tocsr()
+    M_jac = LinearOperator(A.shape, matvec=lambda r: r / d)
+    M_ic = LinearOperator(A.shape, matvec=lambda r: spsolve_triangular(
+        Lt, spsolve_triangular(L, r, lower=True), lower=False))
+    print(d.min(), d.max(), iterations(A, b), iterations(A, b, M_jac), iterations(A, b, M_ic))
+A = lapD(m, aggregate_D); L = ic0(A, m)
+print(L.nnz, abs(L @ L.T - A).max())          # same pattern as A, but not exact
+# Output:
+# 4.0 4.0 100 100 40
+# 0.4 4.0 197 103 49
+# 11781 0.4669795587343442
+```
+
+### Rust
+
+```rust
+// rust/examples/iterative_solvers_c4.rs  —  cargo run --release --example iterative_solvers_c4
+// C4: CG, Jacobi-preconditioned CG and IC(0)-preconditioned CG on the uniform
+// chamber and on the chamber with a cell aggregate (D = 0.1 inside).
+include!("iterative_solvers_shared/defs.rs");
+
+fn lap_d(m: usize, dfun: impl Fn(f64, f64) -> f64) -> CsMat<f64> {   // -div(D grad u)
+    let (n, h) = (m * m, 1.0 / (m + 1) as f64);
+    let mut t = TriMat::new((n, n));
+    for j in 0..m {
+        for i in 0..m {
+            let k = i + m * j;
+            let (x, y) = ((i + 1) as f64 * h, (j + 1) as f64 * h);     // node
+            let (xw, xe) = ((i as f64 + 0.5) * h, (i as f64 + 1.5) * h); // its faces
+            let (ys, yn) = ((j as f64 + 0.5) * h, (j as f64 + 1.5) * h);
+            let faces = [(dfun(xw, y), i > 0, k.wrapping_sub(1)),
+                         (dfun(xe, y), i < m - 1, k + 1),
+                         (dfun(x, ys), j > 0, k.wrapping_sub(m)),
+                         (dfun(x, yn), j < m - 1, k + m)];
+            for (d, inside, l) in faces {
+                t.add_triplet(k, k, d);              // every face adds D to the diagonal
+                if inside { t.add_triplet(k, l, -d); }
+            }
+        }
+    }
+    t.to_csr()
+}
+fn aggregate_d(x: f64, y: f64) -> f64 {
+    if (x - 0.5).powi(2) + (y - 0.5).powi(2) < 0.3f64.powi(2) { 0.1 } else { 1.0 }
+}
+// IC(0) for the five-point pattern: diagonal d, west and south entries of L
+fn ic0(a: &CsMat<f64>, m: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    let n = a.rows();
+    let (mut d, mut lw, mut ls) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
+    let g = |i: usize, j: usize| *a.get(i, j).unwrap_or(&0.0);
+    for k in 0..n {
+        if k > 0 { lw[k] = g(k, k - 1) / d[k - 1]; }
+        if k >= m { ls[k] = g(k, k - m) / d[k - m]; }
+        d[k] = (g(k, k) - lw[k].powi(2) - ls[k].powi(2)).sqrt();
+    }
+    (d, lw, ls)
+}
+// z = (L L^T)^{-1} r by a forward and a backward substitution
+fn ic_solve(l: &(Vec<f64>, Vec<f64>, Vec<f64>), m: usize, r: &[f64]) -> Vec<f64> {
+    let (d, lw, ls) = l;
+    let n = r.len();
+    let mut y = r.to_vec();
+    for k in 0..n {
+        if k > 0 { y[k] -= lw[k] * y[k - 1]; }
+        if k >= m { y[k] -= ls[k] * y[k - m]; }
+        y[k] /= d[k];
+    }
+    for k in (0..n).rev() {
+        if k + 1 < n { y[k] -= lw[k + 1] * y[k + 1]; }
+        if k + m < n { y[k] -= ls[k + m] * y[k + m]; }
+        y[k] /= d[k];
+    }
+    y
+}
+
+fn main() {
+    let m = 63;
+    let b = chamber_rhs(m, 12.0);
+    for a in [lap2(m), lap_d(m, aggregate_d)] {
+        let d = diagonal(&a);
+        let l = ic0(&a, m);
+        let it = |minv: &dyn Fn(&[f64]) -> Vec<f64>| pcg(&a, &b, minv, 1e-6, 10_000).1.unwrap();
+        let dmin = d.iter().cloned().fold(f64::INFINITY, f64::min);
+        let dmax = d.iter().cloned().fold(0.0, f64::max);
+        println!("{} {} {} {} {}", dmin, dmax,
+                 it(&|r| r.to_vec()),
+                 it(&|r| r.iter().zip(&d).map(|(p, q)| p / q).collect()),
+                 it(&|r| ic_solve(&l, m, r)));
+    }
+}
+
+// Output:
+// 4 4 100 100 40
+// 0.4 4 198 103 49
+```
+
+:::
+
+| CG iterations, $m = 63$ | uniform | aggregate |
+|---|---|---|
+| no preconditioner | 100 | 197 |
+| Jacobi | 100 | 103 |
+| IC(0) | 40 | 49 |
+
+On the uniform chamber the diagonal is constant (4 everywhere) and Jacobi preconditioning changes nothing. With the aggregate, the diagonal ranges from 0.4 to 4, plain CG needs twice as many iterations, and the diagonal scaling removes almost all of that. IC(0) is 2.5–4 times better than plain CG; $L$ has the same 11 781 non-zeros as the lower triangle of $A$, and $LL^T$ differs from $A$ by up to 0.47 (the dropped fill-in). Rust needs 198 instead of 197 plain CG iterations on the aggregate: at iteration 197 the residual is $0.99994\times10^{-6}$, right at the tolerance, and a different order of summation in assembling $A$ tips it over. Counts near a tolerance can differ by one between implementations.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# lap1(), lap2(), chamber_rhs() as in the Background
+adv2 <- function(m, Pe) {                     # flow in +x, upwind differences
+  h <- 1 / (m + 1)
+  Tx <- lap1(m) + Pe * h * bandSparse(m, k = c(0, -1),
+                                      diagonals = list(rep(1, m), rep(-1, m - 1)))
+  kronecker(Diagonal(m), Tx) + kronecker(lap1(m), Diagonal(m))
+}
+gmres <- function(A, b, k = 300, tol = 1e-6) {
+  n <- length(b); Q <- matrix(0, n, k + 1); H <- matrix(0, k + 1, k)
+  beta <- sqrt(sum(b^2)); Q[, 1] <- b / beta
+  for (j in 1:k) {
+    w <- (A %*% Q[, j])[, 1]                   # one product with A
+    for (i in 1:j) { H[i, j] <- sum(Q[, i] * w); w <- w - H[i, j] * Q[, i] }
+    H[j + 1, j] <- sqrt(sum(w^2)); Q[, j + 1] <- w / H[j + 1, j]
+    e1 <- c(beta, rep(0, j)); Hj <- H[1:(j + 1), 1:j, drop = FALSE]
+    y <- qr.solve(Hj, e1)                      # small least-squares problem
+    if (sqrt(sum((e1 - Hj %*% y)^2)) < tol * beta) break
+  }
+  list(x = as.vector(Q[, 1:j] %*% y), it = j)
+}
+cg <- function(A, b, maxit) {                 # plain CG, fixed number of steps
+  x <- numeric(length(b)); r <- b; p <- r; rr <- sum(r^2)
+  for (it in 1:maxit) {
+    Ap <- (A %*% p)[, 1]; alpha <- rr / sum(p * Ap)
+    x <- x + alpha * p; r <- r - alpha * Ap
+    rr_new <- sum(r^2); p <- r + (rr_new / rr) * p; rr <- rr_new
+  }
+  x
+}
+relres <- function(A, b, x) sqrt(sum((b - A %*% x)^2)) / sqrt(sum(b^2))
+m <- 63; b <- chamber_rhs(m)
+A <- adv2(m, Pe = 50)
+isSymmetric(A)
+sapply(c(50, 100, 300), function(k) relres(A, b, cg(A, b, k)))
+g <- gmres(A, b); c(g$it, relres(A, b, g$x))
+gs <- gmres(lap2(m), b); gs$it                # GMRES on the symmetric chamber
+xd <- solve(A, b); max(abs(g$x - xd)); 1 - xd[(m^2 + 1) / 2]
+# Output:
+# [1] FALSE
+# [1]  52.67222 105.26163 313.69948
+# [1] 1.160000e+02 9.631911e-07
+# [1] 99
+# [1] 6.110142e-08
+# [1] 0.8800808
+```
+
+### Python
+
+```python
+# imports, lap1(), lap2(), chamber_rhs() as in the Background
+from scipy.sparse.linalg import cg, gmres, spsolve
+
+def adv2(m, Pe):                              # flow in +x, upwind differences
+    h = 1 / (m + 1)
+    Tx = lap1(m) + Pe * h * sparse.diags([np.ones(m), -np.ones(m - 1)], [0, -1])
+    return (sparse.kron(sparse.identity(m), Tx) + sparse.kron(lap1(m), sparse.identity(m))).tocsr()
+
+relres = lambda A, b, x: np.linalg.norm(b - A @ x) / np.linalg.norm(b)
+m = 63; b = chamber_rhs(m)
+A = adv2(m, Pe=50)
+print(abs(A - A.T).max() == 0)                # symmetric?
+print([relres(A, b, cg(A, b, rtol=1e-12, maxiter=k)[0]) for k in [50, 100, 300]])
+
+def run_gmres(A, b, restart):
+    count = [0]
+    def callback(pr_norm): count[0] += 1      # once per inner iteration
+    x, info = gmres(A, b, rtol=1e-6, restart=restart, maxiter=1000,
+                    callback=callback, callback_type="pr_norm")
+    return x, count[0], info
+
+x, its, info = run_gmres(A, b, restart=300)   # full GMRES
+print(its, relres(A, b, x), info)
+print(run_gmres(A, b, restart=20)[1])         # restarted GMRES(20)
+print(run_gmres(lap2(m), b, restart=300)[1])  # GMRES on the symmetric chamber
+xd = spsolve(A, b); print(abs(x - xd).max(), 1 - xd[(m * m - 1) // 2])
+# Output:
+# False
+# [np.float64(52.6722164382221), np.float64(105.26162881388188), np.float64(313.69947889855973)]
+# 116 9.631910941186645e-07 0
+# 187
+# 99
+# 6.110142478088498e-08 0.8800807721698659
+```
+
+### Rust
+
+```rust
+// rust/examples/iterative_solvers_c5.rs  —  cargo run --release --example iterative_solvers_c5
+// C5: the perfused chamber (advection-diffusion, nonsymmetric). CG fails;
+// hand-written GMRES (Arnoldi on sprs, small least squares by nalgebra QR) works.
+include!("iterative_solvers_shared/defs.rs");
+use nalgebra::{DMatrix, DVector};
+
+fn adv2(m: usize, pe: f64) -> CsMat<f64> {          // flow in +x, upwind differences
+    let (n, ph) = (m * m, pe / (m + 1) as f64);
+    let mut t = TriMat::new((n, n));
+    for j in 0..m {
+        for i in 0..m {
+            let k = i + m * j;
+            t.add_triplet(k, k, 4.0 + ph);
+            if i > 0 { t.add_triplet(k, k - 1, -1.0 - ph); }
+            if i < m - 1 { t.add_triplet(k, k + 1, -1.0); }
+            if j > 0 { t.add_triplet(k, k - m, -1.0); }
+            if j < m - 1 { t.add_triplet(k, k + m, -1.0); }
+        }
+    }
+    t.to_csr()
+}
+fn relres(a: &CsMat<f64>, b: &[f64], x: &[f64]) -> f64 {
+    let ax = matvec(a, x);
+    norm(&b.iter().zip(&ax).map(|(p, q)| p - q).collect::<Vec<_>>()) / norm(b)
+}
+fn cg_fixed(a: &CsMat<f64>, b: &[f64], steps: usize) -> Vec<f64> {   // plain CG, no stopping
+    let n = b.len();
+    let (mut x, mut r, mut p) = (vec![0.0; n], b.to_vec(), b.to_vec());
+    let mut rr = dot(&r, &r);
+    for _ in 0..steps {
+        let ap = matvec(a, &p);
+        let alpha = rr / dot(&p, &ap);
+        for i in 0..n { x[i] += alpha * p[i]; r[i] -= alpha * ap[i]; }
+        let rr_new = dot(&r, &r);
+        for i in 0..n { p[i] = r[i] + (rr_new / rr) * p[i]; }
+        rr = rr_new;
+    }
+    x
+}
+fn gmres(a: &CsMat<f64>, b: &[f64], k: usize, tol: f64) -> (Vec<f64>, usize) {
+    let beta = norm(b);
+    let mut q: Vec<Vec<f64>> = vec![b.iter().map(|v| v / beta).collect()];
+    let mut h = DMatrix::<f64>::zeros(k + 1, k);
+    let mut y = DVector::<f64>::zeros(0);
+    let mut jlast = 0;
+    for j in 0..k {
+        let mut w = matvec(a, &q[j]);                   // one product with A
+        for i in 0..=j {
+            h[(i, j)] = dot(&q[i], &w);
+            for (wl, ql) in w.iter_mut().zip(&q[i]) { *wl -= h[(i, j)] * ql; }
+        }
+        h[(j + 1, j)] = norm(&w);
+        q.push(w.iter().map(|v| v / h[(j + 1, j)]).collect());
+        // small least-squares problem: minimise || beta e1 - H y ||
+        let hj = h.view((0, 0), (j + 2, j + 1)).into_owned();
+        let mut e1 = DVector::<f64>::zeros(j + 2);
+        e1[0] = beta;
+        let qr = hj.clone().qr();
+        y = qr.r().solve_upper_triangular(&(qr.q().transpose() * &e1)).unwrap();
+        jlast = j + 1;
+        if (&e1 - &hj * &y).norm() < tol * beta { break; }
+    }
+    let mut x = vec![0.0; b.len()];
+    for (l, yl) in y.iter().enumerate() {
+        for (xi, qi) in x.iter_mut().zip(&q[l]) { *xi += yl * qi; }
+    }
+    (x, jlast)
+}
+
+fn main() {
+    let m = 63;
+    let b = chamber_rhs(m, 12.0);
+    let a = adv2(m, 50.0);
+    let at: CsMat<f64> = a.transpose_view().to_csr();
+    println!("{}", a == at);                            // symmetric?
+    let res: Vec<f64> = [50, 100, 300].iter().map(|&s| relres(&a, &b, &cg_fixed(&a, &b, s))).collect();
+    println!("{:?}", res);
+    let (x, it) = gmres(&a, &b, 300, 1e-6);
+    println!("{} {:e}", it, relres(&a, &b, &x));
+    println!("{}", gmres(&lap2(m), &b, 300, 1e-6).1);  // GMRES on the symmetric chamber
+    println!("{}", 1.0 - x[(m * m - 1) / 2]);
+}
+
+// Output:
+// false
+// [52.67221643822255, 105.26162881388326, 313.6994788985633]
+// 116 9.631910948911138e-7
+// 99
+// 0.8800807605276728
+```
+
+:::
+
+(a) Not symmetric. (b) CG does not converge: the true relative residual is 53 after 50 iterations and 314 after 300, and grows. Nothing in CG's own arithmetic signals the problem; only the check of symmetry, or of the true residual, does. (c) Full GMRES converges in 116 iterations to a relative residual of $9.6\times10^{-7}$, and agrees with the direct solve to $6\times10^{-8}$. Restarted GMRES(20) needs 187 iterations: restarting saves memory (20 basis vectors instead of 116) at the price of more iterations. (d) On the symmetric chamber GMRES takes 99 iterations, CG 100: for SPD matrices the two minimise different norms over the same Krylov space and need about the same count, but CG does it with four vectors instead of a growing basis. The perfused chamber is much better oxygenated: 0.880 in the centre instead of 0.116. (Rust prints the centre from the GMRES solution, which agrees with the direct solve to 7 digits.)
+
+:::
+
+## Where this leads
+
+- *Steady state in two dimensions* and *Reaction–diffusion and pattern formation* (Part 10) produce these matrices; with Newton's method for nonlinear uptake, every Newton step is a linear solve, and inside a large 3D model that solve is a preconditioned Krylov method.
+- *Beyond rectangles: finite elements and flow* (Part 11): finite-element meshes give sparse matrices without a grid structure; there, algebraic multigrid and ILU replace the hand-written IC(0) for the five-point pattern used here.
+- *How `eigen()` works, and big problems* (Part 5): Lanczos and Arnoldi, the eigenvalue versions of the Krylov recurrences in CG and GMRES.
