@@ -36,7 +36,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 31 | diffusion-explicit | done | done | done |
 | 32 | diffusion-implicit | done | running | |
 | 33 | steady-state-2d | done | running | |
-| 34 | advection-diffusion | running | | |
+| 34 | advection-diffusion | done | running | |
 | 35 | reaction-diffusion | running | | |
 | 36 | fem-outlook | done | (no demo: further reading) | done |
 | 37 | iterative-solvers | running | (no demo) | |
@@ -75,3 +75,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - diffusion-implicit: R/Python solution tabs rely on Background-defined helpers (thomas, be_step, cn_step, exact) — decide self-contained convention in audit. h = 10 W/(m²K) from memory. Read [M2], [H1] full text (agent fetched before no-network rule); [M1], [H2] headline only. Embryo 1D model is our own.
 - gnlm demo: extra LM stop rule → 13 passes vs lecture slide's 15 (stated on page). Data panel y-axis clips good-start curve at 4 mg/L.
 - fem-outlook: notes assume content of steady-state-2d, reaction-diffusion, iterative-solvers, advection-diffusion lecture (T-sensor 100 µm, 1000 µm/s) — verify in pass 2. Hydrogel numbers own round values.
+- advection-diffusion: cell-centred grid across channel (vs nodes elsewhere?) — reconcile with steady-state-2d. Device numbers own round values; Kamholz & Yager 2001 cited cautiously. Some code blocks 13–14 lines.
