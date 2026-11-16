@@ -32,7 +32,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 27 | gradient-methods | running | | |
 | 28 | nonlinear-least-squares | running | | |
 | 29 | identifiability | running | | |
-| 30 | constrained-lp | running | | |
+| 30 | constrained-lp | done | running | |
 | 31 | diffusion-explicit | running | | |
 | 32 | diffusion-implicit | running | | |
 | 33 | steady-state-2d | running | | |
@@ -61,3 +61,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - phase-plane: oscillator = Sel'kov (no repressilator xref existed); runge-kutta may define repressilator — reconcile in pass 2 (fine to have both). Slides not screenshotted; densest separatrix slide, 'Failure: Re λ ≈ 0'. Install: rootSolve.
 - runge-kutta: Python C2/C3/C5/C6 tabs import C1/C4 functions from local files (not self-contained) — make self-contained in audit. Repressilator params α=216, α0=0.216, β=5, n=2 unverified vs Elowitz & Leibler. ode_solvers Dopri5 dense-output end-point bug noted.
 - fourier-fft: from memory — 4.8-h ultradian example, p53 ~5.5 h, Hes1 ~2 h periods, 'sample every 2 h' guideline. R fft prime-length slowness claim measured here.
+- constrained-lp: from memory — iML1515 2712 reactions / 1877 metabolites, Recon3D ~13 000 reactions. Install: lpSolve, numDeriv.

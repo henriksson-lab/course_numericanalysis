@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-html/tabby.min.js"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/light-border.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-662ae1889177880cb371f83234c0a158.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
+  <meta name="generator" content="quarto-1.7.30">
+
+  <meta name="author" content="Numerical analysis for biologists">
+  <title>Numerical analysis for biologists – Nonlinear least squares and ODE fitting</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reset.css">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reveal.css">
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+      }
+    pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+    div.sourceCode
+      { color: #24292e;  }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span { color: #24292e; } /* Normal */
+    code span.al { color: #ff5555; font-weight: bold; } /* Alert */
+    code span.an { color: #6a737d; } /* Annotation */
+    code span.at { color: #d73a49; } /* Attribute */
+    code span.bn { color: #005cc5; } /* BaseN */
+    code span.bu { color: #d73a49; } /* BuiltIn */
+    code span.cf { color: #d73a49; } /* ControlFlow */
+    code span.ch { color: #032f62; } /* Char */
+    code span.cn { color: #005cc5; } /* Constant */
+    code span.co { color: #6a737d; } /* Comment */
+    code span.cv { color: #6a737d; } /* CommentVar */
+    code span.do { color: #6a737d; } /* Documentation */
+    code span.dt { color: #d73a49; } /* DataType */
+    code span.dv { color: #005cc5; } /* DecVal */
+    code span.er { color: #ff5555; text-decoration: underline; } /* Error */
+    code span.ex { color: #d73a49; font-weight: bold; } /* Extension */
+    code span.fl { color: #005cc5; } /* Float */
+    code span.fu { color: #6f42c1; } /* Function */
+    code span.im { color: #032f62; } /* Import */
+    code span.in { color: #6a737d; } /* Information */
+    code span.kw { color: #d73a49; } /* Keyword */
+    code span.op { color: #24292e; } /* Operator */
+    code span.ot { color: #6f42c1; } /* Other */
+    code span.pp { color: #d73a49; } /* Preprocessor */
+    code span.re { color: #6a737d; } /* RegionMarker */
+    code span.sc { color: #005cc5; } /* SpecialChar */
+    code span.ss { color: #032f62; } /* SpecialString */
+    code span.st { color: #032f62; } /* String */
+    code span.va { color: #e36209; } /* Variable */
+    code span.vs { color: #032f62; } /* VerbatimString */
+    code span.wa { color: #ff5555; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/theme/quarto-bf56578b9c06c165c166475cd19dbcd1.css">
+  <script>window.backupDefine = window.define; window.define = undefined;</script><script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css">
+  <link href="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/quarto-support/footer.css" rel="stylesheet">
+  <style type="text/css">
+    .reveal div.sourceCode {
+      margin: 0;
+      overflow: auto;
+    }
+    .reveal div.hanging-indent {
+      margin-left: 1em;
+      text-indent: -1em;
+    }
+    .reveal .slide:not(.center) {
+      height: 100%;
+    }
+    .reveal .slide.scrollable {
+      overflow-y: auto;
+    }
+    .reveal .footnotes {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .reveal .slide .absolute {
+      position: absolute;
+      display: block;
+    }
+    .reveal .footnotes ol {
+      counter-reset: ol;
+      list-style-type: none; 
+      margin-left: 0;
+    }
+    .reveal .footnotes ol li:before {
+      counter-increment: ol;
+      content: counter(ol) ". "; 
+    }
+    .reveal .footnotes ol li > p:first-child {
+      display: inline-block;
+    }
+    .reveal .slide ul,
+    .reveal .slide ol {
+      margin-bottom: 0.5em;
+    }
+    .reveal .slide ul li,
+    .reveal .slide ol li {
+      margin-top: 0.4em;
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide ul[role="tablist"] li {
+      margin-bottom: 0;
+    }
+    .reveal .slide ul li > *:first-child,
+    .reveal .slide ol li > *:first-child {
+      margin-block-start: 0;
+    }
+    .reveal .slide ul li > *:last-child,
+    .reveal .slide ol li > *:last-child {
+      margin-block-end: 0;
+    }
+    .reveal .slide .columns:nth-child(3) {
+      margin-block-start: 0.8em;
+    }
+    .reveal blockquote {
+      box-shadow: none;
+    }
+    .reveal .tippy-content>* {
+      margin-top: 0.2em;
+      margin-bottom: 0.7em;
+    }
+    .reveal .tippy-content>*:last-child {
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide > img.stretch.quarto-figure-center,
+    .reveal .slide > img.r-stretch.quarto-figure-center {
+      display: block;
+      margin-left: auto;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-left,
+    .reveal .slide > img.r-stretch.quarto-figure-left  {
+      display: block;
+      margin-left: 0;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-right,
+    .reveal .slide > img.r-stretch.quarto-figure-right  {
+      display: block;
+      margin-left: auto;
+      margin-right: 0; 
+    }
+  </style>
+</head>
+<body class="quarto-light">
+  <div class="reveal">
+    <div class="slides">
+
+<section id="title-slide" class="quarto-title-block center">
+  <h1 class="title">Nonlinear least squares and ODE fitting</h1>
+  <p class="subtitle">Part 9 — Optimisation and model fitting</p>
+
+<div class="quarto-title-authors">
+<div class="quarto-title-author">
+<div class="quarto-title-author-name">
+Numerical analysis for biologists 
+</div>
+</div>
+</div>
+
+</section>
+<section id="about-this-lecture" class="slide level2 smaller">
+<h2>About this lecture</h2>
+<p>Fitting a model to data means choosing parameters that make the <strong>residuals</strong> small. When the model is <strong>nonlinear in its parameters</strong> (a rate inside an exponential), <code>lm</code> cannot do it and there is no formula: we iterate.</p>
+<ul>
+<li><strong>Gauss–Newton</strong>: linearise the model, solve <strong>one linear least-squares problem per step</strong> (by QR), repeat. Fast near the answer, wild far from it.</li>
+<li><strong>Levenberg–Marquardt</strong>: damped Gauss–Newton, sliding between Gauss–Newton and gradient descent. What <code>minpack.lm::nlsLM</code> and <code>scipy.optimize.least_squares</code> use.</li>
+<li>Practicalities: <code>nls</code> and its <strong>“singular gradient”</strong>, <strong>log-parameters</strong> for positive rates, <strong>multistart</strong>.</li>
+<li><strong>ODE models</strong>: the ODE solver sits <em>inside</em> the residual function. Its tolerance and the finite-difference step must fit together.</li>
+<li>Biology: a drug taken orally. From 12 plasma samples, estimate the <strong>absorption rate</strong>, the <strong>elimination rate</strong> and the <strong>volume of distribution</strong>.</li>
+</ul>
+<aside class="notes">
+<p>This unit puts together three earlier ones: linear least squares by QR (Part 4), Newton for systems with its Jacobian (Part 2) and the ODE solvers of Part 8. It also runs alongside Gradient descent, Newton and quasi-Newton: Levenberg-Marquardt is the special-purpose method for sums of squares, and its two limits are Gauss-Newton and gradient descent. The PK model is the running example; it has a closed form, which lets us check every ODE-based fit exactly. The flip-flop at the end leads into the next unit, Identifiability and uncertainty of fitted parameters.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-biology-problem-first-a-drug-in-plasma" class="slide level2 smaller">
+<h2>A biology problem first: a drug in plasma</h2>
+
+<img data-src="fig01-pk-data.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:62.0%"><ul>
+<li>One oral dose <span class="math inline">D = 100</span> mg. Plasma sampled 12 times over 12 hours.</li>
+<li>Questions: how fast is the drug <strong>absorbed</strong> (<span class="math inline">k_a</span>), how fast <strong>eliminated</strong> (<span class="math inline">k_e</span>), and in what <strong>volume</strong> (<span class="math inline">V</span>) does it distribute? These decide the dosing schedule.</li>
+<li>The data are <strong>simulated</strong> from <span class="math inline">k_a = 1</span>/h, <span class="math inline">k_e = 0.2</span>/h, <span class="math inline">V = 20</span> L, plus noise with SD 0.1 mg/L, so we know the truth.</li>
+</ul>
+<aside class="notes">
+<p>This is the standard one-compartment model with first-order absorption, the first model fitted in any pharmacokinetics course. Real data would come from a phase 1 study. The data were simulated with set.seed(1), rounded to 2 decimals and typed in, so R, Python and Rust use the same 12 numbers (they are in the exercise and in the figure script). The fitted curve (orange) differs slightly from the true one (dashed) because of the noise: least squares finds the best curve for these data, not the truth. How close the estimates are to the truth is the topic of the next unit.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-model-an-ode-with-a-closed-form" class="slide level2 smaller">
+<h2>The model: an ODE with a closed form</h2>
+<div class="columns">
+<div class="column" style="width:50%;">
+<p>Amount in gut <span class="math inline">A_g</span>, in the central compartment (plasma) <span class="math inline">A_c</span>:</p>
+<p><span class="math display">A_g' = -k_a A_g, \qquad A_c' = k_a A_g - k_e A_c</span></p>
+<p><span class="math inline">A_g(0) = D</span>, <span class="math inline">A_c(0) = 0</span>, and we measure <span class="math inline">C = A_c / V</span>.</p>
+</div><div class="column" style="width:50%;">
+<p>Solved by hand (the <strong>Bateman function</strong>):</p>
+<p><span class="math display">C(t) = \frac{D\,k_a}{V(k_a - k_e)}\left(e^{-k_e t} - e^{-k_a t}\right)</span></p>
+</div></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a aria-hidden="true" tabindex="-1"></a>D  <span class="ot">&lt;-</span> <span class="dv">100</span></span>
+<span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.25</span>, <span class="fl">0.5</span>, <span class="fl">0.75</span>, <span class="dv">1</span>, <span class="fl">1.5</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">10</span>, <span class="dv">12</span>)</span>
+<span id="cb1-3"><a aria-hidden="true" tabindex="-1"></a>y  <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">1.02</span>, <span class="fl">1.88</span>, <span class="fl">2.34</span>, <span class="fl">2.98</span>, <span class="fl">3.27</span>, <span class="fl">3.26</span>, <span class="fl">3.17</span>, <span class="fl">2.77</span>, <span class="fl">1.92</span>, <span class="fl">1.23</span>, <span class="fl">1.00</span>, <span class="fl">0.61</span>)</span>
+<span id="cb1-4"><a aria-hidden="true" tabindex="-1"></a>bateman <span class="ot">&lt;-</span> <span class="cf">function</span>(t, ka, ke, V) D <span class="sc">*</span> ka <span class="sc">/</span> (V <span class="sc">*</span> (ka <span class="sc">-</span> ke)) <span class="sc">*</span> (<span class="fu">exp</span>(<span class="sc">-</span>ke <span class="sc">*</span> t) <span class="sc">-</span> <span class="fu">exp</span>(<span class="sc">-</span>ka <span class="sc">*</span> t))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><span class="math inline">k_a</span> and <span class="math inline">k_e</span> sit <strong>inside exponentials</strong>: the model is <strong>nonlinear in its parameters</strong>. No transformation turns it into <code>lm</code>.</li>
+<li>Most ODE models have no closed form. We use the formula first, then fit the ODE directly and check against it.</li>
+</ul>
+<aside class="notes">
+<p>The ODE is linear in the state, which is why it can be solved by hand: first A_g = D exp(-ka t), then a linear first-order ODE for A_c.&nbsp;Taking logs helps for a single exponential (log C = log C0 - k t is a straight line, as in the intro), but not for a difference of two exponentials. Note the formula is 0/0 at ka = ke: R returns NaN there. The ODE has no such problem; the exercise looks at this. Bioavailability F is absorbed into V here (strictly, V is V/F).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-least-squares-problem" class="slide level2 smaller">
+<h2>The least-squares problem</h2>
+<p>Parameters <span class="math inline">\mathbf p = (k_a, k_e, V)</span>, model values <span class="math inline">m_i(\mathbf p) = C(t_i)</span>, residuals <span class="math inline">r_i = y_i - m_i(\mathbf p)</span>:</p>
+<p><span class="math display">\min_{\mathbf p}\ \text{RSS}(\mathbf p) = \sum_{i=1}^{12} r_i(\mathbf p)^2</span></p>
+<div class="columns">
+<div class="column" style="width:52%;">
+<p><img data-src="fig02-rss-landscape.svg" style="width:100.0%"></p>
+</div><div class="column" style="width:48%;">
+<ul>
+<li>RSS over <span class="math inline">(k_a, k_e)</span>, with <span class="math inline">V</span> at its best value for each pair.</li>
+<li>A curved valley, <strong>two</strong> minima with the <strong>same</strong> RSS (stars), and a line <span class="math inline">k_a = k_e</span> where the formula is 0/0.</li>
+<li>A start in the wrong place can end in the wrong minimum. We come back to this at the end.</li>
+</ul>
+</div></div>
+<aside class="notes">
+<p>Contours of RSS on log axes; V is “profiled out”: for fixed ka and ke the model is linear in D/V, so the best V comes from a one-line linear least-squares fit. The valley is long and curved, which is typical for rate constants: the data mainly determine a combination of them. The second minimum is not a numerical artefact; it is the flip-flop solution, an exact symmetry of the model, discussed at the end. For now: nonlinear least squares can have several minima, and a local method finds the one whose valley it starts in.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="recap-linear-least-squares-by-qr" class="slide level2 smaller">
+<h2>Recap: linear least squares by QR</h2>
+<p>For a <strong>linear</strong> model <span class="math inline">A\mathbf x \approx \mathbf b</span> (unit <em>Least squares: normal equations vs QR</em>):</p>
+<ul>
+<li>minimise <span class="math inline">\|\mathbf b - A\mathbf x\|^2</span>; factor <span class="math inline">A = QR</span> and back-substitute <span class="math inline">R\mathbf x = Q^T\mathbf b</span>. In R: <code>qr.solve(A, b)</code>.</li>
+<li>The normal equations <span class="math inline">A^TA\mathbf x = A^T\mathbf b</span> give the same <span class="math inline">\mathbf x</span> in exact arithmetic, but <strong>square</strong> the condition number: <span class="math inline">\kappa(A^TA) = \kappa(A)^2</span>.</li>
+</ul>
+<p>And from <em>Newton for systems of equations</em>: the <strong>Jacobian</strong> <span class="math inline">J_{ij} = \partial m_i / \partial p_j</span> is the matrix of slopes, and</p>
+<p><span class="math display">\mathbf m(\mathbf p + \boldsymbol\delta) \approx \mathbf m(\mathbf p) + J\,\boldsymbol\delta.</span></p>
+<p>Gauss–Newton = these two ideas together.</p>
+<aside class="notes">
+<p>One slide of recap only. The student should remember: QR for least squares, never form A^T A if you can avoid it, and the Jacobian as the matrix that turns a small change in the parameters into the change in the model. Here the Jacobian is 12 x 3: one row per measurement, one column per parameter. Unlike in Newton for systems, J is not square, which is why each step is a least-squares problem rather than a linear system.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="linearise-the-model" class="slide level2 smaller">
+<h2>Linearise the model</h2>
+<p>At the start <span class="math inline">\mathbf p_0 = (0.5, 0.1, 10)</span>, by forward differences (rows <span class="math inline">t = 0.25</span>, <span class="math inline">2</span>, <span class="math inline">12</span> h):</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a aria-hidden="true" tabindex="-1"></a>model <span class="ot">&lt;-</span> <span class="cf">function</span>(p) <span class="fu">bateman</span>(tt, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>])</span>
+<span id="cb2-2"><a aria-hidden="true" tabindex="-1"></a>jac <span class="ot">&lt;-</span> <span class="cf">function</span>(p, <span class="at">h =</span> <span class="fl">1e-7</span>) <span class="fu">sapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, <span class="cf">function</span>(j) {      <span class="co"># forward differences</span></span>
+<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a>  e <span class="ot">&lt;-</span> <span class="fu">replace</span>(<span class="fu">numeric</span>(<span class="dv">3</span>), j, h <span class="sc">*</span> p[j]); (<span class="fu">model</span>(p <span class="sc">+</span> e) <span class="sc">-</span> <span class="fu">model</span>(p)) <span class="sc">/</span> e[j] })</span>
+<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a>J <span class="ot">&lt;-</span> <span class="fu">jac</span>(<span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.1</span>, <span class="dv">10</span>));  <span class="fu">round</span>(J[<span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">6</span>, <span class="dv">12</span>), ], <span class="dv">3</span>)</span>
+<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        [,1]    [,2]   [,3]</span></span>
+<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,]  2.178  -0.147 -0.116</span></span>
+<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,]  6.379  -6.379 -0.564</span></span>
+<span id="cb2-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [3,] -1.495 -35.844 -0.373</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Column 1: raising <span class="math inline">k_a</span> raises early concentrations and lowers late ones (faster in, faster gone).</li>
+<li>Column 2: raising <span class="math inline">k_e</span> lowers everything, most at 12 h. Column 3: raising <span class="math inline">V</span> dilutes.</li>
+<li>Step <span class="math inline">h = 10^{-7}\,p_j</span> is relative to each parameter, as in <em>Newton for systems of equations</em>.</li>
+</ul>
+<aside class="notes">
+<p>Each column is a sensitivity: how much each predicted concentration moves per unit change of one parameter. Read the signs with the students; they are pharmacology. The forward-difference step of about sqrt(eps) times the parameter balances truncation and rounding error (Convergence and cost). We could differentiate the Bateman function by hand, but for an ODE model we cannot, so we use the generic finite-difference Jacobian from the start. Keep the 0.373 in mind: V’s column is small because V is large, a scaling issue that the log-parameters slide comes back to.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-gaussnewton-step" class="slide level2 smaller">
+<h2>The Gauss–Newton step</h2>
+<p>Replace the model by its linearisation and minimise the RSS of that:</p>
+<p><span class="math display">\min_{\boldsymbol\delta}\ \|\mathbf r - J\boldsymbol\delta\|^2, \qquad \mathbf r = \mathbf y - \mathbf m(\mathbf p_k), \qquad \mathbf p_{k+1} = \mathbf p_k + \boldsymbol\delta</span></p>
+<p>A <strong>linear</strong> least-squares problem with design matrix <span class="math inline">J</span> (12 × 3) and data <span class="math inline">\mathbf r</span>: solve it <strong>by QR</strong>.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>r <span class="ot">&lt;-</span> y <span class="sc">-</span> <span class="fu">model</span>(<span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.1</span>, <span class="dv">10</span>))</span>
+<span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">qr.solve</span>(J, r)                                  <span class="co"># delta</span></span>
+<span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  0.35245282 -0.01478552  8.03484167</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>In the normal-equation form, <span class="math inline">J^TJ\,\boldsymbol\delta = J^T\mathbf r</span>. Same <span class="math inline">\boldsymbol\delta</span> here, but at the minimum <span class="math inline">\kappa(J) = 170</span> while <span class="math inline">\kappa(J^TJ) = 2.9\times10^4</span>: QR keeps 2 more digits.</li>
+<li>Compare <em>Newton for systems of equations</em>: there <span class="math inline">J</span> was square and we solved <span class="math inline">J\boldsymbol\delta = -\mathbf F</span>. Here <span class="math inline">J</span> is tall and we solve in the least-squares sense.</li>
+</ul>
+<aside class="notes">
+<p>This is the whole method: linearise, solve a linear least-squares problem, update, repeat. Gauss used it for orbits of asteroids around 1800. Many textbooks write the step with the normal equations; libraries do not form J^T J. With three well-scaled parameters the difference is small, but with 20 parameters of very different size, or a nearly non-identifiable model, kappa(J) can be 1e7 and then kappa squared is 1e14, and the normal equations lose everything. qr.solve uses Householder QR (Part 4).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="one-gaussnewton-step-by-hand" class="slide level2 smaller">
+<h2>One Gauss–Newton step by hand</h2>
+<p>One parameter: after an IV bolus, <span class="math inline">C(t) = 10\,e^{-kt}</span>. Data <span class="math inline">t = 1, 2, 4</span> h: <span class="math inline">y = 6.0,\ 3.7,\ 1.3</span> mg/L. Start <span class="math inline">k_0 = 0.3</span>.</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th><span class="math inline">t</span></th>
+<th><span class="math inline">m = 10e^{-0.3t}</span></th>
+<th><span class="math inline">J = -10\,t\,e^{-0.3t}</span></th>
+<th><span class="math inline">r = y - m</span></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>7.408</td>
+<td>−7.408</td>
+<td>−1.408</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>5.488</td>
+<td>−10.976</td>
+<td>−1.788</td>
+</tr>
+<tr class="odd">
+<td>4</td>
+<td>3.012</td>
+<td>−12.048</td>
+<td>−1.712</td>
+</tr>
+</tbody>
+</table>
+<p>With one column, the least-squares solution is a ratio:</p>
+<p><span class="math display">\delta = \frac{\sum J_i r_i}{\sum J_i^2} = \frac{50.68}{320.51} = 0.158, \qquad k_1 = 0.458.</span></p>
+<p>RSS: 8.11 → 0.285. Next steps: 0.5021, 0.504413, 0.5044173 (the minimum).</p>
+<aside class="notes">
+<p>Do this on the board. The one-column least-squares formula is the slope of a line through the origin, from the qPCR unit. The RSS drops by a factor 28 in one step. The exercise repeats this and does the second step, then the same step in log k. The number of correct digits roughly doubles in the last steps: GN behaves like Newton here because the residuals at the minimum are small (RSS 0.0052).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="gaussnewton-in-r" class="slide level2 smaller">
+<h2>Gauss–Newton in R</h2>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a>gauss_newton <span class="ot">&lt;-</span> <span class="cf">function</span>(p, <span class="at">maxit =</span> <span class="dv">30</span>, <span class="at">tol =</span> <span class="fl">1e-8</span>) {</span>
+<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>maxit) {</span>
+<span id="cb4-3"><a aria-hidden="true" tabindex="-1"></a>    r <span class="ot">&lt;-</span> y <span class="sc">-</span> <span class="fu">model</span>(p)</span>
+<span id="cb4-4"><a aria-hidden="true" tabindex="-1"></a>    delta <span class="ot">&lt;-</span> <span class="fu">qr.solve</span>(<span class="fu">jac</span>(p), r)               <span class="co"># linear least squares by QR</span></span>
+<span id="cb4-5"><a aria-hidden="true" tabindex="-1"></a>    p <span class="ot">&lt;-</span> p <span class="sc">+</span> delta</span>
+<span id="cb4-6"><a aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"%2d %10.6f %10.6f %10.4f %12.8f</span><span class="sc">\n</span><span class="st">"</span>, k, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>], <span class="fu">sum</span>((y <span class="sc">-</span> <span class="fu">model</span>(p))<span class="sc">^</span><span class="dv">2</span>)))</span>
+<span id="cb4-7"><a aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="fu">sqrt</span>(<span class="fu">sum</span>(delta<span class="sc">^</span><span class="dv">2</span>)) <span class="sc">&lt;</span> tol <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">sum</span>(p<span class="sc">^</span><span class="dv">2</span>))) <span class="cf">break</span></span>
+<span id="cb4-8"><a aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb4-9"><a aria-hidden="true" tabindex="-1"></a>  p</span>
+<span id="cb4-10"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb4-11"><a aria-hidden="true" tabindex="-1"></a>p_hat <span class="ot">&lt;-</span> <span class="fu">gauss_newton</span>(<span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.1</span>, <span class="dv">10</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<pre><code> 1   0.852453   0.085214    18.0348  15.91083738
+ 2   1.124562   0.128428    22.3757   0.97745046
+ 3   1.056583   0.176306    20.8165   0.09134721
+ 4   1.016284   0.189795    20.2448   0.06656857
+ 5   1.015102   0.190607    20.2166   0.06646745
+ 6   1.015072   0.190616    20.2162   0.06646744</code></pre>
+<p>Two more iterations change nothing visible: <span class="math inline">\hat k_a = 1.0151</span>, <span class="math inline">\hat k_e = 0.1906</span>, <span class="math inline">\hat V = 20.216</span>, RSS <span class="math inline">0.0665</span>.</p>
+<aside class="notes">
+<p>Ten lines. The stopping rule is a relative step size; the RSS itself cannot go to zero because of the noise, so “RSS small” is not a usable criterion. Iterations 7 and 8 are not shown. With a forward-difference Jacobian, the step stalls at about 1e-9 relative, so asking for tol = 1e-10 would never stop: the stopping tolerance must sit above the accuracy of the Jacobian.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="nls-is-gaussnewton" class="slide level2 smaller">
+<h2><code>nls</code> is Gauss–Newton</h2>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">bateman</span>(tt, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="fl">0.5</span>, <span class="at">ke =</span> <span class="fl">0.1</span>, <span class="at">V =</span> <span class="dv">10</span>),</span>
+<span id="cb6-2"><a aria-hidden="true" tabindex="-1"></a>           <span class="at">trace =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb6-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 93.53426    (2.65e+01): par = (0.5 0.1 10)</span></span>
+<span id="cb6-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 15.91084    (1.43e+01): par = (0.8524528 0.08521448 18.03484)</span></span>
+<span id="cb6-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.9774509   (3.57e+00): par = (1.124562 0.1284276 22.37571)</span></span>
+<span id="cb6-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.09134723  (6.10e-01): par = (1.056583 0.1763063 20.81648)</span></span>
+<span id="cb6-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.06656857  (3.89e-02): par = (1.016284 0.1897946 20.24476)</span></span>
+<span id="cb6-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.06646745  (3.05e-04): par = (1.015102 0.1906071 20.21665)</span></span>
+<span id="cb6-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.06646744  (1.67e-06): par = (1.015072 0.1906157 20.21621)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Exactly our iterates. <a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/nls.html"><code>nls</code></a> uses Gauss–Newton with a QR solve and a numerical Jacobian, plus <strong>step halving</strong> if the RSS goes up.</li>
+<li>The number in brackets is its convergence criterion (the size of the predicted RSS decrease); it stops below <span class="math inline">10^{-5}</span>.</li>
+</ul>
+<aside class="notes">
+<p>The first column is the RSS, the second nls’s relative-offset convergence criterion, then the parameters. The match with our 10 lines is digit for digit: nls computes the gradient with numericDeriv (forward differences) and solves with qr. Step halving: if the full step increases the RSS, nls tries half, a quarter, and so on, down to minFactor = 1/1024. That is a crude form of damping. Python: scipy.optimize.curve_fit does the same job, but uses Levenberg-Marquardt (MINPACK) by default.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="how-fast-gaussnewton-is-almost-newton" class="slide level2 smaller">
+<h2>How fast? Gauss–Newton is almost Newton</h2>
+
+<img data-src="fig03-convergence.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:58.0%"><ul>
+<li>Newton for minimising RSS needs the Hessian <span class="math inline">2\left(J^TJ - \sum_i r_i \nabla^2 m_i\right)</span>. Gauss–Newton <strong>drops the second term</strong>: it needs only first derivatives.</li>
+<li>Small residuals (good fit) or a nearly linear model → the dropped term is small → convergence close to <strong>quadratic</strong>. Large residuals → only <strong>linear</strong> convergence.</li>
+</ul>
+<aside class="notes">
+<p>Relative error in (ka, ke, V) against a reference fit, per accepted iteration, on a log axis. Gauss-Newton (blue) needs 3 slow steps and then gains 2-3 digits per step; the curve bending downwards is the signature of superlinear convergence. It flattens at 1e-10 because the Jacobian is a forward difference. The green and orange curves are Levenberg-Marquardt, which comes next. The Hessian formula connects to Gradient descent, Newton and quasi-Newton: Gauss-Newton is a quasi-Newton method whose Hessian approximation J^T J comes for free from the Jacobian.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="failure-gaussnewton-from-a-bad-start" class="slide level2 smaller">
+<h2>Failure: Gauss–Newton from a bad start</h2>
+<p>Start <span class="math inline">\mathbf p_0 = (3, 0.05, 50)</span>: fast absorption, very slow elimination, large volume. RSS 9.5.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a>p0 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">3</span>, <span class="fl">0.05</span>, <span class="dv">50</span>)</span>
+<span id="cb7-2"><a aria-hidden="true" tabindex="-1"></a>p1 <span class="ot">&lt;-</span> p0 <span class="sc">+</span> <span class="fu">qr.solve</span>(<span class="fu">jac</span>(p0), y <span class="sc">-</span> <span class="fu">model</span>(p0));  p1        <span class="co"># one Gauss-Newton step</span></span>
+<span id="cb7-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -2.22468806  0.17865474  0.04427022</span></span>
+<span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sum</span>((y <span class="sc">-</span> <span class="fu">model</span>(p1))<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb7-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 6.742435e+29</span></span>
+<span id="cb7-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">bateman</span>(tt, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="dv">3</span>, <span class="at">ke =</span> <span class="fl">0.05</span>, <span class="at">V =</span> <span class="dv">50</span>))</span>
+<span id="cb7-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># Error in nls(...) : singular gradient</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The linearisation is only good <strong>near</strong> <span class="math inline">\mathbf p_0</span>; the full step goes far outside: a <strong>negative</strong> absorption rate and a volume of 44 mL.</li>
+<li><code>nls</code> evaluates the Jacobian at that point, finds it numerically rank deficient (<span class="math inline">\kappa \approx 10^{12}</span>) and stops: <strong>“singular gradient”</strong>.</li>
+</ul>
+<aside class="notes">
+<p>“Singular gradient” is the most common nls error and it rarely means the model is wrong. It means: at some trial point the columns of the Jacobian became (numerically) dependent. Typical causes: a bad start (here), a parameter that wandered to a place where it no longer affects the model (V = 0.04 makes everything huge; ka negative makes the exponentials blow up), or a model that really is over-parameterised. The remedies: better starting values, bounds or log-parameters, or a damped method. The damped method is next.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="levenbergmarquardt-damped-gaussnewton" class="slide level2 smaller">
+<h2>Levenberg–Marquardt: damped Gauss–Newton</h2>
+<p>Add a penalty on the step length:</p>
+<p><span class="math display">\min_{\boldsymbol\delta}\ \|\mathbf r - J\boldsymbol\delta\|^2 + \lambda\,\|D_g\boldsymbol\delta\|^2 \quad\Longleftrightarrow\quad \min_{\boldsymbol\delta} \left\| \begin{pmatrix} J \\ \sqrt{\lambda}\,D_g \end{pmatrix}\boldsymbol\delta - \begin{pmatrix}\mathbf r\\ \mathbf 0\end{pmatrix}\right\|^2</span></p>
+<ul>
+<li>Still a linear least-squares problem, 3 rows taller: solve by <strong>QR</strong>. (<span class="math inline">D_g</span> = diagonal of column lengths of <span class="math inline">J</span>, Marquardt’s scaling, so the units of <span class="math inline">V</span> do not matter.)</li>
+<li><span class="math inline">\lambda \to 0</span>: the Gauss–Newton step. <span class="math inline">\lambda</span> large: <span class="math inline">\boldsymbol\delta \approx D_g^{-2}J^T\mathbf r/\lambda</span>, a short step <strong>downhill</strong> (<span class="math inline">-J^T\mathbf r</span> is half the gradient of the RSS): <strong>gradient descent</strong>.</li>
+<li>Rule: if the RSS went <strong>down</strong>, accept and divide <span class="math inline">\lambda</span> by 10; if <strong>up</strong>, reject and multiply <span class="math inline">\lambda</span> by 10.</li>
+</ul>
+<aside class="notes">
+<p>Levenberg (1944) and Marquardt (1963). The normal-equation form is (J^T J + lambda D^2) delta = J^T r; the stacked form on the slide is the same thing without squaring the condition number. Far from the minimum, where the linearisation is poor, steps are rejected and lambda grows until the step is short enough to go downhill: gradient descent is slow but safe. Near the minimum lambda shrinks and the method becomes Gauss-Newton with its fast convergence. This is a trust-region idea: lambda controls how far we trust the linear model. Gradient descent and trust regions in general are in Gradient descent, Newton and quasi-Newton.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="levenbergmarquardt-in-r" class="slide level2 smaller">
+<h2>Levenberg–Marquardt in R</h2>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a aria-hidden="true" tabindex="-1"></a>lev_mar <span class="ot">&lt;-</span> <span class="cf">function</span>(p, <span class="at">lambda =</span> <span class="fl">0.01</span>, <span class="at">maxit =</span> <span class="dv">200</span>, <span class="at">tol =</span> <span class="fl">1e-8</span>) {</span>
+<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a>  rss <span class="ot">&lt;-</span> <span class="fu">sum</span>((y <span class="sc">-</span> <span class="fu">model</span>(p))<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb8-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>maxit) {</span>
+<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a>    J <span class="ot">&lt;-</span> <span class="fu">jac</span>(p); r <span class="ot">&lt;-</span> y <span class="sc">-</span> <span class="fu">model</span>(p)</span>
+<span id="cb8-5"><a aria-hidden="true" tabindex="-1"></a>    Dg <span class="ot">&lt;-</span> <span class="fu">diag</span>(<span class="fu">sqrt</span>(<span class="fu">colSums</span>(J<span class="sc">^</span><span class="dv">2</span>)))              <span class="co"># Marquardt's scaling</span></span>
+<span id="cb8-6"><a aria-hidden="true" tabindex="-1"></a>    delta <span class="ot">&lt;-</span> <span class="fu">qr.solve</span>(<span class="fu">rbind</span>(J, <span class="fu">sqrt</span>(lambda) <span class="sc">*</span> Dg), <span class="fu">c</span>(r, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>))</span>
+<span id="cb8-7"><a aria-hidden="true" tabindex="-1"></a>    rss_new <span class="ot">&lt;-</span> <span class="fu">sum</span>((y <span class="sc">-</span> <span class="fu">model</span>(p <span class="sc">+</span> delta))<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb8-8"><a aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="fu">is.finite</span>(rss_new) <span class="sc">&amp;&amp;</span> rss_new <span class="sc">&lt;</span> rss) {  <span class="co"># accept: trust the linear model more</span></span>
+<span id="cb8-9"><a aria-hidden="true" tabindex="-1"></a>      p <span class="ot">&lt;-</span> p <span class="sc">+</span> delta; rss <span class="ot">&lt;-</span> rss_new; lambda <span class="ot">&lt;-</span> lambda <span class="sc">/</span> <span class="dv">10</span></span>
+<span id="cb8-10"><a aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="fu">sqrt</span>(<span class="fu">sum</span>(delta<span class="sc">^</span><span class="dv">2</span>)) <span class="sc">&lt;</span> tol <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">sum</span>(p<span class="sc">^</span><span class="dv">2</span>))) <span class="cf">break</span></span>
+<span id="cb8-11"><a aria-hidden="true" tabindex="-1"></a>    } <span class="cf">else</span> lambda <span class="ot">&lt;-</span> lambda <span class="sc">*</span> <span class="dv">10</span>                <span class="co"># reject: shorter, more downhill step</span></span>
+<span id="cb8-12"><a aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb8-13"><a aria-hidden="true" tabindex="-1"></a>  p</span>
+<span id="cb8-14"><a aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>From <span class="math inline">(3, 0.05, 50)</span>: 15 passes, 10 steps accepted, 5 rejected (the first two among them); ends at <span class="math inline">(1.0151, 0.1906, 20.216)</span>.</li>
+</ul>
+<aside class="notes">
+<p>Fourteen lines, and the core is the same qr.solve as Gauss-Newton with three extra rows. The is.finite check matters: a trial point with ka negative may give Inf or NaN, which must count as a rejection. The fixed factor 10 is the simplest rule; MINPACK adjusts lambda more cleverly through a trust-region radius, but the behaviour is the same. Iteration counts: 15 loop passes; passes 1, 2 and 4 are rejected far from the minimum, passes 13 and 14 near the end, where the RSS can hardly decrease any more within rounding.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-two-paths" class="slide level2 smaller">
+<h2>The two paths</h2>
+
+<img data-src="fig04-gn-lm-paths.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:68.0%"><ul>
+<li>Gauss–Newton (orange) jumps out of the region where the model makes sense.</li>
+<li>Levenberg–Marquardt (green) first takes short downhill steps along the valley, then Gauss–Newton steps: error curve in orange on the convergence plot.</li>
+</ul>
+<aside class="notes">
+<p>Projected on the (ka, ke) plane; contours are the profiled RSS of the earlier slide in linear axes. The first two LM trial steps were rejected (not drawn), so lambda went up to 1 before a step was accepted. Steps 3-5 move along the valley floor, then the method switches to almost pure Gauss-Newton and converges in four more steps. On the convergence plot the orange LM curve has the same steep end as Gauss-Newton: near the minimum, LM is Gauss-Newton.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-library-versions" class="slide level2 smaller">
+<h2>The library versions</h2>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(minpack.lm)</span>
+<span id="cb9-2"><a aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">nlsLM</span>(y <span class="sc">~</span> <span class="fu">bateman</span>(tt, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="dv">3</span>, <span class="at">ke =</span> <span class="fl">0.05</span>, <span class="at">V =</span> <span class="dv">50</span>))</span>
+<span id="cb9-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">coef</span>(fit)</span>
+<span id="cb9-4"><a aria-hidden="true" tabindex="-1"></a><span class="co">#         ka         ke          V</span></span>
+<span id="cb9-5"><a aria-hidden="true" tabindex="-1"></a><span class="co">#  1.0150722  0.1906157 20.2162105</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><a href="https://search.r-project.org/CRAN/refmans/minpack.lm/html/nlsLM.html"><code>nlsLM</code></a> has the <code>nls</code> interface but uses MINPACK’s Levenberg–Marquardt; <a href="https://search.r-project.org/CRAN/refmans/minpack.lm/html/nls.lm.html"><code>nls.lm</code></a> takes a residual <strong>function</strong> instead of a formula.</li>
+<li>Python: <code>scipy.optimize.curve_fit</code> (LM by default) and <code>least_squares</code> (trust region by default, <code>method="lm"</code> for MINPACK). Rust: nalgebra + 40 hand-written lines (exercise).</li>
+<li>Same answer as <code>nls</code> when both converge. LM converges from <strong>more</strong> starts, not from all.</li>
+</ul>
+<aside class="notes">
+<p>MINPACK (Moré, 1980) is the Fortran library behind both minpack.lm and scipy’s “lm” option. scipy’s default for least_squares is “trf”, a trust-region reflective method that also handles bounds. curve_fit wraps least_squares with a model-function interface like nls and also returns a covariance matrix; standard errors are for the next unit. The Rust argmin crate has a Gauss-Newton solver, but it needs extra trait plumbing; in the exercise we write LM ourselves with nalgebra’s QR, which is shorter and shows everything.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="positive-rates-fit-the-logarithms" class="slide level2 smaller">
+<h2>Positive rates: fit the logarithms</h2>
+<p>Rates and volumes must be positive. Fit <span class="math inline">\mathbf q = \log\mathbf p</span> and use <span class="math inline">k_a = e^{q_1}</span>, …:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">nlsLM</span>(y <span class="sc">~</span> <span class="fu">bateman</span>(tt, <span class="fu">exp</span>(lka), <span class="fu">exp</span>(lke), <span class="fu">exp</span>(lV)),</span>
+<span id="cb10-2"><a aria-hidden="true" tabindex="-1"></a>             <span class="at">start =</span> <span class="fu">list</span>(<span class="at">lka =</span> <span class="fu">log</span>(<span class="dv">3</span>), <span class="at">lke =</span> <span class="fu">log</span>(<span class="fl">0.05</span>), <span class="at">lV =</span> <span class="fu">log</span>(<span class="dv">50</span>)))</span>
+<span id="cb10-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">exp</span>(<span class="fu">coef</span>(fit))</span>
+<span id="cb10-4"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        lka        lke         lV</span></span>
+<span id="cb10-5"><a aria-hidden="true" tabindex="-1"></a><span class="co">#  1.0150721  0.1906157 20.2162104</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><strong>Positivity for free</strong>: any step in <span class="math inline">\mathbf q</span> gives <span class="math inline">\mathbf p &gt; 0</span>. No negative <span class="math inline">k_a</span>, no <span class="math inline">V = 0.04</span> with a negative sign next.</li>
+<li><strong>Scale-free</strong>: a step of 0.1 in <span class="math inline">q</span> is a 10 % change in any parameter, whatever its units. <span class="math inline">\kappa(J)</span> at the minimum: <strong>170</strong> in <span class="math inline">(k_a, k_e, V)</span>, <strong>8.7</strong> in logs.</li>
+<li>Chain rule: <span class="math inline">\partial m/\partial q_j = p_j\,\partial m/\partial p_j</span>.</li>
+<li>Not a cure-all: plain Gauss–Newton in logs from <span class="math inline">(3, 0.05, 50)</span> still diverges (<span class="math inline">k_a \to 2\times10^{-4}</span>, <span class="math inline">k_e \to 617</span>). Damping is still needed.</li>
+</ul>
+<aside class="notes">
+<p>The log-parameterisation is standard in pharmacometrics and systems biology (it also makes the multistart grid natural: starts spread over orders of magnitude). The conditioning improvement comes from the column scaling: V’s column was small because V is large; in log form all columns measure relative sensitivities. Bounds are the other option (least_squares(bounds=…), nlsLM(lower=…)); they are covered in Constraints and linear programming. Log-parameters cannot express a parameter that is truly zero; if a rate might be zero, you will see q drifting to minus infinity.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="fitting-an-ode-model" class="slide level2 smaller">
+<h2>Fitting an ODE model</h2>
+<p>Most models (saturable elimination, viral dynamics, gene circuits) have <strong>no closed form</strong>. Then the residual function <strong>solves the ODE</strong>:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(deSolve)</span>
+<span id="cb11-2"><a aria-hidden="true" tabindex="-1"></a>pk_rhs <span class="ot">&lt;-</span> <span class="cf">function</span>(t, A, p) <span class="fu">list</span>(<span class="fu">c</span>(<span class="sc">-</span>p[<span class="dv">1</span>] <span class="sc">*</span> A[<span class="dv">1</span>],                 <span class="co"># gut</span></span>
+<span id="cb11-3"><a aria-hidden="true" tabindex="-1"></a>                                    p[<span class="dv">1</span>] <span class="sc">*</span> A[<span class="dv">1</span>] <span class="sc">-</span> p[<span class="dv">2</span>] <span class="sc">*</span> A[<span class="dv">2</span>]))   <span class="co"># central compartment</span></span>
+<span id="cb11-4"><a aria-hidden="true" tabindex="-1"></a>pk_ode <span class="ot">&lt;-</span> <span class="cf">function</span>(p, <span class="at">tol =</span> <span class="fl">1e-10</span>) {</span>
+<span id="cb11-5"><a aria-hidden="true" tabindex="-1"></a>  out <span class="ot">&lt;-</span> <span class="fu">ode</span>(<span class="fu">c</span>(D, <span class="dv">0</span>), <span class="fu">c</span>(<span class="dv">0</span>, tt), pk_rhs, p, <span class="at">rtol =</span> tol, <span class="at">atol =</span> tol)</span>
+<span id="cb11-6"><a aria-hidden="true" tabindex="-1"></a>  out[<span class="sc">-</span><span class="dv">1</span>, <span class="dv">3</span>] <span class="sc">/</span> p[<span class="dv">3</span>]                       <span class="co"># amount in the central compartment / V</span></span>
+<span id="cb11-7"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb11-8"><a aria-hidden="true" tabindex="-1"></a>resid <span class="ot">&lt;-</span> <span class="cf">function</span>(q, ...) y <span class="sc">-</span> <span class="fu">pk_ode</span>(<span class="fu">exp</span>(q), ...)</span>
+<span id="cb11-9"><a aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">nls.lm</span>(<span class="fu">log</span>(<span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.1</span>, <span class="dv">10</span>)), <span class="at">fn =</span> resid,</span>
+<span id="cb11-10"><a aria-hidden="true" tabindex="-1"></a>              <span class="at">control =</span> <span class="fu">nls.lm.control</span>(<span class="at">epsfcn =</span> <span class="fl">1e-10</span>))</span>
+<span id="cb11-11"><a aria-hidden="true" tabindex="-1"></a><span class="fu">exp</span>(fit<span class="sc">$</span>par)</span>
+<span id="cb11-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  1.0150721  0.1906157 20.2162095</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Matches the closed-form fit to 7 digits. Cost: each residual = one ODE solve; each Jacobian = 3 more.</li>
+</ul>
+<aside class="notes">
+<p>deSolve’s ode with its default method lsoda (Stiffness and implicit methods). The output matrix has time in column 1 and the states after it; we drop the t = 0 row and take column 3 (A_c). Python: solve_ivp inside the function passed to least_squares; Rust: ode_solvers’ Dopri5 inside a hand-written LM. The epsfcn setting is explained two slides on. Saturable (Michaelis-Menten) elimination, ke A_c replaced by Vmax C/(Km + C), has no closed form and is fitted exactly like this. Viral dynamics (target cells, infected cells, virus) likewise.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-optimiser-sees-the-solver-error" class="slide level2 smaller">
+<h2>The optimiser sees the solver error</h2>
+
+<img data-src="fig05-solver-error.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:80.0%"><ul>
+<li>What the optimiser minimises is <span class="math inline">\text{RSS}_\text{exact}</span> <strong>plus the solver error</strong>: smooth stretches with <strong>jumps</strong> where the solver changes its step sequence.</li>
+<li>With <code>rtol = atol = 1e-3</code> the error (<span class="math inline">10^{-4}</span>) is as large as the RSS change from a 0.3 % change in <span class="math inline">k_a</span>: the fitted <span class="math inline">k_a</span> is wrong in the 4th digit, and the reported RSS (0.06641) is <strong>below</strong> the true minimum (0.06647).</li>
+</ul>
+<aside class="notes">
+<p>RSS computed through deSolve minus the exact RSS from the Bateman formula, along a line in ka (ke and V fixed at the estimate). Left, tolerance 1e-3: an error of about 1e-4 with visible jumps (step rejections and order changes in lsoda). Right, 1e-6: three orders smaller, still with one small kink. The optimiser cannot tell solver error from model misfit, so it partly fits the solver error. For this mild model the effect on the estimate is small even at 1e-3 (4 digits); for stiff models, or models where a small state drives a big one, the noise is larger and the optimiser can stall, stop early or report a wrong convergence. Table in exercise C6: estimates and RSS for rtol from 1e-2 to 1e-10.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="inner-tolerance-vs-finite-difference-step" class="slide level2 smaller">
+<h2>Inner tolerance vs finite-difference step</h2>
+
+<img data-src="fig06-tolerance-step.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:60.0%"><ul>
+<li>The Jacobian is a difference quotient: solver error <span class="math inline">\varepsilon_\text{ode}</span> divided by the step <span class="math inline">h</span>. MINPACK’s default step <span class="math inline">1.5\times10^{-8}|q|</span> is tiny (here <span class="math inline">|q_1| = |\log k_a| = 0.015</span>): the error <strong>jumps around</strong> whatever the tolerance.</li>
+<li>Rule (from <em>Convergence and cost</em>): <span class="math inline">h \approx \sqrt{\varepsilon_\text{ode}}</span>, and the solver tolerance 100–1000 times tighter than the accuracy you want from the fit. Then <strong>refit with a tighter tolerance</strong> and keep only the digits that agree.</li>
+</ul>
+<aside class="notes">
+<p>Relative error of the fitted ka against the exact fit, for deSolve tolerances from 1e-3 to 1e-12 (tighter to the right) and two finite-difference steps. Orange: MINPACK’s default, sqrt(machine eps) times |q|. Because log ka is close to 0, the absolute step for ka is 2e-10, smaller than the solver error, and the Jacobian is garbage at random tolerances (3.5e-3 error at 1e-9!). Blue: epsfcn = 1e-10 gives step 1e-5 |q|; the error falls with the tolerance until it reaches the 1e-7 level set by the optimiser’s own stopping rule. scipy’s least_squares (default “trf”) uses a step relative to max(1, |q|), which avoids the trap. Alternative: forward sensitivity equations (deSolve’s companion packages, SUNDIALS) compute the Jacobian by solving extra ODEs; mention only.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="multistart" class="slide level2 smaller">
+<h2>Multistart</h2>
+<div class="columns">
+<div class="column" style="width:52%;">
+<div class="sourceCode" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a aria-hidden="true" tabindex="-1"></a>resid <span class="ot">&lt;-</span> <span class="cf">function</span>(q) y <span class="sc">-</span> <span class="fu">bateman</span>(tt, <span class="fu">exp</span>(q[<span class="dv">1</span>]), <span class="fu">exp</span>(q[<span class="dv">2</span>]), <span class="fu">exp</span>(q[<span class="dv">3</span>]))</span>
+<span id="cb12-2"><a aria-hidden="true" tabindex="-1"></a>g <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.03</span>, <span class="fl">0.1</span>, <span class="fl">0.3</span>, <span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">10</span>)</span>
+<span id="cb12-3"><a aria-hidden="true" tabindex="-1"></a>starts <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">ka =</span> g, <span class="at">ke =</span> <span class="fl">1.5</span> <span class="sc">*</span> g)</span>
+<span id="cb12-4"><a aria-hidden="true" tabindex="-1"></a>ends <span class="ot">&lt;-</span> <span class="fu">t</span>(<span class="fu">apply</span>(starts, <span class="dv">1</span>, <span class="cf">function</span>(s) {</span>
+<span id="cb12-5"><a aria-hidden="true" tabindex="-1"></a>  fit <span class="ot">&lt;-</span> <span class="fu">nls.lm</span>(<span class="fu">log</span>(<span class="fu">c</span>(s, <span class="dv">10</span>)), <span class="at">fn =</span> resid,</span>
+<span id="cb12-6"><a aria-hidden="true" tabindex="-1"></a>                <span class="at">control =</span> <span class="fu">nls.lm.control</span>(<span class="at">maxiter =</span> <span class="dv">200</span>))</span>
+<span id="cb12-7"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">c</span>(<span class="fu">exp</span>(fit<span class="sc">$</span>par), <span class="at">rss =</span> fit<span class="sc">$</span>deviance)</span>
+<span id="cb12-8"><a aria-hidden="true" tabindex="-1"></a>}))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div><div class="column" style="width:48%;">
+<p><img data-src="fig07-multistart.svg" style="width:100.0%"></p>
+</div></div>
+<ul>
+<li>36 starts over 2.5 orders of magnitude (log grid). <strong>14</strong> end at <span class="math inline">(1.02, 0.19, 20.2)</span>, <strong>21</strong> at <span class="math inline">(0.19, 1.02, 3.8)</span>, <strong>1</strong> runs off (<span class="math inline">k_a \to 10^{15}</span>, RSS 64.5 = no model at all).</li>
+<li>Always compare the <strong>RSS</strong> of the ends: a failed run has a much larger RSS. Here the two good ends have the <strong>same</strong> RSS: 0.06646744.</li>
+</ul>
+<aside class="notes">
+<p>Multistart is the simplest global strategy: many local fits from spread-out starts, keep the best. A grid on log axes (or random log-uniform starts) covers the plausible range. Starts above the diagonal ka = ke go to the mirror solution: each start finds the minimum on its side of the ridge. The one failure started close to the diagonal and drifted to ka huge, ke tiny, V huge: the model predicts essentially 0, RSS = sum(y^2) = 64.5. Cost: 36 fits of about 8 iterations each, about 1500 model evaluations; with an ODE inside each costs one solve. Other global methods (simulated annealing, evolutionary algorithms, scatter search) are popular in systems biology; multistart with a good local method is hard to beat in benchmarks.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-flip-flop-two-answers-one-curve" class="slide level2 smaller">
+<h2>The flip-flop: two answers, one curve</h2>
+
+<img data-src="fig08-flipflop.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:75.0%"><ul>
+<li>Swap <span class="math inline">k_a \leftrightarrow k_e</span> and set <span class="math inline">V' = V\,k_e/k_a</span>: the Bateman function is <strong>exactly</strong> the same. Plasma data alone <strong>cannot</strong> tell “fast in, slow out” from “slow in, fast out”.</li>
+<li>Pharmacology: <strong>flip-flop kinetics</strong> (e.g.&nbsp;slow-release tablets). Decide with other data (an IV dose gives <span class="math inline">k_e</span> directly) or prior knowledge (<span class="math inline">V = 3.8</span> L is plasma volume only).</li>
+<li>No optimiser fixes this: the parameters are not <strong>identifiable</strong>. Next unit.</li>
+</ul>
+<aside class="notes">
+<p>Check the algebra: D ka / (V (ka - ke)) times (e^{-ke t} - e^{-ka t}); swapping ka and ke flips the sign of both the denominator and the bracket, and the prefactor ka/V becomes ke/V’, which equals ka/V when V’ = V ke / ka. So the two parameter sets give identical concentrations at every time; the RSS values agree to all printed digits. The difference is in the gut, which is not measured. This is structural non-identifiability: a symmetry of the model, not a lack of data. The next unit, Identifiability and uncertainty of fitted parameters, takes this up with the same model and data, together with practical non-identifiability (flat valleys) and standard errors.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="checklist-is-my-nonlinear-fit-trustworthy" class="slide level2 smaller">
+<h2>Checklist: is my nonlinear fit trustworthy?</h2>
+<ul>
+<li><strong>“singular gradient” / no convergence</strong> → better starts, log-parameters, or Levenberg–Marquardt (<code>nlsLM</code>, <code>least_squares</code>).</li>
+<li><strong>A parameter at a strange value</strong> (negative rate, <span class="math inline">10^{15}</span>, <span class="math inline">10^{-27}</span>) → the fit ran off; restart, reparameterise, or the data do not determine it.</li>
+<li><strong>Plot the fitted curve over the data</strong>, and the residuals against time: a systematic pattern means a wrong model, not a numerical problem.</li>
+<li><strong>Multistart</strong>: several local fits from a log grid; compare the RSS of the ends. Equal RSS at different parameters → non-identifiable.</li>
+<li><strong>ODE inside</strong>: set <code>rtol</code>/<code>atol</code> explicitly and tight (1e-8 to 1e-10); refit with 100× tighter tolerance; finite-difference step <span class="math inline">\gg</span> solver error.</li>
+<li><strong>Stopping</strong>: ask for a tolerance above the accuracy of your Jacobian; read the convergence message.</li>
+</ul>
+<aside class="notes">
+<p>Each item is a failure from this lecture: the bad start, the run-off to infinity, the flip-flop, the solver error and the finite-difference step. The plot-the-fit item is the one that catches model errors, which no optimiser can detect: a perfect minimisation of the wrong model is still the wrong answer.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="summary" class="slide level2 smaller">
+<h2>Summary</h2>
+<ul>
+<li>Nonlinear least squares: minimise <span class="math inline">\sum_i (y_i - m_i(\mathbf p))^2</span> when <span class="math inline">\mathbf p</span> enters nonlinearly. No formula: iterate.</li>
+<li><strong>Gauss–Newton</strong>: linearise, <span class="math inline">\mathbf m(\mathbf p + \boldsymbol\delta) \approx \mathbf m + J\boldsymbol\delta</span>, then <strong>one linear least-squares solve per step</strong>, by QR. Nearly quadratic near a good fit; can jump far away from a bad start. <code>nls</code> is Gauss–Newton with step halving (“singular gradient”).</li>
+<li><strong>Levenberg–Marquardt</strong>: add <span class="math inline">\lambda\|D_g\boldsymbol\delta\|^2</span>; <span class="math inline">\lambda</span> small = Gauss–Newton, <span class="math inline">\lambda</span> large = gradient descent. <code>nlsLM</code>, <code>nls.lm</code>, <code>curve_fit</code>, <code>least_squares</code>.</li>
+<li><strong>Log-parameters</strong> for positive rates: positivity for free, better conditioning (170 → 8.7).</li>
+<li><strong>ODE fitting</strong>: the solver runs inside the residual; its error is part of the objective. Tight tolerance, a finite-difference step well above the solver error, refit to check.</li>
+<li><strong>Multistart</strong> finds several minima; the PK model has two with equal RSS (flip-flop).</li>
+</ul>
+<p><strong>Next:</strong> <em>Identifiability and uncertainty of fitted parameters</em>: which parameters the data determine, and how well.</p>
+<aside class="notes">
+<p>The methods of this unit are the workhorse of quantitative biology: almost every published rate constant from a time course came out of a Levenberg-Marquardt or trust-region fit with an ODE solver inside. The next unit asks how much to trust the numbers: standard errors from J^T J, profile likelihoods, and the structural non-identifiability we just met. After that, Constraints and linear programming deals with bounds and linear constraints.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+
+
+</section>
+    </div>
+  <div class="quarto-auto-generated-content" style="display: none;">
+<div class="footer footer-default">
+
+</div>
+</div></div>
+
+  <script>window.backupDefine = window.define; window.define = undefined;</script>
+  <script src="../site_libs/revealjs/dist/reveal.js"></script>
+  <!-- reveal.js plugins -->
+  <script src="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.js"></script>
+  <script src="../site_libs/revealjs/plugin/pdf-export/pdfexport.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/quarto-support/support.js"></script>
+  
+
+  <script src="../site_libs/revealjs/plugin/notes/notes.js"></script>
+  <script src="../site_libs/revealjs/plugin/search/search.js"></script>
+  <script src="../site_libs/revealjs/plugin/zoom/zoom.js"></script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://revealjs.com/config/
+      Reveal.initialize({
+'controlsAuto': false,
+'previewLinksAuto': false,
+'pdfSeparateFragments': false,
+'autoAnimateEasing': "ease",
+'autoAnimateDuration': 1,
+'autoAnimateUnmatched': true,
+'jumpToSlide': true,
+'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
+'smaller': false,
+ 
+        // Display controls in the bottom right corner
+        controls: true,
+
+        // Help the user learn the controls by providing hints, for example by
+        // bouncing the down arrow when they first encounter a vertical slide
+        controlsTutorial: false,
+
+        // Determines where controls appear, "edges" or "bottom-right"
+        controlsLayout: 'edges',
+
+        // Visibility rule for backwards navigation arrows; "faded", "hidden"
+        // or "visible"
+        controlsBackArrows: 'visible',
+
+        // Display a presentation progress bar
+        progress: true,
+
+        // Display the page number of the current slide
+        slideNumber: 'c/t',
+
+        // 'all', 'print', or 'speaker'
+        showSlideNumber: 'all',
+
+        // Add the current slide number to the URL hash so that reloading the
+        // page/copying the URL will return you to the same slide
+        hash: true,
+
+        // Start with 1 for the hash rather than 0
+        hashOneBasedIndex: false,
+
+        // Flags if we should monitor the hash and change slides accordingly
+        respondToHashChanges: true,
+
+        // Push each slide change to the browser history
+        history: false,
+
+        // Enable keyboard shortcuts for navigation
+        keyboard: true,
+
+        // Enable the slide overview mode
+        overview: true,
+
+        // Disables the default reveal.js slide layout (scaling and centering)
+        // so that you can use custom CSS layout
+        disableLayout: false,
+
+        // Vertical centering of slides
+        center: false,
+
+        // Enables touch navigation on devices with touch input
+        touch: true,
+
+        // Loop the presentation
+        loop: false,
+
+        // Change the presentation direction to be RTL
+        rtl: false,
+
+        // see https://revealjs.com/vertical-slides/#navigation-mode
+        navigationMode: 'linear',
+
+        // Randomizes the order of slides each time the presentation loads
+        shuffle: false,
+
+        // Turns fragments on and off globally
+        fragments: true,
+
+        // Flags whether to include the current fragment in the URL,
+        // so that reloading brings you to the same fragment position
+        fragmentInURL: false,
+
+        // Flags if the presentation is running in an embedded mode,
+        // i.e. contained within a limited portion of the screen
+        embedded: false,
+
+        // Flags if we should show a help overlay when the questionmark
+        // key is pressed
+        help: true,
+
+        // Flags if it should be possible to pause the presentation (blackout)
+        pause: true,
+
+        // Flags if speaker notes should be visible to all viewers
+        showNotes: false,
+
+        // Global override for autoplaying embedded media (null/true/false)
+        autoPlayMedia: null,
+
+        // Global override for preloading lazy-loaded iframes (null/true/false)
+        preloadIframes: null,
+
+        // Number of milliseconds between automatically proceeding to the
+        // next slide, disabled when set to 0, this value can be overwritten
+        // by using a data-autoslide attribute on your slides
+        autoSlide: 0,
+
+        // Stop auto-sliding after user input
+        autoSlideStoppable: true,
+
+        // Use this method for navigation when auto-sliding
+        autoSlideMethod: null,
+
+        // Specify the average time in seconds that you think you will spend
+        // presenting each slide. This is used to show a pacing timer in the
+        // speaker view
+        defaultTiming: null,
+
+        // Enable slide navigation via mouse wheel
+        mouseWheel: false,
+
+        // The display mode that will be used to show slides
+        display: 'block',
+
+        // Hide cursor if inactive
+        hideInactiveCursor: true,
+
+        // Time before the cursor is hidden (in ms)
+        hideCursorTime: 5000,
+
+        // Opens links in an iframe preview overlay
+        previewLinks: false,
+
+        // Transition style (none/fade/slide/convex/concave/zoom)
+        transition: 'none',
+
+        // Transition speed (default/fast/slow)
+        transitionSpeed: 'default',
+
+        // Transition style for full page slide backgrounds
+        // (none/fade/slide/convex/concave/zoom)
+        backgroundTransition: 'none',
+
+        // Number of slides away from the current that are visible
+        viewDistance: 3,
+
+        // Number of slides away from the current that are visible on mobile
+        // devices. It is advisable to set this to a lower number than
+        // viewDistance in order to save resources.
+        mobileViewDistance: 2,
+
+        // The "normal" size of the presentation, aspect ratio will be preserved
+        // when the presentation is scaled to fit different resolutions. Can be
+        // specified using percentage units.
+        width: 1280,
+
+        height: 720,
+
+        // Factor of the display size that should remain empty around the content
+        margin: 0.1,
+
+        // reveal.js plugins
+        plugins: [QuartoLineHighlight, PdfExport, RevealMenu, QuartoSupport,
+
+          RevealNotes,
+          RevealSearch,
+          RevealZoom
+        ]
+      });
+    </script>
+    <script id="quarto-html-after-body" type="application/javascript">
+      window.document.addEventListener("DOMContentLoaded", function (event) {
+        const tabsets =  window.document.querySelectorAll(".panel-tabset-tabby")
+        tabsets.forEach(function(tabset) {
+          const tabby = new Tabby('#' + tabset.id);
+        });
+        const isCodeAnnotation = (el) => {
+          for (const clz of el.classList) {
+            if (clz.startsWith('code-annotation-')) {                     
+              return true;
+            }
+          }
+          return false;
+        }
+        const onCopySuccess = function(e) {
+          // button target
+          const button = e.trigger;
+          // don't keep focus
+          button.blur();
+          // flash "checked"
+          button.classList.add('code-copy-button-checked');
+          var currentTitle = button.getAttribute("title");
+          button.setAttribute("title", "Copied!");
+          let tooltip;
+          if (window.bootstrap) {
+            button.setAttribute("data-bs-toggle", "tooltip");
+            button.setAttribute("data-bs-placement", "left");
+            button.setAttribute("data-bs-title", "Copied!");
+            tooltip = new bootstrap.Tooltip(button, 
+              { trigger: "manual", 
+                customClass: "code-copy-button-tooltip",
+                offset: [0, -8]});
+            tooltip.show();    
+          }
+          setTimeout(function() {
+            if (tooltip) {
+              tooltip.hide();
+              button.removeAttribute("data-bs-title");
+              button.removeAttribute("data-bs-toggle");
+              button.removeAttribute("data-bs-placement");
+            }
+            button.setAttribute("title", currentTitle);
+            button.classList.remove('code-copy-button-checked');
+          }, 1000);
+          // clear code selection
+          e.clearSelection();
+        }
+        const getTextToCopy = function(trigger) {
+            const codeEl = trigger.previousElementSibling.cloneNode(true);
+            for (const childEl of codeEl.children) {
+              if (isCodeAnnotation(childEl)) {
+                childEl.remove();
+              }
+            }
+            return codeEl.innerText;
+        }
+        const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+          text: getTextToCopy
+        });
+        clipboard.on('success', onCopySuccess);
+        if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+          const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+            text: getTextToCopy,
+            container: window.document.getElementById('quarto-embedded-source-code-modal')
+          });
+          clipboardModal.on('success', onCopySuccess);
+        }
+          var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+          var mailtoRegex = new RegExp(/^mailto:/);
+            var filterRegex = new RegExp('/' + window.location.host + '/');
+          var isInternal = (href) => {
+              return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+          }
+          // Inspect non-navigation links and adorn them if external
+         var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+          for (var i=0; i<links.length; i++) {
+            const link = links[i];
+            if (!isInternal(link.href)) {
+              // undo the damage that might have been done by quarto-nav.js in the case of
+              // links that we want to consider external
+              if (link.dataset.originalHref !== undefined) {
+                link.href = link.dataset.originalHref;
+              }
+            }
+          }
+        function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+          const config = {
+            allowHTML: true,
+            maxWidth: 500,
+            delay: 100,
+            arrow: false,
+            appendTo: function(el) {
+                return el.closest('section.slide') || el.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'light-border',
+            placement: 'bottom-start',
+          };
+          if (contentFn) {
+            config.content = contentFn;
+          }
+          if (onTriggerFn) {
+            config.onTrigger = onTriggerFn;
+          }
+          if (onUntriggerFn) {
+            config.onUntrigger = onUntriggerFn;
+          }
+            config['offset'] = [0,0];
+            config['maxWidth'] = 700;
+          window.tippy(el, config); 
+        }
+        const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+        for (var i=0; i<noterefs.length; i++) {
+          const ref = noterefs[i];
+          tippyHover(ref, function() {
+            // use id or data attribute instead here
+            let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+            try { href = new URL(href).hash; } catch {}
+            const id = href.replace(/^#\/?/, "");
+            const note = window.document.getElementById(id);
+            if (note) {
+              return note.innerHTML;
+            } else {
+              return "";
+            }
+          });
+        }
+        const findCites = (el) => {
+          const parentEl = el.parentElement;
+          if (parentEl) {
+            const cites = parentEl.dataset.cites;
+            if (cites) {
+              return {
+                el,
+                cites: cites.split(' ')
+              };
+            } else {
+              return findCites(el.parentElement)
+            }
+          } else {
+            return undefined;
+          }
+        };
+        var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+        for (var i=0; i<bibliorefs.length; i++) {
+          const ref = bibliorefs[i];
+          const citeInfo = findCites(ref);
+          if (citeInfo) {
+            tippyHover(citeInfo.el, function() {
+              var popup = window.document.createElement('div');
+              citeInfo.cites.forEach(function(cite) {
+                var citeDiv = window.document.createElement('div');
+                citeDiv.classList.add('hanging-indent');
+                citeDiv.classList.add('csl-entry');
+                var biblioDiv = window.document.getElementById('ref-' + cite);
+                if (biblioDiv) {
+                  citeDiv.innerHTML = biblioDiv.innerHTML;
+                }
+                popup.appendChild(citeDiv);
+              });
+              return popup.innerHTML;
+            });
+          }
+        }
+      });
+      </script>
+    
+
+</body></html>

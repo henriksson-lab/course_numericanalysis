@@ -1,0 +1,131 @@
+---
+title: "Quiz: nonlinear least squares and ODE fitting"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of nonlinear least squares and ODE fitting. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** Which of these models can be fitted with `lm` (linear least squares), and which need a nonlinear fit? (a) $C = a + b\,t + c\,t^2$; (b) $C = a\,e^{-0.2t} + b$ with the rate known; (c) $C = a\,e^{-kt}$ with $k$ unknown; (d) $C = \dfrac{V_\max S}{K_m + S}$.
+
+::: {.callout-tip collapse="true" title="Hint"}
+"Linear" refers to the parameters, not to $t$ or $S$. Does each parameter appear only as a multiplier of a known function?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(a) and (b) are linear in their parameters: `lm` fits them (a polynomial is a Vandermonde system; in (b) the columns are $e^{-0.2t}$ and 1). (c) and (d) are nonlinear: $k$ sits inside the exponential and $K_m$ in the denominator. (c) could be linearised by taking logs, but that changes the error model; (d) has the same problem with the Lineweaver–Burk transformation. Fit them by nonlinear least squares.
+:::
+
+---
+
+**Q2.** In one sentence each: what does a Gauss–Newton step do, and why is it solved with QR rather than with the normal equations?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is linearised, and what kind of problem is left? What does $J^TJ$ do to the condition number?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+It replaces the model by its linearisation $\mathbf m + J\boldsymbol\delta$ at the current parameters and solves the resulting **linear** least-squares problem $\min\|\mathbf r - J\boldsymbol\delta\|^2$ for the step. QR solves that problem with error proportional to $\kappa(J)$, while the normal equations $J^TJ\boldsymbol\delta = J^T\mathbf r$ work with $\kappa(J)^2$ and lose twice as many digits.
+:::
+
+---
+
+**Q3.** Gauss–Newton is often described as "Newton's method without second derivatives". Which term of the Hessian of the RSS does it drop, and when is that a good approximation?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Differentiate $\sum_i r_i^2$ twice, with $r_i = y_i - m_i(\mathbf p)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The Hessian is $2\left(J^TJ - \sum_i r_i\,\nabla^2 m_i\right)$; Gauss–Newton keeps only $J^TJ$. The dropped term is small when the residuals are small (a good fit) or the model is nearly linear (small $\nabla^2 m_i$). Then Gauss–Newton converges almost quadratically; with large residuals it converges only linearly, or not at all.
+:::
+
+---
+
+**Q4.** `nls` stops with "singular gradient". Name two common causes and one remedy for each.
+
+::: {.callout-tip collapse="true" title="Hint"}
+The "gradient" is the Jacobian. When are its columns (nearly) linearly dependent?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) A **bad start**: the Gauss–Newton step jumps to an absurd point (a negative rate, a tiny volume) where the Jacobian is numerically rank deficient. Remedy: better starting values, log-parameters, or a damped method such as `nlsLM`. (2) A model with **redundant parameters** (two parameters that only appear as a product, or a parameter the data do not inform). Remedy: reparameterise or fix one parameter; this is an identifiability problem, not a numerical one. (3) Also common: a formula that is $0/0$ at the start, such as the Bateman function with $k_a = k_e$.
+:::
+
+---
+
+**Q5.** In Levenberg–Marquardt, what happens to the step when $\lambda \to 0$ and when $\lambda$ is very large? When does the algorithm increase $\lambda$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at $(J^TJ + \lambda D^2)\boldsymbol\delta = J^T\mathbf r$ in the two limits.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\lambda \to 0$: the Gauss–Newton step. $\lambda$ large: $\boldsymbol\delta \approx D^{-2}J^T\mathbf r/\lambda$, a short step in the (scaled) steepest-descent direction, since $-2J^T\mathbf r$ is the gradient of the RSS. $\lambda$ is increased (typically ×10) when a trial step makes the RSS **larger** (the step is rejected), and decreased when the RSS goes down. Far from the minimum the method behaves like cautious gradient descent, near it like Gauss–Newton.
+:::
+
+---
+
+**Q6.** Give two reasons to fit $\log k$ instead of a rate constant $k$.
+
+::: {.callout-tip collapse="true" title="Hint"}
+What values can $e^q$ take? What does a step of 0.1 in $q$ mean?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) **Positivity**: $k = e^q > 0$ for every $q$, so no step can produce a negative rate (which in an ODE model can make the solution blow up). (2) **Scaling**: a step in $q$ is a relative change in $k$, the same for a rate of 0.01/h and a volume of 20 L, so the Jacobian is better conditioned (in the PK fit $\kappa(J)$ drops from 170 to 8.7) and step sizes, damping and stopping tolerances mean the same for every parameter. Log-parameters do not remove the need for damping.
+:::
+
+---
+
+**Q7.** You fit an ODE model with `solve_ivp` inside `least_squares`, using the default `rtol = 1e-3`. The fit "converges". What can be wrong, and how do you check?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is the optimiser actually minimising?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The optimiser minimises the RSS of the **numerical** solution, which differs from the true RSS by the solver error (about $10^{-3}$ relative here). It partly fits that error: the estimates are wrong beyond the third or fourth digit, and the reported RSS can even be below the true minimum. The finite-difference Jacobian also suffers. Check by setting `rtol` and `atol` explicitly (e.g. $10^{-8}$), refitting with a 100 times tighter tolerance, and keeping only the digits that agree.
+:::
+
+---
+
+**Q8.** Your model values are computed by an ODE solver with an error of about $10^{-8}$. Roughly which forward-difference step $h$ should the Jacobian use, and what goes wrong with $h = 10^{-8}$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Error $\approx \tfrac{h}{2}|m''| + 2\varepsilon/h$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$h \approx \sqrt{\varepsilon} = 10^{-4}$ (times the scale of the parameter), giving a derivative error around $10^{-4}$. With $h = 10^{-8}$ the noise term is $2\times10^{-8}/10^{-8} = 2$: the Jacobian is as large as its error, and the optimiser takes erratic steps or stops at a wrong point. The default step of $\sqrt{\varepsilon_\text{machine}} \approx 1.5\times10^{-8}$ assumes model values accurate to 16 digits.
+:::
+
+---
+
+**Q9.** A multistart from 36 starting points gives two groups of fits with the same RSS to 7 digits but different parameters, and one fit with a much larger RSS. How do you interpret each?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which fits are local minima, and is either of the two equal ones "better"?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The fit with the large RSS is a failure (it ran off or stopped in a poor local minimum) and is discarded. The two groups with equal RSS are two parameter sets that explain the data equally well: the data cannot tell them apart. That is a sign of **non-identifiability** (in the PK model the flip-flop: $k_a \leftrightarrow k_e$ with $V \to V k_e/k_a$). Choosing between them needs other data or prior knowledge, not a better optimiser.
+:::
+
+---
+
+**Q10.** In the one-compartment oral model, $(k_a, k_e, V) = (1.0, 0.2, 20)$ fits the plasma data. Without computing a fit, give another parameter set that fits exactly as well.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Swap the two rates. How must $V$ change so that the prefactor $k_a/(V(k_a - k_e))$ keeps its value up to the sign change of the bracket?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$(k_a, k_e, V) = (0.2, 1.0, 4)$: $V' = V k_e/k_a = 20 \cdot 0.2/1.0 = 4$. Both give $C(t) = 6.25\,(e^{-0.2t} - e^{-t})$ mg/L, so the RSS is identical. An IV dose, or knowledge that $k_a > k_e$ for this formulation, decides between them.
+:::

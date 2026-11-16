@@ -250,12 +250,12 @@ Numerical analysis for biologists
 <h2>A biology problem: the fit is fine</h2>
 
 <img data-src="fig01-same-fit.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:72.0%"><ul>
-<li>One oral dose of 100 mg; the first blood sample is taken at <strong>3 h</strong>. Three fits with absorption rate <span class="math inline">k_a = 0.68</span>, <span class="math inline">2</span> and <span class="math inline">20</span> /h (each with <span class="math inline">k_e</span> and <span class="math inline">V</span> re-fitted) pass equally well through the data.</li>
+<li>One oral dose of 100 mg; the first blood sample is taken at <strong>3 h</strong>. Three fits with absorption rate <span class="math inline">k_a = 1.12</span>, <span class="math inline">3</span> and <span class="math inline">20</span> /h (each with <span class="math inline">k_e</span> and <span class="math inline">V</span> re-fitted) pass equally well through the data.</li>
 <li>The grey circles are what early samples <strong>would</strong> have shown. Without them, the data cannot say how fast the drug was absorbed.</li>
-<li><code>nls</code> happily reports <span class="math inline">k_a = 0.68 \pm 0.31</span> /h. Is that number worth anything?</li>
+<li><code>nls</code> happily reports <span class="math inline">k_a = 1.12 \pm 0.41</span> /h. Is that number worth anything?</li>
 </ul>
 <aside class="notes">
-<p>This is the situation the lecture is about. The model fits, the residuals look fine, the software prints an estimate and a standard error, and yet the parameter is not determined: any absorption rate from about 0.3 per hour to infinity (instant absorption) fits the late data. The curves only differ before the first sample. In clinical pharmacokinetics this is common: outpatients come in hours after the dose. The data here are simulated (true ka = 1, ke = 0.2, V = 20) so that we know the truth; the grey points are the early samples of the same simulated subject.</p>
+<p>This is the situation the lecture is about. The model fits, the residuals look fine, the software prints an estimate and a standard error, and yet the parameter is not determined: any absorption rate from about 0.7 per hour to infinity (instant absorption) fits the late data. The curves only differ before the first sample. In clinical pharmacokinetics this is common: outpatients come in hours after the dose. The data are the simulated measurements of the previous unit (true ka = 1, ke = 0.2, V = 20, noise SD 0.1 mg/L) so that we know the truth; the grey points are the early samples of the same simulated subject.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -273,19 +273,19 @@ Numerical analysis for biologists
 <p>One-compartment model, oral dose <span class="math inline">D</span>, bioavailability <span class="math inline">F</span> (fraction absorbed):</p>
 <p><span class="math display">C(t) = \frac{F\,D\,k_a}{V\,(k_a - k_e)}\left(e^{-k_e t} - e^{-k_a t}\right)</span></p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a aria-hidden="true" tabindex="-1"></a>pk <span class="ot">&lt;-</span> <span class="cf">function</span>(t, ka, ke, V, <span class="at">D =</span> <span class="dv">100</span>) D <span class="sc">*</span> ka <span class="sc">/</span> (V <span class="sc">*</span> (ka <span class="sc">-</span> ke)) <span class="sc">*</span> (<span class="fu">exp</span>(<span class="sc">-</span>ke <span class="sc">*</span> t) <span class="sc">-</span> <span class="fu">exp</span>(<span class="sc">-</span>ka <span class="sc">*</span> t))</span>
-<span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a>t <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.25</span>, <span class="fl">0.5</span>, <span class="dv">1</span>, <span class="fl">1.5</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">12</span>, <span class="dv">24</span>)                         <span class="co"># hours</span></span>
-<span id="cb1-3"><a aria-hidden="true" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.98</span>, <span class="fl">1.89</span>, <span class="fl">2.69</span>, <span class="fl">3.47</span>, <span class="fl">3.39</span>, <span class="fl">3.00</span>, <span class="fl">2.77</span>, <span class="fl">1.98</span>, <span class="fl">1.35</span>, <span class="fl">0.52</span>, <span class="fl">0.28</span>)  <span class="co"># mg/L</span></span>
+<span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a>t <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.25</span>, <span class="fl">0.5</span>, <span class="fl">0.75</span>, <span class="dv">1</span>, <span class="fl">1.5</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">10</span>, <span class="dv">12</span>)                          <span class="co"># h</span></span>
+<span id="cb1-3"><a aria-hidden="true" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">1.02</span>, <span class="fl">1.88</span>, <span class="fl">2.34</span>, <span class="fl">2.98</span>, <span class="fl">3.27</span>, <span class="fl">3.26</span>, <span class="fl">3.17</span>, <span class="fl">2.77</span>, <span class="fl">1.92</span>, <span class="fl">1.23</span>, <span class="fl">1.00</span>, <span class="fl">0.61</span>)  <span class="co"># mg/L</span></span>
 <span id="cb1-4"><a aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="fl">0.5</span>, <span class="at">ke =</span> <span class="fl">0.1</span>, <span class="at">V =</span> <span class="dv">10</span>))</span>
 <span id="cb1-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">coef</span>(fit)</span>
 <span id="cb1-6"><a aria-hidden="true" tabindex="-1"></a><span class="co">#         ka         ke          V</span></span>
-<span id="cb1-7"><a aria-hidden="true" tabindex="-1"></a><span class="co">#  0.9976079  0.1925081 20.0326702</span></span>
+<span id="cb1-7"><a aria-hidden="true" tabindex="-1"></a><span class="co">#  1.0150721  0.1906157 20.2162113</span></span>
 <span id="cb1-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">deviance</span>(fit)                          <span class="co"># residual sum of squares</span></span>
-<span id="cb1-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.1626121</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.06646744</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
-<li>All 11 samples, <span class="math inline">F = 1</span> assumed. Truth: <span class="math inline">k_a = 1</span>, <span class="math inline">k_e = 0.2</span> /h, <span class="math inline">V = 20</span> L, noise SD 0.15 mg/L.</li>
+<li>The data of the previous unit: 12 samples, <span class="math inline">F = 1</span> assumed. Truth: <span class="math inline">k_a = 1</span>, <span class="math inline">k_e = 0.2</span> /h, <span class="math inline">V = 20</span> L, noise SD 0.1 mg/L.</li>
 </ul>
 <aside class="notes">
-<p>The same model as in the previous unit: first-order absorption from the gut with rate ka, first-order elimination with rate ke, one well-mixed compartment of volume V. The fit with all 11 samples recovers the truth well. The rest of the lecture asks how well, and what goes wrong with fewer or worse-placed samples. D = 100 mg, so D/V has units mg/L. nls uses Gauss-Newton by default; the details are in the previous unit.</p>
+<p>The same model as in the previous unit: first-order absorption from the gut with rate ka, first-order elimination with rate ke, one well-mixed compartment of volume V. The fit with all 12 samples recovers the truth well. The rest of the lecture asks how well, and what goes wrong with fewer or worse-placed samples. D = 100 mg, so D/V has units mg/L. nls uses Gauss-Newton by default; the details are in the previous unit.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -361,12 +361,13 @@ Numerical analysis for biologists
 <p>If the bioavailability <span class="math inline">F</span> is unknown, <span class="math inline">F</span> and <span class="math inline">V</span> enter only through <span class="math inline">F/V</span>: doubling both changes nothing.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V <span class="sc">/</span> F), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="fl">0.5</span>, <span class="at">ke =</span> <span class="fl">0.1</span>, <span class="at">V =</span> <span class="dv">10</span>, <span class="at">F =</span> <span class="fl">0.8</span>))</span>
 <span id="cb2-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># Error in nlsModel(...) : singular gradient matrix at initial parameter estimates</span></span>
-<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a>p4 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">coef</span>(fit), <span class="at">F =</span> <span class="dv">1</span>)</span>
-<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a>J4 <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(p) <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>] <span class="sc">/</span> p[<span class="dv">4</span>]), p4)  <span class="co"># numDeriv</span></span>
-<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">svd</span>(J4 <span class="sc">%*%</span> <span class="fu">diag</span>(p4))<span class="sc">$</span>d                <span class="co"># columns scaled: d C / d log p</span></span>
-<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.124957e+01 3.096841e+00 9.077142e-01 3.183060e-11</span></span>
-<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">svd</span>(J4 <span class="sc">%*%</span> <span class="fu">diag</span>(p4))<span class="sc">$</span>v[, <span class="dv">4</span>], <span class="dv">3</span>)</span>
-<span id="cb2-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  0.000  0.000 -0.707 -0.707      # log V and log F together</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(numDeriv)                     <span class="co"># numerical Jacobian and Hessian</span></span>
+<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a>p4 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">coef</span>(fit), <span class="at">F =</span> <span class="dv">1</span>)</span>
+<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a>J4 <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(p) <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>] <span class="sc">/</span> p[<span class="dv">4</span>]), p4)</span>
+<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">svd</span>(J4 <span class="sc">%*%</span> <span class="fu">diag</span>(p4))<span class="sc">$</span>d                <span class="co"># columns scaled: d C / d log p</span></span>
+<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.189228e+01 3.483442e+00 1.047785e+00 2.252039e-11</span></span>
+<span id="cb2-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">svd</span>(J4 <span class="sc">%*%</span> <span class="fu">diag</span>(p4))<span class="sc">$</span>v[, <span class="dv">4</span>], <span class="dv">3</span>)</span>
+<span id="cb2-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  0.000  0.000 -0.707 -0.707      # log V and log F together</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>The Jacobian has an exact null direction: <span class="math inline">\sigma_4 \approx 10^{-11}</span> (rounding), <span class="math inline">v_4 \propto (0, 0, 1, 1)</span> in <span class="math inline">(\log k_a, \log k_e, \log V, \log F)</span>.</li>
 <li>Fix: fit and report the identifiable combination, the <strong>apparent volume</strong> <span class="math inline">V/F</span>. Separating <span class="math inline">F</span> needs a different experiment (an IV dose).</li>
@@ -390,7 +391,7 @@ Numerical analysis for biologists
 
 <img data-src="fig02-flipflop.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:88.0%"><p>Swap <span class="math inline">k_a \leftrightarrow k_e</span> and set <span class="math inline">V' = V\,k_e/k_a</span>: the formula gives <strong>the same</strong> <span class="math inline">C(t)</span> for every <span class="math inline">t</span>.</p>
 <ul>
-<li>Two exact minima with the same SSE: <span class="math inline">(0.998, 0.193, 20.0)</span> and <span class="math inline">(0.193, 0.998, 3.87)</span>. Each is <strong>locally</strong> identifiable; globally the data cannot choose.</li>
+<li>Two exact minima with the same SSE: <span class="math inline">(1.015, 0.191, 20.2)</span> and <span class="math inline">(0.191, 1.015, 3.80)</span>. Each is <strong>locally</strong> identifiable; globally the data cannot choose.</li>
 <li>Right: fix <span class="math inline">k_a</span>, re-fit the rest, plot the rise in SSE. Two wells of equal depth.</li>
 </ul>
 <aside class="notes">
@@ -412,16 +413,16 @@ Numerical analysis for biologists
 <div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>fit2 <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="fl">0.1</span>, <span class="at">ke =</span> <span class="fl">0.5</span>, <span class="at">V =</span> <span class="dv">5</span>))</span>
 <span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">coef</span>(fit2)</span>
 <span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        ka        ke         V</span></span>
-<span id="cb3-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.1925080 0.9976088 3.8656951</span></span>
+<span id="cb3-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.1906156 1.0150718 3.7963082</span></span>
 <span id="cb3-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="fu">deviance</span>(fit), <span class="fu">deviance</span>(fit2))</span>
-<span id="cb3-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.1626121 0.1626121</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb3-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.06646744 0.06646744</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>Same residuals, different parameters. Neither run warns.</li>
 <li><strong>Check:</strong> multistart (previous unit). Equal-SSE minima at different parameter values mean a structural problem, not a convergence problem.</li>
 <li><strong>Fix:</strong> use outside knowledge. An IV dose gives <span class="math inline">k_e</span> directly; or impose <span class="math inline">k_a &gt; k_e</span> by fitting <span class="math inline">k_a = k_e + e^{\delta}</span>.</li>
 </ul>
 <aside class="notes">
-<p>The multistart check from the previous unit was a guard against local minima. Here it finds two minima with identical SSE to all printed digits, which is the signature of a symmetry in the model. The second solution has V = 3.9 L, which is physiologically odd for many drugs, but only outside knowledge can say that. Constraining ka &gt; ke is a modelling decision: make it explicitly and say so.</p>
+<p>The multistart check from the previous unit was a guard against local minima. Here it finds two minima with identical SSE to all printed digits, which is the signature of a symmetry in the model. The second solution has V = 3.8 L, which is physiologically odd for many drugs, but only outside knowledge can say that. Constraining ka &gt; ke is a modelling decision: make it explicitly and say so.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -438,7 +439,7 @@ Numerical analysis for biologists
 <h2>Near the optimum the SSE is a bowl</h2>
 <p>Taylor expansion of <span class="math inline">S(\theta) = \sum_i r_i(\theta)^2</span> around the optimum <span class="math inline">\hat\theta</span> (gradient = 0):</p>
 <p><span class="math display">S(\hat\theta + \delta) \approx S(\hat\theta) + \tfrac12\,\delta^T H\,\delta, \qquad H = \nabla^2 S</span></p>
-<p>With residuals <span class="math inline">r_i = y_i - C(t_i;\theta)</span> and the Jacobian <span class="math inline">J_{ij} = \partial C(t_i)/\partial\theta_j</span> (<span class="math inline">11\times3</span>):</p>
+<p>With residuals <span class="math inline">r_i = y_i - C(t_i;\theta)</span> and the Jacobian <span class="math inline">J_{ij} = \partial C(t_i)/\partial\theta_j</span> (<span class="math inline">12\times3</span>):</p>
 <p><span class="math display">H = 2J^TJ \;-\; 2\sum_i r_i\,\nabla^2 C(t_i) \;\approx\; 2J^TJ</span></p>
 <ul>
 <li>The second term is small when residuals are small and random: this is the <strong>Gauss–Newton</strong> approximation from the previous unit.</li>
@@ -461,16 +462,15 @@ Numerical analysis for biologists
 <section id="standard-errors-from-the-jacobian" class="slide level2 smaller">
 <h2>Standard errors from the Jacobian</h2>
 <p>If the noise is independent with variance <span class="math inline">\sigma^2</span>, the estimate is approximately normal with</p>
-<p><span class="math display">\operatorname{Cov}(\hat\theta) \approx \sigma^2 (J^TJ)^{-1}, \qquad \hat\sigma^2 = s^2 = \frac{S(\hat\theta)}{n - p} = \frac{0.1626}{11 - 3} = 0.0203</span></p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(numDeriv)</span>
-<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a>th <span class="ot">&lt;-</span> <span class="fu">coef</span>(fit)</span>
-<span id="cb4-3"><a aria-hidden="true" tabindex="-1"></a>J  <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(p) <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>]), th)   <span class="co"># 11 x 3</span></span>
-<span id="cb4-4"><a aria-hidden="true" tabindex="-1"></a>s2 <span class="ot">&lt;-</span> <span class="fu">deviance</span>(fit) <span class="sc">/</span> (<span class="fu">length</span>(y) <span class="sc">-</span> <span class="dv">3</span>)</span>
-<span id="cb4-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(s2 <span class="sc">*</span> <span class="fu">solve</span>(<span class="fu">crossprod</span>(J))))          <span class="co"># standard errors by hand</span></span>
-<span id="cb4-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.1158224 0.0204759 1.3158715</span></span>
-<span id="cb4-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">vcov</span>(fit)))                         <span class="co"># what nls reports</span></span>
-<span id="cb4-8"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        ka        ke         V</span></span>
-<span id="cb4-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.1158224 0.0204759 1.3158715</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p><span class="math display">\operatorname{Cov}(\hat\theta) \approx \sigma^2 (J^TJ)^{-1}, \qquad \hat\sigma^2 = s^2 = \frac{S(\hat\theta)}{n - p} = \frac{0.06647}{12 - 3} = 0.00739</span></p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a>th <span class="ot">&lt;-</span> <span class="fu">coef</span>(fit)</span>
+<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a>J  <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(p) <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>]), th)   <span class="co"># 12 x 3</span></span>
+<span id="cb4-3"><a aria-hidden="true" tabindex="-1"></a>s2 <span class="ot">&lt;-</span> <span class="fu">deviance</span>(fit) <span class="sc">/</span> (<span class="fu">length</span>(y) <span class="sc">-</span> <span class="dv">3</span>)</span>
+<span id="cb4-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(s2 <span class="sc">*</span> <span class="fu">solve</span>(<span class="fu">crossprod</span>(J))))          <span class="co"># standard errors by hand</span></span>
+<span id="cb4-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.06243155 0.01040041 0.71647066</span></span>
+<span id="cb4-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">vcov</span>(fit)))                         <span class="co"># what nls reports</span></span>
+<span id="cb4-7"><a aria-hidden="true" tabindex="-1"></a><span class="co">#         ka         ke          V</span></span>
+<span id="cb4-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.06243155 0.01040041 0.71647070</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>The same formula as for linear regression, with <span class="math inline">J</span> in place of the design matrix.</li>
 </ul>
@@ -494,17 +494,17 @@ Numerical analysis for biologists
 <span id="cb5-2"><a aria-hidden="true" tabindex="-1"></a>H <span class="ot">&lt;-</span> <span class="fu">hessian</span>(sse, th)                         <span class="co"># numDeriv: full second derivatives</span></span>
 <span id="cb5-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(H, <span class="dv">2</span>)                                   <span class="co"># round(2 * crossprod(J), 2):</span></span>
 <span id="cb5-4"><a aria-hidden="true" tabindex="-1"></a><span class="co">#       [,1]   [,2]  [,3]                     #       [,1]   [,2]  [,3]</span></span>
-<span id="cb5-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,] 16.75  -6.56 -1.41                     # [1,] 16.59  -6.56 -1.41</span></span>
-<span id="cb5-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,] -6.56 690.81 10.57                     # [2,] -6.56 696.41 10.57</span></span>
-<span id="cb5-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [3,] -1.41  10.57  0.29                     # [3,] -1.41  10.57  0.29</span></span>
+<span id="cb5-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,] 20.84  -6.08 -1.72                     # [1,] 20.78  -6.08 -1.72</span></span>
+<span id="cb5-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,] -6.08 823.98 11.42                     # [2,] -6.08 825.40 11.42</span></span>
+<span id="cb5-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [3,] -1.72  11.42  0.32                     # [3,] -1.72  11.42  0.32</span></span>
 <span id="cb5-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="dv">2</span> <span class="sc">*</span> s2 <span class="sc">*</span> <span class="fu">solve</span>(H)))</span>
-<span id="cb5-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.11518692 0.02071607 1.32153067</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb5-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.06216416 0.01040070 0.71504108</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
-<li><span class="math inline">H</span> and <span class="math inline">2J^TJ</span> agree to about 1 %: the Gauss–Newton approximation is good here.</li>
+<li><span class="math inline">H</span> and <span class="math inline">2J^TJ</span> agree to 0.3 %: the Gauss–Newton approximation is good here.</li>
 <li>In likelihood language: <span class="math inline">-\log L = S/(2\sigma^2) + \text{const}</span>, so the <strong>Fisher information</strong> is <span class="math inline">\mathcal I = J^TJ/\sigma^2</span> and <span class="math inline">\operatorname{Cov} \approx \mathcal I^{-1}</span>. For a general likelihood: invert the Hessian of <span class="math inline">-\log L</span> (<code>optim(..., hessian = TRUE)</code>).</li>
 </ul>
 <aside class="notes">
-<p>numDeriv::hessian computes all second derivatives numerically. This is the route to use when the objective is not a sum of squares, e.g.&nbsp;a Poisson or binomial likelihood: minimise the negative log-likelihood with optim, ask for the Hessian, and invert it. For least squares with Gaussian noise the two routes agree up to the residual term. The observed Fisher information is the Hessian of the negative log-likelihood at the optimum; its inverse is the asymptotic covariance. The standard errors differ by about 1 % here, which is irrelevant for reporting.</p>
+<p>numDeriv::hessian computes all second derivatives numerically. This is the route to use when the objective is not a sum of squares, e.g.&nbsp;a Poisson or binomial likelihood: minimise the negative log-likelihood with optim, ask for the Hessian, and invert it. For least squares with Gaussian noise the two routes agree up to the residual term. The observed Fisher information is the Hessian of the negative log-likelihood at the optimum; its inverse is the asymptotic covariance. The standard errors differ by less than 0.5 % here, which is irrelevant for reporting.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -522,16 +522,16 @@ Numerical analysis for biologists
 <p><span class="math display">r_{jk} = \frac{\operatorname{Cov}_{jk}}{\sqrt{\operatorname{Cov}_{jj}\operatorname{Cov}_{kk}}}</span></p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">cov2cor</span>(<span class="fu">vcov</span>(fit)), <span class="dv">2</span>)</span>
 <span id="cb6-2"><a aria-hidden="true" tabindex="-1"></a><span class="co">#       ka    ke     V</span></span>
-<span id="cb6-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.00 -0.83  0.90</span></span>
-<span id="cb6-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke -0.83  1.00 -0.93</span></span>
-<span id="cb6-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V   0.90 -0.93  1.00</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb6-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.00 -0.82  0.90</span></span>
+<span id="cb6-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke -0.82  1.00 -0.91</span></span>
+<span id="cb6-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V   0.90 -0.91  1.00</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li><span class="math inline">r(k_a, V) = 0.90</span>: a larger <span class="math inline">k_a</span> can be compensated by a larger <span class="math inline">V</span>. The bowl is a <strong>tilted, elongated valley</strong>.</li>
 <li><span class="math inline">|r| &gt; 0.95</span> is a warning; <span class="math inline">|r| \to 1</span> means one parameter can replace another.</li>
 <li>A standard error alone hides this: each SE is the width of the valley <strong>after</strong> the others have moved along.</li>
 </ul>
 <aside class="notes">
-<p>cov2cor divides each covariance by the product of the two standard errors. High correlation between estimates is not a property of the biology (the true ka and V are not “correlated”), it is a property of the experiment: the data constrain a combination of ka and V much better than either alone. With all 11 samples the correlations are high but below 0.95; on the sparse design they reach 0.99. Python: np.corrcoef does not apply here; compute C / np.outer(se, se).</p>
+<p>cov2cor divides each covariance by the product of the two standard errors. High correlation between estimates is not a property of the biology (the true ka and V are not “correlated”), it is a property of the experiment: the data constrain a combination of ka and V much better than either alone. With all 12 samples the correlations are high but below 0.95. Python: np.corrcoef does not apply here; compute C / np.outer(se, se).</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -550,17 +550,17 @@ Numerical analysis for biologists
 <div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a>Jl <span class="ot">&lt;-</span> J <span class="sc">%*%</span> <span class="fu">diag</span>(th)                  <span class="co"># sensitivities to log ka, log ke, log V</span></span>
 <span id="cb7-2"><a aria-hidden="true" tabindex="-1"></a>sv <span class="ot">&lt;-</span> <span class="fu">svd</span>(Jl)</span>
 <span id="cb7-3"><a aria-hidden="true" tabindex="-1"></a>sv<span class="sc">$</span>d</span>
-<span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 8.2918957 3.0896881 0.8728112</span></span>
+<span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 8.779119 3.478099 1.005166</span></span>
 <span id="cb7-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(sv<span class="sc">$</span>v[, <span class="dv">3</span>], <span class="dv">2</span>)                   <span class="co"># the worst direction</span></span>
-<span id="cb7-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  0.68 -0.62  0.39</span></span>
+<span id="cb7-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -0.69  0.60 -0.40</span></span>
 <span id="cb7-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(s2) <span class="sc">/</span> sv<span class="sc">$</span>d                       <span class="co"># SE along each direction (log units)</span></span>
-<span id="cb7-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.01719403 0.04614417 0.16334701</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.009788864 0.024708208 0.085495889</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
-<li>As in <em>The SVD, rank deficiency and regularisation</em>: noise along <span class="math inline">v_i</span> is amplified by <span class="math inline">1/\sigma_i</span>. Here the SE along <span class="math inline">v_3</span> is <span class="math inline">s/\sigma_3 = 0.16</span>, about <strong>16 %</strong>.</li>
-<li><span class="math inline">v_3</span>: increase <span class="math inline">k_a</span>, decrease <span class="math inline">k_e</span>, increase <span class="math inline">V</span> together. The data barely notice.</li>
+<li>As in <em>The SVD, rank deficiency and regularisation</em>: noise along <span class="math inline">v_i</span> is amplified by <span class="math inline">1/\sigma_i</span>. Here the SE along <span class="math inline">v_3</span> is <span class="math inline">s/\sigma_3 = 0.085</span>, about <strong>9 %</strong>.</li>
+<li><span class="math inline">v_3</span>: increase <span class="math inline">k_a</span>, decrease <span class="math inline">k_e</span>, increase <span class="math inline">V</span> together (the sign of <span class="math inline">v_3</span> is arbitrary). The data barely notice.</li>
 </ul>
 <aside class="notes">
-<p>This is the link to Part 4. There the matrix was the signature S and v5 said “CD4 minus CD8”; here the matrix is the Jacobian and v3 names the combination of rate constants that the data constrain least. In log units, an SE of 0.16 means a factor exp(0.16) = 1.18, so about 16 % relative uncertainty in that combination, against 2 % along v1. Exact zero singular values are structural non-identifiability (the F/V slide); small ones are practical non-identifiability.</p>
+<p>This is the link to Part 4. There the matrix was the signature S and v5 said “CD4 minus CD8”; here the matrix is the Jacobian and v3 names the combination of rate constants that the data constrain least. In log units, an SE of 0.085 means a factor exp(0.085) = 1.09, so about 9 % relative uncertainty in that combination, against 1 % along v1. Exact zero singular values are structural non-identifiability (the F/V slide); small ones are practical non-identifiability.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -576,11 +576,11 @@ Numerical analysis for biologists
 <section id="scaling-and-conditioning" class="slide level2 smaller">
 <h2>Scaling and conditioning</h2>
 <div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(J, <span class="at">exact =</span> <span class="cn">TRUE</span>)                <span class="co"># columns in 1/h, 1/h and L</span></span>
-<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 172.817</span></span>
+<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 169.9302</span></span>
 <span id="cb8-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(Jl, <span class="at">exact =</span> <span class="cn">TRUE</span>)               <span class="co"># columns per unit log-parameter</span></span>
-<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 9.500217</span></span>
+<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 8.733995</span></span>
 <span id="cb8-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(<span class="fu">crossprod</span>(J), <span class="at">exact =</span> <span class="cn">TRUE</span>)     <span class="co"># forming J^T J squares kappa</span></span>
-<span id="cb8-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 29865.7</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb8-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 28876.26</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>Part of a large <span class="math inline">\kappa(J)</span> is just <strong>units</strong> (<span class="math inline">V</span> in litres vs rates per hour). Log-parameters remove that part; what is left is real.</li>
 <li>As in <em>Pivoting, norms and conditioning</em>: solving with <span class="math inline">J^TJ</span> loses about <span class="math inline">\log_{10}\kappa(J)^2</span> digits. <code>vcov</code> uses the QR factor <span class="math inline">R</span> of <span class="math inline">J</span>: <span class="math inline">(J^TJ)^{-1} = R^{-1}R^{-T}</span>.</li>
@@ -607,20 +607,20 @@ Numerical analysis for biologists
 <span id="cb9-3"><a aria-hidden="true" tabindex="-1"></a>            <span class="at">subset =</span> late)</span>
 <span id="cb9-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(fits)<span class="sc">$</span>coefficients[, <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>]</span>
 <span id="cb9-5"><a aria-hidden="true" tabindex="-1"></a><span class="co">#      Estimate Std. Error</span></span>
-<span id="cb9-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  0.6770636 0.30528148</span></span>
-<span id="cb9-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke  0.2144039 0.05541457</span></span>
-<span id="cb9-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V  19.1086919 3.44482006</span></span>
+<span id="cb9-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.1220379 0.40551186</span></span>
+<span id="cb9-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke  0.1882042 0.01525188</span></span>
+<span id="cb9-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V  20.1639648 0.76727489</span></span>
 <span id="cb9-9"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">cov2cor</span>(<span class="fu">vcov</span>(fits)), <span class="dv">3</span>)</span>
 <span id="cb9-10"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        ka     ke      V</span></span>
-<span id="cb9-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.000 -0.936  0.933</span></span>
-<span id="cb9-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke -0.936  1.000 -0.986</span></span>
-<span id="cb9-13"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V   0.933 -0.986  1.000</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb9-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.000 -0.852  0.522</span></span>
+<span id="cb9-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke -0.852  1.000 -0.835</span></span>
+<span id="cb9-13"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V   0.522 -0.835  1.000</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>After 3 h the curve is <span class="math inline">\approx A\,e^{-k_e t}</span> with <span class="math inline">A = D k_a/(V(k_a - k_e))</span>: only <strong>two</strong> numbers, for three parameters.</li>
-<li>The SE says <span class="math inline">k_a = 0.68 \pm 0.31</span>; Wald 95 % interval <span class="math inline">(0.08, 1.28)</span>. The truth (1.0) is inside, but is this interval right?</li>
+<li>The SE says <span class="math inline">k_a = 1.12 \pm 0.41</span>; Wald 95 % interval <span class="math inline">(0.33, 1.92)</span>. The truth (1.0) is inside, but is this interval right?</li>
 </ul>
 <aside class="notes">
-<p>The model is structurally fine; the problem is where the samples are. Once absorption is complete, exp(-ka t) is negligible and the data only see the elimination phase, which has two features: an amplitude and a slope. ka enters only through the amplitude, together with V, so ka and V can trade off. The correlation of ke and V is -0.986. The SE is not absurd, which makes it dangerous: it suggests ka is known to about 50 %. The next slides show that the truth is much worse.</p>
+<p>The model is structurally fine; the problem is where the samples are. Once absorption is complete, exp(-ka t) is negligible and the data only see the elimination phase, which has two features: an amplitude and a slope. ka enters only through the amplitude, together with V, so ka can be traded against ke and V. No correlation is alarming here, and the SE is not absurd, which makes it dangerous: it suggests ka is known to about 35 %. The next slides show that the truth is much worse.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -663,15 +663,16 @@ Numerical analysis for biologists
 <span id="cb10-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">deviance</span>(f)</span>
 <span id="cb10-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
 <span id="cb10-5"><a aria-hidden="true" tabindex="-1"></a>crit <span class="ot">&lt;-</span> <span class="cf">function</span>(ka) (<span class="fu">prof</span>(ka, t, y) <span class="sc">-</span> <span class="fu">deviance</span>(fit)) <span class="sc">/</span> s2 <span class="sc">-</span> <span class="fl">3.84</span></span>
-<span id="cb10-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="fu">uniroot</span>(crit, <span class="fu">c</span>(<span class="fl">0.3</span>, <span class="fl">0.998</span>))<span class="sc">$</span>root, <span class="fu">uniroot</span>(crit, <span class="fu">c</span>(<span class="fl">0.998</span>, <span class="dv">30</span>))<span class="sc">$</span>root)</span>
-<span id="cb10-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.7794766 1.2375772                         # profile interval</span></span>
-<span id="cb10-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">coef</span>(fit)[<span class="st">"ka"</span>] <span class="sc">+</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">1.96</span>, <span class="fl">1.96</span>) <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">vcov</span>(fit)[<span class="st">"ka"</span>, <span class="st">"ka"</span>])</span>
-<span id="cb10-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.7705976 1.2246214                         # Wald interval</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb10-6"><a aria-hidden="true" tabindex="-1"></a>ka_hat <span class="ot">&lt;-</span> <span class="fu">coef</span>(fit)[[<span class="st">"ka"</span>]]</span>
+<span id="cb10-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="fu">uniroot</span>(crit, <span class="fu">c</span>(<span class="fl">0.3</span>, ka_hat))<span class="sc">$</span>root, <span class="fu">uniroot</span>(crit, <span class="fu">c</span>(ka_hat, <span class="dv">30</span>))<span class="sc">$</span>root)</span>
+<span id="cb10-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.8971499 1.1417900                         # profile interval</span></span>
+<span id="cb10-9"><a aria-hidden="true" tabindex="-1"></a>ka_hat <span class="sc">+</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">1.96</span>, <span class="fl">1.96</span>) <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">vcov</span>(fit)[<span class="st">"ka"</span>, <span class="st">"ka"</span>])</span>
+<span id="cb10-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.8927063 1.1374380                         # Wald interval</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li><span class="math inline">3.84 = 1.96^2</span> is the 95 % point of <span class="math inline">\chi^2_1</span>. For a linear model the two intervals are identical.</li>
 </ul>
 <aside class="notes">
-<p>The profile is the honest version of the standard error: instead of assuming the valley is a parabola, we walk along it. Each grid point is a full nonlinear fit with one parameter held fixed, so it costs as many fits as grid points, which is cheap for small models. The threshold: with Gaussian noise, -2 log L = S/sigma^2 + const, and the likelihood-ratio test says a drop of chi^2_1(0.95) = 3.84 is the 95 % boundary. We plug in s^2 for sigma^2; with few degrees of freedom an F-based threshold is a bit wider, which does not change the picture. With all 11 samples the two intervals agree to within 0.01: the profile confirms the SE. uniroot finds where the profile crosses the threshold, as in Bisection and fixed-point iteration.</p>
+<p>The profile is the honest version of the standard error: instead of assuming the valley is a parabola, we walk along it. Each grid point is a full nonlinear fit with one parameter held fixed, so it costs as many fits as grid points, which is cheap for small models. The threshold: with Gaussian noise, -2 log L = S/sigma^2 + const, and the likelihood-ratio test says a drop of chi^2_1(0.95) = 3.84 is the 95 % boundary. We plug in s^2 for sigma^2; with few degrees of freedom an F-based threshold is a bit wider, which does not change the picture. With all 12 samples the two intervals agree to within 0.005: the profile confirms the SE. uniroot finds where the profile crosses the threshold, as in Bisection and fixed-point iteration.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -688,11 +689,11 @@ Numerical analysis for biologists
 <h2>Profiles show what the SE hides</h2>
 
 <img data-src="fig04-profiles.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:78.0%"><ul>
-<li>All samples (blue): a clear well, close to the Wald parabola (dotted). <span class="math inline">k_a \in (0.78, 1.24)</span>.</li>
-<li>From 3 h (orange): the profile <strong>never</strong> reaches 3.84 between 0.3 and 30. It levels off at 2.15: no upper bound. The Wald interval <span class="math inline">(0.08, 1.28)</span> is wrong at both ends.</li>
+<li>All samples (blue): a clear well, close to the Wald parabola (dotted). <span class="math inline">k_a \in (0.90, 1.14)</span>.</li>
+<li>From 3 h (orange): a lower bound (0.68), but on the right the profile levels off at 1.07, far below 3.84: <strong>no upper bound</strong>. The Wald interval <span class="math inline">(0.33, 1.92)</span> is wrong at both ends.</li>
 </ul>
 <aside class="notes">
-<p>This is the main diagnostic of the lecture. A profile that rises above the threshold on both sides gives a confidence interval (possibly asymmetric). A profile that flattens below the threshold on one side means the parameter is practically non-identifiable in that direction: here, any ka above 0.3 fits, and the curve stays at 2.15 all the way to infinity (instant absorption). A profile that is flat everywhere means the parameter is not determined at all. On the left of the orange curve the profile also stays low because ka approaches ke, where the flip-flop branch begins. Raue et al.&nbsp;(2009, Bioinformatics) popularised profiles for exactly this use in systems biology.</p>
+<p>This is the main diagnostic of the lecture. A profile that rises above the threshold on both sides gives a confidence interval (possibly asymmetric). A profile that flattens below the threshold on one side means the parameter is practically non-identifiable in that direction: here, any ka above 0.68 fits, and the curve stays at 1.07 all the way to infinity (instant absorption). A profile that is flat everywhere means the parameter is not determined at all. Compare the dotted Wald parabola for the sparse design: too wide on the left, far too narrow on the right. Raue et al.&nbsp;(2009, Bioinformatics) popularised profiles for exactly this use in systems biology.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -710,12 +711,12 @@ Numerical analysis for biologists
 
 <img data-src="fig06-sloppy.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:68.0%"><p>Eigenvalues <span class="math inline">\lambda_i</span> of <span class="math inline">J^TJ</span> (log-parameters, so units do not matter), relative to the largest.</p>
 <ul>
-<li>Two-compartment version (5 parameters: <span class="math inline">k_a</span>, <span class="math inline">k_{10}</span>, <span class="math inline">k_{12}</span>, <span class="math inline">k_{21}</span>, <span class="math inline">V</span>), same 11 samples: eigenvalues spread <strong>evenly over 4 decades</strong>.</li>
-<li>SE along each eigenvector <span class="math inline">\propto 1/\sqrt{\lambda_i}</span>: the stiffest combination is known 80× better than the sloppiest.</li>
+<li>Two-compartment version (5 parameters: <span class="math inline">k_a</span>, <span class="math inline">k_{10}</span>, <span class="math inline">k_{12}</span>, <span class="math inline">k_{21}</span>, <span class="math inline">V</span>), same 12 sample times: eigenvalues spread over <strong>4.5 decades</strong>, with no gap.</li>
+<li>SE along each eigenvector <span class="math inline">\propto 1/\sqrt{\lambda_i}</span>: the stiffest combination is known 180× better than the sloppiest.</li>
 <li>Typical of biochemical network models (Gutenkunst et al.&nbsp;2007): a few stiff combinations, many <strong>sloppy</strong> ones, no clear gap.</li>
 </ul>
 <aside class="notes">
-<p>The eigenvalues of J^T J are the squared singular values of J. A gap between large and small (as with the F/V product) says “this many combinations are determined, the rest are not”. Sloppy models have no gap: the eigenvalues are roughly evenly spaced on a log scale, often over 6 or more decades in signalling models with dozens of parameters. Here sqrt(10^3.8) is about 80. The point of Gutenkunst et al.&nbsp;was that this is the norm, not the exception, in systems biology: individual rate constants are rarely determined by time-course data, even when the fit is excellent.</p>
+<p>The eigenvalues of J^T J are the squared singular values of J. A gap between large and small (as with the F/V product) says “this many combinations are determined, the rest are not”. Sloppy models have no gap: the eigenvalues are roughly evenly spaced on a log scale, often over 6 or more decades in signalling models with dozens of parameters. Here sqrt(10^4.5) is about 180. The two-compartment curves are computed from the closed-form tri-exponential solution at the true parameters, no data needed. The point of Gutenkunst et al.&nbsp;was that this is the norm, not the exception, in systems biology: individual rate constants are rarely determined by time-course data, even when the fit is excellent.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -750,27 +751,34 @@ Numerical analysis for biologists
 </thead>
 <tbody>
 <tr class="odd">
-<td>all samples: <span class="math inline">\hat C \pm</span> SE</td>
-<td>1.86 ± 0.08</td>
-<td>2.82 ± 0.08</td>
-<td>1.93 ± 0.08</td>
-<td>0.61 ± 0.09</td>
+<td>truth</td>
+<td>1.86</td>
+<td>2.82</td>
+<td>1.87</td>
+<td>0.57</td>
 </tr>
 <tr class="even">
+<td>all samples: <span class="math inline">\hat C \pm</span> SE</td>
+<td>1.87 ± 0.04</td>
+<td>2.83 ± 0.04</td>
+<td>1.93 ± 0.04</td>
+<td>0.62 ± 0.04</td>
+</tr>
+<tr class="odd">
 <td>from 3 h: <span class="math inline">\hat C \pm</span> SE</td>
-<td>1.42 ± 0.33</td>
-<td>2.29 ± 0.41</td>
-<td>1.98 ± 0.10</td>
-<td>0.58 ± 0.12</td>
+<td>2.02 ± 0.51</td>
+<td>3.00 ± 0.54</td>
+<td>1.92 ± 0.05</td>
+<td>0.62 ± 0.05</td>
 </tr>
 </tbody>
 </table>
 <ul>
-<li>From 3 h: predictions <strong>inside</strong> the sampled window are as good as with all samples; <strong>before</strong> 3 h they are poor (and still optimistic).</li>
+<li>From 3 h: predictions <strong>inside</strong> the sampled window are as good as with all samples; <strong>before</strong> 3 h they are 12× less certain.</li>
 <li>Ask what you need the model for. A sloppy model can predict well <strong>where the data constrain it</strong>, while its parameters are not determined.</li>
 </ul>
 <aside class="notes">
-<p>This is the constructive side of sloppiness. If the question is “what is the concentration at 6 h”, the sparse design answers it with SE 0.10 mg/L, close to the rich design. If the question is “what is ka” or “what is the peak concentration”, it cannot. The delta-method formula g^T Cov g propagates the parameter covariance to any derived quantity: a prediction, the AUC, the half-life ln 2 / ke. It inherits the linearisation, so for the sparse design the 0.5 h and 1 h SEs are still too small (the true values are 1.86 and 2.82). For those, profile the prediction itself or simulate.</p>
+<p>This is the constructive side of sloppiness. If the question is “what is the concentration at 6 h”, the sparse design answers it with SE 0.05 mg/L, close to the rich design. If the question is “what is ka” or “what is the peak concentration”, it cannot. The delta-method formula g^T Cov g propagates the parameter covariance to any derived quantity: a prediction, the AUC, the half-life ln 2 / ke. It inherits the linearisation, so for the sparse design the 0.5 h and 1 h SEs are only rough (the profile of ka is far from a parabola). For those, profile the prediction itself or simulate.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -806,16 +814,16 @@ Numerical analysis for biologists
 </section>
 <section id="design-in-code-same-cost-earlier-samples" class="slide level2 smaller">
 <h2>Design in code: same cost, earlier samples</h2>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a aria-hidden="true" tabindex="-1"></a>se_design <span class="ot">&lt;-</span> <span class="cf">function</span>(tt, <span class="at">p =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="fl">0.2</span>, <span class="dv">20</span>), <span class="at">sigma =</span> <span class="fl">0.15</span>) {</span>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a aria-hidden="true" tabindex="-1"></a>se_design <span class="ot">&lt;-</span> <span class="cf">function</span>(tt, <span class="at">p =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="fl">0.2</span>, <span class="dv">20</span>), <span class="at">sigma =</span> <span class="fl">0.1</span>) {</span>
 <span id="cb11-2"><a aria-hidden="true" tabindex="-1"></a>  J <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(lp) <span class="fu">pk</span>(tt, <span class="fu">exp</span>(lp[<span class="dv">1</span>]), <span class="fu">exp</span>(lp[<span class="dv">2</span>]), <span class="fu">exp</span>(lp[<span class="dv">3</span>])), <span class="fu">log</span>(p))</span>
 <span id="cb11-3"><a aria-hidden="true" tabindex="-1"></a>  sigma <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">solve</span>(<span class="fu">crossprod</span>(J))))   <span class="co"># predicted SE of log ka, log ke, log V</span></span>
 <span id="cb11-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb11-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">se_design</span>(<span class="fu">c</span>(<span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">12</span>, <span class="dv">24</span>)), <span class="dv">3</span>)</span>
-<span id="cb11-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.624 0.198 0.103</span></span>
-<span id="cb11-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">se_design</span>(<span class="fu">c</span>(<span class="fl">0.5</span>, <span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">8</span>, <span class="dv">24</span>)), <span class="dv">3</span>)</span>
-<span id="cb11-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.171 0.170 0.105</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb11-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">se_design</span>(<span class="fu">c</span>(<span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">10</span>, <span class="dv">12</span>)), <span class="dv">3</span>)</span>
+<span id="cb11-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.398 0.115 0.061</span></span>
+<span id="cb11-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">se_design</span>(<span class="fu">c</span>(<span class="fl">0.5</span>, <span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">8</span>, <span class="dv">12</span>)), <span class="dv">3</span>)</span>
+<span id="cb11-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.101 0.087 0.059</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
-<li>Six samples either way. Moving three of them before 3 h cuts the SE of <span class="math inline">\log k_a</span> from 0.62 (a factor 1.9) to 0.17 (18 %), at no cost to <span class="math inline">k_e</span> and <span class="math inline">V</span>.</li>
+<li>Six samples either way. Moving three of them before 3 h cuts the SE of <span class="math inline">\log k_a</span> from 0.40 (a factor 1.5) to 0.10 (10 %); <span class="math inline">k_e</span> even improves.</li>
 <li>The guess <span class="math inline">\theta</span> need not be right, only roughly right. Check several guesses.</li>
 <li>These are linearised SEs; for the first design the profile showed the truth is worse still.</li>
 </ul>
@@ -836,7 +844,7 @@ Numerical analysis for biologists
 <section id="fix-2-reparameterise" class="slide level2 smaller">
 <h2>Fix 2: reparameterise</h2>
 <ul>
-<li><strong>Log-parameters</strong> <span class="math inline">\theta = \log k</span>: positivity for free, columns of <span class="math inline">J</span> on the same scale (<span class="math inline">\kappa</span> 173 → 9.5), and the bowl is often more nearly quadratic (better SEs, as factors).</li>
+<li><strong>Log-parameters</strong> <span class="math inline">\theta = \log k</span>: positivity for free, columns of <span class="math inline">J</span> on the same scale (<span class="math inline">\kappa</span> 170 → 8.7), and the bowl is often more nearly quadratic (better SEs, as factors).</li>
 <li><strong>Fit what is identifiable.</strong> Unknown <span class="math inline">F</span>: estimate <span class="math inline">V/F</span>, not <span class="math inline">F</span> and <span class="math inline">V</span>. From 3 h only: the late curve <span class="math inline">A e^{-k_e t}</span> determines <span class="math inline">k_e</span>, <span class="math inline">A</span>, and the clearance-type quantity <span class="math inline">\text{AUC} = FD/(k_eV)</span>.</li>
 <li><strong>Remove a symmetry.</strong> <span class="math inline">k_a = k_e + e^{\delta}</span> allows only the branch <span class="math inline">k_a &gt; k_e</span>: no flip-flop.</li>
 <li>Reparameterising does not create information. It moves the undetermined part into one named parameter and keeps the rest clean.</li>
@@ -859,20 +867,20 @@ Numerical analysis for biologists
 <h2>Fix 3: a prior is an extra residual</h2>
 <p>Prior knowledge “<span class="math inline">k_a</span> is about 1.2 /h, within a factor <span class="math inline">e^{0.5} = 1.65</span>” becomes one more residual, <span class="math inline">(\log k_a - \log 1.2)/0.5</span>:</p>
 <div class="sourceCode" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(minpack.lm)</span>
-<span id="cb12-2"><a aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="cf">function</span>(lp, t, y) <span class="fu">c</span>((y <span class="sc">-</span> <span class="fu">pk</span>(t, <span class="fu">exp</span>(lp[<span class="dv">1</span>]), <span class="fu">exp</span>(lp[<span class="dv">2</span>]), <span class="fu">exp</span>(lp[<span class="dv">3</span>]))) <span class="sc">/</span> <span class="fl">0.15</span>,</span>
+<span id="cb12-2"><a aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="cf">function</span>(lp, t, y) <span class="fu">c</span>((y <span class="sc">-</span> <span class="fu">pk</span>(t, <span class="fu">exp</span>(lp[<span class="dv">1</span>]), <span class="fu">exp</span>(lp[<span class="dv">2</span>]), <span class="fu">exp</span>(lp[<span class="dv">3</span>]))) <span class="sc">/</span> <span class="fl">0.1</span>,</span>
 <span id="cb12-3"><a aria-hidden="true" tabindex="-1"></a>                            (lp[<span class="dv">1</span>] <span class="sc">-</span> <span class="fu">log</span>(<span class="fl">1.2</span>)) <span class="sc">/</span> <span class="fl">0.5</span>)</span>
 <span id="cb12-4"><a aria-hidden="true" tabindex="-1"></a>fp <span class="ot">&lt;-</span> <span class="fu">nls.lm</span>(<span class="at">par =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="fl">0.2</span>, <span class="dv">20</span>)), <span class="at">fn =</span> res, <span class="at">t =</span> t[late], <span class="at">y =</span> y[late])</span>
 <span id="cb12-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">exp</span>(fp<span class="sc">$</span>par)</span>
-<span id="cb12-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  0.9168597  0.1872567 20.7779831</span></span>
+<span id="cb12-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  1.1563835  0.1871582 20.1940289</span></span>
 <span id="cb12-7"><a aria-hidden="true" tabindex="-1"></a>Ja <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(res, fp<span class="sc">$</span>par, <span class="at">t =</span> t[late], <span class="at">y =</span> y[late])   <span class="co"># 7 x 3 (6 data + 1 prior)</span></span>
 <span id="cb12-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">solve</span>(<span class="fu">crossprod</span>(Ja))))                        <span class="co"># SE of log ka, log ke, log V</span></span>
-<span id="cb12-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.37112145 0.15471983 0.09106729</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb12-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.34998612 0.08243784 0.04434703</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>This is <strong>ridge regularisation</strong> (<em>The SVD, rank deficiency and regularisation</em>) on <span class="math inline">\log k_a</span>, and the maximum a posteriori estimate with a log-normal prior.</li>
-<li>SE of <span class="math inline">\log k_a</span>: 0.37, against 0.50 in the prior alone. The data added <strong>little</strong>: the answer is mostly the prior. Say so.</li>
+<li>SE of <span class="math inline">\log k_a</span>: 0.35, against 0.50 in the prior alone. The data added <strong>little</strong>: the answer is mostly the prior. Say so.</li>
 </ul>
 <aside class="notes">
-<p>Dividing the data residuals by the noise SD (0.15, known from the assay) and the prior residual by the prior SD puts them on the same footing: the sum of squares is then -2 log of likelihood times prior. nls.lm (Levenberg-Marquardt, from the previous unit) takes a residual function, so adding a row is trivial. Python: scipy.optimize.least_squares with the extra residual. The SE now has a finite value, but compare it with the prior SD: the posterior is only a little narrower than the prior, so the estimate is mostly assumption. A prior removes the numerical symptom (flat valley, huge SE) but not the lack of information, the same lesson as NNLS and ridge in Part 4.</p>
+<p>Dividing the data residuals by the noise SD (0.1 mg/L, known from the assay) and the prior residual by the prior SD puts them on the same footing: the sum of squares is then -2 log of likelihood times prior. nls.lm (Levenberg-Marquardt, from the previous unit) takes a residual function, so adding a row is trivial. Python: scipy.optimize.least_squares with the extra residual. The SE now has a finite value, but compare it with the prior SD: the posterior is only a little narrower than the prior, so the estimate is mostly assumption. A prior removes the numerical symptom (flat valley, huge SE) but not the lack of information, the same lesson as NNLS and ridge in Part 4.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;

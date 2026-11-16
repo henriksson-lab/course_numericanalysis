@@ -239,7 +239,7 @@ plot(1:n, lam, pch = 19, col = oi["blue"], xlab = "mode k", ylab = expression(la
      main = "eigenvalues of (D / dx²) A", ylim = c(-42, 0))
 abline(h = -2 / 0.05, lty = 2, col = oi["red"], lwd = 2)
 text(1, -35.5, "Euler limit -2/dt for dt = 0.05 s (r = 1/2)", pos = 4, col = oi["red"], cex = 1.2)
-text(1, -22, "slowest (k = 1): -0.039 per s", pos = 4, cex = 1.2)
+text(1, -24, "slowest: -0.039 per s", pos = 4, cex = 1.2)
 text(49, -30, "fastest: -39.96", pos = 2, cex = 1.2)
 xi <- x[2:N]
 v1 <- e$vectors[, 1]; v1 <- v1 / max(abs(v1)) * sign(v1[25])

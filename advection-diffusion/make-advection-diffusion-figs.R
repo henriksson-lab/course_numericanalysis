@@ -133,20 +133,19 @@ svg("fig01-tsensor.svg", width = 13, height = 6.2)
 layout(matrix(c(1, 1, 2, 3), 2), widths = c(1, 1.5))
 par_big(mar = c(1, 1, 1, 1))
 plot(NA, xlim = c(0, 10), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "", asp = 1)
-polygon(c(0.3, 3.4, 3.4, 0.3), c(8.6, 6.4, 5.6, 7.8), col = "#0072B240", border = "black", lwd = 2)
-polygon(c(0.3, 3.4, 3.4, 0.3), c(2.2, 4.4, 5.6, 1.4), col = "grey95", border = "black", lwd = 2)
+polygon(c(0.3, 3.4, 3.4, 0.3), c(8.6, 6.4, 5.4, 7.6), col = "grey95", border = "black", lwd = 2)
+polygon(c(0.3, 3.4, 3.4, 0.3), c(2.2, 4.4, 5.4, 3.2), col = "#0072B240", border = "black", lwd = 2)
+polygon(c(3.4, 9.7, 9.7, 3.4), c(4.4, 4.4, 6.2, 5.4), col = "#0072B230", border = NA)
+rect(3.4, 4.4, 9.7, 5.4, col = "#0072B230", border = NA)
 rect(3.4, 4.4, 9.7, 6.4, col = NA, lwd = 2)
-for (j in 1:60) {
-  xx <- 3.4 + (j - 1) * 6.3 / 60
-  f <- min(1, (j / 60))
-  rect(xx, 5.4 - 1 * f * 0.8, xx + 6.3 / 60, 6.4, border = NA, col = adjustcolor(oi["blue"], 0.25))
-}
-text(1.2, 8.9, "sample:\nsmall molecules,\nproteins, cells", cex = 1.15, pos = 4)
-text(1.2, 1.0, "buffer", cex = 1.3, pos = 4)
+segments(3.4, 5.4, 9.7, 5.4, lty = 2, col = "grey40")
+text(1.0, 8.8, "buffer", cex = 1.3, pos = 4)
+text(0.6, 1.3, "sample: small molecules,\nproteins, cells", cex = 1.15, pos = 4)
 arrows(4, 3.6, 9, 3.6, length = 0.12, lwd = 2); text(6.5, 3.0, "flow, x", cex = 1.3)
 arrows(9.9, 4.4, 9.9, 6.4, code = 3, length = 0.08); text(9.9, 6.9, "w", cex = 1.3)
-set.seed(2); points(runif(8, 3.7, 9.4), runif(8, 5.55, 6.3), pch = 21, bg = oi["orange"], cex = 1.8)
-text(5, 8.6, "T-sensor / H-filter (top view)", cex = 1.4, font = 2, pos = 4)
+set.seed(2); points(runif(8, 3.7, 9.4), runif(8, 4.55, 5.25), pch = 21, bg = oi["orange"], cex = 1.8)
+text(6.5, 7.4, "small molecules\nspread across", cex = 1.1, col = oi["blue"])
+text(5, 9.4, "T-sensor / H-filter, top view", cex = 1.3, font = 2)
 pal <- hcl.colors(60, "Blues 3", rev = TRUE)
 par(mar = c(4.5, 5, 2.5, 1))
 image(xs, y, t(F1), col = pal, zlim = c(0, 1), xlab = "", ylab = paste0("y (", um, ")"),
@@ -221,8 +220,8 @@ par_big(mar = c(4.8, 5.5, 1, 1))
 plot(L / Ns, ec, log = "xy", type = "o", pch = 19, cex = 1.5, lwd = 2, col = oi["red"],
      xlab = paste0("Δx (", um, ")"), ylab = "max error", ylim = c(1e-5, 1))
 lines(L / Ns, eu, type = "o", pch = 17, cex = 1.5, lwd = 2, col = oi["blue"])
-abline(v = 2 * D / u, lty = 3); text(2 * D / u, 3e-5, "cell Pe = 2", pos = 4, cex = 1.2)
-legend("bottomright", c("central", "upwind"), col = c(oi["red"], oi["blue"]), pch = c(19, 17),
+abline(v = 2 * D / u, lty = 3); text(2 * D / u, 1.5e-5, "cell Pe = 2", pos = 2, cex = 1.2)
+legend("topleft", c("central", "upwind"), col = c(oi["red"], oi["blue"]), pch = c(19, 17),
        lwd = 2, bty = "n", cex = 1.3)
 dev.off()
 
@@ -283,17 +282,26 @@ em <- sapply(dxs, function(h) {
   max(abs(cm - plug_exact(ym, 2000, 1000)))
 })
 cat("fig09 errors\n"); print(signif(cbind(dxs, em), 3))
-ce <- march_explicit(c0, uy, 1000, dy, 1, 100)       # 100 steps of 1 um
-cat("fig09 explicit limit near wall", min(uy) * dy^2 / (2 * 1000), " max |c|", max(abs(ce)), "\n")
+growth <- function(dxm, xmax = 100) {               # max |c| along x, explicit marching
+  c <- c0; out <- numeric(round(xmax / dxm))
+  for (k in seq_along(out)) { c <- march_explicit(c, uy, 1000, dy, dxm, 1); out[k] <- max(abs(c)) }
+  out
+}
+g1 <- growth(1); g01 <- growth(0.1)
+cat("fig09 explicit limit near wall", min(uy) * dy^2 / (2 * 1000), "centre", max(uy) * dy^2 / (2 * 1000),
+    " max|c| at x = 100: dx = 1:", g1[100], " dx = 0.1:", g01[1000], "\n")
 svg("fig09-march.svg", width = 13, height = 4.8)
 par_big(mfrow = c(1, 2), mar = c(4.8, 5.5, 3, 1))
 plot(dxs, em, log = "xy", type = "o", pch = 19, cex = 1.5, lwd = 2, col = oi["blue"],
-     xlab = paste0("Δx (", um, ")"), ylab = "max error at x = 2 mm",
+     xlab = paste0("\u0394x (", um, ")"), ylab = "max error at x = 2 mm",
      main = "implicit marching, plug flow")
-lines(dxs, em[1] * dxs / dxs[1], lty = 2); text(30, em[1] * 30 / 200, "slope 1", pos = 1, cex = 1.3)
-plot(y, ce, type = "o", pch = 19, col = oi["red"], lwd = 1.5, ylim = c(-1, 2),
-     xlab = paste0("y (", um, ")"), ylab = "c", main = paste0("explicit marching, Δx = 1 ", um, ", x = 100 ", um))
-lines(y, march(c0, uy, 1000, dy, 1, 100), lwd = 3, col = oi["blue"])
+lines(dxs, em[1] * dxs / dxs[1], lty = 2); text(30, em[1] * 30 / 200 * 0.6, "slope 1", pos = 1, cex = 1.3)
+plot((1:100) * 1, g1, log = "y", type = "l", lwd = 3, col = oi["red"], ylim = c(0.5, 1e40),
+     xlab = paste0("x (", um, ")"), ylab = "max |c| across the channel",
+     main = "explicit marching, Poiseuille flow")
+lines((1:1000) * 0.1, g01, lwd = 3, col = oi["blue"])
+legend("topleft", paste0("\u0394x = ", c(1, 0.1), " ", um), col = c(oi["red"], oi["blue"]), lwd = 3,
+       bty = "n", cex = 1.25)
 dev.off()
 
 ## ---- fig10: H-filter -------------------------------------------------------------------------
@@ -305,7 +313,7 @@ frac <- sapply(c(1000, 100, 0.05), function(Dm) {
   for (k in 2:length(xsteps)) { c <- march(c, uy, Dm, dy, 100, 1); out <- c(out, sum(uy[right] * c[right]) / sum(uy * c0)) }
   out
 })
-cat("fig10 fraction crossed at 1, 2, 5, 10, 20 mm\n"); print(round(frac[xsteps %in% c(1, 2, 5, 10, 20) * 1000, ], 4))
+cat("fig10 fraction crossed at 1, 2, 5, 10, 20 mm\n"); print(round(frac[xsteps %in% (c(1, 2, 5, 10, 20) * 1000), ], 4))
 svg("fig10-hfilter.svg", width = 9, height = 5.4)
 par_big(mar = c(4.8, 5.5, 1, 1))
 plot(NA, xlim = c(0, 20), ylim = c(0, 0.52), xlab = "distance downstream (mm)",

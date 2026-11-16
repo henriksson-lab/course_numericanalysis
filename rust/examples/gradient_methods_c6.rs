@@ -2,9 +2,14 @@
 // C6: argmin's Nelder-Mead, BFGS, L-BFGS and nonlinear CG on the 4PL; then the
 // dose in nM, rescaled parameters, and log10(EC50). Like optim without `gr`,
 // the gradient is by central differences with an absolute step 1e-3.
+// The line search is backtracking with the Armijo condition (argmin's More-Thuente
+// line search did not terminate on this problem with a finite-difference gradient).
 use argmin::core::{Executor, State, TerminationStatus};
 use argmin::solver::conjugategradient::{beta::PolakRibiere, NonlinearConjugateGradient};
-use argmin::solver::linesearch::MoreThuenteLineSearch;
+use argmin::solver::linesearch::{condition::ArmijoCondition, BacktrackingLineSearch};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NF: AtomicU64 = AtomicU64::new(0);   // calls of the cost function
 use argmin::solver::neldermead::NelderMead;
 use argmin::solver::quasinewton::{BFGS, LBFGS};
 include!("gradient_methods_shared/defs.rs");
@@ -23,6 +28,7 @@ impl CostFunction for Fd {
     type Param = Vec<f64>;
     type Output = f64;
     fn cost(&self, q: &Vec<f64>) -> Result<f64, Error> {
+        NF.fetch_add(1, Ordering::Relaxed);
         let p = self.par(q);
         Ok(doses().iter().zip(Y.iter()).map(|(&c, &y)| (y - f4(&p, c * self.unit)).powi(2)).sum())
     }
@@ -41,7 +47,8 @@ impl Gradient for Fd {
 fn eye() -> Vec<Vec<f64>> { (0..4).map(|i| (0..4).map(|j| (i == j) as i32 as f64).collect()).collect() }
 
 fn run(name: &str, prob: Fd, q0: Vec<f64>, method: &str) {
-    let ls = MoreThuenteLineSearch::new();
+    NF.store(0, Ordering::Relaxed);
+    let ls = BacktrackingLineSearch::new(ArmijoCondition::new(1e-4).unwrap());
     let res = match method {
         "NM" => {
             let mut simplex = vec![q0.clone()];
@@ -65,7 +72,7 @@ fn run(name: &str, prob: Fd, q0: Vec<f64>, method: &str) {
             let p = prob.par(&q);
             let why = match status { TerminationStatus::Terminated(r) => r.text().to_string(), _ => "running".into() };
             println!("{:<16} {:<5} SSE {:10.4}  EC50 {:9.4}  hill {:7.3}  iter {:3}  cost calls {:4}  ({})",
-                     name, method, cost, p[2], p[3], iters, counts.get("cost_count").copied().unwrap_or(0), why);
+                     name, method, cost, p[2], p[3], iters, NF.load(Ordering::Relaxed), why);
         }
         Err(e) => println!("{:<16} {:<5} error: {}", name, method, e),
     }

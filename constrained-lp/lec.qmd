@@ -74,7 +74,7 @@ The data are synthetic: true A = 1, k = 0.5, c = 0, plus a fixed noise vector. B
 
 ## Fix 1: bounds {.smaller}
 
-![](fig01-decay-bounds.svg){width="68%" fig-align="center"}
+![](fig01-decay-bounds.svg){width="58%" fig-align="center"}
 
 ```r
 fitb <- optim(c(1, 0.3, 0.1), sse, method = "L-BFGS-B", lower = c(0, 0, 0))
@@ -335,13 +335,13 @@ The objective "maximise growth" is an assumption: that evolution has tuned the c
 ::: {.column width="52%"}
 ![](fig07-fva.svg){width="100%"}
 :::
-::::: {.column width="48%"}
+::: {.column width="48%"}
 **Flux variability analysis** (FVA): fix growth at its maximum (15), then minimise and maximise each flux in turn, $2 \times 9$ more LPs.
 
 - GLY and the bypass can share the glucose in **any** ratio: each ranges over $[0, 10]$.
 - The solver's GLY = 10 was one arbitrary corner.
 - Like a non-identifiable parameter (*Identifiability and uncertainty of fitted parameters*): the objective cannot tell the routes apart. **Report ranges**, not one flux vector.
-:::::
+:::
 ::::
 
 ::: notes
@@ -378,10 +378,19 @@ round(fba(ub = c(10, 4))$duals[7:8], 3)   # less oxygen
 - Plenty of oxygen: one more glucose gives +1.5 growth, oxygen has price **0** (its bound is inactive: 10 used of 15). **Glucose limits growth.**
 - Oxygen limited to 4: **both** limit; growth 10, and acetate is secreted (8): **overflow metabolism**.
 
-![](fig08-oxygen-scan.svg){width="58%" fig-align="center"}
+::: notes
+The shadow price is the Lagrange multiplier again: the rate at which the best growth changes if one bound is relaxed. Experimentally that is the question: would adding more of this nutrient help? Rows 7 and 8 of the constraint matrix are the two uptake bounds, so duals[7:8] are their prices. With plenty of oxygen, the cell respires all its pyruvate and only glucose is short. With oxygen 4, respiration is capped at 2, the rest of the pyruvate is fermented, and acetate leaves the cell, as E. coli does in oxygen-limited cultures.
+:::
+
+## Scanning the oxygen limit {.smaller}
+
+![](fig08-oxygen-scan.svg){width="72%" fig-align="center"}
+
+- Below 10: each unit of oxygen gives $5/6 = 0.833$ more growth and less acetate. Above 10: oxygen is in excess, price 0.
+- Shadow prices are **local**: they hold until another constraint becomes active (the kink at 10), where the price is not unique.
 
 ::: notes
-The shadow price is the Lagrange multiplier again: the rate at which the best growth changes if one bound is relaxed. Experimentally that is the question: would adding more of this nutrient help? The scan shows the classical phenotype phase plane in one dimension: below oxygen 10, growth rises by 2.5/3 = 0.833 per unit oxygen, with acetate secretion falling to 0; above 10, oxygen is in excess. At exactly 10 the price is ambiguous (0.833 from the left, 0 from the right); solvers report either one. Shadow prices are local: they hold until another constraint becomes active, which is where the kink is.
+This is the one-dimensional version of a phenotype phase plane (growth as a function of two uptake rates). Each point is one LP. At exactly 10 the price is ambiguous (0.833 from the left, 0 from the right); solvers report either one, and the exercise shows lpSolve and HiGHS disagreeing there. To predict the effect of a large change, re-solve instead of multiplying by the price.
 :::
 
 ## FBA checklist {.smaller}

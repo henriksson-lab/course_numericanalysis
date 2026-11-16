@@ -1,0 +1,143 @@
+---
+title: "Quiz: gradient descent, Newton and quasi-Newton"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of gradient-based and derivative-free optimisation. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** How are the gradient and the Hessian related to the Jacobian from *Newton for systems of equations*?
+
+::: {.callout-tip collapse="true" title="Hint"}
+A Jacobian is defined for a function with a vector of outputs. How many outputs does $f$ have? And $\nabla f$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The gradient is the Jacobian of the scalar function $f$ (one row, written as a column). The Hessian is the Jacobian of the gradient, a vector function with $n$ outputs, so it is $n \times n$. That is why a Hessian can be computed as a finite-difference Jacobian of a coded gradient, and why Newton for minimisation is Newton for systems applied to $\nabla f = \mathbf 0$ with $J = H$.
+:::
+
+---
+
+**Q2.** At a point $\mathbf x$, $\nabla f(\mathbf x) = \mathbf 0$ and the Hessian has eigenvalues $12$ and $-0.5$. What kind of point is it, and what would steepest descent and pure Newton do near it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Mixed signs of curvature.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A **saddle**: the surface curves up in one direction and down in the other. Steepest descent moves away from it (unless it starts exactly on the line through it along the upward-curving direction), because going along the negative-curvature direction decreases $f$. Pure Newton looks only for $\nabla f = \mathbf 0$ and is attracted to the saddle just as to a minimum. Check the eigenvalues of $H$ at the answer.
+:::
+
+---
+
+**Q3.** Why is $-\nabla f$ the direction of steepest descent?
+
+::: {.callout-tip collapse="true" title="Hint"}
+For a short step $\mathbf s$ of fixed length, $f(\mathbf x + \mathbf s) - f(\mathbf x) \approx \nabla f^\mathsf T\mathbf s$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The change $\nabla f^\mathsf T\mathbf s = \|\nabla f\|\,\|\mathbf s\|\cos\theta$ is most negative when the angle $\theta$ between $\mathbf s$ and $\nabla f$ is 180°, i.e. $\mathbf s$ points along $-\nabla f$. Steps perpendicular to $\nabla f$ (along a contour line) do not change $f$ to first order.
+:::
+
+---
+
+**Q4.** Steepest descent with an exact line search needs about 60 steps per 6 digits when the Hessian has condition number $\kappa = 9$. Roughly how many when $\kappa = 900$? Why?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The error shrinks by $(\kappa-1)/(\kappa+1) \approx 1 - 2/\kappa$ per step.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+About 100 times as many, roughly 6000 steps: the number of steps per digit grows in proportion to $\kappa$ ($\ln 10 \cdot \kappa/2$ steps per digit for large $\kappa$). In a long narrow valley the negative gradient points across the valley, and each step overshoots to the other side (zig-zag).
+:::
+
+---
+
+**Q5.** What does the Armijo condition $f(\mathbf x - \alpha\mathbf g) \le f(\mathbf x) - c\,\alpha\|\mathbf g\|^2$ protect against, and why is halving $\alpha$ guaranteed to find an acceptable step?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What happens for a very small $\alpha$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+It rejects steps that overshoot and increase $f$ (or decrease it by almost nothing), which is how a fixed step size diverges. For small $\alpha$, $f(\mathbf x - \alpha\mathbf g) \approx f(\mathbf x) - \alpha\|\mathbf g\|^2$, which beats the required decrease $c\,\alpha\|\mathbf g\|^2$ because $c = 10^{-4} < 1$. So halving eventually succeeds whenever $\mathbf g \ne \mathbf 0$. In code, also reject `NaN` (a step out of the domain, e.g. a negative EC50).
+:::
+
+---
+
+**Q6.** Newton's method for minimisation found the minimum of a 4-parameter fit in 5 steps; steepest descent needed 3453. Why is Newton not always the method of choice?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Think about cost per step, and about starts far from the minimum.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) It needs the Hessian ($n^2$ second derivatives, or $n$ extra gradients by finite differences) and a linear solve ($O(n^3)$) per step, which is expensive for many parameters. (2) Far from the minimum the Hessian may not be positive definite; the Newton step then heads for a saddle or a maximum, or goes uphill. It must be safeguarded (line search plus a shifted Hessian $H + \mu I$, or a trust region). Quasi-Newton methods (BFGS) get most of the speed with only gradients and a positive definite matrix by construction.
+:::
+
+---
+
+**Q7.** In BFGS, what information is used to update the approximate inverse Hessian $B$, and which condition does the update enforce?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compare with the secant method in one variable.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The last step $\mathbf s = \mathbf x_{k+1} - \mathbf x_k$ and the change of gradient $\mathbf y = \nabla f_{k+1} - \nabla f_k$. The update enforces the **secant condition** $B_{k+1}\mathbf y = \mathbf s$: the new curvature model reproduces the observed change of slope along the step, as the secant method does for $f'$ in one variable. If $\mathbf y^\mathsf T\mathbf s > 0$, $B$ stays positive definite. L-BFGS keeps only the last few $(\mathbf s, \mathbf y)$ pairs instead of the $n \times n$ matrix.
+:::
+
+---
+
+**Q8.** When would you choose Nelder–Mead over BFGS? What is its main danger?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does Nelder–Mead need from $f$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+When $f$ is noisy, has kinks or jumps, or is cheap but impossible to differentiate (finite differences would be meaningless), and the number of parameters is small. It only compares function values. Dangers: it is slow, gets slower with more parameters, and its stopping rule ("the values at the corners agree") is also met on a plateau or in a collapsed simplex away from the minimum. In the lecture it failed from 5 of 15 starts, 4 of them silently. It is `optim`'s default, so many published fits use it without knowing.
+:::
+
+---
+
+**Q9.** A colleague fits a 4PL curve with dose in nM and the starting value EC50 = 1. `optim` returns `convergence = 0` and a Hill slope of $-13.8$. What went wrong, and what are two fixes?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Where is a curve with EC50 = 1 nM relative to doses of 10–100 000 nM?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The start puts the whole curve to the left of the data, where the model is constant over all doses; the optimiser slides into a degenerate fit (a flat line at the mean of the data), where the SSE does not change with EC50 or hill, so the gradient is zero and it stops: "converged". The same happened to the growth curve with time in minutes. Fixes: start from the data (EC50 near the dose where the response is halfway, or a self-start model such as `SSfpl`); use units or parameters of size about 1 (µM, or fit $\log_{10}$ EC50), or `parscale`; multistart; and always plot the fit over the data.
+:::
+
+---
+
+**Q10.** `optim(p, f, method = "BFGS")` without a gradient function: how is the gradient computed, and why can that hurt a badly scaled problem?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look up `ndeps` in the `optim` help page.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+By central finite differences with step `ndeps = 1e-3` in every parameter (on the `par/parscale` scale), i.e. $2n$ extra calls of `f` per gradient. The step is **absolute**: for a parameter of size 1000 it is a relative step of $10^{-6}$, for a parameter of size 0.001 it is as large as the parameter itself. Either way the gradient is inaccurate, and BFGS stops early or wanders. Pass an analytic gradient (checked with `numDeriv::grad`), or rescale with `parscale`. scipy uses forward differences with a relative step $\sqrt\varepsilon\max(1, |x|)$ instead.
+:::
+
+---
+
+**Q11.** Why does training a neural network use stochastic gradient descent rather than BFGS, while a dose–response fit should use BFGS?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Count data points and parameters.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A network has millions of parameters (BFGS's $n \times n$ matrix does not fit in memory) and millions of data points (one exact gradient is a pass over all of them). SGD uses the gradient of a small random minibatch per step: cheap, noisy steps, with a hand-tuned learning rate, and no need for an exact minimum. A dose–response curve has 4 parameters and 18 points: exact gradients are cheap, and BFGS (or a least-squares method) converges in a dozen steps to the exact minimum.
+:::

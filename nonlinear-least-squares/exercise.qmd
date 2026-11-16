@@ -1,0 +1,1511 @@
+---
+title: "Exercise: nonlinear least squares and ODE fitting"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- write a model fit as **nonlinear least squares**, with residuals $r_i = y_i - m_i(\mathbf p)$ and a **Jacobian** $J_{ij} = \partial m_i/\partial p_j$,
+- do a **Gauss–Newton** step by hand for one parameter, and in code for three, with each step a **linear least-squares problem solved by QR**,
+- show how Gauss–Newton fails from a bad start, and how **Levenberg–Marquardt** (damping $\lambda$) fixes it, and say what the two limits of $\lambda$ are,
+- read `nls`'s **"singular gradient"** and use `minpack.lm::nlsLM` / `nls.lm`, `scipy.optimize.curve_fit` / `least_squares`, or a hand-written LM in Rust,
+- fit **log-parameters** to keep rates positive and improve the conditioning,
+- fit an **ODE model** with the solver inside the residual function, and choose the solver **tolerance** and the **finite-difference step** so that they fit together,
+- run a **multistart** and recognise two minima with the same RSS (the **flip-flop**).
+
+The by-hand part needs pen, paper and a calculator with `exp`. The code part checks your hand answers and then fits the three-parameter model, first in closed form, then as an ODE.
+
+## Background
+
+After an oral dose $D$, a drug moves from the gut ($A_g$) into the plasma, or central compartment ($A_c$), and is eliminated from there:
+
+$$A_g' = -k_a A_g, \qquad A_c' = k_a A_g - k_e A_c, \qquad A_g(0) = D,\ A_c(0) = 0,$$
+
+and we measure the concentration $C = A_c/V$. This linear ODE has a closed form, the **Bateman function**
+
+$$C(t) = \frac{D\,k_a}{V(k_a - k_e)}\left(e^{-k_e t} - e^{-k_a t}\right).$$
+
+The data: $D = 100$ mg, plasma sampled at 12 times over 12 hours. They were **simulated** from $k_a = 1$/h, $k_e = 0.2$/h, $V = 20$ L with noise of SD 0.1 mg/L (`set.seed(1)` in R, then rounded to 2 decimals), so we know the truth.
+
+**Facts used below:**
+
+1. **Nonlinear least squares.** Parameters $\mathbf p$, model $m_i(\mathbf p) = C(t_i)$, residuals $\mathbf r = \mathbf y - \mathbf m(\mathbf p)$. Minimise $\text{RSS}(\mathbf p) = \|\mathbf r\|^2$.
+2. **Jacobian.** $J_{ij} = \partial m_i / \partial p_j$ (12 × 3). Forward differences: column $j \approx (\mathbf m(\mathbf p + h_j\mathbf e_j) - \mathbf m(\mathbf p))/h_j$ with $h_j \approx 10^{-7}\max(1, |p_j|)$.
+3. **Gauss–Newton.** $\boldsymbol\delta = \arg\min \|\mathbf r - J\boldsymbol\delta\|^2$, solved by **QR** (`qr.solve(J, r)`), then $\mathbf p \leftarrow \mathbf p + \boldsymbol\delta$. For **one** parameter: $\delta = \sum_i J_i r_i / \sum_i J_i^2$.
+4. **Levenberg–Marquardt.** $\boldsymbol\delta = \arg\min \|\mathbf r - J\boldsymbol\delta\|^2 + \lambda\|D_g\boldsymbol\delta\|^2$, i.e. $(J^TJ + \lambda D_g^2)\boldsymbol\delta = J^T\mathbf r$, solved as the stacked least-squares problem $\begin{pmatrix}J\\ \sqrt\lambda D_g\end{pmatrix}\boldsymbol\delta \approx \begin{pmatrix}\mathbf r\\ \mathbf 0\end{pmatrix}$. $D_g$ = diagonal of the column lengths of $J$ (or $I$). Accept the step and divide $\lambda$ by 10 if the RSS goes down; otherwise reject it and multiply $\lambda$ by 10.
+5. **Log-parameters.** Fit $\mathbf q = \log\mathbf p$; $\partial m/\partial q_j = p_j\,\partial m/\partial p_j$.
+6. **Flip-flop.** $(k_a, k_e, V)$ and $(k_e, k_a, V k_e/k_a)$ give the same $C(t)$.
+7. **Finite differences with noise.** If the model values carry an error of size $\varepsilon$ (rounding, or an ODE solver's error), the forward-difference error is about $\tfrac{h}{2}|m''| + 2\varepsilon/h$, smallest near $h \approx 2\sqrt{\varepsilon/|m''|}$ (*Convergence and cost*).
+
+The data, the model and a first library fit in each language. All solutions below assume this code has been run.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+D  <- 100                                                  # oral dose, mg
+tt <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12)   # hours after the dose
+y  <- c(1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61)  # mg/L
+bateman <- function(t, ka, ke, V) D * ka / (V * (ka - ke)) * (exp(-ke * t) - exp(-ka * t))
+rss <- function(p) sum((y - bateman(tt, p[1], p[2], p[3]))^2)
+rss(c(1, 0.2, 20))                           # at the simulation parameters
+# [1] 0.08346328
+fit <- nls(y ~ bateman(tt, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
+coef(fit)
+#         ka         ke          V
+#  1.0150721  0.1906157 20.2162113
+deviance(fit)                                # RSS at the fitted parameters
+# [1] 0.06646744
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import curve_fit
+
+D = 100.0                                                  # oral dose, mg
+tt = np.array([0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12])   # hours
+y = np.array([1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61])  # mg/L
+
+def bateman(t, ka, ke, V):
+    return D * ka / (V * (ka - ke)) * (np.exp(-ke * t) - np.exp(-ka * t))
+
+def rss(p):
+    return np.sum((y - bateman(tt, *p))**2)
+
+print(rss([1, 0.2, 20]))                    # at the simulation parameters
+# 0.0834632806408188
+p, cov = curve_fit(bateman, tt, y, p0=[0.5, 0.1, 10])
+print(p)
+# [ 1.01507215  0.19061569 20.21621051]
+print(rss(p))                               # RSS at the fitted parameters
+# 0.06646743904580547
+```
+
+### Rust
+
+```rust
+// rust/examples/nonlinear_least_squares_background.rs  —  cargo run --example nonlinear_least_squares_background
+// Background: the PK data, the Bateman function and the residual sum of squares
+const D: f64 = 100.0; // oral dose, mg
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0]; // h
+const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61]; // mg/L
+
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+}
+
+fn rss(p: [f64; 3]) -> f64 {
+    TT.iter().zip(Y.iter()).map(|(&t, &y)| (y - bateman(t, p[0], p[1], p[2])).powi(2)).sum()
+}
+
+fn main() {
+    println!("{}", rss([1.0, 0.2, 20.0]));                       // at the simulation parameters
+    // no nls in Rust: we write Gauss-Newton ourselves in C2; here the RSS at nls's estimate
+    println!("{}", rss([1.0150721, 0.1906157, 20.2162104]));
+}
+
+// Output:
+// 0.0834632806408188
+// 0.06646743904589647
+```
+
+:::
+
+In R, [`nls`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/nls.html) is Gauss–Newton; [`minpack.lm::nlsLM`](https://search.r-project.org/CRAN/refmans/minpack.lm/html/nlsLM.html) has the same formula interface with Levenberg–Marquardt, and [`minpack.lm::nls.lm`](https://search.r-project.org/CRAN/refmans/minpack.lm/html/nls.lm.html) takes a residual function. In Python, [`scipy.optimize.curve_fit`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.curve_fit.html) takes a model function like `nls` (Levenberg–Marquardt by default) and [`scipy.optimize.least_squares`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html) takes a residual function (trust-region `"trf"` by default, `method="lm"` for MINPACK). In Rust there is no `nls`: we write Gauss–Newton and Levenberg–Marquardt ourselves with nalgebra's [`QR`](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.QR.html) (the argmin crate has a Gauss–Newton solver, but it needs more plumbing than the method itself). ODEs: [`deSolve::ode`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html), [`scipy.integrate.solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html), and `ode_solvers::Dopri5` in Rust.
+
+## By hand
+
+**B1. Sensitivities.** After an IV bolus, a one-compartment model gives $C(t) = C_0 e^{-kt}$.
+(a) Write down $\partial C/\partial C_0$ and $\partial C/\partial k$.
+(b) Evaluate the $3\times 2$ Jacobian at $C_0 = 10$ mg/L, $k = 0.3$/h for samples at $t = 1, 2, 4$ h.
+(c) At which time $t$ is $|\partial C/\partial k|$ largest? What does that say about when to sample if you want $k$?
+(d) For the oral model on the slides, the Jacobian column for $k_a$ is positive at $t = 0.25$ h and negative at $t = 12$ h. Explain the sign change in words.
+
+**B2. Gauss–Newton by hand.** Fit only $k$ in $C(t) = 10\,e^{-kt}$ to $y = (6.0, 3.7, 1.3)$ mg/L at $t = (1, 2, 4)$ h.
+(a) From $k_0 = 0.3$: compute $\mathbf m$, $J$, $\mathbf r$, the step $\delta = \sum J_i r_i/\sum J_i^2$ and $k_1$. Compare with the slide.
+(b) Do the second step from $k_1$. Compute the RSS at $k_0$, $k_1$, $k_2$.
+(c) The minimum is at $k^* = 0.504417$. How many correct digits do $k_0$, $k_1$, $k_2$ have? What kind of convergence does that suggest?
+
+**B3. A linear model needs one step.** Suppose $k_e = 0.2$ is known and the model is $m(t) = a\,e^{-0.2t} + b$ (a decay on top of a baseline $b$).
+(a) Write the Jacobian with respect to $(a, b)$. Does it depend on $(a, b)$?
+(b) Explain why Gauss–Newton reaches the least-squares solution in **one** step from any start. Which unit's method is it then?
+
+**B4. Levenberg–Marquardt between two limits.** Take $J = \begin{pmatrix}1 & 0\\1 & 1\\1 & 2\end{pmatrix}$, $\mathbf r = (1, 0, 1)$ and $D_g = I$.
+(a) Compute $J^TJ$ and $J^T\mathbf r$.
+(b) The Gauss–Newton step: solve $J^TJ\boldsymbol\delta = J^T\mathbf r$.
+(c) The LM step with $\lambda = 1$: solve $(J^TJ + I)\boldsymbol\delta = J^T\mathbf r$.
+(d) The LM step with $\lambda = 100$. Compare it with $J^T\mathbf r/\lambda$. In which direction does a large-$\lambda$ step point, and why is that "downhill"? (The gradient of $\|\mathbf r\|^2$ with respect to $\mathbf p$ is $-2J^T\mathbf r$.)
+(e) Order the three steps by length. What does $\lambda$ control?
+
+**B5. Log-parameters.** Same data as B2; now fit $q = \log k$.
+(a) Use the chain rule to write $\partial m/\partial q$ in terms of $\partial m/\partial k$.
+(b) Do one Gauss–Newton step in $q$ from $k_0 = 0.3$ (reuse $\mathbf r$ and $J$ from B2(a)). What is $k_1 = e^{q_1}$? Is it closer to $k^*$ than the step in $k$?
+(c) Now start far away, at $k_0 = 1.5$. There $\mathbf m = (2.231, 0.498, 0.025)$, $\partial m/\partial k = (-2.231, -0.996, -0.099)$ and $\mathbf r = (3.769, 3.202, 1.275)$. Do one Gauss–Newton step in $k$ and one in $q$. What is wrong with the first one, biologically?
+
+**B6. The flip-flop.**
+(a) Show that swapping $k_a \leftrightarrow k_e$ and replacing $V$ by $V' = V k_e/k_a$ leaves $C(t)$ unchanged.
+(b) The fit gives $(\hat k_a, \hat k_e, \hat V) = (1.0151, 0.1906, 20.216)$. What is the mirror solution?
+(c) The two parameter sets give the same plasma curve. What do they predict differently? Name one experiment that would tell them apart.
+
+**B7. Tolerance and finite-difference step.** A residual function solves an ODE with an error of about $\varepsilon_\text{ode}$ in each model value. Take $|m''| \approx 1$ in the units of the problem.
+(a) With $\varepsilon_\text{ode} = 10^{-6}$ (deSolve's default tolerance), what is the error of a forward-difference derivative with $h = 10^{-8}$? With $h = 10^{-3}$?
+(b) Which $h$ minimises the error, and what is the smallest error? Repeat for $\varepsilon_\text{ode} = 10^{-10}$.
+(c) A Levenberg–Marquardt fit of 3 parameters with a forward-difference Jacobian solves the ODE once for the residual, 3 times for the Jacobian, and once for the trial point, per iteration. A multistart from 36 starts takes about 10 iterations each. How many ODE solves is that? At 5 ms per solve, how long?
+
+## In code
+
+**C1. The data and the model.**
+(a) Plot the data and the curve with the simulation parameters $(1, 0.2, 20)$. Compute the RSS there and at the start $(0.5, 0.1, 10)$.
+(b) Compute $t_\text{max} = \ln(k_a/k_e)/(k_a - k_e)$, $C_\text{max} = C(t_\text{max})$ and $\text{AUC} = D/(V k_e)$ for the simulation parameters.
+(c) Evaluate the Bateman function at $k_a = k_e = 0.2$ and at $k_a = 0.2 + 10^{-9}$, $k_e = 0.2$ (print 15 digits), for $t = 1$ and $4$ h. Compare with the limit $D k t e^{-kt}/V$. What happens, and how many digits are lost near $k_a = k_e$?
+
+**C2. Gauss–Newton.**
+(a) Write a function for the forward-difference Jacobian with step $h_j = 10^{-7}p_j$, and a Gauss–Newton loop that solves each step **by QR** and prints the iterates. Start at $(0.5, 0.1, 10)$.
+(b) How many correct digits does each iteration add near the end?
+(c) Print $\kappa(J)$ and $\kappa(J^TJ)$ at the solution. How many digits would the normal equations lose compared with QR?
+(d) Compare with `nls(..., trace = TRUE)` (Python: `curve_fit`; Rust: skip).
+
+**C3. Gauss–Newton fails, Levenberg–Marquardt does not.**
+(a) Take one Gauss–Newton step from $(3, 0.05, 50)$. Where does it go, and what is the RSS there?
+(b) Write Levenberg–Marquardt with Marquardt's scaling $D_g$ (Fact 4), solving the stacked problem by QR. Start at $(3, 0.05, 50)$ with $\lambda = 0.01$ and print every accepted step with its $\lambda$.
+(c) Run `nls` and `nlsLM` from the same start (Python: `curve_fit` and `least_squares`).
+
+**C4. Log-parameters.**
+(a) Rewrite the Jacobian so that it takes any model function `f` and uses $h_j = 10^{-7}\max(1, |p_j|)$. Compare $\kappa(J)$ at the solution in $(k_a, k_e, V)$ and in $\log(k_a, k_e, V)$.
+(b) Run Gauss–Newton in log-parameters from $(3, 0.05, 50)$. Do the rates stay positive? Does it converge?
+(c) Run Levenberg–Marquardt in log-parameters from the same start. Then `nlsLM` with `exp()` inside the formula (Python: `curve_fit` with a wrapper).
+
+**C5. Fit the ODE.** Pretend there is no closed form.
+(a) Write `pk_ode(p, tol)` that solves the two-compartment ODE with `rtol = atol = tol` and returns $A_c/V$ at the 12 sampling times. Check it against the Bateman function at $(1, 0.2, 20)$ with `tol = 1e-10`.
+(b) Fit $\log(k_a, k_e, V)$ from $(0.5, 0.1, 10)$ with the ODE inside the residual function: `nls.lm` with `control = nls.lm.control(epsfcn = 1e-10)` (Python: `least_squares`; Rust: your LM with `Dopri5`). Compare with the closed-form fit.
+
+**C6. How tight must the inner solver be?**
+(a) Repeat C5(b) with `tol` $= 10^{-2}, 10^{-3}, 10^{-4}, 10^{-6}, 10^{-8}, 10^{-10}$. For each, print the estimates, the RSS the optimiser reports, the **true** RSS (Bateman function) at the returned parameters, and the number of iterations. In Python, include the `solve_ivp` default `rtol = 1e-3, atol = 1e-6`.
+(b) Along the line $k_a \in [0.9, 1.1]$ (401 points; $k_e$, $V$ at the estimate), compute $\max|\text{RSS}_\text{ode} - \text{RSS}_\text{exact}|$ for `tol` $= 10^{-3}, 10^{-6}, 10^{-10}$. Compare with the RSS change caused by a 1 % change in $k_a$.
+
+**C7. Multistart.** Fit from the 36 starts $k_a \in \{0.03, 0.1, 0.3, 1, 3, 10\}$, $k_e \in 1.5\times\{0.03, \dots, 10\}$, $V = 10$, in log-parameters. Tabulate where the fits end (parameters and RSS, rounded to 4 digits). How many minima are there? Are they equally good? Which one would you report, and why?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — Jacobian and one-parameter Gauss–Newton (B1, B2, B5)"}
+$\frac{d}{dk} e^{-kt} = -t\,e^{-kt}$. With one parameter, $J$ is a single column and the least-squares solution of $J\delta \approx \mathbf r$ is $\sum J_i r_i/\sum J_i^2$ (the slope of a line through the origin). Keep 4 significant digits. For $q = \log k$: $k = e^q$, so $dk/dq = k$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — Levenberg–Marquardt by hand (B4)"}
+A $2\times2$ system $\begin{pmatrix}a&b\\c&d\end{pmatrix}\boldsymbol\delta = \mathbf g$ has $\delta_1 = (d g_1 - b g_2)/(ad - bc)$, $\delta_2 = (a g_2 - c g_1)/(ad - bc)$. Adding $\lambda I$ only changes $a$ and $d$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — finite differences with noise (B7)"}
+Truncation error $\approx \tfrac{h}{2}|m''|$, noise error $\approx 2\varepsilon/h$ (two noisy values, divided by $h$). Set the derivative of the sum with respect to $h$ to zero. This is the V-shaped error curve of *Convergence and cost*, with $\varepsilon_\text{ode}$ in place of machine epsilon.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — QR least squares in each language (C2–C4)"}
+R: [`qr.solve(A, b)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/qr.html) solves a tall system in the least-squares sense; `rbind` stacks the damping rows under $J$. Python: `Q, R = np.linalg.qr(A)` then `np.linalg.solve(R, Q.T @ b)` ([`np.linalg.qr`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.qr.html)); `np.vstack` stacks. Rust: `a.clone().qr()`, `q_tr_mul` and `solve_upper_triangular`, as in *Least squares: normal equations vs QR*. Condition numbers: [`kappa(A, exact = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kappa.html), `np.linalg.cond`, ratio of nalgebra's `singular_values()`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — library fitters (C2–C4, C7)"}
+R: [`nls`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/nls.html) (`trace = TRUE` prints iterates), [`nlsLM`](https://search.r-project.org/CRAN/refmans/minpack.lm/html/nlsLM.html) (same interface), [`nls.lm(par, fn)`](https://search.r-project.org/CRAN/refmans/minpack.lm/html/nls.lm.html) where `fn` returns the residual vector; `fit$par`, `fit$deviance` (RSS), `fit$niter`. Wrap a call that may fail in [`tryCatch(..., error = conditionMessage)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/conditions.html). Python: [`curve_fit(f, t, y, p0)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.curve_fit.html) returns `(p, cov)`; [`least_squares(fun, x0)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html) returns an object with `.x`, `.cost` (half the RSS), `.nfev`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — an ODE inside the residual (C5, C6)"}
+R: [`ode(y, times, func, parms, rtol, atol)`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) with `func(t, y, parms)` returning `list(dy)`; give `times = c(0, tt)` because the first time is the start, and drop the first row of the output; column 1 is time. Python: [`solve_ivp(fun, (0, 12), y0, t_eval=tt, args=(ka, ke), rtol=, atol=)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html), solution in `sol.y`. Rust: `Dopri5::new(system, t0, t_end, dx, y0, rtol, atol)` and `integrate_with_continuous_output_model` give the solution at any $t$ (see *Runge–Kutta and adaptive step size*). In `nls.lm`, the finite-difference step is $\sqrt{\texttt{epsfcn}}\,|q_j|$; with $\log k_a \approx 0$ the default is far below the ODE error, so set `epsfcn = 1e-10`.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $\partial C/\partial C_0 = e^{-kt}$, $\partial C/\partial k = -C_0\,t\,e^{-kt}$.
+(b) $e^{-0.3} = 0.7408$, $e^{-0.6} = 0.5488$, $e^{-1.2} = 0.3012$:
+$$J = \begin{pmatrix} 0.7408 & -7.408\\ 0.5488 & -10.976\\ 0.3012 & -12.048\end{pmatrix}.$$
+(c) $\frac{d}{dt}(t e^{-kt}) = (1 - kt)e^{-kt} = 0$ at $t = 1/k = 3.3$ h. Samples near $1/k$ carry the most information about $k$: too early, nothing has decayed; too late, nothing is left. (The next unit makes this precise.)
+(d) A larger $k_a$ moves the drug into plasma faster, so early concentrations rise; but it also brings the peak earlier, after which the drug is eliminated earlier, so late concentrations are lower.
+
+**B2.**
+(a) As on the slide: $\mathbf m = (7.408, 5.488, 3.012)$, $J = (-7.408, -10.976, -12.048)$, $\mathbf r = (-1.408, -1.788, -1.712)$, $\sum J_ir_i = 50.68$, $\sum J_i^2 = 320.51$, $\delta = 0.1581$, $k_1 = 0.4581$.
+(b) At $k_1 = 0.4581$: $\mathbf m = (6.325, 4.000, 1.600)$, $J = (-6.325, -8.000, -6.400)$, $\mathbf r = (-0.325, -0.300, -0.300)$, $\sum J_ir_i = 6.374$, $\sum J_i^2 = 144.97$, $\delta = 0.0440$, $k_2 = 0.5021$. RSS: $8.111 \to 0.2854 \to 0.005870$ (minimum $0.005236$).
+(c) Errors $0.204$, $0.046$, $0.0023$, then (by computer) $4\times10^{-6}$ and $3\times10^{-9}$: about 0, 1, 2, 5, 8 correct digits. The number of digits nearly doubles per step at the end: close to quadratic convergence, because the residuals at the minimum are small.
+
+**B3.**
+(a) $J = \begin{pmatrix} e^{-0.2t_1} & 1\\ \vdots & \vdots\\ e^{-0.2t_n} & 1\end{pmatrix}$: it does not depend on $(a, b)$.
+(b) The model is **linear** in $(a, b)$, so $\mathbf m(\mathbf p + \boldsymbol\delta) = \mathbf m(\mathbf p) + J\boldsymbol\delta$ exactly. The Gauss–Newton subproblem is then the full problem, and its solution is the least-squares fit: it is linear least squares with design matrix $J$ (*Least squares: normal equations vs QR*). In general, the more nearly linear the model, the faster Gauss–Newton.
+
+**B4.**
+(a) $J^TJ = \begin{pmatrix}3&3\\3&5\end{pmatrix}$, $J^T\mathbf r = (2, 2)$.
+(b) $\det = 6$; $\delta_1 = (5\cdot2 - 3\cdot2)/6 = 2/3$, $\delta_2 = (3\cdot2 - 3\cdot2)/6 = 0$. GN step $(0.667, 0)$.
+(c) $\begin{pmatrix}4&3\\3&6\end{pmatrix}$, $\det = 15$: $\delta = (6/15, 2/15) = (0.400, 0.133)$.
+(d) $\begin{pmatrix}103&3\\3&105\end{pmatrix}$, $\det = 10806$: $\delta = (204, 200)/10806 = (0.01888, 0.01851)$, close to $J^T\mathbf r/100 = (0.02, 0.02)$. A large-$\lambda$ step points along $J^T\mathbf r$, which is minus half the gradient of the RSS: the steepest-descent direction. Its length is about $1/\lambda$ times the gradient: short and safe.
+(e) Lengths $0.667 > 0.422 > 0.026$. $\lambda$ controls the step **length** and, with it, the **direction**: from the Gauss–Newton direction $(1, 0)$ to the gradient direction $(1, 1)$.
+
+**B5.**
+(a) $\partial m/\partial q = (\partial m/\partial k)(dk/dq) = k\,\partial m/\partial k$.
+(b) $J_q = 0.3J = (-2.222, -3.293, -3.614)$; $\sum J_{q,i} r_i = 0.3\cdot 50.68 = 15.21$; $\sum J_{q,i}^2 = 0.09\cdot 320.51 = 28.85$; $\delta q = 0.5271$; $k_1 = 0.3\,e^{0.5271} = 0.5082$. Error $0.004$, against $0.046$ for the step in $k$: here the log-step is better, because $e^{-kt}$ depends on $k$ through a product $kt$ and the log scale fits that shape.
+(c) In $k$: $\sum J_ir_i = -8.409 - 3.189 - 0.126 = -11.72$, $\sum J_i^2 = 4.977 + 0.992 + 0.0098 = 5.980$, $\delta = -1.961$, $k_1 = -0.461$: a **negative** elimination rate, a drug whose concentration grows by itself. In $q$: $J_q = 1.5J$, $\delta q = \delta/1.5 = -1.307$, $k_1 = 1.5\,e^{-1.307} = 0.406$, positive and on its way to $0.504$ (next step $0.5040$). Log-steps are multiplicative: they can shrink $k$ by a large factor but never through zero.
+
+**B6.**
+(a) Write $C = \frac{D}{V}\cdot\frac{k_a}{k_a - k_e}(e^{-k_et} - e^{-k_at})$. After the swap the fraction becomes $\frac{k_e}{k_e - k_a}$ and the bracket $(e^{-k_at} - e^{-k_et})$; both change sign, so their product is $\frac{k_e}{k_a - k_e}(e^{-k_et} - e^{-k_at})$. This equals the original when $\frac{k_e}{V'} = \frac{k_a}{V}$, i.e. $V' = V k_e/k_a$.
+(b) $(0.1906, 1.0151, 20.216\cdot0.1906/1.0151) = (0.1906, 1.0151, 3.796)$.
+(c) The amount in the gut (fast versus slow absorption), the elimination half-life ($\ln 2/k_e$ = 3.6 h versus 0.68 h) and the volume. An **IV dose** has no absorption phase and measures $k_e$ and $V$ directly; plasma volume (about 3 L) makes $V = 3.8$ L implausible for most drugs. Slow-release formulations do show the flip-flop ($k_a < k_e$).
+
+**B7.**
+(a) $h = 10^{-8}$: $\tfrac12 10^{-8} + 2\cdot10^{-6}/10^{-8} \approx 200$: useless (the true derivative is of order 1). $h = 10^{-3}$: $5\times10^{-4} + 2\times10^{-3} = 2.5\times10^{-3}$.
+(b) $h^* = 2\sqrt{\varepsilon_\text{ode}} = 2\times10^{-3}$, error $10^{-3} + 10^{-3} = 2\times10^{-3}$. For $\varepsilon_\text{ode} = 10^{-10}$: $h^* = 2\times10^{-5}$, error $2\times10^{-5}$. A tight solver tolerance only helps if the step is chosen to match; the default $h \approx 10^{-8}$ is right for model values accurate to $10^{-16}$, not for an ODE solution.
+(c) $5 \times 10 \times 36 = 1800$ solves, about 9 s. A model with 20 parameters, 100 starts and a 0.1 s solve takes hours, which is why the inner solver's cost matters.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+rss <- function(p) sum((y - bateman(tt, p[1], p[2], p[3]))^2)
+rss(c(1, 0.2, 20)); rss(c(0.5, 0.1, 10))
+# [1] 0.08346328
+# [1] 93.53426
+tmax <- log(1 / 0.2) / (1 - 0.2)
+c(tmax = tmax, Cmax = bateman(tmax, 1, 0.2, 20), AUC = D / (20 * 0.2))
+#      tmax      Cmax       AUC
+#  2.011797  3.343702 25.000000
+bateman(c(1, 4), 0.2, 0.2, 20)                     # ka = ke: 0/0
+# [1] NaN NaN
+print(D * 0.2 * c(1, 4) * exp(-0.2 * c(1, 4)) / 20, digits = 15)  # the limit ka -> ke
+# [1] 0.818730753077982 1.797315856468886
+print(bateman(c(1, 4), 0.2 + 1e-9, 0.2, 20), digits = 15)        # close to ka = ke
+# [1] 0.818730754387648 1.797315861636336
+plot(tt, y, pch = 19, xlab = "time (h)", ylab = "concentration (mg/L)")
+curve(bateman(x, 1, 0.2, 20), 0, 12, add = TRUE)
+```
+
+### Python
+
+```python
+import matplotlib.pyplot as plt
+
+def rss(p):
+    return np.sum((y - bateman(tt, *p))**2)
+
+print(rss([1, 0.2, 20]), rss([0.5, 0.1, 10]))
+# 0.0834632806408188 93.534259173689
+tmax = np.log(1 / 0.2) / (1 - 0.2)
+print(tmax, bateman(tmax, 1, 0.2, 20), D / (20 * 0.2))     # tmax, Cmax, AUC
+# 2.0117973905426254 3.3437015248821105 25.0
+t2 = np.array([1.0, 4.0]); k = np.float64(0.2)
+with np.errstate(divide="ignore", invalid="ignore"):
+    print(bateman(t2, k, k, 20))                            # ka = ke: 0/0
+# [nan nan]
+print(*(D * k * t2 * np.exp(-k * t2) / 20))                 # the limit ka -> ke
+# 0.8187307530779819 1.7973158564688863
+print(*bateman(t2, k + 1e-9, k, 20))                        # close to ka = ke
+# 0.8187307543876478 1.797315861636336
+t = np.linspace(0, 12, 200)
+plt.plot(tt, y, "o"); plt.plot(t, bateman(t, 1, 0.2, 20))
+plt.xlabel("time (h)"); plt.ylabel("concentration (mg/L)"); plt.show()
+```
+
+### Rust
+
+```rust
+// rust/examples/nonlinear_least_squares_c1.rs  —  cargo run --example nonlinear_least_squares_c1
+// C1: the PK data and the Bateman function; tmax, Cmax, AUC; the 0/0 at ka = ke
+const D: f64 = 100.0;
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
+
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+}
+
+fn rss(p: [f64; 3]) -> f64 {
+    TT.iter().zip(Y.iter()).map(|(&t, &y)| (y - bateman(t, p[0], p[1], p[2])).powi(2)).sum()
+}
+
+fn main() {
+    println!("{} {}", rss([1.0, 0.2, 20.0]), rss([0.5, 0.1, 10.0]));
+    let tmax = (1.0f64 / 0.2).ln() / (1.0 - 0.2);
+    println!("{} {} {}", tmax, bateman(tmax, 1.0, 0.2, 20.0), D / (20.0 * 0.2));
+    for t in [1.0, 4.0] {
+        println!("{} {} {}",
+                 bateman(t, 0.2, 0.2, 20.0),                    // ka = ke: 0/0
+                 D * 0.2 * t * (-0.2 * t).exp() / 20.0,         // the limit ka -> ke
+                 bateman(t, 0.2 + 1e-9, 0.2, 20.0));            // close to ka = ke
+    }
+    // a table instead of a plot
+    for t in [0.0, 1.0, 2.0, 4.0, 8.0, 12.0] {
+        println!("t = {:>4}  C = {:.3}", t, bateman(t, 1.0, 0.2, 20.0));
+    }
+}
+
+// Output:
+// 0.0834632806408188 93.534259173689
+// 2.0117973905426254 3.3437015248821105 25
+// NaN 0.8187307530779819 0.8187307543876478
+// NaN 1.7973158564688863 1.797315861636336
+// t =    0  C = 0.000
+// t =    1  C = 2.818
+// t =    2  C = 3.344
+// t =    4  C = 2.694
+// t =    8  C = 1.260
+// t =   12  C = 0.567
+```
+
+:::
+
+The concentration peaks at 2.01 h at 3.34 mg/L. At $k_a = k_e$ the formula is $0/0$ = `NaN`, although the limit $D k t e^{-kt}/V$ is perfectly finite (0.8187 and 1.7973 mg/L). Close to the diagonal the formula still works but subtracts two exponentials that agree to about 9 digits: catastrophic cancellation (*Error, conditioning and stability*), with a worst-case relative error of $\varepsilon/10^{-9} \approx 2\times10^{-7}$. Here the result differs from the limit by $1.6\times10^{-9}$, which is mostly the genuine effect of $k_a - k_e = 10^{-9}$; at $k_a - k_e = 10^{-13}$ the cancellation would leave only about 3 digits. The ODE form has no such problem; an optimiser that crosses $k_a = k_e$ with the formula can hit `NaN`.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+model <- function(p) bateman(tt, p[1], p[2], p[3])
+jac <- function(p, h = 1e-7) sapply(1:3, function(j) {   # forward differences
+  e <- replace(numeric(3), j, h * p[j]); (model(p + e) - model(p)) / e[j] })
+gauss_newton <- function(p, maxit = 30, tol = 1e-8) {
+  for (k in 1:maxit) {
+    r <- y - model(p)
+    delta <- qr.solve(jac(p), r)               # linear least squares by QR
+    p <- p + delta
+    cat(sprintf("%2d %10.6f %10.6f %10.4f %12.8f\n", k, p[1], p[2], p[3], sum((y - model(p))^2)))
+    if (sqrt(sum(delta^2)) < tol * sqrt(sum(p^2))) break
+  }
+  p
+}
+p_hat <- gauss_newton(c(0.5, 0.1, 10))
+#  1   0.852453   0.085214    18.0348  15.91083738
+#  2   1.124562   0.128428    22.3757   0.97745046
+#  3   1.056583   0.176306    20.8165   0.09134721
+#  4   1.016284   0.189795    20.2448   0.06656857
+#  5   1.015102   0.190607    20.2166   0.06646745
+#  6   1.015072   0.190616    20.2162   0.06646744
+#  7   1.015072   0.190616    20.2162   0.06646744
+#  8   1.015072   0.190616    20.2162   0.06646744
+J <- jac(p_hat)
+c(kappa_J = kappa(J, exact = TRUE), kappa_JtJ = kappa(crossprod(J), exact = TRUE))
+#    kappa_J  kappa_JtJ
+#   169.9301 28876.2541
+fit <- nls(y ~ bateman(tt, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10), trace = TRUE)
+# 93.53426    (2.65e+01): par = (0.5 0.1 10)
+# 15.91084    (1.43e+01): par = (0.8524528 0.08521448 18.03484)
+# 0.9774509   (3.57e+00): par = (1.124562 0.1284276 22.37571)
+# 0.09134723  (6.10e-01): par = (1.056583 0.1763063 20.81648)
+# 0.06656857  (3.89e-02): par = (1.016284 0.1897946 20.24476)
+# 0.06646745  (3.05e-04): par = (1.015102 0.1906071 20.21665)
+# 0.06646744  (1.67e-06): par = (1.015072 0.1906157 20.21621)
+```
+
+### Python
+
+```python
+from scipy.optimize import curve_fit
+
+def model(p):
+    return bateman(tt, *p)
+
+def jac(p, h=1e-7):                         # forward differences, one column per parameter
+    J = np.empty((len(tt), 3))
+    for j in range(3):
+        e = np.zeros(3); e[j] = h * p[j]
+        J[:, j] = (model(p + e) - model(p)) / e[j]
+    return J
+
+def gauss_newton(p, maxit=30, tol=1e-8):
+    p = np.array(p, dtype=float)
+    for k in range(1, maxit + 1):
+        r = y - model(p)
+        Q, R = np.linalg.qr(jac(p))
+        delta = np.linalg.solve(R, Q.T @ r)       # linear least squares by QR
+        p = p + delta
+        print("%2d %10.6f %10.6f %10.4f %12.8f" % (k, *p, np.sum((y - model(p))**2)))
+        if np.linalg.norm(delta) < tol * np.linalg.norm(p):
+            break
+    return p
+
+p_hat = gauss_newton([0.5, 0.1, 10])
+#  1   0.852453   0.085214    18.0348  15.91083737
+#  2   1.124562   0.128428    22.3757   0.97745046
+#  3   1.056583   0.176306    20.8165   0.09134721
+#  4   1.016284   0.189795    20.2448   0.06656857
+#  5   1.015102   0.190607    20.2166   0.06646745
+#  6   1.015072   0.190616    20.2162   0.06646744
+#  7   1.015072   0.190616    20.2162   0.06646744
+#  8   1.015072   0.190616    20.2162   0.06646744
+J = jac(p_hat)
+print(np.linalg.cond(J), np.linalg.cond(J.T @ J))
+# 169.93014448585245 28876.254004982602
+p, cov = curve_fit(bateman, tt, y, p0=[0.5, 0.1, 10])
+print(p)
+# [ 1.01507215  0.19061569 20.21621051]
+```
+
+### Rust
+
+```rust
+// rust/examples/nonlinear_least_squares_c2.rs  —  cargo run --example nonlinear_least_squares_c2
+// C2: Gauss-Newton with a forward-difference Jacobian and a QR least-squares solve
+use nalgebra::{DMatrix, DVector};
+
+const D: f64 = 100.0;
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
+
+fn model(p: &DVector<f64>) -> DVector<f64> {
+    let (ka, ke, v) = (p[0], p[1], p[2]);
+    DVector::from_iterator(12, TT.iter().map(|&t|
+        D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())))
+}
+
+fn jac(p: &DVector<f64>, h: f64) -> DMatrix<f64> {   // forward differences
+    let m0 = model(p);
+    let mut j = DMatrix::zeros(12, 3);
+    for k in 0..3 {
+        let mut pe = p.clone();
+        let e = h * p[k];
+        pe[k] += e;
+        j.set_column(k, &((model(&pe) - &m0) / e));
+    }
+    j
+}
+
+// least squares min ||A x - b|| by Householder QR: R x = Q^T b
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+fn rss(p: &DVector<f64>) -> f64 {
+    (DVector::from_row_slice(&Y) - model(p)).norm_squared()
+}
+
+fn main() {
+    let y = DVector::from_row_slice(&Y);
+    let mut p = DVector::from_vec(vec![0.5, 0.1, 10.0]);
+    for k in 1..=30 {
+        let r = &y - model(&p);
+        let delta = lstsq_qr(&jac(&p, 1e-7), &r);   // linear least squares by QR
+        p += &delta;
+        println!("{:2} {:10.6} {:10.6} {:10.4} {:12.8}", k, p[0], p[1], p[2], rss(&p));
+        if delta.norm() < 1e-8 * p.norm() { break; }
+    }
+    let j = jac(&p, 1e-7);
+    let cond = |m: &DMatrix<f64>| { let s = m.singular_values(); s.max() / s.min() };
+    println!("{} {}", cond(&j), cond(&(j.transpose() * &j)));
+}
+
+// Output:
+//  1   0.852453   0.085214    18.0348  15.91083738
+//  2   1.124562   0.128428    22.3757   0.97745046
+//  3   1.056583   0.176306    20.8165   0.09134721
+//  4   1.016284   0.189795    20.2448   0.06656857
+//  5   1.015102   0.190607    20.2166   0.06646745
+//  6   1.015072   0.190616    20.2162   0.06646744
+//  7   1.015072   0.190616    20.2162   0.06646744
+//  8   1.015072   0.190616    20.2162   0.06646744
+// 169.93014489255694 28876.254143205482
+```
+
+:::
+
+The iterates are the same in all three languages and in `nls` (whose `trace` prints RSS, convergence criterion and parameters). The relative error in $k_a$ goes 0.16, 0.11, 0.04, $10^{-3}$, $3\times10^{-5}$, $10^{-8}$: at the end the exponent roughly doubles per step, close to quadratic (the RSS at the minimum, 0.066, is small). After iteration 6 the iterates change only in the 9th digit, the accuracy of a forward-difference Jacobian. $\kappa(J) = 170$, $\kappa(J^TJ) = 2.9\times10^4$: the normal equations lose about $\log_{10} 170 \approx 2.2$ more digits. Harmless with 16 digits, but a model with nearly redundant parameters has $\kappa(J) \sim 10^7$, and then the normal equations lose everything.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+model <- function(p) bateman(tt, p[1], p[2], p[3])
+jac <- function(p, h = 1e-7) sapply(1:3, function(j) {
+  e <- replace(numeric(3), j, h * p[j]); (model(p + e) - model(p)) / e[j] })
+p0 <- c(3, 0.05, 50)
+p1 <- p0 + qr.solve(jac(p0), y - model(p0))      # one Gauss-Newton step
+p1; sum((y - model(p1))^2)
+# [1] -2.22468806  0.17865474  0.04427022
+# [1] 6.742435e+29
+lev_mar <- function(p, lambda = 0.01, maxit = 200, tol = 1e-8) {
+  rss <- sum((y - model(p))^2)
+  for (k in 1:maxit) {
+    J <- jac(p); r <- y - model(p)
+    Dg <- diag(sqrt(colSums(J^2)))              # Marquardt's scaling
+    delta <- qr.solve(rbind(J, sqrt(lambda) * Dg), c(r, 0, 0, 0))
+    rss_new <- sum((y - model(p + delta))^2)
+    if (is.finite(rss_new) && rss_new < rss) {  # accept: trust the linear model more
+      p <- p + delta; rss <- rss_new; lambda <- lambda / 10
+      cat(sprintf("%2d %10.6f %10.6f %10.4f %12.8f %8.0e\n", k, p[1], p[2], p[3], rss, lambda))
+      if (sqrt(sum(delta^2)) < tol * sqrt(sum(p^2))) break
+    } else lambda <- lambda * 10                # reject: shorter, more downhill step
+  }
+  p
+}
+p_hat <- lev_mar(p0)
+#  3   3.225965   0.053300    39.0665   4.62738725    1e-01
+#  5   2.689343   0.064661    35.6620   3.38872399    1e-01
+#  6   0.937060   0.117697    25.5420   2.38862181    1e-02
+#  7   1.161419   0.169014    21.4926   0.12095111    1e-03
+#  8   1.011431   0.188231    20.3231   0.06845914    1e-04
+#  9   1.015374   0.190557    20.2196   0.06646770    1e-05
+# 10   1.015070   0.190616    20.2162   0.06646744    1e-06
+# 11   1.015072   0.190616    20.2162   0.06646744    1e-07
+# 12   1.015072   0.190616    20.2162   0.06646744    1e-08
+# 15   1.015072   0.190616    20.2162   0.06646744    1e-07
+library(minpack.lm)
+start <- list(ka = 3, ke = 0.05, V = 50)
+tryCatch(nls(y ~ bateman(tt, ka, ke, V), start = start), error = conditionMessage)
+# [1] "singular gradient"
+coef(nlsLM(y ~ bateman(tt, ka, ke, V), start = start))
+#         ka         ke          V
+#  1.0150722  0.1906157 20.2162105
+```
+
+### Python
+
+```python
+from scipy.optimize import curve_fit, least_squares
+
+def model(p):
+    return bateman(tt, *p)
+
+def jac(p, h=1e-7):
+    J = np.empty((len(tt), 3))
+    for j in range(3):
+        e = np.zeros(3); e[j] = h * p[j]
+        J[:, j] = (model(p + e) - model(p)) / e[j]
+    return J
+
+def lstsq_qr(A, b):
+    Q, R = np.linalg.qr(A)
+    return np.linalg.solve(R, Q.T @ b)
+
+p0 = np.array([3, 0.05, 50])
+p1 = p0 + lstsq_qr(jac(p0), y - model(p0))       # one Gauss-Newton step
+print(p1, np.sum((y - model(p1))**2))
+# [-2.22468807  0.17865474  0.04427025] 6.742427237174397e+29
+
+def lev_mar(p, lam=0.01, maxit=200, tol=1e-8):
+    p = np.array(p, dtype=float)
+    rss = np.sum((y - model(p))**2)
+    for k in range(1, maxit + 1):
+        J = jac(p); r = y - model(p)
+        Dg = np.diag(np.sqrt(np.sum(J**2, axis=0)))      # Marquardt's scaling
+        delta = lstsq_qr(np.vstack([J, np.sqrt(lam) * Dg]), np.concatenate([r, np.zeros(3)]))
+        with np.errstate(all="ignore"):
+            rss_new = np.sum((y - model(p + delta))**2)
+        if np.isfinite(rss_new) and rss_new < rss:       # accept
+            p = p + delta; rss = rss_new; lam = lam / 10
+            print("%2d %10.6f %10.6f %10.4f %12.8f %8.0e" % (k, *p, rss, lam))
+            if np.linalg.norm(delta) < tol * np.linalg.norm(p):
+                break
+        else:                                            # reject
+            lam = lam * 10
+    return p
+
+p_hat = lev_mar(p0)
+#  3   3.225965   0.053300    39.0665   4.62738725    1e-01
+#  5   2.689343   0.064661    35.6620   3.38872399    1e-01
+#  6   0.937060   0.117697    25.5420   2.38862178    1e-02
+#  7   1.161419   0.169014    21.4926   0.12095112    1e-03
+#  8   1.011431   0.188231    20.3231   0.06845914    1e-04
+#  9   1.015374   0.190557    20.2196   0.06646770    1e-05
+# 10   1.015070   0.190616    20.2162   0.06646744    1e-06
+# 11   1.015072   0.190616    20.2162   0.06646744    1e-07
+# 12   1.015072   0.190616    20.2162   0.06646744    1e-08
+# 15   1.015072   0.190616    20.2162   0.06646744    1e-07
+print(curve_fit(bateman, tt, y, p0=p0)[0])               # method "lm" (MINPACK)
+# [ 1.01507215  0.19061569 20.21621046]
+fit = least_squares(lambda p: y - model(p), p0)          # method "trf"
+print(fit.x, fit.nfev)
+# [ 1.01507214  0.19061569 20.21621037] 11
+```
+
+### Rust
+
+```rust
+// rust/examples/nonlinear_least_squares_c3.rs  —  cargo run --example nonlinear_least_squares_c3
+// C3: Gauss-Newton overshoots from a bad start; Levenberg-Marquardt gets there
+use nalgebra::{DMatrix, DVector};
+
+const D: f64 = 100.0;
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
+
+fn model(p: &DVector<f64>) -> DVector<f64> {
+    let (ka, ke, v) = (p[0], p[1], p[2]);
+    DVector::from_iterator(12, TT.iter().map(|&t|
+        D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())))
+}
+
+fn jac(p: &DVector<f64>, h: f64) -> DMatrix<f64> {
+    let m0 = model(p);
+    let mut j = DMatrix::zeros(12, 3);
+    for k in 0..3 {
+        let mut pe = p.clone();
+        let e = h * p[k];
+        pe[k] += e;
+        j.set_column(k, &((model(&pe) - &m0) / e));
+    }
+    j
+}
+
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+fn rss(p: &DVector<f64>) -> f64 {
+    (DVector::from_row_slice(&Y) - model(p)).norm_squared()
+}
+
+// scientific notation as R prints it: 1e-01 rather than Rust's 1e-1
+fn sci(x: f64) -> String {
+    let s = format!("{:.0e}", x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn lev_mar(mut p: DVector<f64>, mut lambda: f64, maxit: usize, tol: f64) -> DVector<f64> {
+    let y = DVector::from_row_slice(&Y);
+    let mut rss_old = rss(&p);
+    for k in 1..=maxit {
+        let j = jac(&p, 1e-7);
+        let r = &y - model(&p);
+        // augmented least-squares problem [J; sqrt(lambda) Dg] delta = [r; 0]
+        let mut a = DMatrix::zeros(15, 3);
+        a.rows_mut(0, 12).copy_from(&j);
+        for c in 0..3 {
+            a[(12 + c, c)] = lambda.sqrt() * j.column(c).norm();   // Marquardt's scaling
+        }
+        let mut b = DVector::zeros(15);
+        b.rows_mut(0, 12).copy_from(&r);
+        let delta = lstsq_qr(&a, &b);
+        let p_new = &p + &delta;
+        let rss_new = rss(&p_new);
+        if rss_new.is_finite() && rss_new < rss_old {       // accept
+            p = p_new; rss_old = rss_new; lambda /= 10.0;
+            println!("{:2} {:10.6} {:10.6} {:10.4} {:12.8} {:>8}", k, p[0], p[1], p[2], rss_old, sci(lambda));
+            if delta.norm() < tol * p.norm() { break; }
+        } else {                                            // reject
+            lambda *= 10.0;
+        }
+    }
+    p
+}
+
+fn main() {
+    let y = DVector::from_row_slice(&Y);
+    let p0 = DVector::from_vec(vec![3.0, 0.05, 50.0]);
+    let p1 = &p0 + lstsq_qr(&jac(&p0, 1e-7), &(&y - model(&p0)));   // one Gauss-Newton step
+    println!("{:.8} {:.8} {:.8}  RSS {:e}", p1[0], p1[1], p1[2], rss(&p1));
+    let p = lev_mar(p0, 0.01, 200, 1e-8);
+    println!("{:.7} {:.7} {:.7}", p[0], p[1], p[2]);
+}
+
+// Output:
+// -2.22468806 0.17865474 0.04427022  RSS 6.742435294270007e29
+//  3   3.225965   0.053300    39.0665   4.62738725    1e-01
+//  5   2.689343   0.064661    35.6620   3.38872399    1e-01
+//  6   0.937060   0.117697    25.5420   2.38862179    1e-02
+//  7   1.161419   0.169014    21.4926   0.12095111    1e-03
+//  8   1.011431   0.188231    20.3231   0.06845914    1e-04
+//  9   1.015374   0.190557    20.2196   0.06646770    1e-05
+// 10   1.015070   0.190616    20.2162   0.06646744    1e-06
+// 11   1.015072   0.190616    20.2162   0.06646744    1e-07
+// 12   1.015072   0.190616    20.2162   0.06646744    1e-08
+// 1.0150721 0.1906157 20.2162104
+```
+
+:::
+
+(a) The first Gauss–Newton step lands at $k_a = -2.22$, $V = 0.044$, RSS $6.7\times10^{29}$: the linear model was trusted far beyond where it holds. (b) Levenberg–Marquardt rejects iterations 1, 2 and 4 (λ grows to 1 at first), creeps along the valley, then switches to Gauss–Newton behaviour (λ falls by 10 per step) and converges in 15 passes. Rust stops after 12 passes: near the end the RSS changes only in the last digits, so accept/reject decisions differ between languages; the answer is the same. (c) `nls` stops with "singular gradient": at the Gauss–Newton trial point the Jacobian is numerically rank deficient ($\kappa \approx 2\times10^{12}$). `nlsLM`, `curve_fit` (MINPACK LM) and `least_squares` (trust region) all converge.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+jac <- function(f, p, h = 1e-7) sapply(seq_along(p), function(j) {
+  e <- replace(numeric(length(p)), j, h * max(1, abs(p[j]))); (f(p + e) - f(p)) / e[j] })
+gauss_newton <- function(f, p, maxit = 30, tol = 1e-8) {
+  for (k in 1:maxit) {
+    delta <- qr.solve(jac(f, p), y - f(p))
+    p <- p + delta
+    cat(sprintf("%2d %10.4g %10.4g %10.4g %12.8f\n", k, exp(p[1]), exp(p[2]), exp(p[3]), sum((y - f(p))^2)))
+    if (sqrt(sum(delta^2)) < tol * (1 + sqrt(sum(p^2)))) break
+  }
+  p
+}
+lev_mar <- function(f, p, lambda = 0.01, maxit = 200, tol = 1e-8) {
+  rss <- sum((y - f(p))^2); n <- length(p)
+  for (k in 1:maxit) {
+    J <- jac(f, p); r <- y - f(p)
+    delta <- qr.solve(rbind(J, sqrt(lambda) * diag(sqrt(colSums(J^2)), n)), c(r, rep(0, n)))
+    if (sqrt(sum(delta^2)) < tol * (1 + sqrt(sum(p^2)))) break     # converged
+    rss_new <- sum((y - f(p + delta))^2)
+    if (is.finite(rss_new) && rss_new < rss) {
+      p <- p + delta; rss <- rss_new; lambda <- lambda / 10
+    } else lambda <- lambda * 10
+  }
+  list(par = p, rss = rss, iter = k)
+}
+f_nat <- function(p) bateman(tt, p[1], p[2], p[3])        # p = (ka, ke, V)
+f_log <- function(q) f_nat(exp(q))                         # q = log(p)
+p_hat <- c(1.0150721, 0.1906157, 20.2162104)
+c(natural = kappa(jac(f_nat, p_hat), exact = TRUE),
+  log = kappa(jac(f_log, log(p_hat)), exact = TRUE))
+#    natural        log
+# 169.930145   8.733995
+tryCatch(gauss_newton(f_log, log(c(3, 0.05, 50))), error = conditionMessage)
+#  1     0.5257     0.6553      18.41  18.15469662
+#  2  0.0002179        617   0.003133  63.97247335
+# [1] "singular matrix 'a' in solve"
+l <- lev_mar(f_log, log(c(3, 0.05, 50)))
+c(ka = exp(l$par[1]), ke = exp(l$par[2]), V = exp(l$par[3]), rss = l$rss, iter = l$iter)
+#          ka          ke           V         rss        iter
+#  1.01507214  0.19061569 20.21621038  0.06646744  8.00000000
+library(minpack.lm)
+fit <- nlsLM(y ~ bateman(tt, exp(lka), exp(lke), exp(lV)),
+             start = list(lka = log(3), lke = log(0.05), lV = log(50)))
+exp(coef(fit))
+#        lka        lke         lV
+#  1.0150721  0.1906157 20.2162104
+```
+
+### Python
+
+```python
+from scipy.optimize import curve_fit
+
+def jac(f, p, h=1e-7):
+    J = np.empty((len(tt), len(p)))
+    for j in range(len(p)):
+        e = np.zeros(len(p)); e[j] = h * max(1, abs(p[j]))
+        J[:, j] = (f(p + e) - f(p)) / e[j]
+    return J
+
+def lstsq_qr(A, b):
+    Q, R = np.linalg.qr(A)
+    return np.linalg.solve(R, Q.T @ b)
+
+def gauss_newton(f, p, maxit=30, tol=1e-8):
+    p = np.array(p, dtype=float)
+    for k in range(1, maxit + 1):
+        delta = lstsq_qr(jac(f, p), y - f(p))
+        p = p + delta
+        print("%2d %10.4g %10.4g %10.4g %12.8f" % (k, *np.exp(p), np.sum((y - f(p))**2)))
+        if not np.all(np.isfinite(f(p))):
+            raise np.linalg.LinAlgError("diverged: non-finite parameters or model")
+        if np.linalg.norm(delta) < tol * (1 + np.linalg.norm(p)):
+            break
+    return p
+
+def lev_mar(f, p, lam=0.01, maxit=200, tol=1e-8):
+    p = np.array(p, dtype=float); n = len(p)
+    rss = np.sum((y - f(p))**2)
+    for k in range(1, maxit + 1):
+        J = jac(f, p); r = y - f(p)
+        Dg = np.diag(np.sqrt(np.sum(J**2, axis=0)))
+        delta = lstsq_qr(np.vstack([J, np.sqrt(lam) * Dg]), np.concatenate([r, np.zeros(n)]))
+        if np.linalg.norm(delta) < tol * (1 + np.linalg.norm(p)):
+            break                                         # converged
+        with np.errstate(all="ignore"):
+            rss_new = np.sum((y - f(p + delta))**2)
+        if np.isfinite(rss_new) and rss_new < rss:
+            p = p + delta; rss = rss_new; lam = lam / 10
+        else:
+            lam = lam * 10
+    return p, rss, k
+
+f_nat = lambda p: bateman(tt, *p)            # p = (ka, ke, V)
+f_log = lambda q: f_nat(np.exp(q))           # q = log(p)
+p_hat = np.array([1.0150721, 0.1906157, 20.2162104])
+print(np.linalg.cond(jac(f_nat, p_hat)), np.linalg.cond(jac(f_log, np.log(p_hat))))
+# 169.930144521522 8.733995073815738
+try:
+    with np.errstate(all="ignore"):
+        gauss_newton(f_log, np.log([3, 0.05, 50]))
+except np.linalg.LinAlgError as e:
+    print("Error:", e)
+#  1     0.5257     0.6553      18.41  18.15469664
+#  2  0.0002179        617   0.003133  63.97247390
+#  3        inf          0        inf          nan
+# Error: diverged: non-finite parameters or model
+q, rss, k = lev_mar(f_log, np.log([3, 0.05, 50]))
+print(np.exp(q), rss, k)
+# [ 1.01507214  0.19061569 20.21621039] 0.06646743904580513 8
+p = curve_fit(lambda t, lka, lke, lV: bateman(t, np.exp(lka), np.exp(lke), np.exp(lV)),
+              tt, y, p0=np.log([3, 0.05, 50]))[0]
+print(np.exp(p))
+# [ 1.01507214  0.19061569 20.21621038]
+```
+
+### Rust
+
+```rust
+// rust/examples/nonlinear_least_squares_c4.rs  —  cargo run --example nonlinear_least_squares_c4
+// C4: log-parameterisation: conditioning, Gauss-Newton still diverges, Levenberg-Marquardt converges
+use nalgebra::{DMatrix, DVector};
+
+const D: f64 = 100.0;
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
+
+fn f_nat(p: &DVector<f64>) -> DVector<f64> {               // p = (ka, ke, V)
+    let (ka, ke, v) = (p[0], p[1], p[2]);
+    DVector::from_iterator(12, TT.iter().map(|&t|
+        D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())))
+}
+fn f_log(q: &DVector<f64>) -> DVector<f64> { f_nat(&q.map(f64::exp)) }   // q = log(p)
+
+fn jac(f: &dyn Fn(&DVector<f64>) -> DVector<f64>, p: &DVector<f64>) -> DMatrix<f64> {
+    let m0 = f(p);
+    let mut j = DMatrix::zeros(m0.len(), p.len());
+    for k in 0..p.len() {
+        let mut pe = p.clone();
+        let e = 1e-7 * p[k].abs().max(1.0);
+        pe[k] += e;
+        j.set_column(k, &((f(&pe) - &m0) / e));
+    }
+    j
+}
+
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+fn rss(f: &dyn Fn(&DVector<f64>) -> DVector<f64>, p: &DVector<f64>) -> f64 {
+    (DVector::from_row_slice(&Y) - f(p)).norm_squared()
+}
+
+// returns (parameters, RSS, iterations)
+fn lev_mar(f: &dyn Fn(&DVector<f64>) -> DVector<f64>, mut p: DVector<f64>)
+    -> (DVector<f64>, f64, usize) {
+    let (n, m) = (p.len(), Y.len());
+    let y = DVector::from_row_slice(&Y);
+    let (mut lambda, mut rss_old, mut k) = (0.01f64, rss(f, &p), 0);
+    while k < 200 {
+        k += 1;
+        let j = jac(f, &p);
+        let mut a = DMatrix::zeros(m + n, n);
+        a.rows_mut(0, m).copy_from(&j);
+        for c in 0..n { a[(m + c, c)] = lambda.sqrt() * j.column(c).norm(); }
+        let mut b = DVector::zeros(m + n);
+        b.rows_mut(0, m).copy_from(&(&y - f(&p)));
+        let delta = lstsq_qr(&a, &b);
+        if delta.norm() < 1e-8 * (1.0 + p.norm()) { break; }     // converged
+        let p_new = &p + &delta;
+        let rss_new = rss(f, &p_new);
+        if rss_new.is_finite() && rss_new < rss_old {
+            p = p_new; rss_old = rss_new; lambda /= 10.0;
+        } else {
+            lambda *= 10.0;
+        }
+    }
+    (p, rss_old, k)
+}
+
+// like C's %.4g
+fn g4(x: f64) -> String {
+    if !x.is_finite() || x == 0.0 { return format!("{}", x); }
+    let e = x.abs().log10().floor() as i32;
+    if e < -4 || e >= 4 { format!("{:.3e}", x) } else {
+        let s = format!("{:.*}", (3 - e).max(0) as usize, x);
+        if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s }
+    }
+}
+
+fn main() {
+    let cond = |m: &DMatrix<f64>| { let s = m.singular_values(); s.max() / s.min() };
+    let p_hat = DVector::from_vec(vec![1.0150721, 0.1906157, 20.2162104]);
+    println!("{} {}", cond(&jac(&f_nat, &p_hat)), cond(&jac(&f_log, &p_hat.map(f64::ln))));
+
+    // Gauss-Newton in log parameters from the bad start
+    let y = DVector::from_row_slice(&Y);
+    let mut q = DVector::from_vec(vec![3.0f64.ln(), 0.05f64.ln(), 50.0f64.ln()]);
+    for k in 1..=30 {
+        let delta = lstsq_qr(&jac(&f_log, &q), &(&y - f_log(&q)));
+        q += &delta;
+        let pk = q.map(f64::exp);
+        println!("{:2} {:>10} {:>10} {:>10} {:12.8}", k, g4(pk[0]), g4(pk[1]), g4(pk[2]), rss(&f_log, &q));
+        if !f_log(&q).iter().all(|v| v.is_finite()) { println!("Error: diverged"); break; }
+        if delta.norm() < 1e-8 * (1.0 + q.norm()) { break; }
+    }
+    // Levenberg-Marquardt in log parameters from the same start
+    let q0 = DVector::from_vec(vec![3.0f64.ln(), 0.05f64.ln(), 50.0f64.ln()]);
+    let (q, r, k) = lev_mar(&f_log, q0);
+    let p = q.map(f64::exp);
+    println!("{:.7} {:.7} {:.7}  RSS {:.7}  iter {}", p[0], p[1], p[2], r, k);
+}
+
+// Output:
+// 169.9301447149905 8.733995070045335
+//  1     0.5257     0.6553      18.41  18.15469662
+//  2  0.0002179        617   0.003133  63.97247321
+//  3        inf          0        inf          NaN
+// Error: diverged
+// 1.0150721 0.1906157 20.2162104  RSS 0.0664674  iter 8
+```
+
+:::
+
+(a) $\kappa(J)$ falls from 170 to 8.7: in log-parameters every column is a relative sensitivity, so $V$'s column is no longer small just because $V$ is large. (b) Gauss–Newton in logs keeps the rates positive, but it still overshoots: after two steps $k_a = 2\times10^{-4}$, $k_e = 617$, $V = 0.003$, and the next step overflows (R: "singular matrix", Python and Rust: `inf`/`NaN`). Positivity is not the same as convergence. (c) Levenberg–Marquardt in logs converges in 8 passes (15 in natural parameters, C3), and `nlsLM` / `curve_fit` with `exp()` inside agree to 7 digits.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve); library(minpack.lm)
+pk_rhs <- function(t, A, p) list(c(-p[1] * A[1],                # gut
+                                    p[1] * A[1] - p[2] * A[2]))  # central compartment
+pk_ode <- function(p, tol = 1e-10) {
+  out <- ode(c(D, 0), c(0, tt), pk_rhs, p, rtol = tol, atol = tol)
+  out[-1, 3] / p[3]                       # amount in the central compartment / V
+}
+max(abs(pk_ode(c(1, 0.2, 20)) - bateman(tt, 1, 0.2, 20)))   # check against the formula
+# [1] 8.49889e-11
+resid <- function(q, ...) y - pk_ode(exp(q), ...)
+fit <- nls.lm(log(c(0.5, 0.1, 10)), fn = resid,
+              control = nls.lm.control(epsfcn = 1e-10))
+print(exp(fit$par), digits = 8)
+# [1]  1.0150721  0.1906157 20.2162095
+c(rss = fit$deviance, iter = fit$niter)
+#        rss       iter
+# 0.06646744 6.00000000
+fit$message
+# [1] "Relative error in the sum of squares is at most `ftol'."
+```
+
+### Python
+
+```python
+from scipy.integrate import solve_ivp
+from scipy.optimize import least_squares
+
+def pk_rhs(t, A, ka, ke):
+    return [-ka * A[0],                    # gut
+            ka * A[0] - ke * A[1]]         # central compartment
+
+def pk_ode(p, tol=1e-10):
+    sol = solve_ivp(pk_rhs, (0, tt[-1]), [D, 0], t_eval=tt, args=(p[0], p[1]),
+                    rtol=tol, atol=tol)
+    return sol.y[1] / p[2]                 # amount in the central compartment / V
+
+print(np.max(np.abs(pk_ode([1, 0.2, 20]) - bateman(tt, 1, 0.2, 20))))
+# 4.2593928384349056e-11
+resid = lambda q, tol=1e-10: y - pk_ode(np.exp(q), tol)
+fit = least_squares(resid, np.log([0.5, 0.1, 10]))
+print(np.exp(fit.x))
+# [ 1.01507222  0.19061567 20.21621128]
+print(2 * fit.cost, fit.nfev)
+# 0.06646743904041613 7
+print(fit.message)
+# `ftol` termination condition is satisfied.
+```
+
+### Rust
+
+```rust
+// rust/examples/nonlinear_least_squares_c5.rs  —  cargo run --release --example nonlinear_least_squares_c5
+// C5: fit the PK model as an ODE: Dopri5 (ode_solvers) inside the residual, hand-written LM
+use nalgebra::{DMatrix, DVector};
+use ode_solvers::continuous_output_model::ContinuousOutputModel;
+use ode_solvers::{Dopri5, System, Vector2};
+
+const D: f64 = 100.0;
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
+
+struct Pk { ka: f64, ke: f64 }
+impl System<f64, Vector2<f64>> for Pk {
+    fn system(&self, _t: f64, a: &Vector2<f64>, da: &mut Vector2<f64>) {
+        da[0] = -self.ka * a[0];                        // gut
+        da[1] = self.ka * a[0] - self.ke * a[1];        // central compartment
+    }
+}
+
+// concentrations at the sampling times: amount in the central compartment / V
+fn pk_ode(p: &DVector<f64>, tol: f64) -> DVector<f64> {
+    let mut s = Dopri5::new(Pk { ka: p[0], ke: p[1] }, 0.0, 12.0, 12.0,
+                            Vector2::new(D, 0.0), tol, tol);
+    let mut dense = ContinuousOutputModel::default();
+    if s.integrate_with_continuous_output_model(&mut dense).is_err() {
+        return DVector::from_element(12, f64::NAN);
+    }
+    DVector::from_iterator(12, TT.iter().map(|&t| dense.evaluate(t).unwrap()[1] / p[2]))
+}
+
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+}
+
+fn jac(f: &dyn Fn(&DVector<f64>) -> DVector<f64>, p: &DVector<f64>) -> DMatrix<f64> {
+    let m0 = f(p);
+    let mut j = DMatrix::zeros(m0.len(), p.len());
+    for k in 0..p.len() {
+        let mut pe = p.clone();
+        let e = 1e-7 * p[k].abs().max(1.0);
+        pe[k] += e;
+        j.set_column(k, &((f(&pe) - &m0) / e));
+    }
+    j
+}
+
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+fn lev_mar(f: &dyn Fn(&DVector<f64>) -> DVector<f64>, mut p: DVector<f64>)
+    -> (DVector<f64>, f64, usize) {
+    let (n, m) = (p.len(), Y.len());
+    let y = DVector::from_row_slice(&Y);
+    let rss = |p: &DVector<f64>| (&y - f(p)).norm_squared();
+    let (mut lambda, mut rss_old, mut k) = (0.01f64, rss(&p), 0);
+    while k < 200 {
+        k += 1;
+        let j = jac(f, &p);
+        let mut a = DMatrix::zeros(m + n, n);
+        a.rows_mut(0, m).copy_from(&j);
+        for c in 0..n { a[(m + c, c)] = lambda.sqrt() * j.column(c).norm(); }
+        let mut b = DVector::zeros(m + n);
+        b.rows_mut(0, m).copy_from(&(&y - f(&p)));
+        let delta = lstsq_qr(&a, &b);
+        if delta.norm() < 1e-8 * (1.0 + p.norm()) { break; }
+        let p_new = &p + &delta;
+        let rss_new = rss(&p_new);
+        if rss_new.is_finite() && rss_new < rss_old {
+            p = p_new; rss_old = rss_new; lambda /= 10.0;
+        } else {
+            lambda *= 10.0;
+        }
+    }
+    (p, rss_old, k)
+}
+
+fn main() {
+    let p_true = DVector::from_vec(vec![1.0, 0.2, 20.0]);
+    let c = pk_ode(&p_true, 1e-10);
+    let err = TT.iter().enumerate().map(|(i, &t)| (c[i] - bateman(t, 1.0, 0.2, 20.0)).abs())
+        .fold(0.0, f64::max);
+    println!("{:e}", err);                                  // check against the formula
+    let f = |q: &DVector<f64>| pk_ode(&q.map(f64::exp), 1e-10);
+    let q0 = DVector::from_vec(vec![0.5f64.ln(), 0.1f64.ln(), 10.0f64.ln()]);
+    let (q, rss, k) = lev_mar(&f, q0);
+    let p = q.map(f64::exp);
+    println!("{:.7} {:.7} {:.7}", p[0], p[1], p[2]);
+    println!("RSS {:.8}  iterations {}", rss, k);
+}
+
+// Output:
+// 1.9843238163730348e-11
+// 1.0150721 0.1906157 20.2162102
+// RSS 0.06646744  iterations 7
+```
+
+:::
+
+The ODE solution agrees with the Bateman function to $10^{-10}$, and the fitted parameters agree with the closed-form fit to about 7 digits ($\hat V$ = 20.21621 in all three). Each residual evaluation is now an ODE solve; the fit needs a few dozen of them.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve); library(minpack.lm)
+pk_rhs <- function(t, A, p) list(c(-p[1] * A[1], p[1] * A[1] - p[2] * A[2]))
+pk_ode <- function(p, tol = 1e-10) {
+  out <- ode(c(D, 0), c(0, tt), pk_rhs, p, rtol = tol, atol = tol)
+  out[-1, 3] / p[3]
+}
+resid <- function(q, tol) y - pk_ode(exp(q), tol)
+rss_exact <- function(p) sum((y - bateman(tt, p[1], p[2], p[3]))^2)
+for (tol in 10^-c(2, 3, 4, 6, 8, 10)) {
+  fit <- nls.lm(log(c(0.5, 0.1, 10)), fn = resid, tol = tol,
+                control = nls.lm.control(epsfcn = 1e-10))
+  p <- exp(fit$par)
+  cat(sprintf("%.0e  %.7f %.7f %.5f  RSS %.8f (true %.8f)  iter %d\n",
+              tol, p[1], p[2], p[3], fit$deviance, rss_exact(p), fit$niter))
+}
+# 1e-02  1.0171978 0.1905501 20.22712  RSS 0.06596930 (true 0.06648785)  iter 6
+# 1e-03  1.0152101 0.1905907 20.21769  RSS 0.06640724 (true 0.06646749)  iter 6
+# 1e-04  1.0150054 0.1906238 20.21556  RSS 0.06645051 (true 0.06646745)  iter 6
+# 1e-06  1.0150719 0.1906158 20.21620  RSS 0.06646780 (true 0.06646744)  iter 6
+# 1e-08  1.0150721 0.1906157 20.21621  RSS 0.06646744 (true 0.06646744)  iter 6
+# 1e-10  1.0150721 0.1906157 20.21621  RSS 0.06646744 (true 0.06646744)  iter 6
+p_hat <- c(1.0150721, 0.1906157, 20.2162104)
+ka <- seq(0.9, 1.1, length.out = 401)                     # (b) noise in the objective
+for (tol in 10^-c(3, 6, 10)) {
+  err <- sapply(ka, function(k) { p <- c(k, p_hat[2:3])
+    sum((y - pk_ode(p, tol))^2) - rss_exact(p) })
+  cat(sprintf("%.0e  max |RSS_ode - RSS_exact| = %.1e\n", tol, max(abs(err))))
+}
+# 1e-03  max |RSS_ode - RSS_exact| = 1.0e-04
+# 1e-06  max |RSS_ode - RSS_exact| = 4.8e-07
+# 1e-10  max |RSS_ode - RSS_exact| = 5.0e-10
+rss_exact(c(1.01 * p_hat[1], p_hat[2:3])) - rss_exact(p_hat)  # 1 % change in ka
+# [1] 0.00106261
+```
+
+### Python
+
+```python
+from scipy.integrate import solve_ivp
+from scipy.optimize import least_squares
+
+def pk_rhs(t, A, ka, ke):
+    return [-ka * A[0], ka * A[0] - ke * A[1]]
+
+def pk_ode(p, rtol=1e-10, atol=1e-10):
+    sol = solve_ivp(pk_rhs, (0, tt[-1]), [D, 0], t_eval=tt, args=(p[0], p[1]),
+                    rtol=rtol, atol=atol)
+    return sol.y[1] / p[2]
+
+rss_exact = lambda p: np.sum((y - bateman(tt, *p))**2)
+for rtol, atol in [(1e-2, 1e-2), (1e-3, 1e-6), (1e-4, 1e-4), (1e-6, 1e-6),
+                   (1e-8, 1e-8), (1e-10, 1e-10)]:
+    fit = least_squares(lambda q: y - pk_ode(np.exp(q), rtol, atol), np.log([0.5, 0.1, 10]))
+    p = np.exp(fit.x)
+    print("%.0e %.0e  %.7f %.7f %.5f  RSS %.8f (true %.8f)  nfev %d" %
+          (rtol, atol, *p, 2 * fit.cost, rss_exact(p), fit.nfev))
+# 1e-02 1e-02  1.0159329 0.1903330 20.23584  RSS 0.06737495 (true 0.06647795)  nfev 11
+# 1e-03 1e-06  1.0149652 0.1906184 20.21559  RSS 0.06638142 (true 0.06646749)  nfev 7
+# 1e-04 1e-04  1.0151036 0.1906113 20.21647  RSS 0.06648274 (true 0.06646744)  nfev 7
+# 1e-06 1e-06  1.0150714 0.1906158 20.21620  RSS 0.06646742 (true 0.06646744)  nfev 7
+# 1e-08 1e-08  1.0150722 0.1906157 20.21621  RSS 0.06646744 (true 0.06646744)  nfev 8
+# 1e-10 1e-10  1.0150722 0.1906157 20.21621  RSS 0.06646744 (true 0.06646744)  nfev 7
+p_hat = np.array([1.0150721, 0.1906157, 20.2162104])
+ka = np.linspace(0.9, 1.1, 401)                         # (b) noise in the objective
+for tol in [1e-3, 1e-6, 1e-10]:
+    err = [np.sum((y - pk_ode([k, *p_hat[1:]], tol, tol))**2) - rss_exact([k, *p_hat[1:]])
+           for k in ka]
+    print("%.0e  max |RSS_ode - RSS_exact| = %.1e" % (tol, np.max(np.abs(err))))
+# 1e-03  max |RSS_ode - RSS_exact| = 2.5e-04
+# 1e-06  max |RSS_ode - RSS_exact| = 2.8e-07
+# 1e-10  max |RSS_ode - RSS_exact| = 3.2e-11
+print(rss_exact([1.01 * p_hat[0], *p_hat[1:]]) - rss_exact(p_hat))   # 1 % change in ka
+# 0.0010626104915004292
+```
+
+### Rust
+
+```rust
+// rust/examples/nonlinear_least_squares_c6.rs  —  cargo run --release --example nonlinear_least_squares_c6
+// C6: how the tolerance of the inner ODE solver (Dopri5) affects the fit
+use nalgebra::{DMatrix, DVector};
+use ode_solvers::continuous_output_model::ContinuousOutputModel;
+use ode_solvers::{Dopri5, System, Vector2};
+
+const D: f64 = 100.0;
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
+
+struct Pk { ka: f64, ke: f64 }
+impl System<f64, Vector2<f64>> for Pk {
+    fn system(&self, _t: f64, a: &Vector2<f64>, da: &mut Vector2<f64>) {
+        da[0] = -self.ka * a[0];                        // gut
+        da[1] = self.ka * a[0] - self.ke * a[1];        // central compartment
+    }
+}
+
+// concentrations at the sampling times: amount in the central compartment / V
+fn pk_ode(p: &DVector<f64>, tol: f64) -> DVector<f64> {
+    let mut s = Dopri5::new(Pk { ka: p[0], ke: p[1] }, 0.0, 12.0, 12.0,
+                            Vector2::new(D, 0.0), tol, tol);
+    let mut dense = ContinuousOutputModel::default();
+    if s.integrate_with_continuous_output_model(&mut dense).is_err() {
+        return DVector::from_element(12, f64::NAN);
+    }
+    DVector::from_iterator(12, TT.iter().map(|&t| dense.evaluate(t).unwrap()[1] / p[2]))
+}
+
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+}
+
+fn jac(f: &dyn Fn(&DVector<f64>) -> DVector<f64>, p: &DVector<f64>) -> DMatrix<f64> {
+    let m0 = f(p);
+    let mut j = DMatrix::zeros(m0.len(), p.len());
+    for k in 0..p.len() {
+        let mut pe = p.clone();
+        let e = 1e-7 * p[k].abs().max(1.0);
+        pe[k] += e;
+        j.set_column(k, &((f(&pe) - &m0) / e));
+    }
+    j
+}
+
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+fn lev_mar(f: &dyn Fn(&DVector<f64>) -> DVector<f64>, mut p: DVector<f64>)
+    -> (DVector<f64>, f64, usize) {
+    let (n, m) = (p.len(), Y.len());
+    let y = DVector::from_row_slice(&Y);
+    let rss = |p: &DVector<f64>| (&y - f(p)).norm_squared();
+    let (mut lambda, mut rss_old, mut k) = (0.01f64, rss(&p), 0);
+    while k < 200 {
+        k += 1;
+        let j = jac(f, &p);
+        let mut a = DMatrix::zeros(m + n, n);
+        a.rows_mut(0, m).copy_from(&j);
+        for c in 0..n { a[(m + c, c)] = lambda.sqrt() * j.column(c).norm(); }
+        let mut b = DVector::zeros(m + n);
+        b.rows_mut(0, m).copy_from(&(&y - f(&p)));
+        let delta = lstsq_qr(&a, &b);
+        if delta.norm() < 1e-8 * (1.0 + p.norm()) { break; }
+        let p_new = &p + &delta;
+        let rss_new = rss(&p_new);
+        if rss_new.is_finite() && rss_new < rss_old {
+            p = p_new; rss_old = rss_new; lambda /= 10.0;
+        } else {
+            lambda *= 10.0;
+        }
+    }
+    (p, rss_old, k)
+}
+
+fn main() {
+    let y = DVector::from_row_slice(&Y);
+    let rss_exact = |p: &DVector<f64>| -> f64 {
+        TT.iter().enumerate().map(|(i, &t)| (y[i] - bateman(t, p[0], p[1], p[2])).powi(2)).sum()
+    };
+    for tol in [1e-2, 1e-3, 1e-4, 1e-6, 1e-8, 1e-10] {
+        let f = |q: &DVector<f64>| pk_ode(&q.map(f64::exp), tol);
+        let q0 = DVector::from_vec(vec![0.5f64.ln(), 0.1f64.ln(), 10.0f64.ln()]);
+        let (q, rss, k) = lev_mar(&f, q0);
+        let p = q.map(f64::exp);
+        println!("{:.0e}  {:.7} {:.7} {:.5}  RSS {:.8} (true {:.8})  iter {}",
+                 tol, p[0], p[1], p[2], rss, rss_exact(&p), k);
+    }
+    // (b) noise in the objective along a line in ka
+    let p_hat = [1.0150721, 0.1906157, 20.2162104];
+    for tol in [1e-3, 1e-6, 1e-10] {
+        let mut worst = 0.0f64;
+        for i in 0..=400 {
+            let p = DVector::from_vec(vec![0.9 + 0.2 * i as f64 / 400.0, p_hat[1], p_hat[2]]);
+            let rss_ode = (&y - pk_ode(&p, tol)).norm_squared();
+            worst = worst.max((rss_ode - rss_exact(&p)).abs());
+        }
+        println!("{:.0e}  max |RSS_ode - RSS_exact| = {:.1e}", tol, worst);
+    }
+    let p1 = DVector::from_vec(vec![1.01 * p_hat[0], p_hat[1], p_hat[2]]);
+    println!("{}", rss_exact(&p1) - rss_exact(&DVector::from_row_slice(&p_hat)));
+}
+
+// Output:
+// 1e-2  1.0153537 0.1905465 20.22159  RSS 0.06642736 (true 0.06646807)  iter 7
+// 1e-3  1.0151607 0.1906004 20.21707  RSS 0.06646982 (true 0.06646746)  iter 7
+// 1e-4  1.0150476 0.1906189 20.21592  RSS 0.06646971 (true 0.06646744)  iter 7
+// 1e-6  1.0150728 0.1906156 20.21622  RSS 0.06646735 (true 0.06646744)  iter 17
+// 1e-8  1.0150721 0.1906157 20.21621  RSS 0.06646744 (true 0.06646744)  iter 7
+// 1e-10  1.0150721 0.1906157 20.21621  RSS 0.06646744 (true 0.06646744)  iter 7
+// 1e-3  max |RSS_ode - RSS_exact| = 3.1e-5
+// 1e-6  max |RSS_ode - RSS_exact| = 1.2e-7
+// 1e-10  max |RSS_ode - RSS_exact| = 2.0e-11
+// 0.0010626104915004292
+```
+
+:::
+
+(a) With `tol = 1e-2` the fitted $k_a$ is wrong in the 3rd digit, with $10^{-3}$ (scipy's default `rtol`!) in the 4th. Worse, the **reported** RSS is wrong: at `tol = 1e-3` R reports 0.06641, *below* the true minimum 0.06647; the optimiser partly fits the solver's error. From `tol = 1e-8` on, all digits shown agree with the closed-form fit. In Rust, `tol = 1e-6` needs 17 iterations instead of 7: the noisy objective makes acceptance decisions erratic. (b) The solver error in the RSS is $10^{-4}$ at `tol = 1e-3`, comparable with the RSS change from a 0.3 % change in $k_a$ ($0.0011 \times 0.3^2$); at $10^{-10}$ it is about $10^{-10}$. Rule: set `rtol`/`atol` explicitly, 100–1000 times tighter than the precision you want, refit with a tighter tolerance, and keep the digits that agree. Different solvers (lsoda, RK45, Dopri5) give different numbers at loose tolerances and the same at tight ones.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(minpack.lm)
+resid <- function(q) y - bateman(tt, exp(q[1]), exp(q[2]), exp(q[3]))
+g <- c(0.03, 0.1, 0.3, 1, 3, 10)
+starts <- expand.grid(ka = g, ke = 1.5 * g)        # 36 starts, never ka = ke
+ends <- t(apply(starts, 1, function(s) {
+  fit <- nls.lm(log(c(s, 10)), fn = resid, control = nls.lm.control(maxiter = 200))
+  c(exp(fit$par), rss = fit$deviance)
+}))
+colnames(ends) <- c("ka", "ke", "V", "rss")
+as.data.frame(table(end = apply(signif(ends, 4), 1, paste, collapse = "  ")))
+#                                      end Freq
+# 1          0.1906  1.015  3.796  0.06647   21
+# 2          1.015  0.1906  20.22  0.06647   14
+# 3 3.872e+15  1.274e-27  5.249e+16  64.54    1
+```
+
+### Python
+
+```python
+from collections import Counter
+from scipy.optimize import least_squares
+
+resid = lambda q: y - bateman(tt, *np.exp(q))
+g = [0.03, 0.1, 0.3, 1, 3, 10]
+ends = []
+for ke0 in 1.5 * np.array(g):               # 36 starts, never ka = ke
+    for ka0 in g:
+        with np.errstate(all="ignore"):
+            fit = least_squares(resid, np.log([ka0, ke0, 10]), max_nfev=2000)
+        ends.append("  ".join("%.4g" % v for v in [*np.exp(fit.x), 2 * fit.cost]))
+for end, n in Counter(ends).most_common():
+    print(n, " ", end)
+# 21   0.1906  1.015  3.796  0.06647
+# 15   1.015  0.1906  20.22  0.06647
+```
+
+### Rust
+
+```rust
+// rust/examples/nonlinear_least_squares_c7.rs  —  cargo run --example nonlinear_least_squares_c7
+// C7: multistart: Levenberg-Marquardt (log parameters) from a 6 x 6 grid of starts
+use nalgebra::{DMatrix, DVector};
+
+const D: f64 = 100.0;
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
+
+fn f_nat(p: &DVector<f64>) -> DVector<f64> {               // p = (ka, ke, V)
+    let (ka, ke, v) = (p[0], p[1], p[2]);
+    DVector::from_iterator(12, TT.iter().map(|&t|
+        D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())))
+}
+fn f_log(q: &DVector<f64>) -> DVector<f64> { f_nat(&q.map(f64::exp)) }   // q = log(p)
+
+fn jac(f: &dyn Fn(&DVector<f64>) -> DVector<f64>, p: &DVector<f64>) -> DMatrix<f64> {
+    let m0 = f(p);
+    let mut j = DMatrix::zeros(m0.len(), p.len());
+    for k in 0..p.len() {
+        let mut pe = p.clone();
+        let e = 1e-7 * p[k].abs().max(1.0);
+        pe[k] += e;
+        j.set_column(k, &((f(&pe) - &m0) / e));
+    }
+    j
+}
+
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> Option<DVector<f64>> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned())   // None if R is singular
+}
+
+fn rss(f: &dyn Fn(&DVector<f64>) -> DVector<f64>, p: &DVector<f64>) -> f64 {
+    (DVector::from_row_slice(&Y) - f(p)).norm_squared()
+}
+
+// returns (parameters, RSS, iterations)
+fn lev_mar(f: &dyn Fn(&DVector<f64>) -> DVector<f64>, mut p: DVector<f64>)
+    -> (DVector<f64>, f64, usize) {
+    let (n, m) = (p.len(), Y.len());
+    let y = DVector::from_row_slice(&Y);
+    let (mut lambda, mut rss_old, mut k) = (0.01f64, rss(f, &p), 0);
+    while k < 200 {
+        k += 1;
+        let j = jac(f, &p);
+        let mut a = DMatrix::zeros(m + n, n);
+        a.rows_mut(0, m).copy_from(&j);
+        for c in 0..n { a[(m + c, c)] = lambda.sqrt() * j.column(c).norm(); }
+        let mut b = DVector::zeros(m + n);
+        b.rows_mut(0, m).copy_from(&(&y - f(&p)));
+        let delta = match lstsq_qr(&a, &b) { Some(d) => d, None => break };
+        if !delta.iter().all(|v| v.is_finite()) { break; }
+        if delta.norm() < 1e-8 * (1.0 + p.norm()) { break; }     // converged
+        let p_new = &p + &delta;
+        let rss_new = rss(f, &p_new);
+        if rss_new.is_finite() && rss_new < rss_old {
+            p = p_new; rss_old = rss_new; lambda /= 10.0;
+        } else {
+            lambda *= 10.0;
+        }
+    }
+    (p, rss_old, k)
+}
+
+// like C's %.4g
+fn g4(x: f64) -> String {
+    if !x.is_finite() || x == 0.0 { return format!("{}", x); }
+    let e = x.abs().log10().floor() as i32;
+    if e < -4 || e >= 4 { format!("{:.3e}", x) } else {
+        let s = format!("{:.*}", (3 - e).max(0) as usize, x);
+        if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s }
+    }
+}
+
+fn main() {
+    let g: [f64; 6] = [0.03, 0.1, 0.3, 1.0, 3.0, 10.0];
+    let mut ends: Vec<(String, usize)> = Vec::new();
+    for &ke0 in g.iter() {
+        for &ka0 in g.iter() {                    // 36 starts, ke0 = 1.5 g: never ka = ke
+            let q0 = DVector::from_vec(vec![ka0.ln(), (1.5 * ke0).ln(), 10.0f64.ln()]);
+            let (q, rss, _) = lev_mar(&f_log, q0);
+            let p = q.map(f64::exp);
+            let key = format!("{}  {}  {}  {}", g4(p[0]), g4(p[1]), g4(p[2]), g4(rss));
+            match ends.iter_mut().find(|(e, _)| *e == key) {
+                Some((_, n)) => *n += 1,
+                None => ends.push((key, 1)),
+            }
+        }
+    }
+    ends.sort_by(|a, b| b.1.cmp(&a.1));
+    for (end, n) in ends { println!("{:2}   {}", n, end); }
+}
+
+// Output:
+// 20   0.1906  1.015  3.796  0.06647
+// 13   1.015  0.1906  20.22  0.06647
+//  1   4.754e21  0.01393  57.05  12.01
+//  1   1.072e15  1.138e-5  139.9  34.3
+//  1   3.784e-8  1.706e-62  2.289e-5  49.52
+```
+
+:::
+
+There are two minima with **identical** RSS (0.06646744 to all printed digits): $(1.015, 0.1906, 20.22)$ and its flip-flop mirror $(0.1906, 1.015, 3.796)$. Starts with $k_a > k_e$ mostly end in the first, starts with $k_a < k_e$ in the second. Some starts run off: $k_a$ to $10^{15}$ or $10^{21}$, $k_e$ or $V$ to absurd values, with RSS 12–65 (64.54 = $\sum y_i^2$ means the model predicts zero). Which starts fail differs between `nls.lm` (1 failure), `least_squares` (none) and our LM (3), because each takes different steps; always compare the RSS of the ends. The data cannot choose between the two minima; for an immediate-release tablet the usual assumption $k_a > k_e$ (and a plausible volume of 20 L rather than 3.8 L) points to the first, but that is prior knowledge, not a result of the fit.
+:::
+
+## Where this leads
+
+- ***Identifiability and uncertainty of fitted parameters*** (next unit): the flip-flop is a **structural** non-identifiability; the same PK model and data are used there for standard errors from $J^TJ$, profile likelihoods and practical non-identifiability (long flat valleys like the one in the RSS landscape).
+- ***Gradient descent, Newton and quasi-Newton***: Levenberg–Marquardt's two limits; Gauss–Newton as Newton with the Hessian approximated by $J^TJ$; general-purpose optimisers (`optim`, `scipy.optimize.minimize`) for objectives that are not sums of squares, such as Poisson or negative-binomial likelihoods.
+- ***Constraints and linear programming***: bounds on parameters as an alternative to log-parameters.
+- ***Stiffness and implicit methods***: a stiff model inside a fit needs an implicit solver (lsoda, BDF, Radau) with tight tolerances; explicit solvers then become the slow part of the fit.
+- Exact Jacobians of ODE models from **sensitivity equations** or automatic differentiation are not covered here; they replace the finite differences of C5–C6 in professional fitting tools.
