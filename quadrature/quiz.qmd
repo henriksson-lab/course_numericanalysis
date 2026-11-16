@@ -1,0 +1,200 @@
+---
+title: "Quiz: numerical integration"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of numerical integration. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** In one sentence: what do all quadrature rules (trapezoid, Simpson, Gauss, the 21-point rule inside `integrate`) have in common, and what does that imply about what they can miss?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Write the rule as a formula with function values in it.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Each is a weighted sum $\sum_i w_i f(x_i)$ of **finitely many** function values. Whatever $f$ does between the points is invisible to the rule, so a feature narrower than the spacing of the points (a narrow peak, a spike) can be missed completely, and the error estimate, computed from the same points, will not notice.
+:::
+
+---
+
+**Q2.** Blood samples at 0, 2 and 4 h give 0, 8 and 4 mg/L. Compute the AUC from 0 to 4 h with the trapezoid rule. Will the true AUC more likely be larger or smaller?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Two trapezoids of width 2. Is the curve between 0 and 2 h, during absorption, bent upwards or downwards?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$2\cdot(0 + 8)/2 + 2\cdot(8 + 4)/2 = 8 + 12 = 20$ mg·h/L. During absorption the curve rises steeply and then flattens (concave), and near the peak it is concave too, so the straight lines lie **below** the curve: the true AUC is probably larger. (In the elimination phase, which is convex, the trapezoid rule overestimates.)
+:::
+
+---
+
+**Q3.** The trapezoid rule with step $h$ has error $0.8$. Roughly what is the error with step $h/4$? What would it be for Simpson's rule if Simpson also had error 0.8 at $h$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Error $\approx C h^p$, with $p = 2$ for the trapezoid and $p = 4$ for Simpson.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Trapezoid: $0.8/4^2 = 0.05$. Simpson: $0.8/4^4 = 0.8/256 \approx 0.003$. This assumes $h$ is already small enough for the leading error term to dominate and that the integrand is smooth.
+:::
+
+---
+
+**Q4.** You test Simpson's rule on your integrand by halving $h$ several times. The log–log plot of the error against $n$ has slope $-1.5$, not $-4$. What does that tell you, and what can you do?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which assumption behind the order 4 can fail?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The integrand is not smooth on the interval: Simpson's $h^4$ error needs a bounded fourth derivative. Slope $-1.5$ is typical of a $\sqrt{x}$-type endpoint (an infinite slope). Find the point (plot the integrand), then either put a grid point there and split the interval, or remove the bad behaviour with a substitution (e.g. $x = u^2$). An adaptive routine (`integrate`, `quad`) will also cope, at the cost of many points near the bad spot.
+:::
+
+---
+
+**Q5.** Trapezoid estimates of an integral are $T(h) = 2.10$ and $T(h/2) = 2.03$. Give a better estimate. What is it called, and which classical rule does it reproduce?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The trapezoid error is $\approx Ch^2$, so halving $h$ divides it by 4.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\big(4\cdot 2.03 - 2.10\big)/3 = (8.12 - 2.10)/3 = 2.0067$. This is **Richardson extrapolation**, as for difference quotients in *Numerical differentiation*; one step of it turns two trapezoid sums into Simpson's rule with step $h/2$. Repeating it is Romberg integration.
+:::
+
+---
+
+**Q6.** A chromatogram is recorded for one hour (0–3600 s). It contains one peak at 340 s with $\sigma = 3$ s and height 1000; its area is $1000\cdot3\sqrt{2\pi} \approx 7520$. Explain the output of the code below. Why is the first result wrong, and what is the fix?
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+peak <- function(t) 1000 * exp(-(t - 340)^2 / (2 * 3^2))
+integrate(peak, 0, 3600)
+# 1.199796e-59 with absolute error < 2.3e-59
+integrate(peak, 310, 370)                  # the peak +- 10 sigma
+# 7519.885 with absolute error < 0.56
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import quad
+peak = lambda t: 1000 * np.exp(-(t - 340)**2 / (2 * 3**2))
+print(quad(peak, 0, 3600))
+# (1.1997955764401264e-59, 2.2683315422332952e-59)
+print(quad(peak, 310, 370))                # the peak +- 10 sigma
+# (7519.8848238929795, 6.520516427577228e-06)
+```
+
+### Rust
+
+```rust
+// rust/examples/quadrature_q6.rs  —  cargo run --example quadrature_q6
+// Q6: a 3 s wide chromatography peak in a one-hour run, with the quadrature
+// crate (double-exponential rule), over the whole run and over the peak.
+fn main() {
+    let peak = |t: f64| 1000.0 * (-(t - 340.0).powi(2) / (2.0 * 9.0)).exp();
+    let o = quadrature::integrate(peak, 0.0, 3600.0, 1e-6);
+    println!("{:e} with error estimate {:.1e}", o.integral, o.error_estimate);
+    let o = quadrature::integrate(peak, 310.0, 370.0, 1e-6); // the peak +- 10 sigma
+    println!("{} with error estimate {:.1e}", o.integral, o.error_estimate);
+}
+
+// Output:
+// 6.526074485307542e-179 with error estimate 6.5e-179
+// 7519.884823892994 with error estimate 3.4e-12
+```
+
+:::
+
+::: {.callout-tip collapse="true" title="Hint"}
+The first 21-point rule on $[0, 3600]$ has its points roughly every 100–200 s.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Over the whole run all three return essentially 0 (between $10^{-179}$ and $10^{-59}$) with a tiny error estimate: no point lands within a few $\sigma$ of the peak, the rule sees a flat zero function and stops. Over the peak $\pm 10\sigma$ (310–370 s) all three return 7519.88. Fixes: integrate over the region where the peak lives (give the scale), split the run into pieces no wider than the peak (as a peak detector would), or for sampled data use the trapezoid rule on the samples, which sees every point.
+:::
+
+---
+
+**Q7.** Up to which polynomial degree is a 5-point Gauss–Legendre rule exact? And Simpson's rule on 5 points (4 intervals)?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Gauss chooses both points and weights: $2n$ free numbers.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Gauss with $n = 5$ points: degree $2n - 1 = 9$. Composite Simpson on 5 points: degree 3 (each panel integrates cubics exactly, not quartics). That is why libraries use Gauss-type rules on each piece: more accuracy per function value for smooth integrands.
+:::
+
+---
+
+**Q8.** `integrate` returns `0 with absolute error < 0`. Is a zero error estimate reassuring?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How is the error estimate computed?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. The error estimate is the difference between two rules (10-point Gauss and 21-point Kronrod) evaluated at the **same** points. If every point sees the same thing (for instance $f = 0$ because the peak is elsewhere), both rules agree perfectly and the estimate is 0. An estimate of exactly 0, or one as large as the value, is a reason to plot the integrand and change the limits.
+:::
+
+---
+
+**Q9.** You want the normalising constant of a likelihood whose maximum is about $10^{-40}$. Why may `integrate(L, 0, Inf)` give a meaningless answer, and what do you do instead?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at the stopping rule: estimated error < max(`abs.tol`, `rel.tol` × |value|), with `abs.tol` $\approx 10^{-4}$ in R.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The whole integral is far below the absolute tolerance, so the first rough estimate already passes the test: different limits give different answers. Integrate the **scaled** function $e^{\ell(\theta) - \ell_{\max}}$ (maximum 1) and add $\ell_{\max}$ back on the log scale: $\log Z = \ell_{\max} + \log \int e^{\ell - \ell_{\max}}$. Also give the scale of the axis: integrate over the mode $\pm$ about 10 standard errors.
+:::
+
+---
+
+**Q10.** Which substitution makes each integral easy for any rule? (a) $\int_0^1 \dfrac{\cos x}{\sqrt{x}}\,dx$ (b) $\int_0^\infty \dfrac{dx}{(1+x)^3}$
+
+::: {.callout-tip collapse="true" title="Hint"}
+(a) The trouble is $1/\sqrt{x}$ at 0. (b) Map $[0, \infty)$ to a finite interval.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(a) $x = u^2$, $dx = 2u\,du$: $\int_0^1 2\cos(u^2)\,du$, smooth. (b) $x = t/(1-t)$: $1 + x = 1/(1-t)$ and $dx = dt/(1-t)^2$, so the integrand becomes $(1-t)^3/(1-t)^2 = 1 - t$, and $\int_0^1 (1 - t)\,dt = 1/2$. Even the trapezoid rule is exact on that.
+:::
+
+---
+
+**Q11.** In non-compartmental pharmacokinetics, why is the log-down rule used for falling concentrations, and why is it not used for rising ones or when a concentration is 0?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which shape does each rule assume between two samples?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+After the peak, elimination is roughly first order, so concentrations fall **exponentially**; the log-down rule assumes exactly that shape between samples, whereas a straight line overestimates a convex decline (by +44 % over a 12 h gap in the lecture example). During absorption the curve is not exponential decay, and the formula $\Delta t\,(C_1 - C_2)/\ln(C_1/C_2)$ breaks down when $C_1 = C_2$ (0/0) or when either is 0 ($\ln 0$), so the linear trapezoid is used there.
+:::
+
+---
+
+**Q12.** Two LC-MS runs of the same sample are sampled at different rates (every 6 s and every 2 s) for a peak with $\sigma \approx 3$ s. The peak heights differ by 30 %, the areas by 1 %. Is something wrong with the instrument?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Does a sample land on the apex?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Probably not. With a 6 s spacing ($2\sigma$) the largest sample can miss the apex by up to 3 s, which lowers the measured height by up to 39 %, depending on the sampling phase. The trapezoid area of a whole peak is much more robust: about 1.4 % worst case at $h = 2\sigma$ and far less for denser sampling. Quantify with areas, and sample densely enough (6–10 points across the peak) if heights or peak shapes matter.
+:::

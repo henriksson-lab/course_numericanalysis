@@ -19,7 +19,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 14 | eigen-algorithms | done | done | done |
 | 15 | polynomial-interpolation | done | done | done |
 | 16 | splines | done | done | done |
-| 17 | fourier-fft | running | | |
+| 17 | fourier-fft | done | running | |
 | 18 | finite-differences | done | done | done |
 | 19 | quadrature | running | | |
 | 20 | monte-carlo | done | done | done |
@@ -39,7 +39,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 34 | advection-diffusion | running | | |
 | 35 | reaction-diffusion | running | | |
 | 36 | fem-outlook | running | (no demo: further reading) | |
-| 37 | iterative-solvers | queued | (no demo) | |
+| 37 | iterative-solvers | running | (no demo) | |
 
 ## Audit notes (pass 3)
 
@@ -60,3 +60,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - eigen-algorithms: install irlba, RSpectra. Timings typed into fig script (single run, 1 thread). Matrix 20 000 cells (contentplan says 100 000) — align plan text.
 - phase-plane: oscillator = Sel'kov (no repressilator xref existed); runge-kutta may define repressilator — reconcile in pass 2 (fine to have both). Slides not screenshotted; densest separatrix slide, 'Failure: Re λ ≈ 0'. Install: rootSolve.
 - runge-kutta: Python C2/C3/C5/C6 tabs import C1/C4 functions from local files (not self-contained) — make self-contained in audit. Repressilator params α=216, α0=0.216, β=5, n=2 unverified vs Elowitz & Leibler. ode_solvers Dopri5 dense-output end-point bug noted.
+- fourier-fft: from memory — 4.8-h ultradian example, p53 ~5.5 h, Hes1 ~2 h periods, 'sample every 2 h' guideline. R fft prime-length slowness claim measured here.
