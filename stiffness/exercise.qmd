@@ -1,0 +1,1303 @@
+---
+title: "Exercise: stiffness and implicit methods"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- compute the amplification factor $R(h\lambda)$ of Euler, RK4 and backward Euler on the test equation $y' = \lambda y$, and draw their **stability regions**,
+- estimate the **time scales** of a kinetic model from the eigenvalues of its Jacobian, and say whether it is **stiff**,
+- take **backward Euler** steps by hand, including the **Newton** iterations a nonlinear step needs,
+- write backward Euler with Newton in code and run it on the enzyme model with steps 100 times larger than explicit Euler can take,
+- choose a library solver (`lsoda`, `bdf`, `radau` / `"LSODA"`, `"BDF"`, `"Radau"`) and **count steps and time** to show that it was the right choice,
+- compare the full mass-action enzyme model with the **Michaelis–Menten** (quasi-steady-state) approximation,
+- recognise the failure of implicit methods: **artificial damping** of oscillations.
+
+The by-hand part uses pen, paper and a pocket calculator. The code part works at the sizes where only code works: thousands of steps, Robertson's problem up to $t = 10^{11}$.
+
+## Background
+
+**The enzyme model.** One enzyme $E$ binds substrate $S$ to a complex $C$, which either falls apart or turns the substrate into product $P$:
+$$E + S \underset{k_r}{\overset{k_f}{\rightleftharpoons}} C \xrightarrow{k_{cat}} E + P$$
+With mass action and $b = k_f E S - k_r C$ (net binding), $c = k_{cat}C$ (catalysis):
+$$S' = -b, \quad E' = -b + c, \quad C' = b - c, \quad P' = c.$$
+We use $k_f = 100\ \mu\text{M}^{-1}\text{s}^{-1}$, $k_r = 100\ \text{s}^{-1}$, $k_{cat} = 1\ \text{s}^{-1}$, $S_0 = 10\ \mu$M, $E_0 = 1\ \mu$M, $C_0 = P_0 = 0$. Two totals are conserved: $E + C = E_0$ and $S + C + P = S_0$.
+
+**Facts used below:**
+
+1. **Test equation.** On $y' = \lambda y$ a one-step method multiplies $y$ by a fixed factor $R(z)$ per step, with $z = h\lambda$:
+   Euler $R = 1 + z$; RK4 $R = 1 + z + z^2/2 + z^3/6 + z^4/24$; backward Euler $R = 1/(1 - z)$. Errors do not grow if $|R(z)| \le 1$; the set of such $z$ is the **stability region**. On the negative real axis: Euler needs $h|\lambda| \le 2$, RK4 $h|\lambda| \le 2.785$, backward Euler nothing.
+2. **Eigenvalues set the time scales.** Near a state, $\mathbf y' = \mathbf f(\mathbf y)$ behaves like $\mathbf y' = J\mathbf y$ with $J$ the Jacobian ($J_{ij} = \partial f_i / \partial y_j$, *Newton for systems of equations*). Each eigenvalue $\lambda$ of $J$ is a mode with time scale $1/|\text{Re}\,\lambda|$. For a $2\times2$ matrix, $\lambda^2 - (\text{tr}\,J)\lambda + \det J = 0$; if one eigenvalue is much larger than the other, $\lambda_\text{fast} \approx \text{tr}\,J$ and $\lambda_\text{slow} \approx \det J / \text{tr}\,J$.
+3. **Stiff** = the step size of an explicit method is limited by stability (by the fastest mode) rather than by the accuracy needed for the slow solution you care about. Typical sign: a ratio of $10^3$ or more between the fastest and slowest time scale over the simulated time.
+4. **Backward Euler**: $\mathbf y_{n+1} = \mathbf y_n + h\,\mathbf f(\mathbf y_{n+1})$. Each step solves $\mathbf G(\mathbf y) = \mathbf y - \mathbf y_n - h\mathbf f(\mathbf y) = \mathbf 0$ by **Newton**: solve $(I - hJ(\mathbf y))\,\boldsymbol\delta = -\mathbf G(\mathbf y)$, set $\mathbf y \leftarrow \mathbf y + \boldsymbol\delta$, starting from $\mathbf y = \mathbf y_n$. Order 1.
+5. **BDF2**: $\mathbf y_{n+1} - \tfrac43\mathbf y_n + \tfrac13\mathbf y_{n-1} = \tfrac23 h\,\mathbf f(\mathbf y_{n+1})$; Newton matrix $I - \tfrac23 hJ$. Order 2, needs two start values.
+6. **Michaelis–Menten (QSSA)**: assume $C' \approx 0$; then $S' = -V_{\max}S/(K_m + S)$ with $V_{\max} = k_{cat}E_0$, $K_m = (k_r + k_{cat})/k_f$. Accurate when $E_0 \ll S_0 + K_m$.
+7. **Library solvers.** R: [`deSolve::ode`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) with `method = "lsoda"` (default; switches between Adams and BDF), `"bdf"`, `"radau"`, `"ode45"` (explicit); step counts in `attr(out, "istate")` or [`diagnostics(out)`](https://search.r-project.org/CRAN/refmans/deSolve/html/diagnostics.html). Python: [`scipy.integrate.solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) with `method="LSODA"`, `"BDF"`, `"Radau"`, `"RK45"` (default, explicit); `sol.t.size - 1` steps (when `t_eval` is not given), `sol.nfev` evaluations. Rust: the [`ode_solvers`](https://docs.rs/ode_solvers/latest/ode_solvers/) crate has **only explicit** methods (`Dopri5`, `Dop853`, `Rk4`); `Dopri5` runs a stiffness test every 1000 steps and stops with an error ("the problem seems to become stiff") when it fires repeatedly. The stiff side in Rust is hand-written backward Euler with Newton and [`nalgebra`](https://docs.rs/nalgebra/latest/nalgebra/)'s LU.
+
+The enzyme model in each language, solved with a library solver:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+enzyme <- function(t, y, p) {
+  with(as.list(c(y, p)), {
+    bind <- kf * E * S - kr * C          # E + S <-> C  (net binding)
+    turn <- kcat * C                     # C -> E + P   (catalysis)
+    list(c(S = -bind, E = -bind + turn, C = bind - turn, P = turn))
+  })
+}
+p  <- c(kf = 100, kr = 100, kcat = 1)    # per uM per s, per s, per s
+y0 <- c(S = 10, E = 1, C = 0, P = 0)     # uM
+out <- ode(y0, c(0, 10, 30), enzyme, p, method = "lsoda", rtol = 1e-8, atol = 1e-10)
+out
+#   time            S         E            C        P
+# 1    0 1.000000e+01 1.0000000 0.000000e+00 0.000000
+# 2   10 1.413693e+00 0.4163667 5.836333e-01 8.002674
+# 3   30 8.610410e-05 0.9999143 8.566728e-05 9.999828
+attr(out, "istate")[2:3]                 # steps, f evaluations
+# [1] 468 938
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import solve_ivp
+
+kf, kr, kcat = 100.0, 100.0, 1.0         # per uM per s, per s, per s
+
+def enzyme(t, y):
+    S, E, C, P = y
+    bind = kf * E * S - kr * C           # E + S <-> C  (net binding)
+    turn = kcat * C                      # C -> E + P   (catalysis)
+    return [-bind, -bind + turn, bind - turn, turn]
+
+y0 = [10.0, 1.0, 0.0, 0.0]               # uM: S, E, C, P
+sol = solve_ivp(enzyme, (0, 30), y0, method="LSODA", dense_output=True,
+                rtol=1e-8, atol=1e-10)
+print(sol.sol([10, 30]).T)               # rows: t = 10, 30; columns S, E, C, P
+# [[1.41369291e+00 4.16366684e-01 5.83633316e-01 8.00267378e+00]
+#  [8.61039647e-05 9.99914333e-01 8.56671450e-05 9.99982823e+00]]
+print(sol.t.size - 1, sol.nfev)          # steps, f evaluations
+# 488 1012
+```
+
+### Rust
+
+```rust
+// rust/examples/stiffness_background.rs  —  cargo run --example stiffness_background
+// Background: the enzyme model E + S <-> C -> E + P with ode_solvers::Dopri5 (explicit RK45).
+// ode_solvers has no stiff (implicit) solver: an explicit method works here, but needs many steps.
+use ode_solvers::continuous_output_model::ContinuousOutputModel;
+use ode_solvers::{Dopri5, System, Vector4};
+
+const KF: f64 = 100.0; const KR: f64 = 100.0; const KCAT: f64 = 1.0; // per uM per s, per s, per s
+
+struct Enzyme;
+impl System<f64, Vector4<f64>> for Enzyme {
+    fn system(&self, _t: f64, y: &Vector4<f64>, dy: &mut Vector4<f64>) {
+        let (s, e, c) = (y[0], y[1], y[2]);
+        let bind = KF * e * s - KR * c; // E + S <-> C  (net binding)
+        let turn = KCAT * c;            // C -> E + P   (catalysis)
+        dy[0] = -bind; dy[1] = -bind + turn; dy[2] = bind - turn; dy[3] = turn;
+    }
+}
+
+fn main() {
+    let y0 = Vector4::new(10.0, 1.0, 0.0, 0.0); // uM: S, E, C, P
+    // Dopri5::new(system, t0, t_end, output spacing, y0, rtol, atol)
+    let mut s = Dopri5::new(Enzyme, 0.0, 30.0, 30.0, y0, 1e-8, 1e-10);
+    let mut dense = ContinuousOutputModel::default(); // the solution at any t
+    let st = s.integrate_with_continuous_output_model(&mut dense).unwrap();
+    for t in [10.0, 30.0] {
+        let y = dense.evaluate(t).unwrap();
+        println!("t = {:>2}  S = {:.6e}  E = {:.6}  C = {:.6e}  P = {:.6}", t, y[0], y[1], y[2], y[3]);
+    }
+    println!("{} steps, {} f evaluations", st.accepted_steps, st.num_eval);
+}
+
+// Output:
+// t = 10  S = 1.413693e0  E = 0.416367  C = 5.836333e-1  P = 8.002674
+// t = 30  S = 8.610395e-5  E = 0.999914  C = 8.566700e-5  P = 9.999828
+// 4890 steps, 29343 f evaluations
+```
+
+:::
+
+The R and Python LSODA codes are different implementations, so their step counts differ. Rust's `Dopri5` is explicit: it gets the same answer with 4890 steps, ten times more than LSODA. Rust prints numbers in its own format (`1.4e0` rather than `1.4`); the values agree with R and Python to the tolerance used.
+
+## By hand
+
+**B1. Amplification factors.** Drug clearance $C' = -0.8\,C$ (per hour), as in *Initial value problems and Euler's method*.
+(a) For $h = 0.5, 2, 3, 10$ hours compute $z = h\lambda$ and the factor per step of Euler and of backward Euler. Compare with the exact factor $e^{z}$ (given: $e^{-0.4} = 0.670$, $e^{-1.6} = 0.202$, $e^{-2.4} = 0.0907$, $e^{-8} = 0.000335$). Which steps are stable? Which are accurate?
+(b) The enzyme model's fastest eigenvalue at the start is $\lambda = -1201\ \text{s}^{-1}$. What is the largest stable step of Euler and of RK4? How many steps does each need to cover 30 s?
+(c) What factor does backward Euler apply to this fast mode with $h = 0.1$ s? What is the exact factor $e^{-120.1}$, roughly? Does the difference matter?
+
+**B2. Backward Euler by hand.** A drug is infused at 2 mg/L per hour and cleared at rate 0.8 per hour: $C' = 2 - 0.8\,C$, $C(0) = 0$. Exact solution: $C(t) = 2.5\,(1 - e^{-0.8t})$.
+(a) Write the backward Euler step and solve it for $C_{n+1}$ (it is linear: no Newton needed).
+(b) Take two steps with $h = 1$ hour, by backward Euler and by Euler. Compare with the exact $C(1) = 1.377$, $C(2) = 1.995$.
+(c) Take one step with $h = 10$ hours by each method. Compare with $C(10) = 2.499$.
+(d) Show that the steady state $C = 2.5$ is a fixed point of the backward Euler step for every $h$.
+
+**B3. Newton inside a step.** Protein monomers dimerise, $2M \to D$, with $M' = -kM^2$, $k = 10$ per $\mu$M per s, $M(0) = 1\ \mu$M. Exact: $M(t) = 1/(1 + kt)$.
+(a) Write the backward Euler equation $G(y) = 0$ for $y = M_1$ with $h = 0.1$ s, and $G'(y)$.
+(b) Do two Newton iterations from $y = M_0 = 1$.
+(c) Solve $G(y) = 0$ exactly with the quadratic formula. How many correct digits did two iterations give? Compare $M_1$ with the exact $M(0.1)$ and with one Euler step.
+(d) Repeat (c) with $h = 0.2$ s. What does Euler give now?
+(e) Why is $y = M_n$ a good starting point for Newton?
+
+**B4. Eigenvalues of the enzyme model.** Use $E = E_0 - C$ to reduce the model to
+$$S' = -k_f(E_0 - C)S + k_r C, \qquad C' = k_f(E_0 - C)S - (k_r + k_{cat})C.$$
+(a) Compute the $2\times2$ Jacobian $\partial(S', C')/\partial(S, C)$ in general, then at $S = 10$, $C = 0$.
+(b) Compute its trace and determinant, and the two eigenvalues (exactly, and with the approximations of fact 2). What are the two time scales, and their ratio?
+(c) Repeat at the end of the reaction, $S = 0$, $C = 0$. Is the model still stiff? What is the Euler step limit now?
+
+**B5. Robertson's Jacobian.** $y_1' = -0.04y_1 + 10^4y_2y_3$, $y_2' = 0.04y_1 - 10^4y_2y_3 - 3\times10^7y_2^2$, $y_3' = 3\times10^7y_2^2$.
+(a) Write the $3\times3$ Jacobian $J$.
+(b) Evaluate $J$ at the start, $\mathbf y = (1, 0, 0)$. What are its eigenvalues? Is the problem stiff at $t = 0$?
+(c) Evaluate $J$ at $t = 40$, where $\mathbf y \approx (0.7158,\ 9.19\times10^{-6},\ 0.2842)$. Each column of $J$ sums to 0: what does that say about one eigenvalue (think of $y_1 + y_2 + y_3$)? The slow eigenvalue is about $-0.02$. Use the trace to estimate the fast one.
+(d) RK45 is stable for $h|\lambda| \lesssim 3.3$. Estimate how many steps it needs from $t = 0$ to $40$.
+(e) Write the Newton matrix $I - hJ$ of a backward Euler step with $h = 1$ at $t = 40$.
+
+**B6. BDF2 by hand.** Drug clearance $C' = -0.8\,C$, $C_0 = 10$, $h = 1$ hour.
+(a) Solve the BDF2 formula for $C_{n+1}$ on this linear equation.
+(b) Take $C_1$ from the exact solution, $C_1 = 10e^{-0.8} = 4.493$, and compute $C_2$ by BDF2.
+(c) Compute $C_1, C_2$ by backward Euler. Compare both with the exact $C_2 = 2.019$.
+
+**B7. Damping and classification.**
+(a) For the oscillator $x'' = -\omega^2 x$ (fact: the eigenvalues are $\pm i\omega$), backward Euler multiplies the amplitude by $|1/(1 - i\omega h)| = 1/\sqrt{1 + \omega^2h^2}$ per step. With $\omega = 2\pi/24$ per hour ($\omega = 0.2618$) and $h = 1$ h, what is the factor per step, per day and after 10 days?
+(b) Stiff or not? Logistic growth of a culture ($r = 0.8$ per hour) over 24 h; the SIR epidemic over a season; the enzyme model over 30 s; the enzyme model over its first 5 ms; Robertson's problem to $t = 10^{5}$; a circadian oscillator over 10 days; diffusion on a fine grid of 1000 points (*Implicit schemes and the method of lines*). For each, which `deSolve`/`solve_ivp` method would you choose?
+
+## In code
+
+**C1. Stability regions.** On a grid of $z$ values with $\text{Re}\,z \in [-5, 3]$, $\text{Im}\,z \in [-4, 4]$, compute $|R(z)|$ for Euler, RK4 and backward Euler and draw the contour $|R| = 1$ of each (R: [`contour`](https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/contour.html) with `levels = 1`; Python: [`plt.contour`](https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.contour.html) with `levels=[1]`). Which side of each curve is stable? Then find where the RK4 region crosses the negative real axis and the positive imaginary axis with a root finder ([`uniroot`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html) / [`scipy.optimize.brentq`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html)).
+
+**C2. Explicit vs backward Euler on the enzyme.** Write the enzyme rates `f(y)` for $\mathbf y = (S, E, C, P)$ and their $4\times4$ Jacobian `jac(y)`.
+(a) Run explicit Euler to $t = 10$ s with $h = 1$ ms and with $h = 3$ ms.
+(b) Write `beuler(f, jac, y0, h, n)` with Newton (fact 4) and run it to $t = 10$ s with $h = 1$, $0.1$ and $0.01$ s. Compare $P(10)$ with the reference $8.002674$ from the background.
+(c) Count the Newton iterations per step, and check both conservation laws.
+
+**C3. Library solvers: count steps and time.** Solve the enzyme model to $t = 30$ s with `rtol = 1e-6`, `atol = 1e-9` using `ode45`, `lsoda`, `bdf` and `radau` (R; use output times `seq(0, 30, by = 0.5)`) or `RK45`, `LSODA`, `BDF`, `Radau` (Python). Print steps, $\mathbf f$ evaluations, wall time ([`system.time`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/system.time.html) / [`time.perf_counter`](https://docs.python.org/3/library/time.html#time.perf_counter)) and $P(30)$. Which solver is fastest, and why does the step count not tell the whole story?
+
+**C4. When is Michaelis–Menten good enough?** For $E_0 = 0.1$, $1$ and $5\ \mu$M (with $S_0 = 10$), solve the full model and the QSSA model (fact 6) on $t \in [0, 20/E_0]$ and print the largest difference in $P(t)$, with $P_\text{QSSA} = S_0 - S_\text{QSSA}$. Compare with the ratio $E_0/(S_0 + K_m)$.
+
+**C5. Order of backward Euler and BDF2.** Start at $t = 0.1$ s from the reference solution (after the binding transient) and integrate 10 s with backward Euler and with BDF2 (fact 5; take the second start value from the reference solution too), for $h = 0.2, 0.1, 0.05, 0.02, 0.01$. Print the error in $P(10.1)$ and read off the order of each method.
+
+**C6. Robertson's problem.** (a) Solve it from $t = 0$ to $40$ with `rtol = 1e-6`, `atol = 1e-10` with an explicit and three stiff solvers; print steps, $\mathbf f$ evaluations, time and $y_2(40)$. (R: pass `hini = 1e-4`, without which deSolve's `ode45` can stall on this problem, and `maxsteps = 1e5`.) Compare the step count of the explicit solver with your estimate from B5(d).
+(b) Solve it to $t = 10^{11}$ with a stiff solver (`rtol = 1e-8`, `atol = 1e-12`), print $\mathbf y$ at $t = 10^{-3}, 1, 10^4, 10^{11}$ and check the conservation law $y_1 + y_2 + y_3 = 1$.
+
+**C7. Backward Euler damps a clock.** Run backward Euler on the 24-hour oscillator $y_1' = y_2$, $y_2' = -\omega^2 y_1$, $\mathbf y(0) = (1, 0)$, $\omega = 2\pi/24$, for 10 days with $h = 1, 0.5, 0.1, 0.01$ hours, and print the amplitude $\sqrt{y_1^2 + (y_2/\omega)^2}$ (exact: 1). Then solve the same problem with an explicit library solver and with BDF at `rtol = 1e-8`, `atol = 1e-10`, and compare amplitudes and step counts. What would you conclude about the clock from the $h = 1$ run alone?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — amplification factors (B1, B6, B7)"}
+Compute $z = h\lambda$ first: $\lambda = -0.8$, so $z = -0.4, -1.6, -2.4, -8$. Stable means $|R| \le 1$; accurate means $R$ close to $e^z$. For the step limits in B1(b), solve $h|\lambda| = 2$ and $h|\lambda| = 2.785$. In B6, move every $C_{n+1}$ term to the left: $C_{n+1}(1 - \tfrac23 h\lambda) = \tfrac43 C_n - \tfrac13 C_{n-1}$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — an implicit step (B2, B3)"}
+Write the formula with $C_{n+1}$ on both sides, then collect: B2 is linear, $C_{n+1}(1 + 0.8h) = C_n + 2h$. In B3 the equation is quadratic: $y + hky^2 - M_0 = 0$. Newton: $y \leftarrow y - G(y)/G'(y)$, as in *Newton and secant methods*.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — Jacobians and eigenvalues (B4, B5)"}
+Row $i$ of $J$ holds the partial derivatives of the $i$-th rate with respect to each variable, holding the others fixed (*Newton for systems of equations*). For a $2\times2$ matrix, $\lambda = \tfrac12\big(\text{tr} \pm \sqrt{\text{tr}^2 - 4\det}\big)$. In B5(c), if the columns of $J$ sum to 0, then $(1, 1, 1)\,J = \mathbf 0$, so $J$ is singular; the eigenvalues add up to the trace.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — backward Euler in code (C2, C5, C7)"}
+Inner loop: `delta <- solve(I - h * jac(y), -(y - yold - h * f(y)))`, stop when the length of `delta` is below `1e-10`. R: [`solve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html), [`diag`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/diag.html); Python: [`np.linalg.solve`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html), `np.eye`; Rust: `(&id - h * jac(&y)).lu().solve(&(-g))` with nalgebra. For BDF2 replace the equation by fact 5 and the matrix by $I - \tfrac23 hJ$. On the linear oscillator Newton converges in one iteration (a second one confirms it).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — library solvers and counters (C3, C4, C6, C7)"}
+R: `attr(out, "istate")[2]` is the number of steps, `[3]` the number of $\mathbf f$ evaluations; `diagnostics(out)` prints everything. deSolve limits the step to the spacing of the output times (`hmax`), so compare step counts for the same `times`. Python: without `t_eval`, `sol.t` holds every step; use `dense_output=True` and `sol.sol(t)` to get values at chosen times. Python's `BDF` and `Radau` are written in Python, `LSODA` in Fortran, so compare their wall times with care. Rust: `Dopri5::from_param(..., n_stiff, ...)` with `n_stiff = u32::MAX` switches the stiffness test off; the returned `Stats` has `accepted_steps` and `num_eval`.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution — by hand"}
+
+**B1.**
+(a)
+
+| $h$ | $z$ | Euler $1 + z$ | backward Euler $1/(1-z)$ | exact $e^z$ |
+|---|---|---|---|---|
+| 0.5 | −0.4 | 0.6 | 0.714 | 0.670 |
+| 2 | −1.6 | −0.6 | 0.385 | 0.202 |
+| 3 | −2.4 | **−1.4** (unstable) | 0.294 | 0.0907 |
+| 10 | −8 | **−7** (unstable) | 0.111 | 0.000335 |
+
+Backward Euler is stable for all four steps, Euler only for $h < 2.5$. Only $h = 0.5$ is accurate for either method (errors 0.07 and 0.04); at $h = 2$ Euler even oscillates in sign. Backward Euler errs on the slow side: it always decays, but too slowly when $h|\lambda|$ is large.
+
+(b) Euler: $h \le 2/1201 = 1.67$ ms, so $30/0.001665 = 18\,015$ steps. RK4: $h \le 2.785/1201 = 2.32$ ms, 12 936 steps.
+
+(c) $1/(1 + 120.1) = 0.0083$. The exact factor is $e^{-120.1} \approx 10^{-52}$. Both make the fast mode vanish within a step or two, which is all we need: after the first millisecond nobody cares whether the fast transient is $10^{-3}$ or $10^{-52}$ of its starting size. The method is not accurate for that mode, but it is stable, and the slow mode (factor $e^{-0.0083}$ per step) is resolved accurately.
+
+**B2.**
+(a) $C_{n+1} = C_n + h(2 - 0.8C_{n+1})$, so $C_{n+1} = \dfrac{C_n + 2h}{1 + 0.8h}$.
+
+(b) Backward Euler: $C_1 = 2/1.8 = 1.111$, $C_2 = 3.111/1.8 = 1.728$. Euler: $C_1 = 0 + 1\cdot 2 = 2$, $C_2 = 2 + (2 - 1.6) = 2.4$. Exact: $1.377$, $1.995$. Both are off by similar amounts, in opposite directions (order 1).
+
+(c) Backward Euler: $C_1 = 20/9 = 2.222$. Euler: $C_1 = 0 + 10\cdot 2 = 20$. Exact $2.499$. Euler is far off (and continuing would oscillate with factor $1 - 8 = -7$); backward Euler is already close to the steady state.
+
+(d) Put $C_n = 2.5$: $(2.5 + 2h)/(1 + 0.8h) = 2.5\,(1 + 0.8h)/(1 + 0.8h) = 2.5$. Backward Euler finds the correct steady state for any step, and approaches it monotonically, because deviations from it shrink by $1/(1 + 0.8h)$ per step.
+
+**B3.**
+(a) $y = M_0 + h(-ky^2)$, so $G(y) = y + hky^2 - M_0 = y + y^2 - 1$, $G'(y) = 1 + 2y$.
+
+(b) $y = 1$: $G = 1$, $G' = 3$, $y = 1 - 1/3 = 0.6667$. Then $G = 0.6667 + 0.4444 - 1 = 0.1111$, $G' = 2.3333$, $y = 0.6667 - 0.0476 = 0.6190$.
+
+(c) $y = (-1 + \sqrt{5})/2 = 0.61803$. Two iterations give 0.6190: two to three correct digits; a third iteration gives 0.618034 (quadratic convergence). The exact ODE solution is $M(0.1) = 1/2 = 0.5$: the backward Euler step itself has a large error at this $h$ ($hk = 1$), which Newton cannot fix. One Euler step gives $1 - 0.1\cdot10\cdot1 = 0$: all monomers gone in 0.1 s.
+
+(d) $G(y) = y + 2y^2 - 1 = 0$, so $y = (-1 + \sqrt{1 + 8})/4 = 0.5$; exact $M(0.2) = 1/3$. Euler: $1 - 0.2\cdot10 = -1$, a negative concentration. Backward Euler stays positive (the positive root of the quadratic).
+
+(e) For small $h$, $M_{n+1}$ differs from $M_n$ by $O(h)$, so the start is close to the root and Newton converges quickly. A good start also matters for which root Newton finds: the quadratic has a second, negative root ($-1.618$ in (c)).
+
+**B4.**
+(a) $J = \begin{pmatrix} -k_f(E_0 - C) & k_fS + k_r \\ k_f(E_0 - C) & -k_fS - k_r - k_{cat}\end{pmatrix}$. At $S = 10$, $C = 0$: $J = \begin{pmatrix} -100 & 1100 \\ 100 & -1101 \end{pmatrix}$.
+
+(b) $\text{tr} = -1201$, $\det = 110\,100 - 110\,000 = 100$. $\lambda = \tfrac12\big(-1201 \pm \sqrt{1201^2 - 400}\big) = \tfrac12(-1201 \pm 1200.834)$: $\lambda_\text{fast} = -1200.917$, $\lambda_\text{slow} = -0.0833$. Approximations: $\text{tr} = -1201$ and $\det/\text{tr} = -0.0833$. Time scales: $1/1201 = 0.83$ ms (binding) and $1/0.0833 = 12$ s (catalysis), ratio 14 400: stiff.
+
+(c) $J = \begin{pmatrix} -100 & 100 \\ 100 & -101\end{pmatrix}$, $\text{tr} = -201$, $\det = 100$: $\lambda \approx -200.5$ and $-0.499$. Ratio about 400, still stiff over a 30 s run: Euler needs $h < 2/200.5 = 10$ ms although the solution is nearly constant.
+
+**B5.**
+(a)
+$$J = \begin{pmatrix} -0.04 & 10^4y_3 & 10^4y_2 \\ 0.04 & -10^4y_3 - 6\times10^7y_2 & -10^4y_2 \\ 0 & 6\times10^7y_2 & 0\end{pmatrix}$$
+
+(b) At $(1, 0, 0)$ only the first column is nonzero: $J = \begin{pmatrix}-0.04 & 0 & 0\\ 0.04 & 0 & 0\\ 0 & 0 & 0\end{pmatrix}$, eigenvalues $-0.04, 0, 0$. Not stiff at $t = 0$; it becomes stiff as soon as $y_2$ and $y_3$ grow (within about $10^{-3}$ time units).
+
+(c) $10^4y_3 = 2842$, $10^4y_2 = 0.0919$, $6\times10^7y_2 = 551.4$:
+$$J \approx \begin{pmatrix} -0.04 & 2842 & 0.0919 \\ 0.04 & -3393.4 & -0.0919 \\ 0 & 551.4 & 0\end{pmatrix}.$$
+Columns summing to 0 mean $(y_1 + y_2 + y_3)' = 0$ for all $\mathbf y$, and $(1,1,1)J = \mathbf 0$: $J$ is singular, one eigenvalue is 0. The trace $-3393.4$ is the sum of the eigenvalues, so $\lambda_\text{fast} \approx -3393.4 + 0.02 \approx -3393$ (the exact value is $-3392.8$).
+
+(d) $h \lesssim 3.3/3393 \approx 10^{-3}$, so about $40/10^{-3} = 40\,000$ steps (more early on, when the fast eigenvalue is larger). C6 finds 34 500 to 59 000.
+
+(e) $I - J = \begin{pmatrix} 1.04 & -2842 & -0.0919 \\ -0.04 & 3394.4 & 0.0919 \\ 0 & -551.4 & 1\end{pmatrix}$. Its large entries are no problem for an LU solve; it is far from singular.
+
+**B6.**
+(a) $C_{n+1}\,(1 + \tfrac23\cdot0.8h) = \tfrac43 C_n - \tfrac13 C_{n-1}$, so with $h = 1$: $C_{n+1} = (\tfrac43 C_n - \tfrac13 C_{n-1})/1.5333$.
+
+(b) $C_2 = (\tfrac43\cdot4.4933 - \tfrac13\cdot10)/1.5333 = (5.9911 - 3.3333)/1.5333 = 1.733$.
+
+(c) Backward Euler: $C_1 = 10/1.8 = 5.556$, $C_2 = 5.556/1.8 = 3.086$. Exact $C_2 = 2.019$: error 1.07 for backward Euler, 0.29 for BDF2 (with an exact start value).
+
+**B7.**
+(a) $\omega h = 0.2618$, factor $1/\sqrt{1.06854} = 0.9674$ per hour, $0.9674^{24} = 0.451$ per day, $0.451^{10} = 3.5\times10^{-4}$ after 10 days. The model oscillates for ever; backward Euler says the clock stops within a week.
+
+(b)
+
+| problem | stiff? | method |
+|---|---|---|
+| logistic growth, 24 h | no: one rate, $r = 0.8$ per hour | `ode45` / `RK45` (or default) |
+| SIR epidemic | no: rates of similar size | `ode45` / `RK45` |
+| enzyme, 30 s | yes: 1 ms vs 12 s | `lsoda`, `bdf`, `radau` / `"LSODA"`, `"BDF"`, `"Radau"` |
+| enzyme, first 5 ms | no: we resolve the fast mode itself | `ode45` / `RK45` |
+| Robertson to $10^5$ | very: ratio $10^5$ and more | `lsoda`, `bdf`, `radau` |
+| circadian oscillator, 10 days | no: oscillation, no fast decay | `ode45` / `RK45`; **not** backward Euler |
+| diffusion, 1000 grid points | yes: fastest mode $\sim 1/\Delta x^2$ | `bdf`/`lsode` with a banded or sparse Jacobian / `"BDF"` with `jac_sparsity` |
+
+In R the default `lsoda` is a safe choice for all of them; in Python the default `RK45` is wrong for the stiff ones.
+:::
+
+::: {.callout-note collapse="true" title="Solution — in code"}
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- seq(-5, 3, length.out = 400); y <- seq(-4, 4, length.out = 400)
+z <- outer(x, y, function(a, b) complex(real = a, imaginary = b))
+R <- list(euler  = Mod(1 + z),
+          rk4    = Mod(1 + z + z^2 / 2 + z^3 / 6 + z^4 / 24),
+          beuler = Mod(1 / (1 - z)))
+par(mfrow = c(1, 3))
+for (m in names(R)) {
+  contour(x, y, R[[m]], levels = 1, drawlabels = FALSE, asp = 1, main = m,
+          xlab = "Re z", ylab = "Im z")
+  abline(h = 0, v = 0, col = "grey")
+}
+rk4 <- function(x) 1 + x + x^2 / 2 + x^3 / 6 + x^4 / 24
+uniroot(function(x) rk4(x) - 1, c(-3, -2), tol = 1e-12)$root   # left end on the real axis
+rk4i <- function(s) Mod(rk4(complex(imaginary = s)))
+uniroot(function(s) rk4i(s) - 1, c(2, 3), tol = 1e-12)$root    # top end on the imaginary axis
+# [1] -2.785294
+# [1] 2.828427
+```
+
+### Python
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import brentq
+
+x = np.linspace(-5, 3, 400); y = np.linspace(-4, 4, 400)
+X, Y = np.meshgrid(x, y)
+z = X + 1j * Y
+R = {"euler":  np.abs(1 + z),
+     "rk4":    np.abs(1 + z + z**2 / 2 + z**3 / 6 + z**4 / 24),
+     "beuler": np.abs(1 / (1 - z))}
+fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+for ax, (m, Rm) in zip(axes, R.items()):
+    ax.contour(X, Y, Rm, levels=[1])
+    ax.axhline(0, color="grey"); ax.axvline(0, color="grey")
+    ax.set_aspect("equal"); ax.set_title(m); ax.set_xlabel("Re z"); ax.set_ylabel("Im z")
+plt.show()
+rk4 = lambda x: 1 + x + x**2 / 2 + x**3 / 6 + x**4 / 24
+print(brentq(lambda x: rk4(x) - 1, -3, -2, xtol=1e-12))          # left end on the real axis
+print(brentq(lambda s: abs(rk4(1j * s)) - 1, 2, 3, xtol=1e-12))   # top end on the imaginary axis
+# -2.785293563405282
+# 2.8284271247461894
+```
+
+### Rust
+
+```rust
+// rust/examples/stiffness_c1.rs  —  cargo run --example stiffness_c1
+// C1: stability regions of Euler, RK4 and backward Euler, as text maps, and the RK4 limits.
+use nalgebra::Complex;
+
+fn r_euler(z: Complex<f64>) -> Complex<f64> { 1.0 + z }
+fn r_rk4(z: Complex<f64>) -> Complex<f64> { 1.0 + z + z * z / 2.0 + z.powi(3) / 6.0 + z.powi(4) / 24.0 }
+fn r_beuler(z: Complex<f64>) -> Complex<f64> { 1.0 / (1.0 - z) }
+
+// bisection for g(a) * g(b) < 0
+fn bisect(g: impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
+    while b - a > 1e-12 {
+        let m = 0.5 * (a + b);
+        if g(a) * g(m) <= 0.0 { b = m } else { a = m }
+    }
+    0.5 * (a + b)
+}
+
+fn main() {
+    let methods: [(&str, fn(Complex<f64>) -> Complex<f64>); 3] =
+        [("euler", r_euler), ("rk4", r_rk4), ("beuler", r_beuler)];
+    // '#' = stable (|R(z)| <= 1); Re z from -4 to 2, Im z from 3 to -3, steps of 0.25 / 0.5
+    for (name, r) in methods {
+        println!("{}", name);
+        for i in 0..13 {
+            let im = 3.0 - 0.5 * i as f64;
+            let row: String = (0..25).map(|j| {
+                let z = Complex::new(-4.0 + 0.25 * j as f64, im);
+                if r(z).norm() <= 1.0 { '#' } else { '.' }
+            }).collect();
+            println!("  {}", row);
+        }
+    }
+    let rk4 = |x: f64| 1.0 + x + x * x / 2.0 + x.powi(3) / 6.0 + x.powi(4) / 24.0;
+    println!("{}", bisect(|x| rk4(x) - 1.0, -3.0, -2.0));                         // real axis
+    println!("{}", bisect(|s| r_rk4(Complex::new(0.0, s)).norm() - 1.0, 2.0, 3.0)); // imaginary axis
+}
+
+// Output:
+// euler
+//   .........................
+//   .........................
+//   .........................
+//   .........................
+//   ............#............
+//   .........#######.........
+//   ........#########........
+//   .........#######.........
+//   ............#............
+//   .........................
+//   .........................
+//   .........................
+//   .........................
+// rk4
+//   .........................
+//   ............#####........
+//   .........########........
+//   .......##########........
+//   ......###########........
+//   .....############........
+//   .....############........
+//   .....############........
+//   ......###########........
+//   .......##########........
+//   .........########........
+//   ............#####........
+//   .........................
+// beuler
+//   #########################
+//   #########################
+//   #########################
+//   #########################
+//   #########################
+//   #################.......#
+//   #################.......#
+//   #################.......#
+//   #########################
+//   #########################
+//   #########################
+//   #########################
+//   #########################
+// -2.785293563405048
+// 2.828427124746213
+```
+
+:::
+
+Euler: stable **inside** the circle of radius 1 around $-1$. RK4: stable inside the larger, kidney-shaped curve, which reaches $-2.785$ on the real axis and $\pm2.828 = \pm2\sqrt2$ on the imaginary axis. Backward Euler: stable **outside** the circle of radius 1 around $+1$, which includes the whole left half-plane. Rust has no plotting library in our list, so the Rust version prints the regions as text.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+kf <- 100; kr <- 100; kcat <- 1
+f <- function(y) {                                 # y = (S, E, C, P)
+  b <- kf * y[2] * y[1] - kr * y[3]
+  c(-b, -b + kcat * y[3], b - kcat * y[3], kcat * y[3])
+}
+jac <- function(y) rbind(c(-kf * y[2], -kf * y[1],  kr,         0),
+                         c(-kf * y[2], -kf * y[1],  kr + kcat,  0),
+                         c( kf * y[2],  kf * y[1], -kr - kcat,  0),
+                         c( 0,          0,          kcat,       0))
+euler <- function(f, y0, h, n) {
+  y <- y0
+  for (i in 1:n) y <- y + h * f(y)
+  y
+}
+beuler <- function(f, jac, y0, h, n, tol = 1e-10) {
+  y <- y0; I <- diag(length(y0)); newton <- 0
+  for (i in 1:n) {
+    yold <- y                                      # Newton starts at y_n
+    for (k in 1:20) {
+      delta <- solve(I - h * jac(y), -(y - yold - h * f(y)))
+      y <- y + delta; newton <- newton + 1
+      if (sqrt(sum(delta^2)) < tol) break
+    }
+  }
+  list(y = y, newton = newton)
+}
+y0 <- c(10, 1, 0, 0)
+cat(sprintf("%.6f", euler(f, y0, h = 1e-3, n = 10000)), "\n")   # t = 10 s
+cat(sprintf("%.6f", euler(f, y0, h = 3e-3, n = 3333)), "\n")
+for (h in c(1, 0.1, 0.01)) {
+  r <- beuler(f, jac, y0, h, round(10 / h))
+  cat(sprintf("h = %4.2f  P(10) = %.6f  Newton its/step = %.2f  E+C = %.10f  S+C+P = %.10f\n",
+              h, r$y[4], r$newton / round(10 / h), r$y[2] + r$y[3], r$y[1] + r$y[3] + r$y[4]))
+}
+# 1.413561 0.416389 0.583611 8.002829 
+# NaN NaN NaN NaN 
+# h = 1.00  P(10) = 7.878407  Newton its/step = 4.40  E+C = 1.0000000000  S+C+P = 10.0000000000
+# h = 0.10  P(10) = 7.990014  Newton its/step = 3.68  E+C = 1.0000000000  S+C+P = 10.0000000000
+# h = 0.01  P(10) = 8.001388  Newton its/step = 3.00  E+C = 1.0000000000  S+C+P = 10.0000000000
+```
+
+### Python
+
+```python
+import numpy as np
+
+kf, kr, kcat = 100.0, 100.0, 1.0
+
+def f(y):                                         # y = (S, E, C, P)
+    b = kf * y[1] * y[0] - kr * y[2]
+    return np.array([-b, -b + kcat * y[2], b - kcat * y[2], kcat * y[2]])
+
+def jac(y):
+    return np.array([[-kf * y[1], -kf * y[0],  kr,         0],
+                     [-kf * y[1], -kf * y[0],  kr + kcat,  0],
+                     [ kf * y[1],  kf * y[0], -kr - kcat,  0],
+                     [ 0,          0,          kcat,       0]])
+
+def euler(f, y0, h, n):
+    y = np.array(y0, dtype=float)
+    for i in range(n):
+        y = y + h * f(y)
+    return y
+
+def beuler(f, jac, y0, h, n, tol=1e-10):
+    y = np.array(y0, dtype=float); I = np.eye(len(y)); newton = 0
+    for i in range(n):
+        yold = y.copy()                           # Newton starts at y_n
+        for k in range(20):
+            delta = np.linalg.solve(I - h * jac(y), -(y - yold - h * f(y)))
+            y = y + delta; newton += 1
+            if np.linalg.norm(delta) < tol:
+                break
+    return y, newton
+
+y0 = [10, 1, 0, 0]
+print(" ".join(f"{v:.6f}" for v in euler(f, y0, 1e-3, 10000)))   # t = 10 s
+with np.errstate(all="ignore"):                   # silence overflow warnings
+    print(" ".join(f"{v:.6f}" for v in euler(f, y0, 3e-3, 3333)))
+for h in [1, 0.1, 0.01]:
+    n = round(10 / h)
+    y, newton = beuler(f, jac, y0, h, n)
+    print(f"h = {h:4.2f}  P(10) = {y[3]:.6f}  Newton its/step = {newton / n:.2f}  "
+          f"E+C = {y[1] + y[2]:.10f}  S+C+P = {y[0] + y[2] + y[3]:.10f}")
+# 1.413561 0.416389 0.583611 8.002829
+# nan nan nan nan
+# h = 1.00  P(10) = 7.878407  Newton its/step = 4.40  E+C = 1.0000000000  S+C+P = 10.0000000000
+# h = 0.10  P(10) = 7.990014  Newton its/step = 3.68  E+C = 1.0000000000  S+C+P = 10.0000000000
+# h = 0.01  P(10) = 8.001388  Newton its/step = 3.00  E+C = 1.0000000000  S+C+P = 10.0000000000
+```
+
+### Rust
+
+```rust
+// rust/examples/stiffness_c2.rs  —  cargo run --example stiffness_c2
+// C2: explicit Euler vs backward Euler (with Newton, nalgebra LU) on the enzyme model.
+use nalgebra::{DMatrix, DVector};
+
+const KF: f64 = 100.0; const KR: f64 = 100.0; const KCAT: f64 = 1.0;
+
+fn f(y: &DVector<f64>) -> DVector<f64> {                // y = (S, E, C, P)
+    let b = KF * y[1] * y[0] - KR * y[2];
+    DVector::from_vec(vec![-b, -b + KCAT * y[2], b - KCAT * y[2], KCAT * y[2]])
+}
+
+fn jac(y: &DVector<f64>) -> DMatrix<f64> {
+    DMatrix::from_row_slice(4, 4, &[
+        -KF * y[1], -KF * y[0],  KR,         0.0,
+        -KF * y[1], -KF * y[0],  KR + KCAT,  0.0,
+         KF * y[1],  KF * y[0], -KR - KCAT,  0.0,
+         0.0,        0.0,        KCAT,       0.0])
+}
+
+fn euler(y0: &DVector<f64>, h: f64, n: usize) -> DVector<f64> {
+    let mut y = y0.clone();
+    for _ in 0..n { y = &y + h * f(&y); }
+    y
+}
+
+// returns the last value and the total number of Newton iterations
+fn beuler(y0: &DVector<f64>, h: f64, n: usize, tol: f64) -> (DVector<f64>, usize) {
+    let mut y = y0.clone();
+    let id = DMatrix::<f64>::identity(y.len(), y.len());
+    let mut newton = 0;
+    for _ in 0..n {
+        let yold = y.clone();                            // Newton starts at y_n
+        for _ in 0..20 {
+            let g = &y - &yold - h * f(&y);
+            let delta = (&id - h * jac(&y)).lu().solve(&(-g)).expect("singular I - hJ");
+            y += &delta; newton += 1;
+            if delta.norm() < tol { break; }
+        }
+    }
+    (y, newton)
+}
+
+fn main() {
+    let y0 = DVector::from_vec(vec![10.0, 1.0, 0.0, 0.0]);
+    for h in [1e-3, 3e-3] {
+        let y = euler(&y0, h, (10.0 / h) as usize);      // t = 10 s (3333 steps for 3 ms)
+        println!("{}", y.iter().map(|v| format!("{:.6}", v)).collect::<Vec<_>>().join(" "));
+    }
+    for h in [1.0f64, 0.1, 0.01] {
+        let n = (10.0 / h).round() as usize;
+        let (y, newton) = beuler(&y0, h, n, 1e-10);
+        println!("h = {:4.2}  P(10) = {:.6}  Newton its/step = {:.2}  E+C = {:.10}  S+C+P = {:.10}",
+                 h, y[3], newton as f64 / n as f64, y[1] + y[2], y[0] + y[2] + y[3]);
+    }
+}
+
+// Output:
+// 1.413561 0.416389 0.583611 8.002829
+// NaN NaN NaN NaN
+// h = 1.00  P(10) = 7.878407  Newton its/step = 4.40  E+C = 1.0000000000  S+C+P = 10.0000000000
+// h = 0.10  P(10) = 7.990014  Newton its/step = 3.68  E+C = 1.0000000000  S+C+P = 10.0000000000
+// h = 0.01  P(10) = 8.001388  Newton its/step = 3.00  E+C = 1.0000000000  S+C+P = 10.0000000000
+```
+
+:::
+
+Explicit Euler at 1 ms gives $P(10) = 8.002829$ (10 000 steps, error $1.5\times10^{-4}$); at 3 ms it overflows to `NaN`. Backward Euler is stable at every step, with error $0.12$ at $h = 1$ s, $0.013$ at $0.1$ s and $0.0013$ at $0.01$ s: order 1, with 1000 steps for an error 10 times larger than Euler's at 10 000 steps. Each step needs 3–4 Newton iterations (the first steps more, as they cross the binding transient). Both conservation laws hold to 10 digits: they are linear, and every Newton update keeps linear invariants exactly.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+enzyme <- function(t, y, p) {
+  with(as.list(c(y, p)), {
+    bind <- kf * E * S - kr * C
+    turn <- kcat * C
+    list(c(S = -bind, E = -bind + turn, C = bind - turn, P = turn))
+  })
+}
+p  <- c(kf = 100, kr = 100, kcat = 1)
+y0 <- c(S = 10, E = 1, C = 0, P = 0)
+times <- seq(0, 30, by = 0.5)
+for (m in c("ode45", "lsoda", "bdf", "radau")) {
+  tm <- system.time(out <- ode(y0, times, enzyme, p, method = m, rtol = 1e-6, atol = 1e-9))
+  is <- attr(out, "istate")
+  cat(sprintf("%-6s steps %5d  f-evals %6d  time %.3f s  P(30) = %.6f\n",
+              m, is[2], is[3], tm[["elapsed"]], out[nrow(out), "P"]))
+}
+# ode45  steps  3571  f-evals  21821  time 0.548 s  P(30) = 9.999828
+# lsoda  steps   347  f-evals    762  time 0.014 s  P(30) = 9.999828
+# bdf    steps   369  f-evals    717  time 0.022 s  P(30) = 9.999828
+# radau  steps   101  f-evals    957  time 0.034 s  P(30) = 9.999828
+```
+
+### Python
+
+```python
+import time
+import numpy as np
+from scipy.integrate import solve_ivp
+
+kf, kr, kcat = 100.0, 100.0, 1.0
+
+def enzyme(t, y):
+    S, E, C, P = y
+    bind = kf * E * S - kr * C
+    turn = kcat * C
+    return [-bind, -bind + turn, bind - turn, turn]
+
+y0 = [10.0, 1.0, 0.0, 0.0]
+for m in ["RK45", "LSODA", "BDF", "Radau"]:
+    t0 = time.perf_counter()
+    sol = solve_ivp(enzyme, (0, 30), y0, method=m, rtol=1e-6, atol=1e-9)
+    el = time.perf_counter() - t0
+    print(f"{m:6s} steps {sol.t.size - 1:5d}  f-evals {sol.nfev:6d}  "
+          f"time {el:.3f} s  P(30) = {sol.y[3, -1]:.6f}")
+# RK45   steps  3250  f-evals  19718  time 0.261 s  P(30) = 9.999828
+# LSODA  steps   350  f-evals    781  time 0.009 s  P(30) = 9.999828
+# BDF    steps   240  f-evals    616  time 0.055 s  P(30) = 9.999828
+# Radau  steps   156  f-evals   1433  time 0.111 s  P(30) = 9.999828
+```
+
+### Rust
+
+```rust
+// rust/examples/stiffness_c3.rs  —  cargo run --release --example stiffness_c3
+// C3: step counts and time on the enzyme model. Rust's ode_solvers has only explicit
+// solvers (Dopri5, Dop853, Rk4); the stiff side is our hand-written backward Euler from C2.
+// Run with --release for meaningful timings.
+use nalgebra::{DMatrix, DVector};
+use ode_solvers::{Dopri5, OutputType, System, Vector4};
+use std::time::Instant;
+
+const KF: f64 = 100.0; const KR: f64 = 100.0; const KCAT: f64 = 1.0;
+
+struct Enzyme;
+impl System<f64, Vector4<f64>> for Enzyme {
+    fn system(&self, _t: f64, y: &Vector4<f64>, dy: &mut Vector4<f64>) {
+        let b = KF * y[1] * y[0] - KR * y[2];
+        dy[0] = -b; dy[1] = -b + KCAT * y[2]; dy[2] = b - KCAT * y[2]; dy[3] = KCAT * y[2];
+    }
+}
+
+fn f(y: &DVector<f64>) -> DVector<f64> {
+    let b = KF * y[1] * y[0] - KR * y[2];
+    DVector::from_vec(vec![-b, -b + KCAT * y[2], b - KCAT * y[2], KCAT * y[2]])
+}
+fn jac(y: &DVector<f64>) -> DMatrix<f64> {
+    DMatrix::from_row_slice(4, 4, &[
+        -KF * y[1], -KF * y[0],  KR,         0.0,
+        -KF * y[1], -KF * y[0],  KR + KCAT,  0.0,
+         KF * y[1],  KF * y[0], -KR - KCAT,  0.0,
+         0.0,        0.0,        KCAT,       0.0])
+}
+fn beuler(y0: &DVector<f64>, h: f64, n: usize) -> (DVector<f64>, usize) {  // (y, f evaluations)
+    let (mut y, mut nf) = (y0.clone(), 0);
+    let id = DMatrix::<f64>::identity(4, 4);
+    for _ in 0..n {
+        let yold = y.clone();
+        for _ in 0..20 {
+            let g = &y - &yold - h * f(&y); nf += 1;
+            let delta = (&id - h * jac(&y)).lu().solve(&(-g)).unwrap();
+            y += &delta;
+            if delta.norm() < 1e-10 { break; }
+        }
+    }
+    (y, nf)
+}
+
+fn main() {
+    let y0 = Vector4::new(10.0, 1.0, 0.0, 0.0);
+    // Dopri5 with the stiffness test switched off (n_stiff = u32::MAX)
+    let t = Instant::now();
+    let mut s = Dopri5::from_param(Enzyme, 0.0, 30.0, 30.0, y0, 1e-6, 1e-9, 0.9, 0.04,
+                                   0.2, 10.0, 30.0, 0.0, 1_000_000, u32::MAX, OutputType::Sparse);
+    let st = s.integrate().unwrap();
+    println!("Dopri5  steps {:5}  f-evals {:6}  time {:.4} s  P(30) = {:.6}", st.accepted_steps,
+             st.num_eval, t.elapsed().as_secs_f64(), s.y_out().last().unwrap()[3]);
+    // hand-written backward Euler, fixed h = 0.01 s (no error control: order 1)
+    let t = Instant::now();
+    let (y, nf) = beuler(&DVector::from_vec(vec![10.0, 1.0, 0.0, 0.0]), 0.01, 3000);
+    println!("beuler  steps  3000  f-evals {:6}  time {:.4} s  P(30) = {:.6}", nf,
+             t.elapsed().as_secs_f64(), y[3]);
+}
+
+// Output:
+// Dopri5  steps  3281  f-evals  19695  time 0.0009 s  P(30) = 9.999828
+// beuler  steps  3000  f-evals   8318  time 0.0021 s  P(30) = 9.999824
+```
+
+:::
+
+All solvers agree on $P(30)$. The explicit solver takes ten times more steps and needs 20 000 evaluations of $\mathbf f$; each stiff solver about 1000 or fewer. Radau takes the fewest steps but evaluates $\mathbf f$ more often per step (three implicit stages). Wall time also depends on overheads: in Python, `LSODA` is Fortran while `BDF` and `Radau` are pure Python, so `LSODA` wins clearly although it takes more steps than `BDF`. Your timings will differ; the step counts will not. In Rust only the explicit side is a library call. Compiled Rust evaluates $\mathbf f$ so cheaply that even 3281 Dopri5 steps take a millisecond: the wall-time penalty of stiffness in R and Python is mostly the cost of calling an interpreted `f` 20 000 times. The hand-written backward Euler has no error control, so it cannot tell you its error (here $P(30)$ is still correct to 5 digits).
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+enzyme <- function(t, y, p) {
+  with(as.list(c(y, p)), {
+    bind <- kf * E * S - kr * C
+    turn <- kcat * C
+    list(c(S = -bind, E = -bind + turn, C = bind - turn, P = turn))
+  })
+}
+mm <- function(t, y, p) with(as.list(p), list(-kcat * E0 * y / ((kr + kcat) / kf + y)))
+p <- c(kf = 100, kr = 100, kcat = 1)
+for (E0 in c(0.1, 1, 5)) {
+  tt <- seq(0, 20 / E0, length.out = 401)          # long enough to use up S0 = 10
+  full <- ode(c(S = 10, E = E0, C = 0, P = 0), tt, enzyme, p, rtol = 1e-10, atol = 1e-12)
+  qssa <- ode(c(S = 10), tt, mm, c(p, E0 = E0), rtol = 1e-10, atol = 1e-12)
+  err <- max(abs(full[, "P"] - (10 - qssa[, "S"])))
+  cat(sprintf("E0 = %3.1f  max |P_full - P_qssa| = %.4f uM  (E0 / (S0 + Km) = %.3f)\n",
+              E0, err, E0 / (10 + 1.01)))
+}
+# E0 = 0.1  max |P_full - P_qssa| = 0.0333 uM  (E0 / (S0 + Km) = 0.009)
+# E0 = 1.0  max |P_full - P_qssa| = 0.3318 uM  (E0 / (S0 + Km) = 0.091)
+# E0 = 5.0  max |P_full - P_qssa| = 1.6228 uM  (E0 / (S0 + Km) = 0.454)
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import solve_ivp
+
+kf, kr, kcat = 100.0, 100.0, 1.0
+Km = (kr + kcat) / kf
+
+def enzyme(t, y):
+    S, E, C, P = y
+    bind = kf * E * S - kr * C
+    turn = kcat * C
+    return [-bind, -bind + turn, bind - turn, turn]
+
+for E0 in [0.1, 1, 5]:
+    tt = np.linspace(0, 20 / E0, 401)              # long enough to use up S0 = 10
+    full = solve_ivp(enzyme, (0, tt[-1]), [10, E0, 0, 0], method="LSODA",
+                     t_eval=tt, rtol=1e-10, atol=1e-12)
+    qssa = solve_ivp(lambda t, S: -kcat * E0 * S / (Km + S), (0, tt[-1]), [10],
+                     method="LSODA", t_eval=tt, rtol=1e-10, atol=1e-12)
+    err = np.max(np.abs(full.y[3] - (10 - qssa.y[0])))
+    print(f"E0 = {E0:3.1f}  max |P_full - P_qssa| = {err:.4f} uM  "
+          f"(E0 / (S0 + Km) = {E0 / (10 + Km):.3f})")
+# E0 = 0.1  max |P_full - P_qssa| = 0.0333 uM  (E0 / (S0 + Km) = 0.009)
+# E0 = 1.0  max |P_full - P_qssa| = 0.3318 uM  (E0 / (S0 + Km) = 0.091)
+# E0 = 5.0  max |P_full - P_qssa| = 1.6228 uM  (E0 / (S0 + Km) = 0.454)
+```
+
+### Rust
+
+```rust
+// rust/examples/stiffness_c4.rs  —  cargo run --example stiffness_c4
+// C4: full mass-action model vs the Michaelis-Menten (QSSA) model for three enzyme levels.
+// Reference solutions with Dopri5 at tight tolerance (stiffness test off: slow but correct).
+use ode_solvers::continuous_output_model::ContinuousOutputModel;
+use ode_solvers::{Dopri5, OutputType, System, Vector1, Vector4};
+
+const KF: f64 = 100.0; const KR: f64 = 100.0; const KCAT: f64 = 1.0;
+const KM: f64 = (KR + KCAT) / KF;
+
+struct Enzyme;
+impl System<f64, Vector4<f64>> for Enzyme {
+    fn system(&self, _t: f64, y: &Vector4<f64>, dy: &mut Vector4<f64>) {
+        let b = KF * y[1] * y[0] - KR * y[2];
+        dy[0] = -b; dy[1] = -b + KCAT * y[2]; dy[2] = b - KCAT * y[2]; dy[3] = KCAT * y[2];
+    }
+}
+struct Qssa { e0: f64 }
+impl System<f64, Vector1<f64>> for Qssa {
+    fn system(&self, _t: f64, y: &Vector1<f64>, dy: &mut Vector1<f64>) {
+        dy[0] = -KCAT * self.e0 * y[0] / (KM + y[0]);
+    }
+}
+
+fn main() {
+    for e0 in [0.1, 1.0, 5.0] {
+        let tend = 20.0 / e0;                             // long enough to use up S0 = 10
+        let mut full = ContinuousOutputModel::default();
+        Dopri5::from_param(Enzyme, 0.0, tend, tend, Vector4::new(10.0, e0, 0.0, 0.0), 1e-10, 1e-12,
+                           0.9, 0.04, 0.2, 10.0, tend, 0.0, 10_000_000, u32::MAX, OutputType::Dense)
+            .integrate_with_continuous_output_model(&mut full).unwrap();
+        let mut qssa = ContinuousOutputModel::default();
+        Dopri5::new(Qssa { e0 }, 0.0, tend, tend, Vector1::new(10.0), 1e-10, 1e-12)
+            .integrate_with_continuous_output_model(&mut qssa).unwrap();
+        let err = (0..=400).map(|k| {
+            let t = tend * k as f64 / 400.0;
+            (full.evaluate(t).unwrap()[3] - (10.0 - qssa.evaluate(t).unwrap()[0])).abs()
+        }).fold(0.0, f64::max);
+        println!("E0 = {:3.1}  max |P_full - P_qssa| = {:.4} uM  (E0 / (S0 + Km) = {:.3})",
+                 e0, err, e0 / (10.0 + KM));
+    }
+}
+
+// Output:
+// E0 = 0.1  max |P_full - P_qssa| = 0.0333 uM  (E0 / (S0 + Km) = 0.009)
+// E0 = 1.0  max |P_full - P_qssa| = 0.3318 uM  (E0 / (S0 + Km) = 0.091)
+// E0 = 5.0  max |P_full - P_qssa| = 1.6228 uM  (E0 / (S0 + Km) = 0.454)
+```
+
+:::
+
+The largest error of the QSSA grows in proportion to $E_0/(S_0 + K_m)$: about 0.3 % of $S_0$ for $E_0 = 0.1$, 3 % for $E_0 = 1$, 16 % for $E_0 = 5$. The QSSA counts the substrate bound in $C$ as free, and $C$ can hold up to $E_0$ of it. Inside cells, enzyme and substrate concentrations are often similar, so the full (stiff) model is the safer one.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+# f, jac, beuler from C2; enzyme(t, y, p) as in the background
+bdf2 <- function(f, jac, y0, y1, h, n, tol = 1e-10) {   # needs two start values
+  yprev <- y0; y <- y1; I <- diag(length(y0))
+  for (i in 2:n) {
+    ynew <- y                                            # Newton starts at y_n
+    for (k in 1:20) {
+      G <- ynew - 4 / 3 * y + 1 / 3 * yprev - 2 / 3 * h * f(ynew)
+      delta <- solve(I - 2 / 3 * h * jac(ynew), -G)
+      ynew <- ynew + delta
+      if (sqrt(sum(delta^2)) < tol) break
+    }
+    yprev <- y; y <- ynew
+  }
+  y
+}
+ref <- function(t) unname(ode(c(S = 10, E = 1, C = 0, P = 0), c(0, t), enzyme, NULL,
+                              rtol = 1e-12, atol = 1e-14)[2, -1])
+ys <- ref(0.1); Pref <- ref(10.1)[4]                    # start after the binding transient
+for (h in c(0.2, 0.1, 0.05, 0.02, 0.01)) {
+  n <- round(10 / h)
+  e1 <- abs(beuler(f, jac, ys, h, n)$y[4] - Pref)
+  e2 <- abs(bdf2(f, jac, ys, ref(0.1 + h), h, n)[4] - Pref)
+  cat(sprintf("h = %4.2f   backward Euler %.3e   BDF2 %.3e\n", h, e1, e2))
+}
+# h = 0.20   backward Euler 2.564e-02   BDF2 8.014e-04
+# h = 0.10   backward Euler 1.284e-02   BDF2 2.040e-04
+# h = 0.05   backward Euler 6.427e-03   BDF2 5.144e-05
+# h = 0.02   backward Euler 2.572e-03   BDF2 8.272e-06
+# h = 0.01   backward Euler 1.286e-03   BDF2 2.071e-06
+```
+
+### Python
+
+```python
+# f, jac, beuler from C2
+import numpy as np
+from scipy.integrate import solve_ivp
+
+def bdf2(f, jac, y0, y1, h, n, tol=1e-10):           # needs two start values
+    yprev, y = np.array(y0, float), np.array(y1, float); I = np.eye(len(y))
+    for i in range(1, n):
+        ynew = y.copy()                                  # Newton starts at y_n
+        for k in range(20):
+            G = ynew - 4 / 3 * y + 1 / 3 * yprev - 2 / 3 * h * f(ynew)
+            delta = np.linalg.solve(I - 2 / 3 * h * jac(ynew), -G)
+            ynew = ynew + delta
+            if np.linalg.norm(delta) < tol:
+                break
+        yprev, y = y, ynew
+    return y
+
+def ref(t):
+    return solve_ivp(lambda t, y: f(y), (0, t), [10, 1, 0, 0], method="Radau",
+                     jac=lambda t, y: jac(y), rtol=1e-12, atol=1e-14).y[:, -1]
+
+ys = ref(0.1); Pref = ref(10.1)[3]                       # start after the binding transient
+for h in [0.2, 0.1, 0.05, 0.02, 0.01]:
+    n = round(10 / h)
+    e1 = abs(beuler(f, jac, ys, h, n)[0][3] - Pref)
+    e2 = abs(bdf2(f, jac, ys, ref(0.1 + h), h, n)[3] - Pref)
+    print(f"h = {h:4.2f}   backward Euler {e1:.3e}   BDF2 {e2:.3e}")
+# h = 0.20   backward Euler 2.564e-02   BDF2 8.014e-04
+# h = 0.10   backward Euler 1.284e-02   BDF2 2.040e-04
+# h = 0.05   backward Euler 6.427e-03   BDF2 5.144e-05
+# h = 0.02   backward Euler 2.572e-03   BDF2 8.272e-06
+# h = 0.01   backward Euler 1.286e-03   BDF2 2.071e-06
+```
+
+### Rust
+
+```rust
+// rust/examples/stiffness_c5.rs  —  cargo run --example stiffness_c5
+// C5: order of backward Euler and BDF2 on the enzyme model, from t = 0.1 s to 10.1 s.
+// Reference values from Dopri5 at tight tolerance (stiffness test off).
+use nalgebra::{DMatrix, DVector};
+use ode_solvers::{Dopri5, OutputType, System, Vector4};
+
+const KF: f64 = 100.0; const KR: f64 = 100.0; const KCAT: f64 = 1.0;
+
+fn f(y: &DVector<f64>) -> DVector<f64> {
+    let b = KF * y[1] * y[0] - KR * y[2];
+    DVector::from_vec(vec![-b, -b + KCAT * y[2], b - KCAT * y[2], KCAT * y[2]])
+}
+fn jac(y: &DVector<f64>) -> DMatrix<f64> {
+    DMatrix::from_row_slice(4, 4, &[
+        -KF * y[1], -KF * y[0],  KR,         0.0,
+        -KF * y[1], -KF * y[0],  KR + KCAT,  0.0,
+         KF * y[1],  KF * y[0], -KR - KCAT,  0.0,
+         0.0,        0.0,        KCAT,       0.0])
+}
+
+// one implicit step: solve y - c*h*f(y) = rhs by Newton, starting from y_start
+fn implicit_solve(rhs: &DVector<f64>, c: f64, h: f64, y_start: &DVector<f64>) -> DVector<f64> {
+    let id = DMatrix::<f64>::identity(4, 4);
+    let mut y = y_start.clone();
+    for _ in 0..20 {
+        let g = &y - c * h * f(&y) - rhs;
+        let delta = (&id - c * h * jac(&y)).lu().solve(&(-g)).unwrap();
+        y += &delta;
+        if delta.norm() < 1e-10 { break; }
+    }
+    y
+}
+fn beuler(y0: &DVector<f64>, h: f64, n: usize) -> DVector<f64> {
+    let mut y = y0.clone();
+    for _ in 0..n { y = implicit_solve(&y, 1.0, h, &y); }          // y - h f(y) = y_n
+    y
+}
+fn bdf2(y0: &DVector<f64>, y1: &DVector<f64>, h: f64, n: usize) -> DVector<f64> {
+    let (mut yprev, mut y) = (y0.clone(), y1.clone());
+    for _ in 1..n {                                                 // y - 2/3 h f(y) = 4/3 y_n - 1/3 y_{n-1}
+        let ynew = implicit_solve(&(4.0 / 3.0 * &y - 1.0 / 3.0 * &yprev), 2.0 / 3.0, h, &y);
+        yprev = y; y = ynew;
+    }
+    y
+}
+
+struct Enzyme;
+impl System<f64, Vector4<f64>> for Enzyme {
+    fn system(&self, _t: f64, y: &Vector4<f64>, dy: &mut Vector4<f64>) {
+        let b = KF * y[1] * y[0] - KR * y[2];
+        dy[0] = -b; dy[1] = -b + KCAT * y[2]; dy[2] = b - KCAT * y[2]; dy[3] = KCAT * y[2];
+    }
+}
+fn reference(t: f64) -> DVector<f64> {
+    let mut s = Dopri5::from_param(Enzyme, 0.0, t, t, Vector4::new(10.0, 1.0, 0.0, 0.0),
+                                   1e-12, 1e-14, 0.9, 0.04, 0.2, 10.0, t, 0.0, 10_000_000,
+                                   u32::MAX, OutputType::Sparse);
+    s.integrate().unwrap();
+    DVector::from_column_slice(s.y_out().last().unwrap().as_slice())
+}
+
+fn main() {
+    let ys = reference(0.1);                                        // after the binding transient
+    let pref = reference(10.1)[3];
+    for h in [0.2f64, 0.1, 0.05, 0.02, 0.01] {
+        let n = (10.0 / h).round() as usize;
+        let e1 = (beuler(&ys, h, n)[3] - pref).abs();
+        let e2 = (bdf2(&ys, &reference(0.1 + h), h, n)[3] - pref).abs();
+        println!("h = {:4.2}   backward Euler {:.3e}   BDF2 {:.3e}", h, e1, e2);
+    }
+}
+
+// Output:
+// h = 0.20   backward Euler 2.564e-2   BDF2 8.014e-4
+// h = 0.10   backward Euler 1.284e-2   BDF2 2.040e-4
+// h = 0.05   backward Euler 6.427e-3   BDF2 5.144e-5
+// h = 0.02   backward Euler 2.572e-3   BDF2 8.272e-6
+// h = 0.01   backward Euler 1.286e-3   BDF2 2.071e-6
+```
+
+:::
+
+Halving $h$ halves the backward Euler error (order 1) and divides the BDF2 error by about 4 (order 2): from $h = 0.1$ to $0.01$ the errors drop by factors 10 and 100. Both methods are stable at all these steps, although the explicit stability limit at $t = 0.1$ s is $2/1012 = 2$ ms. Starting at $t = 0$ instead adds the 1 ms binding transient, which no step in this range resolves; try it, and you will see the BDF2 errors stop decreasing for small $h$, until $h$ is small enough to resolve the transient.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+rober <- function(t, y, p) {
+  r1 <- 0.04 * y[1]; r2 <- 3e7 * y[2]^2; r3 <- 1e4 * y[2] * y[3]
+  list(c(-r1 + r3, r1 - r2 - r3, r2))
+}
+y0 <- c(y1 = 1, y2 = 0, y3 = 0)
+# (a) to t = 40
+for (m in c("ode45", "lsoda", "bdf", "radau")) {
+  tm <- system.time(out <- ode(y0, c(0, 40), rober, NULL, method = m, rtol = 1e-6,
+                               atol = 1e-10, hini = 1e-4, maxsteps = 1e5))
+  is <- attr(out, "istate")
+  cat(sprintf("%-6s steps %6d  f-evals %7d  time %.3f s  y2(40) = %.6e\n",
+              m, is[2], is[3], tm[["elapsed"]], out[2, "y2"]))
+}
+# (b) to t = 1e11 on a log grid, with a stiff solver
+times <- c(0, 10^(-6:11))
+out <- ode(y0, times, rober, NULL, method = "bdf", rtol = 1e-8, atol = 1e-12)
+cat("steps:", attr(out, "istate")[2], "\n")
+for (k in c(5, 8, 12, 19))
+  cat(sprintf("%.0e  %.4g  %.4g  %.4g\n", out[k, 1], out[k, 2], out[k, 3], out[k, 4]))
+cat("max |y1 + y2 + y3 - 1| =", max(abs(rowSums(out[, -1]) - 1)), "\n")
+# ode45  steps  59339  f-evals  378696  time 3.228 s  y2(40) = 8.886732e-06
+# lsoda  steps    191  f-evals     392  time 0.005 s  y2(40) = 9.185535e-06
+# bdf    steps    193  f-evals     348  time 0.004 s  y2(40) = 9.185530e-06
+# radau  steps     47  f-evals     453  time 0.006 s  y2(40) = 9.185532e-06
+# steps: 1600 
+# 1e-03  1  2.917e-05  1.083e-05
+# 1e+00  0.9665  3.075e-05  0.03351
+# 1e+04  0.1073  4.8e-07  0.8927
+# 1e+11  2.084e-08  8.335e-14  1
+# max |y1 + y2 + y3 - 1| = 1.100786e-12 
+```
+
+### Python
+
+```python
+import time
+import numpy as np
+from scipy.integrate import solve_ivp
+
+def rober(t, y):
+    r1 = 0.04 * y[0]; r2 = 3e7 * y[1]**2; r3 = 1e4 * y[1] * y[2]
+    return [-r1 + r3, r1 - r2 - r3, r2]
+
+y0 = [1.0, 0.0, 0.0]
+# (a) to t = 40
+for m in ["RK45", "LSODA", "BDF", "Radau"]:
+    t0 = time.perf_counter()
+    sol = solve_ivp(rober, (0, 40), y0, method=m, rtol=1e-6, atol=1e-10)
+    el = time.perf_counter() - t0
+    print(f"{m:6s} steps {sol.t.size - 1:6d}  f-evals {sol.nfev:7d}  "
+          f"time {el:.3f} s  y2(40) = {sol.y[1, -1]:.6e}")
+# (b) to t = 1e11, with a stiff solver; output on a log grid
+times = 10.0 ** np.arange(-6, 12)
+sol = solve_ivp(rober, (0, 1e11), y0, method="BDF", dense_output=True, rtol=1e-8, atol=1e-12)
+print("steps:", sol.t.size - 1)
+Y = sol.sol(times)                               # dense output at the log grid
+for k in [3, 6, 10, 17]:
+    print(f"{times[k]:.0e}  {Y[0, k]:.4g}  {Y[1, k]:.4g}  {Y[2, k]:.4g}")
+print("max |y1 + y2 + y3 - 1| =", np.max(np.abs(Y.sum(axis=0) - 1)))
+# RK45   steps  34537  f-evals  242066  time 2.498 s  y2(40) = 9.185470e-06
+# LSODA  steps    200  f-evals     414  time 0.003 s  y2(40) = 9.185529e-06
+# BDF    steps    144  f-evals     366  time 0.024 s  y2(40) = 9.185555e-06
+# Radau  steps     78  f-evals     647  time 0.026 s  y2(40) = 9.185535e-06
+# steps: 1296
+# 1e-03  1  2.917e-05  1.083e-05
+# 1e+00  0.9665  3.075e-05  0.03351
+# 1e+04  0.1073  4.8e-07  0.8927
+# 1e+11  2.083e-08  8.334e-14  1
+# max |y1 + y2 + y3 - 1| = 7.542921842684791e-11
+```
+
+### Rust
+
+```rust
+// rust/examples/stiffness_c6.rs  —  cargo run --release --example stiffness_c6
+// C6: Robertson's problem. (a) Dopri5 to t = 40: default settings stop with "stiffness
+// detected"; with the test off it finishes, slowly. (b) Hand-written backward Euler with
+// Newton on a log-spaced time grid all the way to t = 1e11. Run with --release for timings.
+use nalgebra::{DMatrix, DVector};
+use ode_solvers::{Dopri5, OutputType, System, Vector3};
+use std::time::Instant;
+
+struct Rober;
+impl System<f64, Vector3<f64>> for Rober {
+    fn system(&self, _t: f64, y: &Vector3<f64>, dy: &mut Vector3<f64>) {
+        let (r1, r2, r3) = (0.04 * y[0], 3e7 * y[1] * y[1], 1e4 * y[1] * y[2]);
+        dy[0] = -r1 + r3; dy[1] = r1 - r2 - r3; dy[2] = r2;
+    }
+}
+fn f(y: &DVector<f64>) -> DVector<f64> {
+    let (r1, r2, r3) = (0.04 * y[0], 3e7 * y[1] * y[1], 1e4 * y[1] * y[2]);
+    DVector::from_vec(vec![-r1 + r3, r1 - r2 - r3, r2])
+}
+fn jac(y: &DVector<f64>) -> DMatrix<f64> {
+    DMatrix::from_row_slice(3, 3, &[
+        -0.04, 1e4 * y[2],                 1e4 * y[1],
+         0.04, -6e7 * y[1] - 1e4 * y[2], -1e4 * y[1],
+         0.0,   6e7 * y[1],                0.0])
+}
+
+fn main() {
+    let y0 = Vector3::new(1.0, 0.0, 0.0);
+    // (a) explicit Dopri5
+    let mut s = Dopri5::new(Rober, 0.0, 40.0, 40.0, y0, 1e-6, 1e-10);
+    if let Err(e) = s.integrate() { println!("Dopri5 (default): {}", e); }
+    let t = Instant::now();
+    let mut s = Dopri5::from_param(Rober, 0.0, 40.0, 40.0, y0, 1e-6, 1e-10, 0.9, 0.04, 0.2,
+                                   10.0, 40.0, 0.0, 10_000_000, u32::MAX, OutputType::Sparse);
+    let st = s.integrate().unwrap();
+    println!("Dopri5 (test off): steps {}  f-evals {}  time {:.3} s  y2(40) = {:.6e}",
+             st.accepted_steps, st.num_eval, t.elapsed().as_secs_f64(), s.y_out().last().unwrap()[1]);
+
+    // (b) backward Euler on t = 0, 1e-6, ..., 1e11 with m points per decade
+    for m in [10, 100] {
+        let t = Instant::now();
+        let times: Vec<f64> = std::iter::once(0.0)
+            .chain((0..=17 * m).map(|k| 10f64.powf(-6.0 + k as f64 / m as f64))).collect();
+        let mut y = DVector::from_vec(vec![1.0, 0.0, 0.0]);
+        let id = DMatrix::<f64>::identity(3, 3);
+        let mut out = Vec::new();
+        for k in 1..times.len() {
+            let h = times[k] - times[k - 1];
+            let yold = y.clone();
+            for _ in 0..20 {
+                let g = &y - &yold - h * f(&y);
+                let delta = (&id - h * jac(&y)).lu().solve(&(-g)).unwrap();
+                y += &delta;
+                if delta.norm() < 1e-12 * (1.0 + y.norm()) { break; }
+            }
+            if (k - 1) % m == 0 { out.push((-6 + ((k - 1) / m) as i32, y.clone())); } // t = 10^e
+        }
+        println!("backward Euler, {} steps per decade ({} steps, {:.3} s):", m, times.len() - 1,
+                 t.elapsed().as_secs_f64());
+        for (e, yk) in out.iter().filter(|(e, _)| [-3, 0, 4, 11].contains(e)) {
+            println!("  1e{}  {:.4e}  {:.4e}  {:.4e}   sum - 1 = {:.1e}", e, yk[0], yk[1], yk[2], yk.sum() - 1.0);
+        }
+    }
+}
+
+// Output:
+// Dopri5 (default): The problem seems to become stiff at x = 1.5145759601250313.
+// Dopri5 (test off): steps 34583  f-evals 207525  time 0.011 s  y2(40) = 9.185472e-6
+// backward Euler, 10 steps per decade (171 steps, 0.000 s):
+//   1e-3  9.9996e-1  2.8180e-5  1.1818e-5   sum - 1 = 0.0e0
+//   1e0  9.6697e-1  3.0828e-5  3.2996e-2   sum - 1 = -2.2e-16
+//   1e4  1.1737e-1  5.3095e-7  8.8263e-1   sum - 1 = -1.0e-15
+//   1e11  2.6228e-8  1.0491e-13  1.0000e0   sum - 1 = -1.0e-14
+// backward Euler, 100 steps per decade (1701 steps, 0.001 s):
+//   1e-3  9.9996e-1  2.9061e-5  1.0938e-5   sum - 1 = 0.0e0
+//   1e0  9.6651e-1  3.0755e-5  3.3456e-2   sum - 1 = 2.2e-16
+//   1e4  1.0832e-1  4.8511e-7  8.9168e-1   sum - 1 = 0.0e0
+//   1e11  2.1319e-8  8.5275e-14  1.0000e0   sum - 1 = 5.1e-15
+```
+
+:::
+
+The explicit solvers take 34 500 (scipy) to 59 000 (deSolve) steps for $t \le 40$, as estimated in B5(d), and 2.5–4 s; the stiff solvers 50–200 steps in milliseconds. deSolve's `ode45` returns a $y_2(40)$ that is 3 % off although its tolerances are tight: tens of thousands of steps, each one at the edge of stability, are not a reliable way to accumulate an answer. To $t = 10^{11}$ the stiff solvers need 1300–1600 steps; an explicit method held at $h \approx 10^{-3}$ would need $10^{14}$. The conservation law holds to $10^{-11}$. In Rust, `Dopri5` stops at $t = 1.5$ with "the problem seems to become stiff" unless the test is switched off; then it takes 34 583 steps, like scipy's RK45. The hand-written backward Euler on a log-spaced grid reaches $10^{11}$ in 171 or 1701 steps. With 10 steps per decade $y_2(10^4)$ is 10 % off, with 100 steps per decade 1 %: order 1 shows, but the method is stable at steps of $10^{10}$, and the conservation law holds to rounding error.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+# beuler from C2
+w <- 2 * pi / 24                                   # one cycle per 24 h
+A <- rbind(c(0, 1), c(-w^2, 0))
+amp <- function(y) sqrt(y[1]^2 + (y[2] / w)^2)     # exact: 1 for ever
+for (h in c(1, 0.5, 0.1, 0.01)) {
+  y <- beuler(function(y) as.vector(A %*% y), function(y) A, c(1, 0), h, round(240 / h))$y
+  cat(sprintf("backward Euler h = %4.2f: amplitude after 10 days %.6f\n", h, amp(y)))
+}
+osc <- function(t, y, p) list(as.vector(A %*% y))
+for (m in c("ode45", "bdf")) {
+  out <- ode(c(1, 0), c(0, 240), osc, NULL, method = m, rtol = 1e-8, atol = 1e-10)
+  cat(sprintf("%-5s: amplitude %.6f, steps %d\n", m, amp(out[2, -1]), attr(out, "istate")[2]))
+}
+# backward Euler h = 1.00: amplitude after 10 days 0.000351
+# backward Euler h = 0.50: amplitude after 10 days 0.016950
+# backward Euler h = 0.10: amplitude after 10 days 0.439470
+# backward Euler h = 0.01: amplitude after 10 days 0.921045
+# ode45: amplitude 1.000000, steps 565
+# bdf  : amplitude 0.999996, steps 1240
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import solve_ivp
+# beuler from C2
+w = 2 * np.pi / 24                                 # one cycle per 24 h
+A = np.array([[0, 1], [-w**2, 0]])
+amp = lambda y: np.sqrt(y[0]**2 + (y[1] / w)**2)   # exact: 1 for ever
+for h in [1, 0.5, 0.1, 0.01]:
+    y, _ = beuler(lambda y: A @ y, lambda y: A, [1, 0], h, round(240 / h))
+    print(f"backward Euler h = {h:4.2f}: amplitude after 10 days {amp(y):.6f}")
+for m in ["RK45", "BDF"]:
+    sol = solve_ivp(lambda t, y: A @ y, (0, 240), [1, 0], method=m, rtol=1e-8, atol=1e-10)
+    print(f"{m:5s}: amplitude {amp(sol.y[:, -1]):.6f}, steps {sol.t.size - 1}")
+# backward Euler h = 1.00: amplitude after 10 days 0.000351
+# backward Euler h = 0.50: amplitude after 10 days 0.016950
+# backward Euler h = 0.10: amplitude after 10 days 0.439470
+# backward Euler h = 0.01: amplitude after 10 days 0.921045
+# RK45 : amplitude 1.000000, steps 769
+# BDF  : amplitude 0.999997, steps 1283
+```
+
+### Rust
+
+```rust
+// rust/examples/stiffness_c7.rs  —  cargo run --example stiffness_c7
+// C7: backward Euler damps a 24-hour oscillation; an explicit library solver does not.
+use nalgebra::{DMatrix, DVector};
+use ode_solvers::{Dopri5, OutputType, System, Vector2};
+use std::f64::consts::PI;
+
+const W: f64 = 2.0 * PI / 24.0;                       // one cycle per 24 h
+
+fn amp(x: f64, v: f64) -> f64 { (x * x + (v / W).powi(2)).sqrt() } // exact: 1 for ever
+
+struct Osc;
+impl System<f64, Vector2<f64>> for Osc {
+    fn system(&self, _t: f64, y: &Vector2<f64>, dy: &mut Vector2<f64>) {
+        dy[0] = y[1]; dy[1] = -W * W * y[0];
+    }
+}
+
+fn main() {
+    let a = DMatrix::from_row_slice(2, 2, &[0.0, 1.0, -W * W, 0.0]);
+    let id = DMatrix::<f64>::identity(2, 2);
+    for h in [1.0, 0.5, 0.1, 0.01] {
+        // linear ODE: one Newton iteration is exact, so solve (I - hA) y_{n+1} = y_n directly
+        let lu = (&id - h * &a).lu();
+        let mut y = DVector::from_vec(vec![1.0, 0.0]);
+        for _ in 0..(240.0 / h).round() as usize { y = lu.solve(&y).unwrap(); }
+        println!("backward Euler h = {:4.2}: amplitude after 10 days {:.6}", h, amp(y[0], y[1]));
+    }
+    let mut s = Dopri5::new(Osc, 0.0, 240.0, 240.0, Vector2::new(1.0, 0.0), 1e-8, 1e-10);
+    s.set_output(OutputType::Sparse);                 // last output = the step that ends at t = 240
+    let st = s.integrate().unwrap();
+    let y = s.y_out().last().unwrap();
+    println!("Dopri5: amplitude {:.6}, steps {}", amp(y[0], y[1]), st.accepted_steps);
+}
+
+// Output:
+// backward Euler h = 1.00: amplitude after 10 days 0.000351
+// backward Euler h = 0.50: amplitude after 10 days 0.016950
+// backward Euler h = 0.10: amplitude after 10 days 0.439470
+// backward Euler h = 0.01: amplitude after 10 days 0.921045
+// Dopri5: amplitude 1.000000, steps 813
+```
+
+:::
+
+With $h = 1$ h the amplitude after 10 days is $3.5\times10^{-4}$ (B7(a)); even $h = 0.01$ h loses 8 %. The damping changes with $h$, which is the sign that it is numerical: the true amplitude cannot depend on the step. From the $h = 1$ run alone a modeller would conclude that the clock is strongly damped and needs a driving signal to keep oscillating, a wrong biological conclusion. The explicit solver keeps the amplitude to 6 digits with fewer steps than BDF: the oscillator is not stiff, and an implicit method is the wrong tool for it.
+:::
+
+## Where this leads
+
+- *Equilibria, stability and the phase plane* (Part 8): the eigenvalues of the Jacobian come back, now to decide whether a steady state of the biology is stable, not whether a solver is.
+- *Nonlinear least squares and ODE fitting* (Part 9): fitting rate constants solves the model hundreds of times; with a stiff model, choosing `lsoda` or `bdf` decides whether that takes seconds or hours.
+- *Implicit schemes and the method of lines* (Part 10): a diffusion equation on a grid becomes a large, sparse, stiff ODE system; backward Euler then needs one sparse (tridiagonal) solve per step.
+- We wrote backward Euler with a fixed step and full Newton iterations. Production solvers (`lsoda`, `bdf`, `radau`) also estimate their error, adapt step and order, and reuse the Jacobian and its LU factorisation over many steps.

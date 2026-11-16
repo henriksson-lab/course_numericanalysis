@@ -1,0 +1,1733 @@
+---
+title: "Exercise: gradient descent, Newton and quasi-Newton"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- compute a **gradient** and a **Hessian** by hand for a function of two variables, and check a coded gradient against **finite differences**,
+- decide from the Hessian whether a point with zero gradient is a **minimum**, a **maximum** or a **saddle**,
+- take **steepest descent** steps with an exact and with a **backtracking (Armijo)** line search, and predict from the **condition number** how slow steepest descent will be,
+- take a **Newton** step for minimisation, and recognise when the Hessian is not positive definite,
+- explain what the **BFGS** update does and why it needs only gradients, and do one **Nelder–Mead** move by hand,
+- fit a **4-parameter logistic dose–response curve** with your own methods and with `optim` / `scipy.optimize.minimize` / `argmin`, and detect the usual failures: a wrong gradient, bad **scaling**, a bad **start**.
+
+The by-hand part needs pen and paper (a calculator helps in B7). The code part uses the dose–response data from the lecture.
+
+## Background
+
+To minimise a smooth function $f(\mathbf x)$ of $n$ variables:
+
+1. **Gradient** $\nabla f$: the vector of partial derivatives $\partial f/\partial x_j$ (the Jacobian of a scalar function, written as a column). It points uphill, perpendicular to the contour lines. At a minimum, $\nabla f = \mathbf 0$.
+2. **Hessian** $H$: the matrix of second derivatives $H_{ij} = \partial^2 f/\partial x_i\partial x_j$, the Jacobian of the gradient. Symmetric. Near $\mathbf x$, $f(\mathbf x + \mathbf s) \approx f(\mathbf x) + \nabla f^\mathsf T \mathbf s + \tfrac12 \mathbf s^\mathsf T H \mathbf s$. A point with $\nabla f = \mathbf 0$ is a **minimum** if $H$ is **positive definite** (all eigenvalues $> 0$; for $2\times2$: $\det H > 0$ and $\operatorname{tr} H > 0$), a maximum if all eigenvalues are negative, a **saddle** if they have both signs.
+3. **Gradient of a sum of squares.** If $\mathrm{SSE}(\mathbf p) = \sum_i (y_i - m(c_i;\mathbf p))^2$, then $\nabla\mathrm{SSE} = -2J^\mathsf T\mathbf r$, with residuals $r_i = y_i - m(c_i)$ and the model Jacobian $J_{ij} = \partial m(c_i)/\partial p_j$.
+4. **Steepest descent:** $\mathbf x_{k+1} = \mathbf x_k - \alpha_k \nabla f(\mathbf x_k)$. **Backtracking (Armijo):** start with $\alpha = 1$ and halve until $f(\mathbf x - \alpha\mathbf g) \le f(\mathbf x) - c\,\alpha\,\|\mathbf g\|^2$, $c = 10^{-4}$. On a quadratic with exact line search the error shrinks by about $(\kappa - 1)/(\kappa + 1)$ per step, where $\kappa = \lambda_{\max}/\lambda_{\min}$ is the **condition number** of $H$.
+5. **Newton:** solve $H\mathbf s = -\nabla f$, set $\mathbf x \leftarrow \mathbf x + \alpha\mathbf s$. Quadratic convergence near a minimum. $\mathbf s$ is a descent direction only if $\nabla f^\mathsf T\mathbf s < 0$, which is guaranteed when $H$ is positive definite.
+6. **BFGS** keeps $B \approx H^{-1}$, moves along $-B\nabla f$, and after each step updates $B$ from $\mathbf s = \mathbf x_{k+1} - \mathbf x_k$ and $\mathbf y = \nabla f_{k+1} - \nabla f_k$ so that $B\mathbf y = \mathbf s$ (secant condition): $B \leftarrow V^\mathsf T B V + \rho\,\mathbf s\mathbf s^\mathsf T$, $V = I - \rho\,\mathbf y\mathbf s^\mathsf T$, $\rho = 1/\mathbf y^\mathsf T\mathbf s$. **L-BFGS** stores only the last few $(\mathbf s, \mathbf y)$ pairs.
+7. **Nelder–Mead** keeps $n+1$ points (a simplex) and replaces the worst by **reflecting** it through the centroid $\bar{\mathbf x}$ of the others: $\mathbf x_r = \bar{\mathbf x} + (\bar{\mathbf x} - \mathbf x_\text{worst})$. If $\mathbf x_r$ beats the best point, try the **expansion** $\bar{\mathbf x} + 2(\bar{\mathbf x} - \mathbf x_\text{worst})$; if it is no better than the second-worst, **contract** towards $\bar{\mathbf x}$.
+8. **Libraries.** R: [`optim`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/optim.html) (default `"Nelder-Mead"`; `"BFGS"`, `"CG"`, `"L-BFGS-B"`; option `gr` for the gradient, `control = list(parscale = ...)` for scaling). Python: [`scipy.optimize.minimize`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html) (default `"BFGS"`, `jac=` for the gradient; no `parscale`, so rescale by hand). Rust: the [`argmin`](https://docs.rs/argmin/latest/argmin/) crate (`NelderMead`, `BFGS`, `LBFGS`, `NonlinearConjugateGradient`). Gradient checks: R [`numDeriv::grad`](https://search.r-project.org/CRAN/refmans/numDeriv/html/grad.html), [`jacobian`](https://search.r-project.org/CRAN/refmans/numDeriv/html/jacobian.html) and [`hessian`](https://search.r-project.org/CRAN/refmans/numDeriv/html/hessian.html); Python [`scipy.optimize.approx_fprime`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.approx_fprime.html); Rust: hand-written differences.
+
+**The running example.** A reporter assay: 9 doses of an agonist from 0.01 to 100 µM (half-log steps), 2 wells each, response in % of the maximum. The 4-parameter logistic model is
+
+$$m(c) = b + \frac{t - b}{1 + (\mathrm{EC50}/c)^{h}}, \qquad \mathbf p = (b, t, \mathrm{EC50}, h) = (\text{bottom}, \text{top}, \mathrm{EC50}, \text{hill}).$$
+
+With $u = (\mathrm{EC50}/c)^h$ and $D = 1 + u$ the model derivatives are $\partial m/\partial b = u/D$, $\partial m/\partial t = 1/D$, $\partial m/\partial \mathrm{EC50} = -(t-b)\,h\,u/(\mathrm{EC50}\,D^2)$, $\partial m/\partial h = -(t-b)\,u\log(\mathrm{EC50}/c)/D^2$. The best fit is $\mathbf p^* = (5.3932,\ 96.1737,\ 1.27098,\ 1.23955)$ with $\mathrm{SSE} = 314.92396$; the start used throughout is $\mathbf p_0 = (0, 100, 1, 1)$.
+
+The data, the SSE and its gradient in each language (every task below uses these definitions):
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(numDeriv)
+dose <- rep(10^seq(-2, 2, by = 0.5), each = 2)        # µM
+y <- c(12.9, 9.8, 2.9, 0.1, 4.2, 9.7, 17.7, 22.3, 49.7, 42.1,
+       67.3, 72.6, 97.4, 91.8, 94.6, 93.3, 92.9, 95.1)
+f4  <- function(p, c) p[1] + (p[2] - p[1]) / (1 + (p[3] / c)^p[4])
+sse <- function(p) sum((y - f4(p, dose))^2)   # p = (bottom, top, EC50, hill)
+grad_sse <- function(p) {
+  u <- (p[3] / dose)^p[4];  D <- 1 + u
+  J <- cbind(u / D, 1 / D,
+             -(p[2] - p[1]) * p[4] * u / (p[3] * D^2),
+             -(p[2] - p[1]) * u * log(p[3] / dose) / D^2)
+  -2 * drop(t(J) %*% (y - f4(p, dose)))
+}
+p0 <- c(0, 100, 1, 1)
+sse(p0)
+grad_sse(p0)
+grad(sse, p0)                       # numDeriv: finite-difference check
+fit <- optim(p0, sse, grad_sse, method = "BFGS")
+fit$par; fit$value; fit$counts
+
+# Output:
+# [1] 558.9029
+# [1]    -1.729861    48.929861 -1125.637873    59.964774
+# [1]    -1.729861    48.929861 -1125.637873    59.964774
+# [1]  5.394369 96.174526  1.271055  1.239552
+# [1] 314.924
+# function gradient
+#       40       11
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import minimize, approx_fprime
+np.set_printoptions(suppress=True)
+np.seterr(invalid="ignore", over="ignore")   # bad trial steps give nan or inf
+
+dose = np.repeat(10.0 ** np.arange(-2, 2.01, 0.5), 2)   # µM
+y = np.array([12.9, 9.8, 2.9, 0.1, 4.2, 9.7, 17.7, 22.3, 49.7, 42.1,
+              67.3, 72.6, 97.4, 91.8, 94.6, 93.3, 92.9, 95.1])
+
+def f4(p, c):
+    return p[0] + (p[1] - p[0]) / (1 + (p[2] / c) ** p[3])
+
+def sse(p):                        # p = (bottom, top, EC50, hill)
+    return np.sum((y - f4(p, dose)) ** 2)
+
+def grad_sse(p):
+    u = (p[2] / dose) ** p[3]; D = 1 + u
+    J = np.column_stack([u / D, 1 / D,
+                         -(p[1] - p[0]) * p[3] * u / (p[2] * D**2),
+                         -(p[1] - p[0]) * u * np.log(p[2] / dose) / D**2])
+    return -2 * J.T @ (y - f4(p, dose))
+
+p0 = np.array([0.0, 100.0, 1.0, 1.0])
+def e(v): return "  ".join(f"{x:.1e}" for x in v)
+
+print(sse(p0))
+print(grad_sse(p0))
+print(approx_fprime(p0, sse, 1e-6))   # forward-difference check
+fit = minimize(sse, p0, jac=grad_sse, method="BFGS")
+print(fit.x, fit.fun, fit.nfev, fit.njev)
+
+# Output:
+# 558.9029101250604
+# [   -1.72986112    48.92986112 -1125.6378732     59.96477439]
+# [   -1.72985369    48.92986875 -1125.63441164    59.96813946]
+# [ 5.39318019 96.1737059   1.27098002  1.23955393] 314.92395944130067 70 58
+```
+
+### Rust
+
+```rust
+// rust/examples/gradient_methods_background.rs  —  cargo run --example gradient_methods_background
+// The 4PL fit: SSE, gradient, a central-difference check, and argmin's BFGS
+// (the counterpart of optim(method = "BFGS") and minimize(method="BFGS")).
+use argmin::core::{Executor, State};
+use argmin::solver::linesearch::MoreThuenteLineSearch;
+use argmin::solver::quasinewton::BFGS;
+include!("gradient_methods_shared/defs.rs");
+
+fn main() -> Result<(), Error> {
+    let p0 = P0.to_vec();
+    println!("{:.4}", sse(&p0));
+    println!("{:.6?}", grad_sse(&p0));
+    let fd: Vec<f64> = (0..4).map(|j| {           // central differences
+        let h = 1e-6 * p0[j].abs().max(1.0);
+        let (mut a, mut b) = (p0.clone(), p0.clone());
+        a[j] += h; b[j] -= h;
+        (sse(&a) - sse(&b)) / (2.0 * h)
+    }).collect();
+    println!("{:.6?}", fd);
+    let eye: Vec<Vec<f64>> = (0..4).map(|i| (0..4).map(|j| (i == j) as i32 as f64).collect()).collect();
+    let res = Executor::new(Fit, BFGS::new(MoreThuenteLineSearch::new()))
+        .configure(|s| s.param(p0.clone()).inv_hessian(eye).max_iters(200))
+        .run()?;
+    let s = res.state();
+    println!("{:.6?}  SSE {:.6}  iterations {}", s.get_best_param().unwrap(), s.get_best_cost(), s.get_iter());
+    Ok(())
+}
+
+// ---- rust/examples/gradient_methods_shared/defs.rs ----
+// Shared by the gradient_methods_* examples: include!("gradient_methods_shared/defs.rs")
+// The 4PL dose-response data, model, SSE and analytic gradient.
+use argmin::core::{CostFunction, Error, Gradient};
+
+const Y: [f64; 18] = [12.9, 9.8, 2.9, 0.1, 4.2, 9.7, 17.7, 22.3, 49.7, 42.1,
+                      67.3, 72.6, 97.4, 91.8, 94.6, 93.3, 92.9, 95.1];
+const P0: [f64; 4] = [0.0, 100.0, 1.0, 1.0];
+
+fn doses() -> Vec<f64> {          // 9 doses 0.01 ... 100 µM, 2 wells each
+    (0..18).map(|i| 10f64.powf(-2.0 + 0.5 * (i / 2) as f64)).collect()
+}
+fn f4(p: &[f64], c: f64) -> f64 {  // p = (bottom, top, EC50, hill)
+    p[0] + (p[1] - p[0]) / (1.0 + (p[2] / c).powf(p[3]))
+}
+fn sse(p: &[f64]) -> f64 {
+    doses().iter().zip(Y.iter()).map(|(&c, &y)| (y - f4(p, c)).powi(2)).sum()
+}
+fn grad_sse(p: &[f64]) -> Vec<f64> {   // -2 J^T r, one dose at a time
+    let mut g = vec![0.0; 4];
+    for (&c, &y) in doses().iter().zip(Y.iter()) {
+        let u = (p[2] / c).powf(p[3]);
+        let d = 1.0 + u;
+        let r = y - f4(p, c);
+        let j = [u / d, 1.0 / d,
+                 -(p[1] - p[0]) * p[3] * u / (p[2] * d * d),
+                 -(p[1] - p[0]) * u * (p[2] / c).ln() / (d * d)];
+        for k in 0..4 { g[k] -= 2.0 * j[k] * r; }
+    }
+    g
+}
+fn norm(v: &[f64]) -> f64 { v.iter().map(|x| x * x).sum::<f64>().sqrt() }
+fn dot(a: &[f64], b: &[f64]) -> f64 { a.iter().zip(b).map(|(x, y)| x * y).sum() }
+// x + a * s
+fn axpy(x: &[f64], a: f64, s: &[f64]) -> Vec<f64> { x.iter().zip(s).map(|(x, s)| x + a * s).collect() }
+
+// argmin wants the problem as a type with a cost (and gradient) method
+struct Fit;
+impl CostFunction for Fit {
+    type Param = Vec<f64>;
+    type Output = f64;
+    fn cost(&self, p: &Vec<f64>) -> Result<f64, Error> { Ok(sse(p)) }
+}
+impl Gradient for Fit {
+    type Param = Vec<f64>;
+    type Gradient = Vec<f64>;
+    fn gradient(&self, p: &Vec<f64>) -> Result<Vec<f64>, Error> { Ok(grad_sse(p)) }
+}
+
+// Output:
+// 558.9029
+// [-1.729861, 48.929861, -1125.637873, 59.964774]
+// [-1.729861, 48.929861, -1125.637873, 59.964774]
+// [5.393180, 96.173706, 1.270980, 1.239554]  SSE 314.923959  iterations 13
+```
+
+:::
+
+Rust prints numbers in its own format (e.g. `1.13e3` rather than `1.13e+03`); the values are the same unless the text says otherwise. The Rust examples share the definitions above through `include!`. scipy's `minimize` takes a different number of steps than R's `optim` (its line search and stopping rules differ), so counts of function calls differ between languages.
+
+## By hand
+
+**B1. Gradient and Hessian.** Let $f(x_1, x_2) = x_1^2 - 2x_1x_2 + 2x_2^2 - 2x_2$.
+(a) Compute $\nabla f$ and evaluate it at $(0, 0)$ and at $(3, 1)$.
+(b) Compute the Hessian $H$. Does it depend on $\mathbf x$?
+(c) Find the point where $\nabla f = \mathbf 0$.
+(d) Is it a minimum? Use the determinant and trace, then find the eigenvalues of $H$ and its condition number $\kappa$.
+(e) Take one Newton step from $(0, 0)$. Where do you land, and why?
+
+**B2. Minimum, maximum or saddle?** Let $f(x, y) = x^3 - 3x + y^2$.
+(a) Find all points with $\nabla f = \mathbf 0$.
+(b) Classify each with the Hessian.
+(c) Take one Newton step from $(-0.5, 1)$. Does it move towards the minimum? Is $\nabla f^\mathsf T\mathbf s < 0$ (a descent direction)?
+
+**B3. Steepest descent zig-zags.** Let $f(\mathbf x) = \tfrac12(x_1^2 + 9x_2^2)$, start $\mathbf x_0 = (9, 1)$.
+(a) Give $H$ and $\kappa$.
+(b) For a quadratic $f = \tfrac12\mathbf x^\mathsf T H\mathbf x$, the exact line search step along $-\mathbf g$ is $\alpha = \mathbf g^\mathsf T\mathbf g / \mathbf g^\mathsf T H\mathbf g$. Take two steepest-descent steps with exact line search.
+(c) Show that the two search directions are perpendicular.
+(d) By what factor did the distance to the minimum shrink per step? Compare with $(\kappa-1)/(\kappa+1)$.
+(e) How many steps does it take to reduce the distance by $10^6$? How many does Newton need?
+
+**B4. Backtracking by hand.** Same $f$ and $\mathbf x_0 = (9, 1)$. Run the Armijo rule with $c = 10^{-4}$: try $\alpha = 1, \tfrac12, \tfrac14, \ldots$ and stop at the first $\alpha$ with $f(\mathbf x_0 - \alpha\mathbf g) \le f(\mathbf x_0) - c\,\alpha\,\|\mathbf g\|^2$. Which $\alpha$ is accepted, and how does the new $f$ compare with the exact line search of B3?
+
+**B5. A fixed step size.** Same $f$, steepest descent with a **fixed** $\alpha$.
+(a) Show that each component evolves separately: $x_{1,k+1} = (1-\alpha)x_{1,k}$, $x_{2,k+1} = (1-9\alpha)x_{2,k}$.
+(b) For which $\alpha$ does the iteration converge? Relate the bound to the largest eigenvalue of $H$.
+(c) Which $\alpha$ makes the slower of the two factors as small as possible, and what is that factor?
+
+**B6. The BFGS secant condition.** Same $f$. The first BFGS step (with $B_0 = I$ and exact line search) is the first steepest-descent step of B3: $\mathbf s = (-1.8, -1.8)$.
+(a) Compute $\mathbf y = \nabla f(\mathbf x_1) - \nabla f(\mathbf x_0)$ and $\mathbf y^\mathsf T\mathbf s$.
+(b) Show that for **any** $B_0$, the update $B_1 = V^\mathsf TB_0V + \rho\,\mathbf s\mathbf s^\mathsf T$ with $V = I - \rho\,\mathbf y\mathbf s^\mathsf T$, $\rho = 1/\mathbf y^\mathsf T\mathbf s$ satisfies $B_1\mathbf y = \mathbf s$. (Hint: compute $V\mathbf y$ first.)
+(c) In one variable, what does $B_1 y = s$ say? Which method from *Newton and secant methods* is this?
+
+**B7. Units and the condition number.** At the best 4PL fit with dose in µM, the diagonal of the SSE Hessian is $(16.0,\ 14.4,\ 3611.5,\ 3701.6)$ for (bottom, top, EC50, hill).
+(a) If EC50 is measured in nM instead ($q = 1000\,\mathrm{EC50}$), how do $\partial\,\mathrm{SSE}/\partial q$ and $\partial^2\mathrm{SSE}/\partial q^2$ relate to the µM versions? (Chain rule.)
+(b) Use the ratio of the largest to the smallest diagonal entry as a rough guess for $\kappa$, in µM and in nM. (The true values are 550 and $1.9\times10^6$.)
+(c) R's `optim` takes finite-difference gradient steps of $10^{-3}$ in every parameter. What is that as a relative change of EC50 = 1271 nM, and of hill = 1.24?
+(d) What happens to $\partial^2\mathrm{SSE}/\partial p^2$ for EC50 if you fit $\ell = \log_{10}\mathrm{EC50}$ instead (at the minimum)? Use $d\,\mathrm{EC50}/d\ell = \ln(10)\,\mathrm{EC50}$.
+
+**B8. Nelder–Mead by hand.** Let $f(x, y) = x^2 + 2y^2$ and the simplex $(1, 1), (2, 1), (1, 2)$.
+(a) Evaluate $f$ at the three points; which is the worst?
+(b) Reflect the worst point through the centroid of the other two. Is the reflection accepted?
+(c) Do a second move: identify the new worst point, reflect, and decide whether to expand.
+
+## In code
+
+**C1. Check the gradient.**
+(a) Compare `grad_sse(p0)` with a forward-difference gradient (step $h_j = \sqrt\varepsilon\max(|p_j|, 1)$) and with `numDeriv::grad` (Python: `approx_fprime`; Rust: central differences). Print the relative error of each component. Which is more accurate?
+(b) Write `grad_bad`, a copy of `grad_sse` in which the factor $h$ (hill) is missing in $\partial m/\partial\mathrm{EC50}$. Compare it with a finite-difference gradient at $\mathbf p_0$ and at $\mathbf p_1 = (5, 95, 2, 1.5)$. Why does the check at $\mathbf p_0$ not see the bug?
+(c) Now flip the sign of the log in $\partial m/\partial h$ and give that gradient to BFGS (`optim(p0, sse, grad_sign, method = "BFGS")`). What SSE does it return, and does it report success?
+
+**C2. Zig-zag and the condition number.** Write `sd_armijo(f, g, x)` (steepest descent with backtracking, stop when $\|\mathbf g\| < 10^{-8}$). Run it on $f = \tfrac12(x_1^2 + \kappa x_2^2)$ from $(1, 1)$ for $\kappa = 1, 10, 100, 1000$. Count the steps and compare with $\log(10^{-8})/\log\frac{\kappa-1}{\kappa+1}$.
+
+**C3. Steepest descent on the 4PL, and the Hessian.**
+(a) Run `sd_armijo` on the SSE from $\mathbf p_0$ with tolerance $10^{-4}$. How many steps?
+(b) Compute the Hessian at the result as the forward-difference Jacobian of `grad_sse` (as in *Newton for systems of equations*). How symmetric is it?
+(c) Find its eigenvalues and $\kappa$. Is the point a minimum? How many steps does $(\kappa - 1)/(\kappa + 1)$ predict for 6 digits?
+
+**C4. Newton.**
+(a) Write Newton with backtracking (Hessian = Jacobian of the gradient; R: [`numDeriv::jacobian`](https://search.r-project.org/CRAN/refmans/numDeriv/html/jacobian.html)). From $\mathbf p_0$, print the SSE and $\|\nabla\mathrm{SSE}\|$ at each step. Is the convergence quadratic?
+(b) Start from $(0, 100, 10, 1)$. Print the eigenvalues of the Hessian. Then take 20 **pure** Newton steps (no line search). Where do you end?
+(c) Make the Hessian positive definite before each solve: if its smallest eigenvalue $\lambda_{\min} \le 0$, add $(10^{-3}\max_i|H_{ii}| - \lambda_{\min})\,I$. How many steps from $(0, 100, 10, 1)$ now?
+
+**C5. BFGS, yours and the library's.** Write `bfgs(f, g, x)` as on the lecture slide. Count the calls of the SSE and of the gradient (wrap them in functions that increment a counter). Compare with `optim(p0, sse, grad_sse, method = "BFGS")` (Python: `minimize(..., jac=grad_sse, method="BFGS")`; Rust: `argmin`'s `BFGS` with `MoreThuenteLineSearch`). In R, also run `optim` with `control = list(reltol = 1e-12)`: why does the default stop at a slightly higher SSE?
+
+**C6. Library methods, units and scaling.**
+(a) Fit the 4PL from $\mathbf p_0$ with Nelder–Mead, BFGS, CG and L-BFGS-B, **without** a gradient function. Print the SSE, EC50, the number of function calls and the convergence code.
+(b) Multiply the doses by 1000 (nM). Fit with BFGS from $(0, 100, 1, 1)$ ("EC50 is about 1") and from $(0, 100, 1000, 1)$. Then repeat the second fit with `parscale = c(1, 100, 1000, 1)` (Python and Rust: optimise $\mathbf q = \mathbf p / \text{scale}$).
+(c) Fit $\log_{10}\mathrm{EC50}$ instead of EC50 (dose in nM, start 3). Compare the number of calls.
+
+**C7. The growth curve from *Why numerical analysis?*.** The data: OD at `t_min = seq(0, 1440, by = 120)` minutes, `od = c(0.001, 0.047, 0.139, 0.282, 0.581, 0.859, 1.049, 1.161, 1.152, 1.217, 1.182, 1.176, 1.185)`, model $N(t) = K/(1 + (K/N_0 - 1)e^{-rt})$, start $(r, K, N_0) = (0.5, 1, 0.05)$.
+(a) Compute the gradient of the SSE at the start, time in minutes.
+(b) Fit with Nelder–Mead and BFGS, with time in minutes and in hours. Which fits are right?
+(c) (R) Compare the condition number of the Hessian at the good fit in minutes and in hours.
+
+**C8. Multistart.** Fit the 4PL from the 15 starts bottom = 0, top = 100, EC50 $\in \{0.01, 0.1, 1, 10, 100\}$, hill $\in \{0.5, 1, 3\}$, once with Nelder–Mead and once with BFGS with the analytic gradient. How many reach SSE = 314.92? Do the failures say so?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — gradients and Hessians by hand (B1, B2)"}
+Differentiate with respect to one variable while treating the other as a constant. The Hessian is the matrix of derivatives of the two gradient components: row $i$ = derivatives of $\partial f/\partial x_i$. For a $2\times2$ symmetric matrix the eigenvalues are $\tfrac12\left(\operatorname{tr} \pm \sqrt{\operatorname{tr}^2 - 4\det}\right)$. A Newton step solves $H\mathbf s = -\nabla f$; for a $2\times 2$ matrix $\begin{pmatrix}a&b\\c&d\end{pmatrix}^{-1} = \frac1{ad-bc}\begin{pmatrix}d&-b\\-c&a\end{pmatrix}$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — line searches (B3, B4, B5)"}
+For $f = \tfrac12(x_1^2 + 9x_2^2)$: $\mathbf g = (x_1, 9x_2)$ and $\mathbf g^\mathsf TH\mathbf g = g_1^2 + 9g_2^2$. For B5, the iteration in each component is $x \leftarrow (1 - \alpha\lambda)x$ with $\lambda$ the curvature in that direction; it converges if $|1 - \alpha\lambda| < 1$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — BFGS (B6, C5)"}
+$V\mathbf y = \mathbf y - \rho\,\mathbf y(\mathbf s^\mathsf T\mathbf y)$ and $\rho\,\mathbf s^\mathsf T\mathbf y = 1$. In code, `outer(s, s)` (Python `np.outer`) is the matrix $\mathbf s\mathbf s^\mathsf T$. Skip the update when $\mathbf y^\mathsf T\mathbf s \le 0$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — checking a gradient (C1)"}
+Compare component by component, relative to the size of each component. A forward difference is good to about $10^{-6}$–$10^{-8}$ relative, `numDeriv::grad` (Richardson extrapolation, see *Numerical differentiation*) to about $10^{-10}$. A bug gives errors of order $10^{-1}$ or 1. Check at a "generic" point: one where no parameter is 0 or 1.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — the Hessian and its eigenvalues (C3, C4)"}
+R: [`eigen(H, symmetric = TRUE)$values`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html), [`solve(H, -g)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html). Python: [`np.linalg.eigvalsh`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvalsh.html) (ascending order), `np.linalg.solve`. Rust: `nalgebra::SymmetricEigen`, `DMatrix::lu().solve`. Symmetrise a finite-difference Hessian with $(H + H^\mathsf T)/2$ before taking eigenvalues.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — library calls (C5–C8)"}
+`optim` returns `par`, `value`, `counts` (calls of `fn` and `gr`, not counting finite-difference calls) and `convergence` (0 = a stopping rule was met, 1 = `maxit` reached). `minimize` returns `x`, `fun`, `nfev`, `njev`, `success`, `message`. In argmin, the starting point goes in `configure(|s| s.param(...))`, BFGS also needs `inv_hessian` (start with the identity), and Nelder–Mead needs the whole starting simplex. Python has no `parscale`: write `lambda q: sse_nM(q * scale)` and start from `p / scale`.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $\nabla f = (2x_1 - 2x_2,\ -2x_1 + 4x_2 - 2)$. At $(0,0)$: $(0, -2)$. At $(3, 1)$: $(4, -4)$.
+(b) $H = \begin{pmatrix} 2 & -2 \\ -2 & 4\end{pmatrix}$, constant ($f$ is quadratic).
+(c) $2x_1 - 2x_2 = 0 \Rightarrow x_1 = x_2$; then $-2x_2 + 4x_2 = 2 \Rightarrow x_2 = 1$. The stationary point is $(1, 1)$.
+(d) $\det H = 8 - 4 = 4 > 0$, $\operatorname{tr} H = 6 > 0$: positive definite, a minimum. Eigenvalues $\tfrac12(6 \pm \sqrt{36 - 16}) = 3 \pm \sqrt5 = 5.236$ and $0.764$; $\kappa = 5.236/0.764 = 6.85$.
+(e) $H^{-1} = \tfrac14\begin{pmatrix}4 & 2\\ 2 & 2\end{pmatrix}$, $\mathbf s = -H^{-1}(0, -2)^\mathsf T = -\tfrac14(-4, -4) = (1, 1)$. One step lands exactly on the minimum $(1,1)$, because the quadratic model of a quadratic function is the function itself.
+
+**B2.**
+(a) $\nabla f = (3x^2 - 3,\ 2y) = \mathbf 0$ at $(1, 0)$ and $(-1, 0)$.
+(b) $H = \begin{pmatrix} 6x & 0 \\ 0 & 2\end{pmatrix}$. At $(1, 0)$: eigenvalues 6 and 2, a **minimum**. At $(-1, 0)$: $-6$ and 2, a **saddle**.
+(c) At $(-0.5, 1)$: $\nabla f = (-2.25, 2)$, $H = \operatorname{diag}(-3, 2)$. $\mathbf s = (-(-2.25)/(-3),\ -2/2) = (-0.75, -1)$, new point $(-1.25, 0)$: it moves **away** from the minimum at $x = 1$, towards the saddle at $x = -1$. $\nabla f^\mathsf T\mathbf s = (-2.25)(-0.75) + 2(-1) = 1.6875 - 2 = -0.3125 < 0$, so it *is* a descent direction here (the $y$ part dominates), and a line search would accept a step; but along $x$ it climbs towards the saddle. Negative curvature means the Newton step cannot be trusted, even when it happens to go downhill.
+
+**B3.**
+(a) $H = \operatorname{diag}(1, 9)$, $\kappa = 9$.
+(b) $\mathbf g_0 = (9, 9)$, $\alpha_0 = (81 + 81)/(81 + 9\cdot81) = 162/810 = 0.2$, $\mathbf x_1 = (9 - 1.8,\ 1 - 1.8) = (7.2, -0.8)$. $\mathbf g_1 = (7.2, -7.2)$, $\alpha_1 = 2\cdot 51.84/(51.84 + 466.56) = 0.2$, $\mathbf x_2 = (7.2 - 1.44,\ -0.8 + 1.44) = (5.76, 0.64)$.
+(c) $\mathbf g_0^\mathsf T\mathbf g_1 = 9\cdot7.2 - 9\cdot7.2 = 0$. With exact line search each new gradient is perpendicular to the previous direction: the zig-zag.
+(d) $\|\mathbf x_0\| = \sqrt{82} = 9.055$, $\|\mathbf x_1\| = \sqrt{52.48} = 7.244$, $\|\mathbf x_2\| = \sqrt{33.59} = 5.795$: factor $0.8$ each step, exactly $(\kappa - 1)/(\kappa + 1) = 8/10$ (this start is the worst case).
+(e) $0.8^k = 10^{-6} \Rightarrow k = 6/\log_{10}(1.25) = 61.9$, so 62 steps. Newton: one step, $\mathbf s = -H^{-1}\mathbf g_0 = (-9, -1)$, straight to $(0, 0)$.
+
+**B4.** $f(\mathbf x_0) = \tfrac12(81 + 9) = 45$, $\|\mathbf g\|^2 = 162$.
+$\alpha = 1$: $\mathbf x = (0, -8)$, $f = 288 > 45 - 0.0162$, reject.
+$\alpha = \tfrac12$: $(4.5, -3.5)$, $f = \tfrac12(20.25 + 110.25) = 65.25$, reject.
+$\alpha = \tfrac14$: $(6.75, -1.25)$, $f = \tfrac12(45.5625 + 14.0625) = 29.81 \le 45 - 0.00405$, **accept**.
+The exact step ($\alpha = 0.2$) gives $f(7.2, -0.8) = \tfrac12(51.84 + 5.76) = 28.8$. Backtracking is a little worse per step but needs only function values.
+
+**B5.**
+(a) $\nabla f = (x_1, 9x_2)$, so $x_1 - \alpha x_1 = (1-\alpha)x_1$ and $x_2 - 9\alpha x_2 = (1 - 9\alpha)x_2$.
+(b) Need $|1 - \alpha| < 1$ and $|1 - 9\alpha| < 1$: $0 < \alpha < 2/9$, i.e. $\alpha < 2/\lambda_{\max}$. This is the stability condition of Euler's method for $y' = -\lambda y$ (*Initial value problems and Euler's method*): steepest descent with a fixed step is Euler's method on $\mathbf x' = -\nabla f$.
+(c) Balance $1 - \alpha = -(1 - 9\alpha) \Rightarrow \alpha = 2/10 = 0.2$; factor $0.8 = (\kappa-1)/(\kappa+1)$ again. No fixed step does better than the condition number allows.
+
+**B6.**
+(a) $\mathbf x_1 = (7.2, -0.8)$: $\nabla f(\mathbf x_1) = (7.2, -7.2)$, $\nabla f(\mathbf x_0) = (9, 9)$, $\mathbf y = (-1.8, -16.2)$ ($= H\mathbf s$, as for any quadratic). $\mathbf y^\mathsf T\mathbf s = 3.24 + 29.16 = 32.4 > 0$.
+(b) $V\mathbf y = \mathbf y - \rho\,\mathbf y\,(\mathbf s^\mathsf T\mathbf y) = \mathbf y - \mathbf y = \mathbf 0$. So $B_1\mathbf y = V^\mathsf TB_0(V\mathbf y) + \rho\,\mathbf s(\mathbf s^\mathsf T\mathbf y) = \mathbf 0 + \mathbf s = \mathbf s$.
+(c) $B_1 = s/y = (x_1 - x_0)/(f'(x_1) - f'(x_0))$: the inverse of the slope of $f'$ between two points. The step $-B_1 f'(x_1)$ is a **secant** step for the equation $f'(x) = 0$.
+
+**B7.**
+(a) $\mathrm{EC50} = q/1000$, so $\partial\,\mathrm{SSE}/\partial q = \tfrac1{1000}\,\partial\,\mathrm{SSE}/\partial\mathrm{EC50}$ and $\partial^2\mathrm{SSE}/\partial q^2 = 10^{-6}\,\partial^2\mathrm{SSE}/\partial\mathrm{EC50}^2$.
+(b) µM: $3701.6/14.4 \approx 257$. nM: the EC50 entry becomes $0.0036$, so $3701.6/0.0036 \approx 10^6$. The rough guesses have the right order of magnitude (550 and $1.9\times10^6$).
+(c) EC50: $10^{-3}/1271 = 8\times10^{-7}$ relative; hill: $10^{-3}/1.24 = 8\times10^{-4}$ relative. The same absolute step means very different relative steps: another reason to scale.
+(d) $\partial^2\mathrm{SSE}/\partial\ell^2 \approx (\ln 10 \cdot \mathrm{EC50})^2\,\partial^2\mathrm{SSE}/\partial\mathrm{EC50}^2$ at the minimum (where the gradient term vanishes). In µM: $(2.303 \cdot 1.271)^2 \cdot 3611.5 \approx 3.1\times10^4$, and the same in nM, because $\ell$ only shifts by 3 when the unit changes. The log parameter does not care about units.
+
+**B8.**
+(a) $f(1,1) = 3$, $f(2,1) = 6$, $f(1,2) = 9$: worst $(1, 2)$.
+(b) Centroid of $(1,1)$ and $(2,1)$: $(1.5, 1)$. Reflection: $(1.5, 1) + ((1.5,1) - (1,2)) = (2, 0)$, $f = 4$. Better than the second-worst (6) but not better than the best (3): accept the reflection. New simplex $(1,1), (2,1), (2,0)$ with values 3, 6, 4.
+(c) Worst now $(2, 1)$; centroid of $(1,1)$ and $(2,0)$ is $(1.5, 0.5)$; reflection $(1, 0)$, $f = 1$: better than the best (3), so try the expansion $(1.5, 0.5) + 2(-0.5, -0.5) = (0.5, -0.5)$, $f = 0.25 + 0.5 = 0.75 < 1$: accept the expansion. New simplex $(1,1), (2,0), (0.5,-0.5)$. Only comparisons of $f$ values were needed.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses dose, y, f4, sse, grad_sse, p0 and numDeriv from the Background
+# (a) forward differences and numDeriv against the analytic gradient
+fd_grad <- function(f, x) {
+  sapply(seq_along(x), function(j) {
+    h <- sqrt(.Machine$double.eps) * max(abs(x[j]), 1)
+    xh <- x; xh[j] <- x[j] + h
+    (f(xh) - f(x)) / h
+  })
+}
+g <- grad_sse(p0)
+rbind(analytic = g, forward = fd_grad(sse, p0))
+signif(abs(fd_grad(sse, p0) - g) / abs(g), 2)
+signif(abs(grad(sse, p0) - g) / abs(g), 2)
+# (b) a bug: the factor p[4] (hill) missing in dm/d EC50
+grad_bad <- function(p) {
+  u <- (p[3] / dose)^p[4];  D <- 1 + u
+  J <- cbind(u / D, 1 / D,
+             -(p[2] - p[1]) * u / (p[3] * D^2),           # p[4] forgotten
+             -(p[2] - p[1]) * u * log(p[3] / dose) / D^2)
+  -2 * drop(t(J) %*% (y - f4(p, dose)))
+}
+p1 <- c(5, 95, 2, 1.5)
+signif(abs(grad_bad(p0) - grad(sse, p0)) / abs(grad(sse, p0)), 2)
+signif(abs(grad_bad(p1) - grad(sse, p1)) / abs(grad(sse, p1)), 2)
+# (c) optim with a sign error in dm/d hill
+grad_sign <- function(p) {
+  u <- (p[3] / dose)^p[4];  D <- 1 + u
+  J <- cbind(u / D, 1 / D,
+             -(p[2] - p[1]) * p[4] * u / (p[3] * D^2),
+             -(p[2] - p[1]) * u * log(dose / p[3]) / D^2)  # sign error
+  -2 * drop(t(J) %*% (y - f4(p, dose)))
+}
+o <- optim(p0, sse, grad_sign, method = "BFGS")
+o$par; o$value; o$convergence
+
+# Output:
+#               [,1]     [,2]      [,3]     [,4]
+# analytic -1.729861 48.92986 -1125.638 59.96477
+# forward  -1.729851 48.92987 -1125.638 59.96481
+# [1] 6.0e-06 2.2e-07 4.3e-08 5.2e-07
+# [1] 5.0e-09 1.8e-12 2.9e-11 4.3e-10
+# [1] 5.0e-09 1.8e-12 2.9e-11 4.3e-10
+# [1] 1.8e-12 1.3e-12 3.3e-01 1.1e-11
+# [1]  0.0188375 99.9849058  1.2021127  1.0543576
+# [1] 457.3891
+# [1] 0
+```
+
+### Python
+
+```python
+# uses np, minimize, approx_fprime, dose, y, f4, sse, grad_sse, p0, e from the Background
+# (a) forward differences and scipy's approx_fprime against the analytic gradient
+def fd_grad(f, x):
+    g = np.zeros(len(x))
+    for j in range(len(x)):
+        h = np.sqrt(np.finfo(float).eps) * max(abs(x[j]), 1)
+        xh = x.copy(); xh[j] += h
+        g[j] = (f(xh) - f(x)) / h
+    return g
+
+g = grad_sse(p0)
+print("analytic", g)
+print("forward ", fd_grad(sse, p0))
+print(e(np.abs(fd_grad(sse, p0) - g) / np.abs(g)))
+print(e(np.abs(approx_fprime(p0, sse) - g) / np.abs(g)))
+# (b) a bug: the factor p[3] (hill) missing in dm/d EC50
+def grad_bad(p):
+    u = (p[2] / dose) ** p[3]; D = 1 + u
+    J = np.column_stack([u / D, 1 / D,
+                         -(p[1] - p[0]) * u / (p[2] * D**2),       # hill forgotten
+                         -(p[1] - p[0]) * u * np.log(p[2] / dose) / D**2])
+    return -2 * J.T @ (y - f4(p, dose))
+
+p1 = np.array([5.0, 95.0, 2.0, 1.5])
+print(e(np.abs(grad_bad(p0) - fd_grad(sse, p0)) / np.abs(fd_grad(sse, p0))))
+print(e(np.abs(grad_bad(p1) - fd_grad(sse, p1)) / np.abs(fd_grad(sse, p1))))
+# (c) minimize with a sign error in dm/d hill
+def grad_sign(p):
+    u = (p[2] / dose) ** p[3]; D = 1 + u
+    J = np.column_stack([u / D, 1 / D,
+                         -(p[1] - p[0]) * p[3] * u / (p[2] * D**2),
+                         -(p[1] - p[0]) * u * np.log(dose / p[2]) / D**2])  # sign error
+    return -2 * J.T @ (y - f4(p, dose))
+
+o = minimize(sse, p0, jac=grad_sign, method="BFGS")
+print(o.x, o.fun, o.success, o.message)
+
+# Output:
+# analytic [   -1.72986112    48.92986112 -1125.6378732     59.96477439]
+# forward  [   -1.72984314    48.9298719  -1125.63781738    59.96481323]
+# 1.0e-05  2.2e-07  5.0e-08  6.5e-07
+# 1.0e-05  1.2e-07  5.0e-08  6.5e-07
+# 1.0e-05  2.2e-07  5.0e-08  6.5e-07
+# 1.9e-08  1.6e-07  3.3e-01  4.3e-08
+# [ 0.00036367 99.98971344  1.23664368  1.01260644] 451.04058755624936 False Desired error not necessarily achieved due to precision loss.
+```
+
+### Rust
+
+```rust
+// rust/examples/gradient_methods_c1.rs  —  cargo run --example gradient_methods_c1
+// C1: check the gradient; a missing factor; a sign error fed to argmin's BFGS.
+use argmin::core::{Executor, State};
+use argmin::solver::linesearch::MoreThuenteLineSearch;
+use argmin::solver::quasinewton::BFGS;
+include!("gradient_methods_shared/defs.rs");
+
+fn fd_grad(f: impl Fn(&[f64]) -> f64, x: &[f64], central: bool) -> Vec<f64> {
+    (0..x.len()).map(|j| {
+        let (mut a, mut b) = (x.to_vec(), x.to_vec());
+        if central {
+            let h = 1e-5 * x[j].abs().max(1.0);
+            a[j] += h; b[j] -= h;
+            (f(&a) - f(&b)) / (2.0 * h)
+        } else {
+            let h = f64::EPSILON.sqrt() * x[j].abs().max(1.0);
+            a[j] += h;
+            (f(&a) - f(x)) / h
+        }
+    }).collect()
+}
+fn rel(a: &[f64], b: &[f64]) -> String {
+    a.iter().zip(b).map(|(x, y)| format!("{:.1e}", ((x - y) / y).abs())).collect::<Vec<_>>().join("  ")
+}
+// the model Jacobian with two possible bugs
+fn grad_buggy(p: &[f64], forget_hill: bool, flip_sign: bool) -> Vec<f64> {
+    let mut g = vec![0.0; 4];
+    for (&c, &y) in doses().iter().zip(Y.iter()) {
+        let u = (p[2] / c).powf(p[3]);
+        let d = 1.0 + u;
+        let r = y - f4(p, c);
+        let h = if forget_hill { 1.0 } else { p[3] };
+        let l = if flip_sign { (c / p[2]).ln() } else { (p[2] / c).ln() };
+        let j = [u / d, 1.0 / d, -(p[1] - p[0]) * h * u / (p[2] * d * d), -(p[1] - p[0]) * u * l / (d * d)];
+        for k in 0..4 { g[k] -= 2.0 * j[k] * r; }
+    }
+    g
+}
+struct BadFit;
+impl CostFunction for BadFit {
+    type Param = Vec<f64>;
+    type Output = f64;
+    fn cost(&self, p: &Vec<f64>) -> Result<f64, Error> { Ok(sse(p)) }
+}
+impl Gradient for BadFit {
+    type Param = Vec<f64>;
+    type Gradient = Vec<f64>;
+    fn gradient(&self, p: &Vec<f64>) -> Result<Vec<f64>, Error> { Ok(grad_buggy(p, false, true)) }
+}
+
+fn main() -> Result<(), Error> {
+    let p0 = P0.to_vec();
+    let g = grad_sse(&p0);
+    // (a)
+    println!("analytic {:.6?}", g);
+    println!("forward  {:.6?}", fd_grad(sse, &p0, false));
+    println!("{}", rel(&fd_grad(sse, &p0, false), &g));
+    println!("{}", rel(&fd_grad(sse, &p0, true), &g));
+    // (b) missing hill factor: invisible at hill = 1
+    let p1 = [5.0, 95.0, 2.0, 1.5];
+    println!("{}", rel(&grad_buggy(&p0, true, false), &fd_grad(sse, &p0, true)));
+    println!("{}", rel(&grad_buggy(&p1, true, false), &fd_grad(sse, &p1, true)));
+    // (c) BFGS with a sign error in dm/d hill
+    let eye: Vec<Vec<f64>> = (0..4).map(|i| (0..4).map(|j| (i == j) as i32 as f64).collect()).collect();
+    let res = Executor::new(BadFit, BFGS::new(MoreThuenteLineSearch::new()))
+        .configure(|s| s.param(p0.clone()).inv_hessian(eye).max_iters(200))
+        .run();
+    match res {
+        Ok(r) => { let s = r.state();
+            println!("{:.4?}  SSE {:.4}  {}", s.get_best_param().unwrap(), s.get_best_cost(),
+                     s.get_termination_reason().unwrap().text()); }
+        Err(e) => println!("argmin stopped with an error: {}", e),
+    }
+    Ok(())
+}
+
+// Output:
+// analytic [-1.729861, 48.929861, -1125.637873, 59.964774]
+// forward  [-1.729836, 48.929872, -1125.637817, 59.964813]
+// 1.5e-5  2.2e-7  5.0e-8  6.5e-7
+// 1.3e-8  9.5e-13  3.2e-10  8.0e-9
+// 1.3e-8  9.5e-13  3.2e-10  8.0e-9
+// 1.8e-11  6.5e-13  3.3e-1  2.6e-10
+// argmin stopped with an error: Condition violated: "MoreThuenteLineSearch: NaN or Inf encountered during iteration"
+```
+
+:::
+
+(a) The forward difference agrees to $10^{-6}$–$10^{-8}$ relative, `numDeriv` (Richardson) to $10^{-9}$–$10^{-12}$; both confirm the analytic gradient. (b) At $\mathbf p_0$ the hill is exactly 1, so forgetting the factor $h$ changes nothing and the check passes. At $\mathbf p_1$ (hill 1.5) the EC50 component is off by 33 % ($1 - 1/1.5$): check at a point where no parameter is 0 or 1. (c) With the sign error, R's BFGS stops at SSE 457.4 with `convergence = 0`; scipy stops at 451.0 and at least reports `success = False` ("precision loss"); argmin's line search stops with an error. A wrong gradient can give a confident wrong fit: always run the check of (a) first.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+sd_armijo <- function(f, g, x, tol = 1e-8, maxit = 1e5) {
+  for (k in 1:maxit) {
+    gk <- g(x)
+    if (sqrt(sum(gk^2)) < tol) break
+    a <- 1
+    while (!isTRUE(f(x - a * gk) <= f(x) - 1e-4 * a * sum(gk^2))) a <- a / 2
+    x <- x - a * gk
+  }
+  list(par = x, steps = k - 1)
+}
+for (kap in c(1, 10, 100, 1000)) {
+  f <- function(x) (x[1]^2 + kap * x[2]^2) / 2
+  g <- function(x) c(x[1], kap * x[2])
+  r <- sd_armijo(f, g, c(1, 1))
+  pred <- if (kap == 1) 1 else log(1e-8) / log((kap - 1) / (kap + 1))
+  cat(sprintf("kappa %5g  steps %6d  predicted %8.0f\n", kap, r$steps, pred))
+}
+
+# Output:
+# kappa     1  steps      1  predicted        1
+# kappa    10  steps     74  predicted       92
+# kappa   100  steps    840  predicted      921
+# kappa  1000  steps   9243  predicted     9210
+```
+
+### Python
+
+```python
+# uses np, minimize, approx_fprime, dose, y, f4, sse, grad_sse, p0, e from the Background
+def sd_armijo(f, g, x, tol=1e-8, maxit=100000):
+    for k in range(maxit + 1):
+        gk = g(x)
+        if np.linalg.norm(gk) < tol:
+            break
+        a = 1.0
+        while not (f(x - a * gk) <= f(x) - 1e-4 * a * gk @ gk):   # also rejects nan
+            a /= 2
+        x = x - a * gk
+    return x, k
+
+for kap in [1, 10, 100, 1000]:
+    f = lambda x: (x[0]**2 + kap * x[1]**2) / 2
+    g = lambda x: np.array([x[0], kap * x[1]])
+    x, steps = sd_armijo(f, g, np.array([1.0, 1.0]))
+    pred = 1 if kap == 1 else np.log(1e-8) / np.log((kap - 1) / (kap + 1))
+    print(f"kappa {kap:5g}  steps {steps:6d}  predicted {pred:8.0f}")
+
+# Output:
+# kappa     1  steps      1  predicted        1
+# kappa    10  steps     74  predicted       92
+# kappa   100  steps    840  predicted      921
+# kappa  1000  steps   9243  predicted     9210
+```
+
+### Rust
+
+```rust
+// rust/examples/gradient_methods_c2.rs  —  cargo run --release --example gradient_methods_c2
+// C2: steepest descent with Armijo backtracking on f = (x1^2 + kappa x2^2)/2.
+fn sd_armijo(f: &dyn Fn(&[f64]) -> f64, g: &dyn Fn(&[f64]) -> Vec<f64>,
+             mut x: Vec<f64>, tol: f64, maxit: usize) -> (Vec<f64>, usize) {
+    let mut k = 0;
+    while k < maxit {
+        let gk = g(&x);
+        let g2: f64 = gk.iter().map(|v| v * v).sum();
+        if g2.sqrt() < tol { break; }
+        let mut a = 1.0;
+        let fx = f(&x);
+        let trial = |a: f64| -> Vec<f64> { x.iter().zip(&gk).map(|(x, g)| x - a * g).collect() };
+        // `!(.. <= ..)` also rejects NaN
+        while !(f(&trial(a)) <= fx - 1e-4 * a * g2) { a /= 2.0; }
+        x = trial(a);
+        k += 1;
+    }
+    (x, k)
+}
+
+fn main() {
+    for kap in [1.0, 10.0, 100.0, 1000.0f64] {
+        let f = move |x: &[f64]| (x[0] * x[0] + kap * x[1] * x[1]) / 2.0;
+        let g = move |x: &[f64]| vec![x[0], kap * x[1]];
+        let (_, steps) = sd_armijo(&f, &g, vec![1.0, 1.0], 1e-8, 100_000);
+        let pred = if kap == 1.0 { 1.0 } else { 1e-8f64.ln() / ((kap - 1.0) / (kap + 1.0)).ln() };
+        println!("kappa {:5}  steps {:6}  predicted {:8.0}", kap, steps, pred);
+    }
+}
+
+// Output:
+// kappa     1  steps      1  predicted        1
+// kappa    10  steps     74  predicted       92
+// kappa   100  steps    840  predicted      921
+// kappa  1000  steps   9243  predicted     9210
+```
+
+:::
+
+The step counts grow in proportion to $\kappa$: about 9 times more steps for every factor 10 in $\kappa$. The prediction from the exact-line-search rate is close; backtracking is sometimes a little better, sometimes a little worse. $\kappa = 1$ (round contours): the gradient points straight at the minimum and one step with $\alpha = 1$ lands on it.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses dose, y, f4, sse, grad_sse, p0 and numDeriv from the Background
+sd_armijo <- function(f, g, x, tol = 1e-4, maxit = 1e4) {
+  for (k in 1:maxit) {
+    gk <- g(x)
+    if (sqrt(sum(gk^2)) < tol) break
+    a <- 1
+    while (!isTRUE(f(x - a * gk) <= f(x) - 1e-4 * a * sum(gk^2))) a <- a / 2
+    x <- x - a * gk
+  }
+  list(par = x, steps = k - 1)
+}
+fit <- sd_armijo(sse, grad_sse, p0)
+fit$steps; fit$par; sse(fit$par)
+fd_jacobian <- function(F, x) {           # as in Newton for systems
+  F0 <- F(x)
+  sapply(seq_along(x), function(j) {
+    h <- sqrt(.Machine$double.eps) * max(abs(x[j]), 1)
+    xh <- x; xh[j] <- x[j] + h
+    (F(xh) - F0) / h
+  })
+}
+H <- fd_jacobian(grad_sse, fit$par)
+round(H, 1)
+max(abs(H - t(H)))                        # symmetric up to FD error
+ev <- eigen((H + t(H)) / 2, symmetric = TRUE)$values
+ev; kap <- max(ev) / min(ev); kap
+(kap - 1) / (kap + 1)
+log(1e-6) / log((kap - 1) / (kap + 1))
+
+# Output:
+# [1] 3453
+# [1]  5.393175 96.173715  1.270980  1.239554
+# [1] 314.924
+#        [,1]   [,2]   [,3]   [,4]
+# [1,]   16.0    2.8 -123.8 -100.8
+# [2,]    2.8   14.4 -123.6   99.6
+# [3,] -123.8 -123.6 3611.5   12.5
+# [4,] -100.8   99.6   12.5 3701.6
+# [1] 8.052073e-06
+# [1] 3708.828240 3618.223185    9.741187    6.737667
+# [1] 550.4618
+# [1] 0.9963733
+# [1] 3802.451
+```
+
+### Python
+
+```python
+# uses np, minimize, approx_fprime, dose, y, f4, sse, grad_sse, p0, e from the Background
+def sd_armijo(f, g, x, tol=1e-4, maxit=10000):
+    for k in range(maxit + 1):
+        gk = g(x)
+        if np.linalg.norm(gk) < tol:
+            break
+        a = 1.0
+        while not (f(x - a * gk) <= f(x) - 1e-4 * a * gk @ gk):
+            a /= 2
+        x = x - a * gk
+    return x, k
+
+x, steps = sd_armijo(sse, grad_sse, p0)
+print(steps, x, sse(x))
+
+def fd_jacobian(F, x):                     # as in Newton for systems
+    F0 = F(x); J = np.zeros((len(F0), len(x)))
+    for j in range(len(x)):
+        h = np.sqrt(np.finfo(float).eps) * max(abs(x[j]), 1)
+        xh = x.copy(); xh[j] += h
+        J[:, j] = (F(xh) - F0) / h
+    return J
+
+H = fd_jacobian(grad_sse, x)
+print(np.round(H, 1))
+print(np.max(np.abs(H - H.T)))
+ev = np.linalg.eigvalsh((H + H.T) / 2)[::-1]
+kap = ev[0] / ev[-1]
+print(ev, kap)
+print((kap - 1) / (kap + 1), np.log(1e-6) / np.log((kap - 1) / (kap + 1)))
+
+# Output:
+# 3464 [ 5.39317516 96.17371498  1.27098015  1.23955356] 314.9239594416683
+# [[  16.     2.8 -123.8 -100.8]
+#  [   2.8   14.4 -123.6   99.6]
+#  [-123.8 -123.6 3611.5   12.5]
+#  [-100.8   99.6   12.5 3701.6]]
+# 4.123898153274297e-05
+# [3708.82773156 3618.22314392    9.7411869     6.73766795] 550.4616377358914
+# 0.9963732744707116 3802.450100936247
+```
+
+### Rust
+
+```rust
+// rust/examples/gradient_methods_c3.rs  —  cargo run --release --example gradient_methods_c3
+// C3: steepest descent on the 4PL; the Hessian as a finite-difference Jacobian
+// of the gradient; its eigenvalues (nalgebra) and condition number.
+use nalgebra::{DMatrix, SymmetricEigen};
+include!("gradient_methods_shared/defs.rs");
+
+fn sd_armijo(mut x: Vec<f64>, tol: f64, maxit: usize) -> (Vec<f64>, usize) {
+    let mut k = 0;
+    while k < maxit {
+        let g = grad_sse(&x);
+        if norm(&g) < tol { break; }
+        let (fx, g2) = (sse(&x), dot(&g, &g));
+        let mut a = 1.0;
+        while !(sse(&axpy(&x, -a, &g)) <= fx - 1e-4 * a * g2) { a /= 2.0; }
+        x = axpy(&x, -a, &g);
+        k += 1;
+    }
+    (x, k)
+}
+fn fd_jacobian(f: impl Fn(&[f64]) -> Vec<f64>, x: &[f64]) -> DMatrix<f64> {
+    let f0 = f(x);
+    let mut j = DMatrix::zeros(f0.len(), x.len());
+    for c in 0..x.len() {
+        let h = f64::EPSILON.sqrt() * x[c].abs().max(1.0);
+        let mut xh = x.to_vec(); xh[c] += h;
+        let fh = f(&xh);
+        for r in 0..f0.len() { j[(r, c)] = (fh[r] - f0[r]) / h; }
+    }
+    j
+}
+
+fn main() {
+    let (x, steps) = sd_armijo(P0.to_vec(), 1e-4, 10_000);
+    println!("{}  {:.6?}  {:.4}", steps, x, sse(&x));
+    let h = fd_jacobian(grad_sse, &x);
+    println!("{:.1}", h);
+    println!("{:.2e}", (&h - h.transpose()).abs().max());
+    let mut ev: Vec<f64> = SymmetricEigen::new((&h + h.transpose()) / 2.0).eigenvalues.iter().cloned().collect();
+    ev.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    let kap = ev[0] / ev[3];
+    println!("{:.6?}  kappa {:.2}", ev, kap);
+    let q = (kap - 1.0) / (kap + 1.0);
+    println!("{:.7}  {:.0}", q, 1e-6f64.ln() / q.ln());
+}
+
+// Output:
+// 3453  [5.393175, 96.173715, 1.270980, 1.239554]  314.9240
+//
+//   ┌                             ┐
+//   │   16.0    2.8 -123.8 -100.8 │
+//   │    2.8   14.4 -123.6   99.6 │
+//   │ -123.8 -123.6 3611.5   12.5 │
+//   │ -100.8   99.6   12.5 3701.6 │
+//   └                             ┘
+//
+//
+// 1.74e-5
+// [3708.828209, 3618.223140, 9.741187, 6.737667]  kappa 550.46
+// 0.9963733  3802
+```
+
+:::
+
+3453 steps in R and Rust (Python: 3464; rounding in the SSE changes some backtracking decisions). The finite-difference Hessian is symmetric to about $10^{-5}$, i.e. 8–9 digits; all four eigenvalues are positive, so this is a minimum; $\kappa = 550$, and $(\kappa-1)/(\kappa+1) = 0.99637$ predicts about 3800 steps for 6 digits, the right size for what we observed. The two small eigenvalues belong to directions that are mostly bottom and top: the SSE is shallow there.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses dose, y, f4, sse, grad_sse, p0 and numDeriv from the Background
+hess <- function(p) jacobian(grad_sse, p)     # numDeriv: Jacobian of the gradient
+# (a) Newton with backtracking, printing each step
+x <- p0
+for (k in 1:6) {
+  g <- grad_sse(x)
+  cat(sprintf("%d  SSE %.8f  |g| %.2e\n", k - 1, sse(x), sqrt(sum(g^2))))
+  if (sqrt(sum(g^2)) < 1e-4) break
+  s <- solve(hess(x), -g);  a <- 1
+  while (!isTRUE(sse(x + a * s) <= sse(x) + 1e-4 * a * sum(g * s))) a <- a / 2
+  x <- x + a * s
+}
+# (b) a worse start: is H positive definite? where does pure Newton go?
+x <- c(0, 100, 10, 1)
+eigen(hess(x), symmetric = TRUE)$values
+for (k in 1:20) x <- x - solve(hess(x), grad_sse(x))
+round(x, 2); sse(x)
+# (c) modified Newton: shift H until it is positive definite
+newton_mod <- function(x, tol = 1e-4, maxit = 100) {
+  for (k in 1:maxit) {
+    g <- grad_sse(x)
+    if (sqrt(sum(g^2)) < tol) break
+    H <- hess(x);  H <- (H + t(H)) / 2
+    lmin <- min(eigen(H, symmetric = TRUE)$values)
+    if (lmin <= 0) H <- H + (1e-3 * max(abs(diag(H))) - lmin) * diag(length(x))
+    s <- solve(H, -g);  a <- 1
+    while (!isTRUE(sse(x + a * s) <= sse(x) + 1e-4 * a * sum(g * s))) a <- a / 2
+    x <- x + a * s
+  }
+  list(par = x, steps = k - 1)
+}
+r <- newton_mod(c(0, 100, 10, 1));  r$steps;  r$par;  sse(r$par)
+
+# Output:
+# 0  SSE 558.90291013  |g| 1.13e+03
+# 1  SSE 395.00565688  |g| 2.18e+02
+# 2  SSE 315.68420590  |g| 1.16e+01
+# 3  SSE 314.92418267  |g| 7.35e-01
+# 4  SSE 314.92395944  |g| 1.38e-04
+# 5  SSE 314.92395944  |g| 2.17e-11
+# [1]   115.27332    13.13729   -42.62776 -2422.74914
+# [1] 43.02 98.43 86.21 16.46
+# [1] 21187.79
+# [1] 9
+# [1]  5.393180 96.173706  1.270980  1.239554
+# [1] 314.924
+```
+
+### Python
+
+```python
+# uses np, minimize, approx_fprime, dose, y, f4, sse, grad_sse, p0, e from the Background
+def hess(p):                       # central-difference Jacobian of the gradient
+    H = np.zeros((4, 4))
+    for j in range(4):
+        h = 1e-5 * max(abs(p[j]), 1)
+        a = p.copy(); a[j] += h; b = p.copy(); b[j] -= h
+        H[:, j] = (grad_sse(a) - grad_sse(b)) / (2 * h)
+    return H
+
+# (a) Newton with backtracking, printing each step
+x = p0.copy()
+for k in range(6):
+    g = grad_sse(x)
+    print(f"{k}  SSE {sse(x):.8f}  |g| {np.linalg.norm(g):.2e}")
+    if np.linalg.norm(g) < 1e-4:
+        break
+    s = np.linalg.solve(hess(x), -g); a = 1.0
+    while not (sse(x + a * s) <= sse(x) + 1e-4 * a * g @ s):
+        a /= 2
+    x = x + a * s
+# (b) a worse start
+x = np.array([0.0, 100.0, 10.0, 1.0])
+print(np.linalg.eigvalsh(hess(x))[::-1])
+for k in range(20):
+    x = x - np.linalg.solve(hess(x), grad_sse(x))
+print(np.round(x, 2), sse(x))
+# (c) modified Newton
+def newton_mod(x, tol=1e-4, maxit=100):
+    for k in range(maxit + 1):
+        g = grad_sse(x)
+        if np.linalg.norm(g) < tol:
+            break
+        H = hess(x); H = (H + H.T) / 2
+        lmin = np.linalg.eigvalsh(H)[0]
+        if lmin <= 0:
+            H = H + (1e-3 * np.max(np.abs(np.diag(H))) - lmin) * np.eye(len(x))
+        s = np.linalg.solve(H, -g); a = 1.0
+        while not (sse(x + a * s) <= sse(x) + 1e-4 * a * g @ s):
+            a /= 2
+        x = x + a * s
+    return x, k
+
+x, steps = newton_mod(np.array([0.0, 100.0, 10.0, 1.0]))
+print(steps, x, sse(x))
+
+# Output:
+# 0  SSE 558.90291013  |g| 1.13e+03
+# 1  SSE 395.00565659  |g| 2.18e+02
+# 2  SSE 315.68420590  |g| 1.16e+01
+# 3  SSE 314.92418267  |g| 7.35e-01
+# 4  SSE 314.92395944  |g| 1.38e-04
+# 5  SSE 314.92395944  |g| 2.21e-11
+# [  115.27332444    13.13728782   -42.62776122 -2422.7491343 ]
+# [43.02 98.43 86.21 16.46] 21187.789238302616
+# 9 [ 5.39318015 96.17370588  1.27098001  1.23955392] 314.92395944130084
+```
+
+### Rust
+
+```rust
+// rust/examples/gradient_methods_c4.rs  —  cargo run --example gradient_methods_c4
+// C4: Newton for minimisation with backtracking; a start with an indefinite
+// Hessian; modified Newton (H + mu I). Linear algebra with nalgebra.
+use nalgebra::{DMatrix, DVector, SymmetricEigen};
+include!("gradient_methods_shared/defs.rs");
+
+fn hess(p: &[f64]) -> DMatrix<f64> {   // central-difference Jacobian of the gradient
+    let mut h = DMatrix::zeros(4, 4);
+    for j in 0..4 {
+        let s = 1e-5 * p[j].abs().max(1.0);
+        let (mut a, mut b) = (p.to_vec(), p.to_vec());
+        a[j] += s; b[j] -= s;
+        let (ga, gb) = (grad_sse(&a), grad_sse(&b));
+        for i in 0..4 { h[(i, j)] = (ga[i] - gb[i]) / (2.0 * s); }
+    }
+    h
+}
+fn eig_sorted(h: &DMatrix<f64>) -> Vec<f64> {
+    let mut ev: Vec<f64> = SymmetricEigen::new((h + h.transpose()) / 2.0).eigenvalues.iter().cloned().collect();
+    ev.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    ev
+}
+fn newton_dir(h: DMatrix<f64>, g: &[f64]) -> Vec<f64> {
+    let s = h.lu().solve(&(-DVector::from_column_slice(g))).expect("singular Hessian");
+    s.iter().cloned().collect()
+}
+fn backtrack(x: &[f64], g: &[f64], s: &[f64]) -> f64 {
+    let (fx, gs) = (sse(x), dot(g, s));
+    let mut a = 1.0;
+    while !(sse(&axpy(x, a, s)) <= fx + 1e-4 * a * gs) { a /= 2.0; }
+    a
+}
+
+fn main() {
+    // (a)
+    let mut x = P0.to_vec();
+    for k in 0..6 {
+        let g = grad_sse(&x);
+        println!("{}  SSE {:.8}  |g| {:.2e}", k, sse(&x), norm(&g));
+        if norm(&g) < 1e-4 { break; }
+        let s = newton_dir(hess(&x), &g);
+        x = axpy(&x, backtrack(&x, &g, &s), &s);
+    }
+    // (b)
+    let mut x = vec![0.0, 100.0, 10.0, 1.0];
+    println!("{:.5?}", eig_sorted(&hess(&x)));
+    for _ in 0..20 { let s = newton_dir(hess(&x), &grad_sse(&x)); x = axpy(&x, 1.0, &s); }
+    println!("{:.2?}  {:.2}", x, sse(&x));
+    // (c)
+    let mut x = vec![0.0, 100.0, 10.0, 1.0];
+    let mut steps = 0;
+    while steps < 100 {
+        let g = grad_sse(&x);
+        if norm(&g) < 1e-4 { break; }
+        let mut h = hess(&x);
+        h = (&h + h.transpose()) / 2.0;
+        let lmin = *eig_sorted(&h).last().unwrap();
+        if lmin <= 0.0 {
+            let mu = 1e-3 * h.diagonal().abs().max() - lmin;
+            h += DMatrix::identity(4, 4) * mu;
+        }
+        let s = newton_dir(h, &g);
+        x = axpy(&x, backtrack(&x, &g, &s), &s);
+        steps += 1;
+    }
+    println!("{}  {:.6?}  {:.4}", steps, x, sse(&x));
+}
+
+// Output:
+// 0  SSE 558.90291013  |g| 1.13e3
+// 1  SSE 395.00565664  |g| 2.18e2
+// 2  SSE 315.68420590  |g| 1.16e1
+// 3  SSE 314.92418267  |g| 7.35e-1
+// 4  SSE 314.92395944  |g| 1.38e-4
+// 5  SSE 314.92395944  |g| 2.11e-11
+// [115.27332, 13.13729, -42.62776, -2422.74913]
+// [43.02, 98.43, 86.21, 16.46]  21187.79
+// 9  [5.393180, 96.173706, 1.270980, 1.239554]  314.9240
+```
+
+:::
+
+(a) Five steps, all full Newton steps: the gradient norm goes $0.735 \to 1.4\times10^{-4} \to 2\times10^{-11}$, the exponent roughly doubles each step (quadratic convergence). (b) Two negative eigenvalues: the Hessian is indefinite, and pure Newton runs off to a steep, shifted curve (EC50 = 86 µM, hill = 16) with SSE 21188. Nothing in the iteration complains. (c) The shifted Hessian always gives a descent direction; the line search does the rest, and the method reaches the minimum in 9 steps.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses dose, y, f4, sse, grad_sse, p0 and numDeriv from the Background
+nf <- 0; ng <- 0                               # call counters
+fc <- function(p) { nf <<- nf + 1; sse(p) }
+gc <- function(p) { ng <<- ng + 1; grad_sse(p) }
+bfgs <- function(f, g, x, tol = 1e-4, maxit = 200) {
+  n <- length(x); B <- diag(n); gk <- g(x)
+  for (k in 1:maxit) {
+    if (sqrt(sum(gk^2)) < tol) break
+    s <- -drop(B %*% gk);  a <- 1;  fx <- f(x)
+    while (!isTRUE(f(x + a*s) <= fx + 1e-4 * a * sum(gk*s))) a <- a / 2
+    s <- a * s;  x <- x + s;  gn <- g(x);  yv <- gn - gk;  gk <- gn
+    if ((sy <- sum(yv * s)) > 0) {
+      V <- diag(n) - outer(yv, s) / sy
+      B <- t(V) %*% B %*% V + outer(s, s) / sy }
+  }
+  list(par = x, steps = k - 1)
+}
+r <- bfgs(fc, gc, p0)
+cat("own BFGS: steps", r$steps, " sse calls", nf, " gradient calls", ng,
+    " SSE", sprintf("%.6f", sse(r$par)), "\n")
+nf <- 0; ng <- 0
+o <- optim(p0, fc, gc, method = "BFGS")
+cat("optim:    sse calls", nf, " gradient calls", ng,
+    " SSE", sprintf("%.6f", o$value), "\n")
+nf <- 0; ng <- 0
+o <- optim(p0, fc, gc, method = "BFGS", control = list(reltol = 1e-12))
+cat("optim, reltol 1e-12: sse calls", nf, " gradient calls", ng,
+    " |g|", signif(sqrt(sum(grad_sse(o$par)^2)), 2), "\n")
+
+# Output:
+# own BFGS: steps 13  sse calls 54  gradient calls 14  SSE 314.923959
+# optim:    sse calls 40  gradient calls 11  SSE 314.923970
+# optim, reltol 1e-12: sse calls 59  gradient calls 16  |g| 4.3e-07
+```
+
+### Python
+
+```python
+# uses np, minimize, approx_fprime, dose, y, f4, sse, grad_sse, p0, e from the Background
+count = {"f": 0, "g": 0}
+def fc(p): count["f"] += 1; return sse(p)
+def gc(p): count["g"] += 1; return grad_sse(p)
+
+def bfgs(f, g, x, tol=1e-4, maxit=200):
+    n = len(x); B = np.eye(n); gk = g(x)
+    for k in range(maxit + 1):
+        if np.linalg.norm(gk) < tol:
+            break
+        s = -B @ gk; a = 1.0; fx = f(x)
+        while not (f(x + a * s) <= fx + 1e-4 * a * gk @ s):
+            a /= 2
+        s = a * s; x = x + s; gn = g(x); yv = gn - gk; gk = gn
+        sy = yv @ s
+        if sy > 0:
+            V = np.eye(n) - np.outer(yv, s) / sy
+            B = V.T @ B @ V + np.outer(s, s) / sy
+    return x, k
+
+x, steps = bfgs(fc, gc, p0)
+print(f"own BFGS: steps {steps}  sse calls {count['f']}  gradient calls {count['g']}  SSE {sse(x):.6f}")
+count = {"f": 0, "g": 0}
+o = minimize(fc, p0, jac=gc, method="BFGS")
+print(f"minimize: sse calls {count['f']}  gradient calls {count['g']}  SSE {o.fun:.6f}  |g| {np.linalg.norm(grad_sse(o.x)):.1e}")
+
+# Output:
+# own BFGS: steps 13  sse calls 54  gradient calls 14  SSE 314.923959
+# minimize: sse calls 70  gradient calls 58  SSE 314.923959  |g| 2.3e-05
+```
+
+### Rust
+
+```rust
+// rust/examples/gradient_methods_c5.rs  —  cargo run --example gradient_methods_c5
+// C5: BFGS written out, with call counters, against argmin's BFGS.
+use argmin::core::{Executor, State};
+use argmin::solver::linesearch::MoreThuenteLineSearch;
+use argmin::solver::quasinewton::BFGS;
+use std::cell::Cell;
+use std::sync::atomic::{AtomicU64, Ordering};
+include!("gradient_methods_shared/defs.rs");
+
+// argmin owns the problem, so count its calls with global counters
+static NF: AtomicU64 = AtomicU64::new(0);
+static NG: AtomicU64 = AtomicU64::new(0);
+struct Counted;
+impl CostFunction for Counted {
+    type Param = Vec<f64>;
+    type Output = f64;
+    fn cost(&self, p: &Vec<f64>) -> Result<f64, Error> { NF.fetch_add(1, Ordering::Relaxed); Ok(sse(p)) }
+}
+impl Gradient for Counted {
+    type Param = Vec<f64>;
+    type Gradient = Vec<f64>;
+    fn gradient(&self, p: &Vec<f64>) -> Result<Vec<f64>, Error> { NG.fetch_add(1, Ordering::Relaxed); Ok(grad_sse(p)) }
+}
+
+fn bfgs(f: &dyn Fn(&[f64]) -> f64, g: &dyn Fn(&[f64]) -> Vec<f64>,
+        mut x: Vec<f64>, tol: f64, maxit: usize) -> (Vec<f64>, usize) {
+    let n = x.len();
+    let mut b = vec![vec![0.0; n]; n];          // B ~ inverse Hessian, start = I
+    for i in 0..n { b[i][i] = 1.0; }
+    let mut gk = g(&x);
+    let mut k = 0;
+    while k < maxit && norm(&gk) >= tol {
+        let s: Vec<f64> = (0..n).map(|i| -dot(&b[i], &gk)).collect();
+        let (fx, gs) = (f(&x), dot(&gk, &s));
+        let mut a = 1.0;
+        while !(f(&axpy(&x, a, &s)) <= fx + 1e-4 * a * gs) { a /= 2.0; }
+        let s: Vec<f64> = s.iter().map(|v| a * v).collect();
+        x = axpy(&x, 1.0, &s);
+        let gn = g(&x);
+        let yv: Vec<f64> = gn.iter().zip(&gk).map(|(a, b)| a - b).collect();
+        gk = gn;
+        let sy = dot(&yv, &s);
+        if sy > 0.0 {   // B <- V^T B V + s s^T / sy,  V = I - y s^T / sy
+            let v: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j|
+                (i == j) as i32 as f64 - yv[i] * s[j] / sy).collect()).collect();
+            let bv: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j|
+                (0..n).map(|l| b[i][l] * v[l][j]).sum()).collect()).collect();
+            b = (0..n).map(|i| (0..n).map(|j|
+                (0..n).map(|l| v[l][i] * bv[l][j]).sum::<f64>() + s[i] * s[j] / sy).collect()).collect();
+        }
+        k += 1;
+    }
+    (x, k)
+}
+
+fn main() -> Result<(), Error> {
+    let (nf, ng) = (Cell::new(0), Cell::new(0));
+    let fc = |p: &[f64]| { nf.set(nf.get() + 1); sse(p) };
+    let gc = |p: &[f64]| { ng.set(ng.get() + 1); grad_sse(p) };
+    let (x, steps) = bfgs(&fc, &gc, P0.to_vec(), 1e-4, 200);
+    println!("own BFGS: steps {}  sse calls {}  gradient calls {}  SSE {:.6}", steps, nf.get(), ng.get(), sse(&x));
+    let eye: Vec<Vec<f64>> = (0..4).map(|i| (0..4).map(|j| (i == j) as i32 as f64).collect()).collect();
+    let res = Executor::new(Counted, BFGS::new(MoreThuenteLineSearch::new()))
+        .configure(|s| s.param(P0.to_vec()).inv_hessian(eye).max_iters(200))
+        .run()?;
+    let s = res.state();
+    println!("argmin:   iterations {}  sse calls {}  gradient calls {}  SSE {:.6}  |g| {:.1e}",
+             s.get_iter(), NF.load(Ordering::Relaxed), NG.load(Ordering::Relaxed), s.get_best_cost(),
+             norm(&grad_sse(s.get_best_param().unwrap())));
+    Ok(())
+}
+
+// Output:
+// own BFGS: steps 13  sse calls 54  gradient calls 14  SSE 314.923959
+// argmin:   iterations 13  sse calls 30  gradient calls 43  SSE 314.923959  |g| 8.1e-10
+```
+
+:::
+
+Our BFGS needs 13 steps, 14 gradients and 54 SSE values (most for backtracking, which starts at $\alpha = 1$ every time). R's `optim` needs 40 and 11 and stops at SSE 314.923970, $10^{-5}$ above the minimum: its stopping rule is a **relative change of the SSE** below `reltol` $= 1.5\times10^{-8}$, and $10^{-5}/315 = 3\times10^{-8}$. With `reltol = 1e-12` it goes on to $\|\nabla\mathrm{SSE}\| = 4\times10^{-7}$. scipy's BFGS uses more calls (its Wolfe line search evaluates the gradient at every trial point) and stops at $\|\mathbf g\|_\infty < 10^{-5}$; argmin's More–Thuente line search uses 30 SSE and 43 gradient calls.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses dose, y, f4, sse, grad_sse, p0 and numDeriv from the Background
+# (a) four methods, µM
+for (m in c("Nelder-Mead", "BFGS", "CG", "L-BFGS-B")) {
+  o <- optim(p0, sse, method = m)
+  cat(sprintf("%-11s  SSE %.4f  EC50 %.4f  fn %3d  gr %3s  conv %d\n",
+              m, o$value, o$par[3], o$counts[1], o$counts[2], o$convergence))
+}
+# (b) dose in nM
+dose_nM <- dose * 1000
+sse_nM <- function(p) sum((y - f4(p, dose_nM))^2)
+show <- function(o) cat(sprintf("SSE %.4f  EC50 %.2f  hill %.3f  fn %3d  conv %d\n",
+                                o$value, o$par[3], o$par[4], o$counts[1], o$convergence))
+show(optim(c(0, 100, 1, 1), sse_nM, method = "BFGS"))
+show(optim(c(0, 100, 1000, 1), sse_nM, method = "BFGS"))
+show(optim(c(0, 100, 1000, 1), sse_nM, method = "BFGS",
+           control = list(parscale = c(1, 100, 1000, 1))))
+# (c) fit log10(EC50) instead
+sse_log <- function(q) sse_nM(c(q[1], q[2], 10^q[3], q[4]))
+o <- optim(c(0, 100, 3, 1), sse_log, method = "BFGS")
+cat(sprintf("log10 EC50 %.4f  EC50 %.2f nM  SSE %.4f  fn %d\n",
+            o$par[3], 10^o$par[3], o$value, o$counts[1]))
+k <- function(H) { ev <- eigen(H, symmetric = TRUE)$values; max(ev) / min(ev) }
+ps <- c(5.39318, 96.17371, 1270.98, 1.239554)
+cat(sprintf("kappa: nM %.3g   log10 %.3g\n", k(hessian(sse_nM, ps)),
+            k(hessian(sse_log, c(ps[1:2], log10(ps[3]), ps[4])))))
+
+# Output:
+# Nelder-Mead  SSE 314.9240  EC50 1.2711  fn 335  gr  NA  conv 0
+# BFGS         SSE 314.9240  EC50 1.2711  fn  40  gr  11  conv 0
+# CG           SSE 321.2024  EC50 1.2765  fn 333  gr 101  conv 1
+# L-BFGS-B     SSE 314.9240  EC50 1.2710  fn  36  gr  36  conv 0
+# SSE 25807.2578  EC50 2.24  hill -13.817  fn  36  conv 0
+# SSE 314.9246  EC50 1271.70  hill 1.239  fn 109  conv 0
+# SSE 314.9240  EC50 1270.95  hill 1.239  fn  36  conv 0
+# log10 EC50 3.1041  EC50 1270.99 nM  SSE 314.9240  fn 31
+# kappa: nM 1.95e+06   log10 4.59e+03
+```
+
+### Python
+
+```python
+# uses np, minimize, approx_fprime, dose, y, f4, sse, grad_sse, p0, e from the Background
+# (a) four methods, µM
+for m in ["Nelder-Mead", "BFGS", "CG", "L-BFGS-B"]:
+    o = minimize(sse, p0, method=m)
+    print(f"{m:<11}  SSE {o.fun:.4f}  EC50 {o.x[2]:.4f}  nfev {o.nfev:4d}  success {o.success}")
+# (b) dose in nM
+dose_nM = dose * 1000
+def sse_nM(p):
+    return np.sum((y - f4(p, dose_nM)) ** 2)
+def show(o, scale=1):
+    x = o.x * scale
+    print(f"SSE {o.fun:.4f}  EC50 {x[2]:.2f}  hill {x[3]:.3f}  nfev {o.nfev:3d}  success {o.success}")
+show(minimize(sse_nM, [0, 100, 1, 1], method="BFGS"))
+show(minimize(sse_nM, [0, 100, 1000, 1], method="BFGS"))
+scale = np.array([1, 100, 1000, 1])           # no parscale in scipy: rescale by hand
+show(minimize(lambda q: sse_nM(q * scale), np.array([0, 100, 1000, 1]) / scale,
+              method="BFGS"), scale)
+# (c) fit log10(EC50) instead
+def sse_log(q):
+    return sse_nM([q[0], q[1], 10 ** q[2], q[3]])
+o = minimize(sse_log, [0, 100, 3, 1], method="BFGS")
+print(f"log10 EC50 {o.x[2]:.4f}  EC50 {10**o.x[2]:.2f} nM  SSE {o.fun:.4f}  nfev {o.nfev}")
+
+# Output:
+# Nelder-Mead  SSE 314.9240  EC50 1.2710  nfev  404  success True
+# BFGS         SSE 314.9240  EC50 1.2710  nfev  120  success False
+# CG           SSE 314.9240  EC50 1.2710  nfev  662  success False
+# L-BFGS-B     SSE 314.9240  EC50 1.2710  nfev  135  success True
+# SSE 9863.9864  EC50 135.33  hill 42.240  nfev  95  success False
+# SSE 314.9240  EC50 1270.98  hill 1.240  nfev 225  success False
+# SSE 314.9240  EC50 1270.98  hill 1.240  nfev 300  success False
+# log10 EC50 3.1041  EC50 1270.98 nM  SSE 314.9240  nfev 331
+```
+
+### Rust
+
+```rust
+// rust/examples/gradient_methods_c6.rs  —  cargo run --example gradient_methods_c6
+// C6: argmin's Nelder-Mead, BFGS, L-BFGS and nonlinear CG on the 4PL; then the
+// dose in nM, rescaled parameters, and log10(EC50). Like optim without `gr`,
+// the gradient is by central differences with an absolute step 1e-3.
+// argmin's line searches have no limit on the number of trial steps, and from the
+// nM starts in (b) they never returned, so (b) and (c) use the BFGS of C5 (Armijo
+// backtracking, at most 60 halvings) with the same finite-difference gradient.
+use argmin::core::{Executor, State, TerminationStatus};
+use argmin::solver::conjugategradient::{beta::PolakRibiere, NonlinearConjugateGradient};
+use argmin::solver::linesearch::{condition::ArmijoCondition, BacktrackingLineSearch};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NF: AtomicU64 = AtomicU64::new(0);   // calls of the cost function
+use argmin::solver::neldermead::NelderMead;
+use argmin::solver::quasinewton::{BFGS, LBFGS};
+include!("gradient_methods_shared/defs.rs");
+
+// p = q * scale; optionally p[2] = 10^p[2]; doses multiplied by `unit`
+#[derive(Clone)]
+struct Fd { unit: f64, scale: [f64; 4], log_ec50: bool }
+impl Fd {
+    fn par(&self, q: &[f64]) -> Vec<f64> {
+        let mut p: Vec<f64> = q.iter().zip(&self.scale).map(|(q, s)| q * s).collect();
+        if self.log_ec50 { p[2] = 10f64.powf(p[2]); }
+        p
+    }
+}
+impl CostFunction for Fd {
+    type Param = Vec<f64>;
+    type Output = f64;
+    fn cost(&self, q: &Vec<f64>) -> Result<f64, Error> {
+        NF.fetch_add(1, Ordering::Relaxed);
+        let p = self.par(q);
+        Ok(doses().iter().zip(Y.iter()).map(|(&c, &y)| (y - f4(&p, c * self.unit)).powi(2)).sum())
+    }
+}
+impl Gradient for Fd {
+    type Param = Vec<f64>;
+    type Gradient = Vec<f64>;
+    fn gradient(&self, q: &Vec<f64>) -> Result<Vec<f64>, Error> {
+        (0..q.len()).map(|j| {
+            let (mut a, mut b) = (q.clone(), q.clone());
+            a[j] += 1e-3; b[j] -= 1e-3;
+            Ok((self.cost(&a)? - self.cost(&b)?) / 2e-3)
+        }).collect()
+    }
+}
+fn eye() -> Vec<Vec<f64>> { (0..4).map(|i| (0..4).map(|j| (i == j) as i32 as f64).collect()).collect() }
+
+fn run(name: &str, prob: Fd, q0: Vec<f64>, method: &str) {
+    NF.store(0, Ordering::Relaxed);
+    let ls = BacktrackingLineSearch::new(ArmijoCondition::new(1e-4).unwrap());
+    let res = match method {
+        "NM" => {
+            let mut simplex = vec![q0.clone()];
+            for j in 0..4 { let mut v = q0.clone(); v[j] += 0.1 * q0[j].abs().max(1.0); simplex.push(v); }
+            let solver = NelderMead::new(simplex).with_sd_tolerance(1e-8).unwrap();
+            Executor::new(prob.clone(), solver).configure(|s| s.max_iters(500)).run().map(|r| r.state().clone())
+                .map(|s| (s.get_best_param().unwrap().clone(), s.get_best_cost(), s.get_iter(), s.get_func_counts().clone(), s.get_termination_status().clone()))
+        }
+        "BFGS" => Executor::new(prob.clone(), BFGS::new(ls))
+            .configure(|s| s.param(q0.clone()).inv_hessian(eye()).max_iters(100)).run()
+            .map(|r| { let s = r.state().clone(); (s.get_best_param().unwrap().clone(), s.get_best_cost(), s.get_iter(), s.get_func_counts().clone(), s.get_termination_status().clone()) }),
+        "LBFGS" => Executor::new(prob.clone(), LBFGS::new(ls, 5))
+            .configure(|s| s.param(q0.clone()).max_iters(100)).run()
+            .map(|r| { let s = r.state().clone(); (s.get_best_param().unwrap().clone(), s.get_best_cost(), s.get_iter(), s.get_func_counts().clone(), s.get_termination_status().clone()) }),
+        _ => Executor::new(prob.clone(), NonlinearConjugateGradient::new(ls, PolakRibiere::new()).restart_iters(10))
+            .configure(|s| s.param(q0.clone()).max_iters(100)).run()
+            .map(|r| { let s = r.state().clone(); (s.get_best_param().unwrap().clone(), s.get_best_cost(), s.get_iter(), s.get_func_counts().clone(), s.get_termination_status().clone()) }),
+    };
+    match res {
+        Ok((q, cost, iters, _counts, status)) => {
+            let p = prob.par(&q);
+            let why = match status { TerminationStatus::Terminated(r) => r.text().to_string(), _ => "running".into() };
+            println!("{:<16} {:<5} SSE {:10.4}  EC50 {:9.4}  hill {:7.3}  iter {:3}  cost calls {:4}  ({})",
+                     name, method, cost, p[2], p[3], iters, NF.load(Ordering::Relaxed), why);
+        }
+        Err(e) => println!("{:<16} {:<5} error: {}", name, method, e),
+    }
+}
+
+// BFGS of C5, on the problem `prob`, with at most 60 halvings per line search;
+// like optim, stop when the relative decrease of the SSE is below 1.5e-8
+fn own_bfgs(name: &str, prob: &Fd, q0: Vec<f64>) {
+    NF.store(0, Ordering::Relaxed);
+    let f = |q: &[f64]| prob.cost(&q.to_vec()).unwrap();
+    let g = |q: &[f64]| prob.gradient(&q.to_vec()).unwrap();
+    let n = q0.len();
+    let mut x = q0;
+    let mut b: Vec<Vec<f64>> = eye();
+    let mut gk = g(&x);
+    let mut k = 0;
+    while k < 100 && norm(&gk) >= 1e-4 {
+        let s: Vec<f64> = (0..n).map(|i| -dot(&b[i], &gk)).collect();
+        let (fx, gs) = (f(&x), dot(&gk, &s));
+        let mut a = 1.0;
+        let mut halvings = 0;
+        while !(f(&axpy(&x, a, &s)) <= fx + 1e-4 * a * gs) && halvings < 60 { a /= 2.0; halvings += 1; }
+        if halvings == 60 { break; }                       // no downhill step found
+        let s: Vec<f64> = s.iter().map(|v| a * v).collect();
+        x = axpy(&x, 1.0, &s);
+        let fnew = f(&x);
+        if fx - fnew < 1.5e-8 * (fx.abs() + 1.5e-8) { k += 1; break; }
+        let gn = g(&x);
+        let yv: Vec<f64> = gn.iter().zip(&gk).map(|(a, b)| a - b).collect();
+        gk = gn;
+        let sy = dot(&yv, &s);
+        if sy > 0.0 {
+            let v: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j|
+                (i == j) as i32 as f64 - yv[i] * s[j] / sy).collect()).collect();
+            let bv: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j|
+                (0..n).map(|l| b[i][l] * v[l][j]).sum()).collect()).collect();
+            b = (0..n).map(|i| (0..n).map(|j|
+                (0..n).map(|l| v[l][i] * bv[l][j]).sum::<f64>() + s[i] * s[j] / sy).collect()).collect();
+        }
+        k += 1;
+    }
+    let p = prob.par(&x);
+    println!("{:<16} own BFGS  SSE {:10.4}  EC50 {:9.4}  hill {:7.3}  iter {:3}  cost calls {:4}",
+             name, f(&x), p[2], p[3], k, NF.load(Ordering::Relaxed));
+}
+
+fn main() {
+    // (a) argmin, dose in µM
+    let um = Fd { unit: 1.0, scale: [1.0; 4], log_ec50: false };
+    for m in ["NM", "BFGS", "LBFGS", "CG"] { run("µM", um.clone(), P0.to_vec(), m); }
+    // (b) dose in nM
+    let nm = Fd { unit: 1000.0, scale: [1.0; 4], log_ec50: false };
+    own_bfgs("nM, EC50 = 1", &nm, vec![0.0, 100.0, 1.0, 1.0]);
+    own_bfgs("nM, EC50 = 1000", &nm, vec![0.0, 100.0, 1000.0, 1.0]);
+    let sc = Fd { unit: 1000.0, scale: [1.0, 100.0, 1000.0, 1.0], log_ec50: false };
+    own_bfgs("nM, rescaled", &sc, vec![0.0, 1.0, 1.0, 1.0]);
+    // (c) log10(EC50)
+    let lg = Fd { unit: 1000.0, scale: [1.0; 4], log_ec50: true };
+    own_bfgs("nM, log10 EC50", &lg, vec![0.0, 100.0, 3.0, 1.0]);
+}
+
+// Output:
+// µM               NM    SSE   314.9240  EC50    1.2710  hill   1.240  iter 167  cost calls  290  (Solver converged)
+// µM               BFGS  SSE   314.9240  EC50    1.2710  hill   1.240  iter  17  cost calls  338  (Solver converged)
+// µM               LBFGS SSE   314.9240  EC50    1.2710  hill   1.240  iter  43  cost calls  543  (Solver converged)
+// µM               CG    SSE   432.5461  EC50    1.2255  hill   0.986  iter 100  cost calls 23910  (Maximum number of iterations reached)
+// nM, EC50 = 1     own BFGS  SSE 25807.2578  EC50    2.8713  hill -32.411  iter   6  cost calls   96
+// nM, EC50 = 1000  own BFGS  SSE   314.9240  EC50 1270.9803  hill   1.240  iter  16  cost calls  196
+// nM, rescaled     own BFGS  SSE   314.9240  EC50 1270.9803  hill   1.240  iter   9  cost calls  142
+// nM, log10 EC50   own BFGS  SSE   314.9240  EC50 1270.9795  hill   1.240  iter  10  cost calls  142
+```
+
+:::
+
+(a) In R, Nelder–Mead needs 335 calls; BFGS and L-BFGS-B about 40 plus their finite-difference gradients; CG stops at `maxit` with SSE 321.2 and says so (`conv 1`). scipy finds the minimum with all four but reports `success = False` for BFGS and CG ("precision loss": its stopping tolerance is too tight for a finite-difference gradient). In Rust, argmin's CG stops at its iteration limit with SSE 432.5; the call counts there include the finite-difference gradient calls. (b) With EC50 = 1 nM as a start, every method ends far away (R and Rust: a flat line at the mean, hill $-13.8$ or $-32$, SSE 25807; scipy: a step, hill 42, SSE 9864), and R says `conv 0`. (argmin's own BFGS never returned from these nM starts, because its line searches have no limit on the number of trial steps; the Rust tab therefore uses the BFGS of C5.) From EC50 = 1000 nM, R's BFGS stops early (SSE 314.9246, 109 calls): $\kappa = 1.9\times10^6$, and the gradient step $10^{-3}$ is tiny for EC50. Rescaling (`parscale`, or optimising $\mathbf p/\text{scale}$) brings R back to 36 calls and the exact minimum; our Rust BFGS needs 142 instead of 196 calls. scipy's BFGS reaches the minimum from EC50 = 1000 in every version, but with many calls and `success = False`. (c) $\log_{10}\mathrm{EC50} = 3.1041$ (EC50 = 1271 nM) in 31 calls: the log takes care of units and keeps EC50 positive.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(numDeriv)
+t_min <- seq(0, 1440, by = 120)
+od <- c(0.001, 0.047, 0.139, 0.282, 0.581, 0.859, 1.049,
+        1.161, 1.152, 1.217, 1.182, 1.176, 1.185)
+logistic <- function(p, t) p[2] / (1 + (p[2] / p[3] - 1) * exp(-p[1] * t))
+sse_t <- function(p, t) sum((od - logistic(p, t))^2)
+start <- c(0.5, 1, 0.05)                         # (r, K, N0)
+# (a) the gradient at the start, time in minutes
+grad(sse_t, start, t = t_min)
+# (b) BFGS and Nelder-Mead in minutes and in hours
+for (u in c("minutes", "hours")) {
+  tt <- if (u == "minutes") t_min else t_min / 60
+  for (m in c("Nelder-Mead", "BFGS")) {
+    o <- optim(start, sse_t, t = tt, method = m)
+    cat(sprintf("%-7s %-11s r %.6f  K %.4f  SSE %.6f\n", u, m, o$par[1], o$par[2], o$value))
+  }
+}
+# (c) condition number at the good fit
+pm <- optim(c(0.01, 1, 0.05), sse_t, t = t_min, control = list(reltol = 1e-12))$par
+k <- function(H) { ev <- eigen(H, symmetric = TRUE)$values; max(ev) / min(ev) }
+cat(sprintf("kappa minutes %.3g   hours %.3g\n", k(hessian(sse_t, pm, t = t_min)),
+            k(hessian(sse_t, pm * c(60, 1, 1), t = t_min / 60))))
+
+# Output:
+# [1] 0.000 3.940 0.098
+# minutes Nelder-Mead r 0.675913  K 0.8358  SSE 2.233928
+# minutes BFGS        r 0.500000  K 0.8358  SSE 2.233928
+# hours   Nelder-Mead r 0.524107  K 1.1914  SSE 0.003000
+# hours   BFGS        r 0.523860  K 1.1912  SSE 0.003000
+# kappa minutes 1.19e+04   hours 1.03e+03
+```
+
+### Python
+
+```python
+# uses np, minimize, approx_fprime, dose, y, f4, sse, grad_sse, p0, e from the Background
+t_min = np.arange(0, 1441, 120.0)
+od = np.array([0.001, 0.047, 0.139, 0.282, 0.581, 0.859, 1.049,
+               1.161, 1.152, 1.217, 1.182, 1.176, 1.185])
+def logistic(p, t):
+    return p[1] / (1 + (p[1] / p[2] - 1) * np.exp(-p[0] * t))
+def sse_t(p, t):
+    return np.sum((od - logistic(p, t)) ** 2)
+start = np.array([0.5, 1, 0.05])                 # (r, K, N0)
+# (a) the gradient at the start, time in minutes
+print(approx_fprime(start, sse_t, 1e-6, t_min))
+# (b) Nelder-Mead and BFGS in minutes and in hours
+for u, tt in [("minutes", t_min), ("hours", t_min / 60)]:
+    for m in ["Nelder-Mead", "BFGS"]:
+        o = minimize(sse_t, start, args=(tt,), method=m)
+        print(f"{u:<7} {m:<11} r {o.x[0]:.6f}  K {o.x[1]:.4f}  SSE {o.fun:.6f}")
+
+# Output:
+# [0.       3.940012 0.098001]
+# minutes Nelder-Mead r 0.018941  K 0.8342  SSE 0.786723
+# minutes BFGS        r 0.500000  K 0.8358  SSE 2.233928
+# hours   Nelder-Mead r 0.524213  K 1.1913  SSE 0.003000
+# hours   BFGS        r 0.524182  K 1.1913  SSE 0.003000
+```
+
+### Rust
+
+```rust
+// rust/examples/gradient_methods_c7.rs  —  cargo run --example gradient_methods_c7
+// C7: the growth curve of "Why numerical analysis?", time in minutes vs hours,
+// with argmin's Nelder-Mead and BFGS (central-difference gradient, step 1e-6).
+use argmin::core::{CostFunction, Error, Executor, Gradient, State};
+use argmin::solver::linesearch::MoreThuenteLineSearch;
+use argmin::solver::neldermead::NelderMead;
+use argmin::solver::quasinewton::BFGS;
+
+const OD: [f64; 13] = [0.001, 0.047, 0.139, 0.282, 0.581, 0.859, 1.049,
+                       1.161, 1.152, 1.217, 1.182, 1.176, 1.185];
+fn logistic(p: &[f64], t: f64) -> f64 {        // p = (r, K, N0)
+    p[1] / (1.0 + (p[1] / p[2] - 1.0) * (-p[0] * t).exp())
+}
+#[derive(Clone)]
+struct Growth { t: Vec<f64> }
+impl CostFunction for Growth {
+    type Param = Vec<f64>;
+    type Output = f64;
+    fn cost(&self, p: &Vec<f64>) -> Result<f64, Error> {
+        Ok(self.t.iter().zip(OD.iter()).map(|(&t, &y)| (y - logistic(p, t)).powi(2)).sum())
+    }
+}
+impl Gradient for Growth {
+    type Param = Vec<f64>;
+    type Gradient = Vec<f64>;
+    fn gradient(&self, p: &Vec<f64>) -> Result<Vec<f64>, Error> {
+        (0..3).map(|j| {
+            let h = 1e-6 * p[j].abs().max(1.0);
+            let (mut a, mut b) = (p.clone(), p.clone());
+            a[j] += h; b[j] -= h;
+            Ok((self.cost(&a)? - self.cost(&b)?) / (2.0 * h))
+        }).collect()
+    }
+}
+
+fn main() -> Result<(), Error> {
+    let t_min: Vec<f64> = (0..=12).map(|i| 120.0 * i as f64).collect();
+    let start = vec![0.5, 1.0, 0.05];
+    // (a)
+    println!("{:.6?}", Growth { t: t_min.clone() }.gradient(&start)?);
+    // (b)
+    for (unit, t) in [("minutes", t_min.clone()), ("hours", t_min.iter().map(|t| t / 60.0).collect())] {
+        let prob = Growth { t };
+        let mut simplex = vec![start.clone()];
+        for j in 0..3 { let mut v = start.clone(); v[j] += 0.1; simplex.push(v); }
+        let r = Executor::new(prob.clone(), NelderMead::new(simplex).with_sd_tolerance(1e-10)?)
+            .configure(|s| s.max_iters(500)).run()?;
+        let p = r.state().get_best_param().unwrap();
+        println!("{:<7} Nelder-Mead r {:.6}  K {:.4}  SSE {:.6}", unit, p[0], p[1], r.state().get_best_cost());
+        let eye = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0], vec![0.0, 0.0, 1.0]];
+        let r = Executor::new(prob, BFGS::new(MoreThuenteLineSearch::new()))
+            .configure(|s| s.param(start.clone()).inv_hessian(eye).max_iters(100)).run()?;
+        let p = r.state().get_best_param().unwrap();
+        println!("{:<7} BFGS        r {:.6}  K {:.4}  SSE {:.6}", unit, p[0], p[1], r.state().get_best_cost());
+    }
+    Ok(())
+}
+
+// Output:
+// [0.000000, 3.940000, 0.098000]
+// minutes Nelder-Mead r 0.666505  K 0.8358  SSE 2.233928
+// minutes BFGS        r 0.500000  K 0.8358  SSE 2.233928
+// hours   Nelder-Mead r 0.524181  K 1.1913  SSE 0.003000
+// hours   BFGS        r 0.524181  K 1.1913  SSE 0.003000
+```
+
+:::
+
+(a) $\partial\,\mathrm{SSE}/\partial r$ is 0 to all printed digits (exactly $3.8\times10^{-23}$): with $r = 0.5$ per minute the model reaches $K$ within minutes, before the first measurement at 120 min, so changing $r$ changes nothing. (b) In minutes, BFGS never moves $r$ (0.500000) and fits $K$ to the mean of the later points (SSE 2.23); Nelder–Mead wanders in $r$ and stops on the plateau (R and Rust: SSE 2.23; scipy's Nelder–Mead happens to find a better but still wrong point, SSE 0.79). In hours, all of them find $r = 0.524$ per hour (doubling time 79 min) and SSE 0.0030. (c) $\kappa$ drops from $1.2\times10^4$ to $1.0\times10^3$: the unit makes the parameters closer in size.
+
+**C8.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses dose, y, f4, sse, grad_sse, p0 and numDeriv from the Background
+starts <- expand.grid(EC50 = 10^(-2:2), hill = c(0.5, 1, 3))
+for (i in seq_len(nrow(starts))) {
+  s <- c(0, 100, starts$EC50[i], starts$hill[i])
+  nm <- optim(s, sse)
+  bf <- optim(s, sse, grad_sse, method = "BFGS")
+  cat(sprintf("EC50 %6g hill %3g | NM SSE %8.2f conv %d hill %6.2f | BFGS SSE %7.2f conv %d\n",
+              s[3], s[4], nm$value, nm$convergence, nm$par[4], bf$value, bf$convergence))
+}
+
+# Output:
+# EC50   0.01 hill 0.5 | NM SSE   314.92 conv 0 hill   1.24 | BFGS SSE  314.92 conv 0
+# EC50    0.1 hill 0.5 | NM SSE   314.92 conv 0 hill   1.24 | BFGS SSE  314.92 conv 0
+# EC50      1 hill 0.5 | NM SSE   314.92 conv 0 hill   1.24 | BFGS SSE  314.92 conv 0
+# EC50     10 hill 0.5 | NM SSE   314.92 conv 0 hill   1.24 | BFGS SSE  314.92 conv 0
+# EC50    100 hill 0.5 | NM SSE  1926.79 conv 1 hill   0.33 | BFGS SSE  314.92 conv 0
+# EC50   0.01 hill   1 | NM SSE   314.92 conv 0 hill   1.24 | BFGS SSE  314.92 conv 0
+# EC50    0.1 hill   1 | NM SSE   314.92 conv 0 hill   1.24 | BFGS SSE  314.92 conv 0
+# EC50      1 hill   1 | NM SSE   314.92 conv 0 hill   1.24 | BFGS SSE  314.92 conv 0
+# EC50     10 hill   1 | NM SSE   314.92 conv 0 hill   1.24 | BFGS SSE  314.92 conv 0
+# EC50    100 hill   1 | NM SSE  2453.17 conv 0 hill   0.17 | BFGS SSE  314.92 conv 0
+# EC50   0.01 hill   3 | NM SSE  1344.43 conv 0 hill  13.57 | BFGS SSE  314.92 conv 0
+# EC50    0.1 hill   3 | NM SSE   314.92 conv 0 hill   1.24 | BFGS SSE  314.92 conv 0
+# EC50      1 hill   3 | NM SSE   314.92 conv 0 hill   1.24 | BFGS SSE  314.92 conv 0
+# EC50     10 hill   3 | NM SSE  1344.41 conv 0 hill  11.20 | BFGS SSE  314.92 conv 0
+# EC50    100 hill   3 | NM SSE  1557.20 conv 0 hill   0.45 | BFGS SSE  314.92 conv 0
+```
+
+### Python
+
+```python
+# uses np, minimize, approx_fprime, dose, y, f4, sse, grad_sse, p0, e from the Background
+for hill in [0.5, 1, 3]:
+    for ec50 in [0.01, 0.1, 1, 10, 100]:
+        s = np.array([0, 100, ec50, hill])
+        nm = minimize(sse, s, method="Nelder-Mead")
+        bf = minimize(sse, s, jac=grad_sse, method="BFGS")
+        print(f"EC50 {ec50:6g} hill {hill:3g} | NM SSE {nm.fun:8.2f} ok {nm.success!s:5} "
+              f"hill {nm.x[3]:6.2f} | BFGS SSE {bf.fun:7.2f}")
+
+# Output:
+# EC50   0.01 hill 0.5 | NM SSE   331.83 ok False hill   1.25 | BFGS SSE  314.92
+# EC50    0.1 hill 0.5 | NM SSE   314.92 ok True  hill   1.24 | BFGS SSE  314.92
+# EC50      1 hill 0.5 | NM SSE   314.92 ok True  hill   1.24 | BFGS SSE  314.92
+# EC50     10 hill 0.5 | NM SSE   314.92 ok True  hill   1.24 | BFGS SSE     nan
+# EC50    100 hill 0.5 | NM SSE   429.75 ok True  hill   1.06 | BFGS SSE     nan
+# EC50   0.01 hill   1 | NM SSE   420.48 ok True  hill   1.07 | BFGS SSE  314.92
+# EC50    0.1 hill   1 | NM SSE   429.46 ok True  hill   1.06 | BFGS SSE  314.92
+# EC50      1 hill   1 | NM SSE   314.92 ok True  hill   1.24 | BFGS SSE  314.92
+# EC50     10 hill   1 | NM SSE   314.92 ok True  hill   1.24 | BFGS SSE     nan
+# EC50    100 hill   1 | NM SSE   429.59 ok True  hill   1.06 | BFGS SSE     nan
+# EC50   0.01 hill   3 | NM SSE   395.05 ok True  hill   1.09 | BFGS SSE  314.92
+# EC50    0.1 hill   3 | NM SSE   314.92 ok True  hill   1.24 | BFGS SSE  314.92
+# EC50      1 hill   3 | NM SSE   314.92 ok True  hill   1.24 | BFGS SSE  314.92
+# EC50     10 hill   3 | NM SSE   314.92 ok True  hill   1.24 | BFGS SSE     nan
+# EC50    100 hill   3 | NM SSE   429.86 ok True  hill   1.06 | BFGS SSE     nan
+```
+
+### Rust
+
+```rust
+// rust/examples/gradient_methods_c8.rs  —  cargo run --example gradient_methods_c8
+// C8: multistart: argmin's Nelder-Mead, and the BFGS of C5 with the analytic
+// gradient, from 15 starts. argmin's Nelder-Mead stops with an internal error
+// when the cost is NaN (EC50 < 0), so this cost returns +Inf there instead.
+// (argmin's BFGS with its More-Thuente line search also stops with a NaN
+// error from most of these starts, as in C1(c).)
+use argmin::core::{Executor, State};
+use argmin::solver::neldermead::NelderMead;
+include!("gradient_methods_shared/defs.rs");
+
+struct SafeFit;
+impl CostFunction for SafeFit {
+    type Param = Vec<f64>;
+    type Output = f64;
+    fn cost(&self, p: &Vec<f64>) -> Result<f64, Error> {
+        let v = sse(p);
+        Ok(if v.is_nan() { f64::INFINITY } else { v })
+    }
+}
+
+fn bfgs(mut x: Vec<f64>) -> f64 {           // as in C5, at most 60 halvings
+    let n = x.len();
+    let mut b = vec![vec![0.0; n]; n];
+    for i in 0..n { b[i][i] = 1.0; }
+    let mut gk = grad_sse(&x);
+    for _ in 0..200 {
+        if norm(&gk) < 1e-4 { break; }
+        let s: Vec<f64> = (0..n).map(|i| -dot(&b[i], &gk)).collect();
+        let (fx, gs) = (sse(&x), dot(&gk, &s));
+        let (mut a, mut halvings) = (1.0, 0);
+        while !(sse(&axpy(&x, a, &s)) <= fx + 1e-4 * a * gs) && halvings < 60 { a /= 2.0; halvings += 1; }
+        if halvings == 60 { break; }
+        let s: Vec<f64> = s.iter().map(|v| a * v).collect();
+        x = axpy(&x, 1.0, &s);
+        let gn = grad_sse(&x);
+        let yv: Vec<f64> = gn.iter().zip(&gk).map(|(a, b)| a - b).collect();
+        gk = gn;
+        let sy = dot(&yv, &s);
+        if sy > 0.0 {
+            let v: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j|
+                (i == j) as i32 as f64 - yv[i] * s[j] / sy).collect()).collect();
+            let bv: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j|
+                (0..n).map(|l| b[i][l] * v[l][j]).sum()).collect()).collect();
+            b = (0..n).map(|i| (0..n).map(|j|
+                (0..n).map(|l| v[l][i] * bv[l][j]).sum::<f64>() + s[i] * s[j] / sy).collect()).collect();
+        }
+    }
+    sse(&x)
+}
+
+fn main() {
+    for hill in [0.5, 1.0, 3.0f64] {
+        for ec50 in [0.01, 0.1, 1.0, 10.0, 100.0f64] {
+            let s: Vec<f64> = vec![0.0, 100.0, ec50, hill];
+            let mut simplex = vec![s.clone()];
+            for j in 0..4 { let mut v = s.clone(); v[j] += 0.1 * s[j].abs().max(1.0); simplex.push(v); }
+            let nm = Executor::new(SafeFit, NelderMead::new(simplex).with_sd_tolerance(1e-8).unwrap())
+                .configure(|st| st.max_iters(500)).run().unwrap();
+            let st = nm.state();
+            println!("EC50 {:6} hill {:3} | NM SSE {:8.2} hill {:6.2} iter {:3} | BFGS SSE {:7.2}",
+                     ec50, hill, st.get_best_cost(), st.get_best_param().unwrap()[3], st.get_iter(), bfgs(s));
+        }
+    }
+}
+
+// Output:
+// EC50   0.01 hill 0.5 | NM SSE   314.92 hill   1.24 iter 167 | BFGS SSE  314.92
+// EC50    0.1 hill 0.5 | NM SSE   314.92 hill   1.24 iter 215 | BFGS SSE  314.92
+// EC50      1 hill 0.5 | NM SSE   314.92 hill   1.24 iter 209 | BFGS SSE  314.92
+// EC50     10 hill 0.5 | NM SSE   314.92 hill   1.24 iter 263 | BFGS SSE  314.92
+// EC50    100 hill 0.5 | NM SSE   314.92 hill   1.24 iter 422 | BFGS SSE  314.92
+// EC50   0.01 hill   1 | NM SSE   314.92 hill   1.24 iter 219 | BFGS SSE  314.92
+// EC50    0.1 hill   1 | NM SSE   314.92 hill   1.24 iter 192 | BFGS SSE  314.92
+// EC50      1 hill   1 | NM SSE   314.92 hill   1.24 iter 167 | BFGS SSE  314.92
+// EC50     10 hill   1 | NM SSE   314.92 hill   1.24 iter 264 | BFGS SSE  314.92
+// EC50    100 hill   1 | NM SSE   314.92 hill   1.24 iter 403 | BFGS SSE  314.92
+// EC50   0.01 hill   3 | NM SSE   314.92 hill   1.24 iter 200 | BFGS SSE  314.92
+// EC50    0.1 hill   3 | NM SSE   314.92 hill   1.24 iter 198 | BFGS SSE  314.92
+// EC50      1 hill   3 | NM SSE   314.92 hill   1.24 iter 205 | BFGS SSE  314.92
+// EC50     10 hill   3 | NM SSE   314.92 hill   1.24 iter 314 | BFGS SSE  314.92
+// EC50    100 hill   3 | NM SSE   314.92 hill   1.24 iter 313 | BFGS SSE  314.92
+```
+
+:::
+
+R: Nelder–Mead reaches 314.92 from 10 of the 15 starts; of the 5 failures only one reports `convergence = 1`. BFGS with the analytic gradient reaches 314.92 from all 15. The other languages fail differently: scipy's Nelder–Mead (other default tolerances and initial simplex) ends above 314.92 from 7 starts while reporting success for 6 of them, and scipy's BFGS returns `nan` from every start with EC50 $\ge 10$, because its line search tries a step with a negative EC50, where $(\mathrm{EC50}/c)^h$ is `nan`, and does not recover. argmin's Nelder–Mead (with a cost that returns $+\infty$ instead of `NaN`) reaches 314.92 from all 15 starts, as does our BFGS in Rust: the same method in different libraries differs in the details (initial simplex, tolerances, how `NaN` is handled), and those details decide the failures. Multistart reveals all of these: when the answers disagree, look closer. Fitting $\log\mathrm{EC50}$ avoids the `nan`.
+:::
+
+## Where this leads
+
+- ***Nonlinear least squares and ODE fitting*** **(Part 9):** the SSE has extra structure: its Hessian is approximately $2J^\mathsf TJ$, built from the same model Jacobian as the gradient. That gives Gauss–Newton, and adding $\mu I$ (as in C4(c)) gives Levenberg–Marquardt, the method behind `nls`, `minpack.lm` and `scipy.optimize.least_squares`. There we also fit ODE models, use log-parameters for positive rates, and multistart systematically.
+- ***Identifiability and uncertainty of fitted parameters*** **(Part 9):** the Hessian at the minimum (C3) gives standard errors of the fitted parameters; a near-zero eigenvalue means a direction the data cannot pin down.
+- ***Constraints and linear programming*** **(Part 9):** bounds (as in L-BFGS-B) and general constraints.
+- Our line searches only enforce sufficient decrease (Armijo). Library codes add a curvature condition (Wolfe) and interpolate the step; trust-region methods replace the line search altogether. We use those through the libraries rather than writing them.

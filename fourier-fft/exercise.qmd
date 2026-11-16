@@ -194,6 +194,40 @@ Rust prints numbers in its own format (e.g. `inf` rather than `Inf`); the values
 (b) Compute the linear convolution of B5(d) by zero-padding and compare with the built-in ([`convolve(y, rev(h), type = "open")`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/convolve.html); Python [`np.convolve`](https://numpy.org/doc/stable/reference/generated/numpy.convolve.html)).
 (c) The gain of a moving average of width $m = 8$ on $n = 240$ samples (30 min apart) is $|H_k|$. Print it for $k = 0, 5, 10, 15, 20, 30, 40, 45, 50, 60$. Which periods are removed completely? Is a moving average a good low-pass filter?
 
+## Explore {#explore}
+
+The demo below samples a clock gene, $x(t) = 8 + 1.5\cos(2\pi(t-6)/P) + B\cos(2\pi t/P_u)$ plus normal noise, every $\Delta t$ hours, and computes the DFT of the samples in your browser. The top panel shows the true signal (grey), the samples (blue) and the Fourier curve through the samples (the trigonometric interpolant of fact 4, orange dashed; with the low-pass filter on, the smoothed curve in green). The bottom panel shows the amplitude $2|X_k|/n$ of each bin against frequency in cycles per day, with the true frequencies (dotted), the Nyquist frequency $1/(2\Delta t)$ (black line) and, for a rhythm faster than Nyquist, an arrow to where it lands. With the Hann window the amplitude is $2|X_k|/\sum_j w_j$ of the mean-removed samples (C5). The readout gives the mean, the strongest bin, the amplitude and peak time of the 24-h bin, and warnings. The noise is fixed: at the 2-h times of the first 48 h it is exactly the noise of the dataset in the Background, so **course data** reproduces those 24 numbers.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="nyquist" data-dt="2" data-dur="48"></div>
+<script src="../demos/dist/nyquist.js"></script>
+```
+
+**E1. (the course data)** Click **course data**. Read off the mean, the amplitude and the peak time of the 24-h bin, and compare with the lecture. What is the Nyquist period, and which periods lie on the frequency grid? Now set **sample every** to 4 h (every other sample of the same experiment) and to 1 h, and set **duration** to 96 h with 2-h sampling. What changes on the frequency axis in each case, and what happens to the estimates?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Mean $8.045$, amplitude $1.465$, peak at $6.45$ h, exactly the `fft()` results of the lecture (true values 1.5 and 6 h). Nyquist period $2\Delta t = 4$ h (6 cycles per day); the bins are at periods $48/k$: 48, 24, 16, 12, …, 4 h, spaced $1/48$ per hour (0.5 per day). With 4-h sampling the bins keep the same spacing but stop at 8 h (Nyquist 3 per day): amplitude $1.400$, peak $6.35$ h. With 1-h sampling (new noise between the old times) the axis runs to 12 per day: $1.433$, $6.20$ h. With 96 h at 2 h the Nyquist frequency stays at 6 per day but the bins are twice as dense ($96/k$, the 24-h bin is $k = 4$): $1.529$, $6.28$ h. $\Delta t$ sets the highest frequency, the record length sets the spacing; all three designs estimate the 24-h rhythm about equally well, because it is slow and on the grid.
+:::
+
+**E2. (aliasing)** Click **+ 4.8 h, every 2 h** (C4, without noise), then **every 4 h**. For each, where is the second peak, and what are the amplitude and peak time of the 24-h bin? Follow the purple arrow and explain the 4-h result with the folding rule $f \mapsto |f - m f_s|$. Then drag **sample every** to 3 h and to 2.5 h. Where does the 4.8-h rhythm appear now? What is the largest sampling interval on the slider that shows it at its true period?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Every 2 h: a peak of height 1 at 5 per day ($48/10 = 4.8$ h), below Nyquist (6 per day); the 24-h bin is untouched, $1.500$ at $6.00$ h. Every 4 h: Nyquist is 3 per day, the 4.8-h rhythm (5 per day) folds to $|5 - 6| = 1$ per day, exactly the 24-h bin. The readout says amplitude $1.803$, peak $3.75$ h: the alias $\cos(2\pi t/24)$ adds to the true $1.5\cos(2\pi(t-6)/24)$, giving $\sqrt{1^2 + 1.5^2} = 1.80$. The orange curve through the samples is a smooth 24-h wave; nothing in the samples betrays the fast rhythm. Every 3 h ($f_s = 8$ per day): it appears at $|5 - 8| = 3$ per day, a false 8-h period. Every 2.5 h: at 5.2 h, close to but not at the truth. Only $\Delta t \le 2$ h shows 4.8 h (Nyquist needs $\Delta t < 2.4$ h).
+:::
+
+**E3. (leakage and the window)** Click **course data** and set **duration** to 60 h ($T/P = 2.5$ cycles). Which bin is strongest now, and what happened to the 24-h estimate? Tick **Hann window**. Then click **leakage** (a 25.5-h free-running rhythm over 120 h, every 30 min, log scale), compare the spectrum with and without the window around 2 per day (12 h) and at 6–12 per day, and look at the end of the orange curve in the top panel.
+
+::: {.callout-note collapse="true" title="Answer E3"}
+At 60 h the bins are at $60/k$: 60, 30, 20, 15 h, so 24 h is not on the grid. The strongest bin is 30 h ($1.041$), the 20-h bin has $0.837$, and the energy spreads into all other bins: the amplitude 1.5 is nowhere. With the Hann window the peak becomes $1.252$ (30 h) and $1.185$ (20 h): closer to 1.5 and much less spread, but still not 24 h; only a 24-h or 48-h record puts the rhythm on a bin. In the **leakage** preset the strongest bin is 24 h ($1.288$, not 1.5) and every bin is raised: about $0.07$ at 12 h and still about $0.01$ at 10–12 per day. With the window the peak bin reads $1.418$, the 12-h bin falls to about $0.003$ and beyond about 6 per day the bins fall below $10^{-4}$ (off the bottom of the plot). The orange curve jumps back at $t = 120$ h: the DFT treats the record as one period, and 4.71 cycles do not join up.
+:::
+
+**E4. (low-pass filtering)** Click **low-pass** (96 h every 30 min, noise sd 1, keep periods $\ge 8$ h). Read the rms error of the samples and of the smoothed curve. Drag **keep periods ≥** to 2, 4, 12, 24 and 48 h and record the rms error each time. Which cut-off is best here, and why would you not choose it for a real gene? What goes wrong at 48 h?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+Samples $0.97$ (the noise), smoothed $0.41$ with 25 of 192 coefficients. Cut-off 2 h: $0.75$; 4 h: $0.55$; 12 h: $0.37$; 24 h: $0.24$; 48 h: $1.07$. The smaller the band you keep, the less noise passes, until the band no longer contains the signal. 24 h is best here only because the truth is a pure 24-h cosine with a whole number of cycles; a real gene has harmonics (12 h, 8 h) and an ultradian component that such a filter would remove (try **fast amplitude** 1 with cut-off 8 h). At 48 h the cut-off is above the clock frequency: the rhythm itself is filtered out, and the smoothed curve is almost flat, worse than the raw data. The same bias–noise trade-off as in C6.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — DFT by hand (B1, B2, B5)"}

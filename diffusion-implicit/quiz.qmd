@@ -1,0 +1,143 @@
+---
+title: "Quiz: implicit schemes and the method of lines"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of implicit schemes for diffusion. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** You halve the grid spacing $\Delta x$ of an FTCS simulation and keep the simulated time the same. By what factor does the work grow, and why? What changes if you use backward Euler with a fixed $\Delta t$ instead?
+
+::: {.callout-tip collapse="true" title="Hint"}
+FTCS needs $r = D\Delta t/\Delta x^2 \le 1/2$. Count grid points times steps.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+FTCS: twice as many grid points and, because $\Delta t \le \Delta x^2/(2D)$, four times as many steps: **8 times** the work. Backward Euler has no step limit, so the number of steps stays the same and only the grid points double (Thomas is $O(N)$): **2 times** the work. Whether $\Delta t$ is still small enough for the accuracy you want is a separate question (Q5).
+:::
+
+---
+
+**Q2.** Write the backward Euler equation for an interior grid point $i$. What kind of linear system do you have to solve per step, and how much does it cost for $N$ unknowns?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The second difference is taken at the new time level.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$-r\,c_{i-1}^{n+1} + (1 + 2r)\,c_i^{n+1} - r\,c_{i+1}^{n+1} = c_i^n$, $r = D\Delta t/\Delta x^2$. The matrix $I - rA$ is **tridiagonal**, symmetric and diagonally dominant, so the Thomas algorithm solves it without pivoting in about $8N$ operations. A dense `solve()` would cost $\tfrac23N^3$.
+:::
+
+---
+
+**Q3.** With $r = 100$, by what factor is the zigzag mode ($z = 4r = 400$) multiplied per step by FTCS, backward Euler and Crank–Nicolson? What does each factor mean in practice?
+
+::: {.callout-tip collapse="true" title="Hint"}
+FTCS $1 - z$, backward Euler $1/(1 + z)$, Crank–Nicolson $(1 - z/2)/(1 + z/2)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+FTCS $-399$: the zigzag explodes, flipping sign each step. Backward Euler $0.0025$: it is gone after one step, as it should be (the exact factor is $e^{-400} \approx 0$). Crank–Nicolson $-0.990$: stable, but the zigzag survives for many steps and flips sign every step. That is the oscillation seen after sharp starts.
+:::
+
+---
+
+**Q4.** You start the chamber simulation from an empty channel next to a full reservoir and use Crank–Nicolson with $r = 40$. Near the source the concentration is 1.6 after one step, 0.36 after two, 1.46 after three. What is happening, and give two fixes.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which modes make up a sharp step, and what does Crank–Nicolson do with them at large $r$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The sharp jump between reservoir and empty channel contains many high-frequency modes, which Crank–Nicolson multiplies by almost $-1$ when $r$ is large: they flip every step and decay slowly. The values above 1 violate the maximum principle and are a sure sign. Fixes: (1) take a few **backward Euler** steps first (they kill the high modes), then switch to Crank–Nicolson; (2) use a **smaller** $\Delta t$ (here $r = 4$ is enough) at least near the start. A stiff ODE solver (BDF) does the first automatically.
+:::
+
+---
+
+**Q5.** A solver gives errors 0.020, 0.010, 0.005 when you halve $\Delta t$ twice; another gives $4.2\times10^{-4}$, $1.0\times10^{-4}$, $2.5\times10^{-5}$. Which is backward Euler and which Crank–Nicolson? To reach $10^{-4}$, about how many times more steps does the first one need?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at the ratio of successive errors: $2^p$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Ratio 2: order 1, backward Euler. Ratio 4: order 2, Crank–Nicolson. Backward Euler needs to go from 0.005 to $10^{-4}$, another factor 50 in $\Delta t$ beyond its third step size. Crank–Nicolson reaches $10^{-4}$ already at the second step size, which is 2 times larger than the third: so backward Euler needs about $2 \times 50 = 100$ times more steps, at the same cost per step.
+:::
+
+---
+
+**Q6.** You keep halving $\Delta t$ in a Crank–Nicolson run, but below some step the error stays at $1.2\times10^{-4}$. At one step size it was even $1.3\times10^{-5}$. Explain both observations. What should you change?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Error $\approx C_t\Delta t^2 + C_x\Delta x^2$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The floor is the **space** error of the grid, which no time step can remove: refine $\Delta x$. The single small value is **cancellation**: the time and space errors have opposite signs and nearly cancel at that one step size. It is luck, not accuracy; only a sequence of refinements shows the real behaviour.
+:::
+
+---
+
+**Q7.** Without an exact solution you compute a temperature on grids with $N = 50, 100, 200$ and get 21.05464, 21.05237, 21.05180. Estimate the order of the method and the error of the finest result.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compare successive differences. With order $p$ the next difference is $2^{-p}$ times the previous one.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Differences $-0.00227$ and $-0.00057$, ratio 3.98: order $p = 2$. The remaining error of the finest value is about the last difference divided by $2^p - 1 = 3$: $0.00057/3 \approx 0.0002$ °C (the limit is about 21.0516). Use grids fine enough to be in the asymptotic range: with $N = 25$ in the sequence the first ratio is $-9$, which says nothing about the order.
+:::
+
+---
+
+**Q8.** What is the **method of lines**, and why should you hand the resulting system to `lsoda`/`bdf` (or `solve_ivp(method="BDF")`) rather than `ode45`/`RK45`? What does `ode.1D` (or `jac_sparsity`) add?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Eigenvalues of $\frac{D}{\Delta x^2}A$ run from $\approx -\pi^2D/L^2$ to $\approx -4D/\Delta x^2$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Discretise space only: the PDE becomes a system of ODEs, one per grid point, $\mathbf c' = \frac{D}{\Delta x^2}A\mathbf c + \mathbf b$, which any ODE solver can integrate. Its eigenvalues span a ratio of about $(2N/\pi)^2$: the system is **stiff**, so an explicit solver is limited by stability to $\Delta t \sim \Delta x^2/D$ (15 000 steps instead of about 200 on the chamber). `ode.1D` and `jac_sparsity` tell the stiff solver that the Jacobian is **banded**, so it is built from a few function evaluations and solved in $O(N)$ instead of as a dense matrix.
+:::
+
+---
+
+**Q9.** You solve a method-of-lines problem at `rtol = atol = 1e-10`, but the error against the exact solution is $2.7\times10^{-5}$. Is the solver broken?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does the tolerance control?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. The tolerance controls only the **time** error of the ODE solver. The **space** error is fixed by $\Delta x$ before the solver starts: $2.7\times10^{-5}$ is the error of the 10 µm grid. Refine the grid (halving $\Delta x$ divides it by about 4) and keep the tolerance below the spatial error.
+:::
+
+---
+
+**Q10.** In the 1D embryo model the temperature step has width $\approx 2\lambda\ln 5$ with $\lambda = \sqrt{D\tau}$ and $\tau = R^2/(2.405^2 D)$. Why does the width not depend on the thermal diffusivity $D$? What does $D$ control?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Insert $\tau$ into $\lambda$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\lambda^2 = D\tau = R^2/2.405^2$: $D$ cancels, so $\lambda = R/2.405 \approx 42$ µm for $R = 100$ µm, and the width (about 134 µm) is set by the embryo's thickness alone. Heat spreads along the embryo and leaks out through its surface at rates that are both proportional to $D$. $D$ sets **how fast** the profile forms ($\tau \approx 12$ ms, steady within about 50 ms), not its shape.
+:::
+
+---
+
+**Q11.** A PCR chip's wall is made twice as thick. What happens to (a) the time the channel side needs to follow a heater step and (b) the steady temperature drop due to heat loss at the top? Why is glass better than PDMS?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Diffusion time $\propto H^2/D$; at steady state the profile is linear.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(a) The time grows as $H^2$: **4 times** longer (PDMS: 17 s → 66 s to come within 0.5 °C). (b) The steady drop $\approx (T_\text{heater} - T_\text{air})\,hH/k$ for small $hH/k$ roughly **doubles** (PDMS: 4.4 → 8.2 °C). Glass has a thermal diffusivity about 7 times and a conductivity about 7 times that of PDMS, so it is faster and loses less: 2 mm of glass follows in about 10 s with a drop of about 1.3 °C. [H1] reaches the same recommendation from a 3D simulation.
+:::

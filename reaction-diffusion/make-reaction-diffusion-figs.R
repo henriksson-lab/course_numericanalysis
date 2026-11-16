@@ -105,7 +105,7 @@ eg <- sapply(Ns, function(N) { s <- steady(N); max(abs(s$c - exact(s$x))) })
 eo <- sapply(Ns, function(N) { s <- steady(N, onesided = TRUE); max(abs(s$c - exact(s$x))) })
 print(rbind(dx = L / Ns, ghost = signif(eg, 3), onesided = signif(eo, 3)))
 svg("fig02-steady.svg", width = 12, height = 5)
-par(mfrow = c(1, 2), mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
+par(mfrow = c(1, 2), mar = c(5, 6.5, 1, 1), mgp = c(4.2, 1, 0), cex.lab = 1.5, cex.axis = 1.3)
 plot(xx, exact(xx), type = "l", lwd = 4, col = "grey60", las = 1, ylim = c(0, 1.05),
      xlab = "x (µm)", ylab = "steady c")
 points(s50$x, s50$c, pch = 19, col = oi["blue"], cex = 1.1)
@@ -116,8 +116,8 @@ legend("topright", c("exact (cosh formula)", "grid, dx = 10 µm", "grid, dx = 10
 plot(L / Ns, eg, log = "xy", type = "b", pch = 19, lwd = 3, col = oi["blue"], las = 1,
      ylim = range(c(eg, eo)), xlab = "grid spacing dx (µm)", ylab = "max error")
 lines(L / Ns, eo, type = "b", pch = 17, lwd = 3, col = oi["red"])
-text(L / Ns[2], eg[2], "ghost point: slope 2", pos = 4, cex = 1.25, col = oi["blue"])
-text(L / Ns[5], eo[5], "one-sided boundary: slope 1", pos = 3, cex = 1.25, col = oi["red"])
+text(5, 3e-5, "ghost point: slope 2", pos = 4, cex = 1.25, col = oi["blue"])
+text(0.8, 5e-2, "one-sided boundary: slope 1", pos = 4, cex = 1.25, col = oi["red"])
 dev.off()
 
 ## ---- fig03: formation -------------------------------------------------------------
@@ -176,7 +176,7 @@ errs <- t(sapply(hs, function(h) {
 }))
 print(cbind(dt = hs, signif(errs, 3)))
 svg("fig04-splitting.svg", width = 8, height = 5.5)
-par(mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
+par(mar = c(5, 6.5, 1, 1), mgp = c(4.5, 1, 0), cex.lab = 1.5, cex.axis = 1.3)
 matplot(hs, errs, log = "xy", type = "b", pch = c(15, 19, 17), lty = 1, lwd = 3,
         col = oi[c("red", "blue", "green")], las = 1,
         xlab = "time step dt (min)", ylab = "max error at t = 60 min")
@@ -204,7 +204,7 @@ s_aw <- Dloc(N5, function(x) ifelse(x < L / 2, 1.2 * D, D), function(x) ifelse(x
 xT <- function(s, thr = 0.1) approx(s$c, s$x, thr)$y
 cat("threshold 0.1 at: cold", xT(s_cold), "warm", xT(s_warm), "post warm", xT(s_pw), "ant warm", xT(s_aw), "\n")
 svg("fig05-tstep.svg", width = 10, height = 5.2)
-par(mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
+par(mar = c(5, 6.5, 1, 1), mgp = c(4.5, 1, 0), cex.lab = 1.5, cex.axis = 1.3)
 plot(s_cold$x, s_cold$c, type = "l", lwd = 4, col = oi["blue"], log = "y", ylim = c(0.005, 1.1),
      las = 1, xlab = "x (µm)", ylab = "steady c (log scale)")
 lines(s_warm$x, s_warm$c, lwd = 4, col = oi["red"])

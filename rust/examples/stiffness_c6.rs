@@ -57,7 +57,7 @@ fn main() {
         println!("backward Euler, {} steps per decade ({} steps, {:.3} s):", m, times.len() - 1,
                  t.elapsed().as_secs_f64());
         for (e, yk) in out.iter().filter(|(e, _)| [-3, 0, 4, 11].contains(e)) {
-            println!("  1e{}  {:.4e}  {:.4e}  {:.4}   sum - 1 = {:.1e}", e, yk[0], yk[1], yk[2], yk.sum() - 1.0);
+            println!("  1e{}  {:.4e}  {:.4e}  {:.4e}   sum - 1 = {:.1e}", e, yk[0], yk[1], yk[2], yk.sum() - 1.0);
         }
     }
 }

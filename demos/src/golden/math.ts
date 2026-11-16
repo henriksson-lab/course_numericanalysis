@@ -65,7 +65,8 @@ export interface Problem {
   f: (x: number) => number;
   xname: string;          // axis label
   fname: string;
-  view: [number, number]; // x range of the plot = default bracket
+  view: [number, number]; // x range of the plot
+  bracket: [number, number]; // default initial bracket
   ylim: [number, number];
   xstar: number;          // global minimiser (for the error)
   fstar: number;
@@ -104,16 +105,16 @@ const TLocal = minByDeriv(rss, 32.4, 32.41);
 export const PROBLEMS: Record<ProbKey, Problem> = {
   decay: {
     key: "decay", label: "mRNA decay SSE(k)", f: sse, xname: "decay rate k (1/h)", fname: "SSE(k)",
-    view: [0, 1], ylim: [-0.03, 0.62], xstar: kStar, fstar: sse(kStar), f2: sse2(kStar), digits: 4,
+    view: [0, 1.6], bracket: [0, 1], ylim: [-0.03, 0.66], xstar: kStar, fstar: sse(kStar), f2: sse2(kStar), digits: 4,
   },
   circadian: {
     key: "circadian", label: "circadian RSS(T)", f: rss, xname: "period T (h)", fname: "RSS(T)",
-    view: [10, 40], ylim: [0, 12.5], xstar: TStar, fstar: rss(TStar), f2: f2num(rss, TStar, 1e-3),
+    view: [10, 40], bracket: [10, 40], ylim: [0, 12.5], xstar: TStar, fstar: rss(TStar), f2: f2num(rss, TStar, 1e-3),
     other: TLocal, digits: 3,
   },
   ztp: {
     key: "ztp", label: "ZTP −log L(λ)", f: nll, xname: "Poisson rate λ", fname: "−log L(λ)",
-    view: [0.2, 4], ylim: [45, 175], xstar: lStar, fstar: nll(lStar), f2: -dscore(lStar), digits: 4,
+    view: [0.2, 4], bracket: [0.2, 4], ylim: [45, 175], xstar: lStar, fstar: nll(lStar), f2: -dscore(lStar), digits: 4,
   },
 };
 

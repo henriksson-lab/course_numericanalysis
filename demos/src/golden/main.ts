@@ -99,7 +99,7 @@ function mount(host: HTMLElement): void {
   function setProblem(k: ProbKey, first = false): void {
     st.prob = k;
     const p = PROBLEMS[k];
-    st.a0 = p.view[0]; st.b0 = p.view[1];
+    st.a0 = p.bracket[0]; st.b0 = p.bracket[1];
     if (first) {
       const a = num(ds.a), b = num(ds.b);
       if (Number.isFinite(a) && Number.isFinite(b) && a < b) { st.a0 = Math.max(p.view[0], a); st.b0 = Math.min(p.view[1], b); }
@@ -159,7 +159,7 @@ function mount(host: HTMLElement): void {
   const multiBtn = button(g5, "multistart", () => {
     if (st.multi) { st.multi = null; draw(); return; }
     const p = PROBLEMS[st.prob];
-    const [L, R] = p.view, n = 6, pts: Pt[] = [];
+    const [L, R] = p.bracket, n = 6, pts: Pt[] = [];
     let evals = 0;
     for (let i = 0; i < n; i++) {
       const r = runAll(brent(p.f, L + i * (R - L) / n, L + (i + 1) * (R - L) / n, 1e-10));
@@ -361,7 +361,8 @@ function mount(host: HTMLElement): void {
     const u = ulp(f0);
     const ymax = Math.max(0.5 * p.f2 * Wd * Wd, 6 * u) * 1.15;
     const ymin = -0.25 * ymax;
-    const sx = scale(-Wd, Wd, L, Rm), sy = scale(ymin, ymax, bot, top);
+    const topZ = top + 26;
+    const sx = scale(-Wd, Wd, L, Rm), sy = scale(ymin, ymax, bot, topZ);
     svgEl("text", { x: 8, y: 24, class: "ttl" }, svg).textContent = `(a) the bottom of ${p.fname}, zoomed in`;
     const yT = niceTicks(ymin, ymax, 5);
     for (const v of yT) {
@@ -371,7 +372,7 @@ function mount(host: HTMLElement): void {
     svgEl("line", { x1: L, x2: Rm, y1: bot, y2: bot, class: "axis" }, svg);
     for (const v of [-1, -0.5, 0, 0.5, 1]) {
       svgEl("line", { x1: sx(v * Wd), x2: sx(v * Wd), y1: bot, y2: bot + 5, class: "axis" }, svg);
-      svgEl("text", { x: sx(v * Wd), y: bot + 24, "text-anchor": "middle", class: "sm" }, svg).textContent = sciTick(v * Wd);
+      svgEl("text", { x: sx(v * Wd), y: bot + 24, "text-anchor": v === -1 ? "start" : v === 1 ? "end" : "middle", class: "sm" }, svg).textContent = sciTick(v * Wd);
     }
     svgEl("text", { x: (L + Rm) / 2, y: H - 14, "text-anchor": "middle" }, svg).textContent =
       `distance from the minimiser, ${p.xname.split(" (")[0].replace(/^.* /, "")} − ${fx(xs, 6)}`;
@@ -379,13 +380,13 @@ function mount(host: HTMLElement): void {
     yl.textContent = "f(x) − f(x̂)";
 
     const clip = svgEl("clipPath", { id: `gs-clipz-${uid}` }, svg);
-    svgEl("rect", { x: L, y: top - 6, width: Rm - L, height: bot - top + 6 }, clip);
+    svgEl("rect", { x: L, y: topZ - 6, width: Rm - L, height: bot - topZ + 6 }, clip);
     const pg = svgEl("g", { "clip-path": `url(#gs-clipz-${uid})` }, svg);
     // predicted flat band
     const fw = flatWidth(p);
     if (fw < Wd * 1.2) {
-      svgEl("rect", { x: sx(-fw), y: top, width: sx(fw) - sx(-fw), height: bot - top, fill: COL.grn, "fill-opacity": 0.13 }, pg);
-      const t = svgEl("text", { x: sx(0), y: top + 22, "text-anchor": "middle", class: "sm" }, pg);
+      svgEl("rect", { x: sx(-fw), y: topZ, width: sx(fw) - sx(-fw), height: bot - topZ, fill: COL.grn, "fill-opacity": 0.13 }, pg);
+      const t = svgEl("text", { x: sx(0), y: topZ + 22, "text-anchor": "middle", class: "sm" }, pg);
       t.style.fill = COL.grn; t.textContent = `±√(2ε|f|/f″) = ±${fmtSci(fw)}`;
     }
     // parabola 1/2 f'' d^2
@@ -403,19 +404,16 @@ function mount(host: HTMLElement): void {
     if (run.rows.length) {
       const e = run.rows[run.rows.length - 1].best - xs;
       if (Math.abs(e) <= Wd) {
-        svgEl("line", { x1: sx(e), x2: sx(e), y1: top + 30, y2: bot, stroke: MCOL[run.method], "stroke-width": 3 }, pg);
-        const t = svgEl("text", { x: sx(e) + (e > 0 ? -6 : 6), y: top + 50, "text-anchor": e > 0 ? "end" : "start", "font-weight": 700 }, pg);
+        svgEl("line", { x1: sx(e), x2: sx(e), y1: topZ + 30, y2: bot, stroke: MCOL[run.method], "stroke-width": 3 }, pg);
+        const t = svgEl("text", { x: sx(e) + (e > 0 ? -6 : 6), y: topZ + 50, "text-anchor": e > 0 ? "end" : "start", "font-weight": 700 }, pg);
         t.style.fill = MCOL[run.method]; t.textContent = "current estimate";
       }
     }
-    // legend
-    const lg = (txt: string, y: number, c: string, dot: boolean) => {
-      if (dot) svgEl("circle", { cx: Rm - 230, cy: y - 6, r: 4, fill: c }, svg);
-      else svgEl("line", { x1: Rm - 242, x2: Rm - 218, y1: y - 6, y2: y - 6, stroke: c, "stroke-width": 3 }, svg);
-      const t = svgEl("text", { x: Rm - 210, y, class: "sm" }, svg); t.textContent = txt;
-    };
-    lg("computed in doubles", top + 80, COL.curve, true);
-    lg("½ f″(x̂) δ² (exact)", top + 104, COL.par, false);
+    // legend, under the title
+    svgEl("circle", { cx: L + 8, cy: top + 6, r: 4.5, fill: COL.curve }, svg);
+    svgEl("text", { x: L + 20, y: top + 12, class: "sm" }, svg).textContent = "f computed in doubles";
+    svgEl("line", { x1: L + 230, x2: L + 256, y1: top + 6, y2: top + 6, stroke: COL.par, "stroke-width": 3 }, svg);
+    svgEl("text", { x: L + 262, y: top + 12, class: "sm" }, svg).textContent = "½ f″(x̂) δ² (exact)";
   }
 
   // ---------------------------------------------------------------- (b) convergence

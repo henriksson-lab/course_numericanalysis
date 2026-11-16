@@ -2,8 +2,9 @@
 // C6: argmin's Nelder-Mead, BFGS, L-BFGS and nonlinear CG on the 4PL; then the
 // dose in nM, rescaled parameters, and log10(EC50). Like optim without `gr`,
 // the gradient is by central differences with an absolute step 1e-3.
-// The line search is backtracking with the Armijo condition (argmin's More-Thuente
-// line search did not terminate on this problem with a finite-difference gradient).
+// argmin's line searches have no limit on the number of trial steps, and from the
+// nM starts in (b) they never returned, so (b) and (c) use the BFGS of C5 (Armijo
+// backtracking, at most 60 halvings) with the same finite-difference gradient.
 use argmin::core::{Executor, State, TerminationStatus};
 use argmin::solver::conjugategradient::{beta::PolakRibiere, NonlinearConjugateGradient};
 use argmin::solver::linesearch::{condition::ArmijoCondition, BacktrackingLineSearch};
@@ -68,7 +69,7 @@ fn run(name: &str, prob: Fd, q0: Vec<f64>, method: &str) {
             .map(|r| { let s = r.state().clone(); (s.get_best_param().unwrap().clone(), s.get_best_cost(), s.get_iter(), s.get_func_counts().clone(), s.get_termination_status().clone()) }),
     };
     match res {
-        Ok((q, cost, iters, counts, status)) => {
+        Ok((q, cost, iters, _counts, status)) => {
             let p = prob.par(&q);
             let why = match status { TerminationStatus::Terminated(r) => r.text().to_string(), _ => "running".into() };
             println!("{:<16} {:<5} SSE {:10.4}  EC50 {:9.4}  hill {:7.3}  iter {:3}  cost calls {:4}  ({})",
@@ -78,17 +79,58 @@ fn run(name: &str, prob: Fd, q0: Vec<f64>, method: &str) {
     }
 }
 
+// BFGS of C5, on the problem `prob`, with at most 60 halvings per line search;
+// like optim, stop when the relative decrease of the SSE is below 1.5e-8
+fn own_bfgs(name: &str, prob: &Fd, q0: Vec<f64>) {
+    NF.store(0, Ordering::Relaxed);
+    let f = |q: &[f64]| prob.cost(&q.to_vec()).unwrap();
+    let g = |q: &[f64]| prob.gradient(&q.to_vec()).unwrap();
+    let n = q0.len();
+    let mut x = q0;
+    let mut b: Vec<Vec<f64>> = eye();
+    let mut gk = g(&x);
+    let mut k = 0;
+    while k < 100 && norm(&gk) >= 1e-4 {
+        let s: Vec<f64> = (0..n).map(|i| -dot(&b[i], &gk)).collect();
+        let (fx, gs) = (f(&x), dot(&gk, &s));
+        let mut a = 1.0;
+        let mut halvings = 0;
+        while !(f(&axpy(&x, a, &s)) <= fx + 1e-4 * a * gs) && halvings < 60 { a /= 2.0; halvings += 1; }
+        if halvings == 60 { break; }                       // no downhill step found
+        let s: Vec<f64> = s.iter().map(|v| a * v).collect();
+        x = axpy(&x, 1.0, &s);
+        let fnew = f(&x);
+        if fx - fnew < 1.5e-8 * (fx.abs() + 1.5e-8) { k += 1; break; }
+        let gn = g(&x);
+        let yv: Vec<f64> = gn.iter().zip(&gk).map(|(a, b)| a - b).collect();
+        gk = gn;
+        let sy = dot(&yv, &s);
+        if sy > 0.0 {
+            let v: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j|
+                (i == j) as i32 as f64 - yv[i] * s[j] / sy).collect()).collect();
+            let bv: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j|
+                (0..n).map(|l| b[i][l] * v[l][j]).sum()).collect()).collect();
+            b = (0..n).map(|i| (0..n).map(|j|
+                (0..n).map(|l| v[l][i] * bv[l][j]).sum::<f64>() + s[i] * s[j] / sy).collect()).collect();
+        }
+        k += 1;
+    }
+    let p = prob.par(&x);
+    println!("{:<16} own BFGS  SSE {:10.4}  EC50 {:9.4}  hill {:7.3}  iter {:3}  cost calls {:4}",
+             name, f(&x), p[2], p[3], k, NF.load(Ordering::Relaxed));
+}
+
 fn main() {
-    let only: Option<String> = std::env::args().nth(1);
-    let run = |name: &str, prob: Fd, q0: Vec<f64>, m: &str| {
-        if only.as_deref().map_or(true, |o| o == m) { run(name, prob, q0, m) } };
+    // (a) argmin, dose in µM
     let um = Fd { unit: 1.0, scale: [1.0; 4], log_ec50: false };
     for m in ["NM", "BFGS", "LBFGS", "CG"] { run("µM", um.clone(), P0.to_vec(), m); }
+    // (b) dose in nM
     let nm = Fd { unit: 1000.0, scale: [1.0; 4], log_ec50: false };
-    run("nM, EC50 = 1", nm.clone(), vec![0.0, 100.0, 1.0, 1.0], "BFGS");
-    run("nM, EC50 = 1000", nm, vec![0.0, 100.0, 1000.0, 1.0], "BFGS");
+    own_bfgs("nM, EC50 = 1", &nm, vec![0.0, 100.0, 1.0, 1.0]);
+    own_bfgs("nM, EC50 = 1000", &nm, vec![0.0, 100.0, 1000.0, 1.0]);
     let sc = Fd { unit: 1000.0, scale: [1.0, 100.0, 1000.0, 1.0], log_ec50: false };
-    run("nM, rescaled", sc, vec![0.0, 1.0, 1.0, 1.0], "BFGS");
+    own_bfgs("nM, rescaled", &sc, vec![0.0, 1.0, 1.0, 1.0]);
+    // (c) log10(EC50)
     let lg = Fd { unit: 1000.0, scale: [1.0; 4], log_ec50: true };
-    run("nM, log10 EC50", lg, vec![0.0, 100.0, 3.0, 1.0], "BFGS");
+    own_bfgs("nM, log10 EC50", &lg, vec![0.0, 100.0, 3.0, 1.0]);
 }

@@ -1,0 +1,228 @@
+---
+title: "Quiz: stiffness and implicit methods"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of stiffness and implicit methods. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** In one or two sentences: what makes an ODE problem **stiff**?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compare what limits the step size of an explicit solver with what the solution itself needs.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The model has widely separated time scales, and after the fast modes have decayed, an explicit solver's step is still limited by **stability** (by the fastest mode, $h \lesssim 2/|\lambda_\text{fast}|$), not by the **accuracy** needed for the slow solution we are interested in. The solver takes many tiny steps along a smooth curve.
+:::
+
+---
+
+**Q2.** On the test equation $y' = \lambda y$, what factor does one step of Euler multiply $y$ by? And one step of backward Euler? For $\lambda = -10$ and $h = 0.5$, compute both.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Put $f(y) = \lambda y$ into $y_{n+1} = y_n + h f(y_n)$ and into $y_{n+1} = y_n + h f(y_{n+1})$, with $z = h\lambda$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Euler: $R = 1 + z$. Backward Euler: $R = 1/(1 - z)$. With $z = -5$: Euler $-4$ (unstable: the error grows by a factor 4 and changes sign each step); backward Euler $1/6 \approx 0.167$ (stable; the exact factor is $e^{-5} = 0.0067$).
+:::
+
+---
+
+**Q3.** A model has Jacobian eigenvalues $-0.05$ and $-2000$ per second. You simulate it for 100 s with an explicit RK4 (stable for $h|\lambda| \le 2.79$). At least how many steps does it need? Is the problem stiff?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The **largest** $|\lambda|$ sets the step limit, for the whole run.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$h \le 2.79/2000 = 1.4$ ms, so at least $100/0.0014 \approx 72\,000$ steps. The slow mode has time scale $1/0.05 = 20$ s, and the fast one $0.5$ ms, a ratio of $40\,000$. Over 100 s the fast mode is long gone after the first few milliseconds: yes, stiff. A stiff solver would need on the order of a hundred steps.
+:::
+
+---
+
+**Q4.** An adaptive RK45 solver controls its error. Why does it not simply take large steps once the fast transient is over?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What happens to the fast mode if the step lies outside the stability region, even if that mode is tiny?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Outside the stability region every step multiplies the (tiny, decayed) fast component by $|R(h\lambda)| > 1$. Within a few steps it grows into a visible error, the error estimate catches it, and the step is rejected and shrunk. So the controller ends up at the stability limit, accepting and rejecting steps around it. Adaptivity finds the limit by trial and error; it cannot get past it.
+:::
+
+---
+
+**Q5.** Why does every step of an implicit method need a Newton iteration (for a nonlinear model)? What linear system does each Newton iteration of backward Euler solve?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Where does $\mathbf y_{n+1}$ appear in $\mathbf y_{n+1} = \mathbf y_n + h\,\mathbf f(\mathbf y_{n+1})$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The unknown $\mathbf y_{n+1}$ appears on both sides, inside the nonlinear $\mathbf f$: each step is a root-finding problem $\mathbf G(\mathbf y) = \mathbf y - \mathbf y_n - h\mathbf f(\mathbf y) = \mathbf 0$. Newton for systems solves $(I - hJ(\mathbf y))\,\boldsymbol\delta = -\mathbf G(\mathbf y)$ and updates $\mathbf y \leftarrow \mathbf y + \boldsymbol\delta$, starting from $\mathbf y_n$. $J$ is the Jacobian of $\mathbf f$.
+:::
+
+---
+
+**Q6.** One backward Euler step of $y' = -y^2$ from $y_0 = 1$ with $h = 1$. Write the equation for $y_1$, take one Newton step from $y = 1$, and give the exact $y_1$.
+
+::: {.callout-tip collapse="true" title="Hint"}
+$G(y) = y + hy^2 - y_0$, $G'(y) = 1 + 2hy$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$G(y) = y + y^2 - 1$, $G'(y) = 1 + 2y$. From $y = 1$: $G = 1$, $G' = 3$, so $y = 1 - 1/3 = 0.667$. Exact: $y_1 = (\sqrt5 - 1)/2 = 0.618$. (The exact ODE solution is $y(1) = 1/(1+1) = 0.5$: the step itself is only order 1. Euler would give $1 - 1 = 0$.)
+:::
+
+---
+
+**Q7.** Implicit methods are stable for any step on decaying problems. Why then are explicit methods (RK45) still the default in many libraries?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compare the cost of one step, and think of a problem that is not stiff.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+An implicit step costs a Jacobian (analytic, or $n$ extra $\mathbf f$ calls), an LU factorisation ($\approx \tfrac23 n^3$ operations) and several Newton iterations; an explicit step only a few $\mathbf f$ calls. On a non-stiff problem both take steps of similar size, chosen for accuracy, so the explicit method is cheaper. Implicit methods also damp oscillations (Q9). Use them when stiffness forces the explicit one into tiny steps.
+:::
+
+---
+
+**Q8.** What does LSODA do, and what are the defaults of `deSolve::ode` and `scipy.integrate.solve_ivp`?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The "A" stands for "automatic".
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+LSODA starts with a non-stiff Adams method, monitors its steps for signs of stiffness, and switches to BDF (and back) automatically. It is the default of `deSolve::ode` (`method = "lsoda"`), so R users are protected from stiffness without knowing it. `solve_ivp` defaults to `method="RK45"`, which is explicit: on a stiff model choose `"LSODA"`, `"BDF"` or `"Radau"` yourself.
+:::
+
+---
+
+**Q9.** You simulate a circadian clock model with backward Euler, $h = 1$ hour, and the oscillation dies out over a week. A colleague uses `ode45` and sees a sustained rhythm. Who is right, and how would you check?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Where does $z = \pm i\omega h$ lie with respect to backward Euler's stability region?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Most likely the colleague. On a pure oscillation backward Euler multiplies the amplitude by $1/\sqrt{1 + \omega^2h^2} < 1$ every step; with $\omega = 2\pi/24$ and $h = 1$ that is a factor 0.45 per day. Check: halve the step (a damping that changes with $h$ is numerical), compare with a solver of a different type, and tighten the tolerance. The true model behaviour does not depend on the step.
+:::
+
+---
+
+**Q10.** In the enzyme model $E + S \rightleftharpoons C \to E + P$, the Michaelis–Menten (QSSA) equation removes the stiffness. Why, and when is that not good enough?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which variable does the QSSA eliminate, and which time scale goes with it?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The QSSA assumes $C' \approx 0$ and replaces $C$ by its quasi-equilibrium value, which removes the fast binding mode (time scale about 1 ms); only the slow catalysis remains, so the single remaining ODE is not stiff. It is an approximation, valid when $E_0 \ll S_0 + K_m$: with $E_0 = 1$, $S_0 = 10$ the product is off by up to 3 % of $S_0$, with $E_0 = 5$ by 16 %. A stiff solver on the full model has no such error.
+:::
+
+---
+
+**Q11.** Robertson's problem: `ode45` takes 59 284 steps to $t = 40$, `lsoda` 98. Give two checks, other than the step count, that tell you the stiff solver's answer can be trusted.
+
+::: {.callout-tip collapse="true" title="Hint"}
+What must hold for the true solution, whatever the solver?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) The conservation law $y_1 + y_2 + y_3 = 1$ and positivity of all three concentrations. (2) The answer does not change when the tolerances are tightened (with `atol` well below $y_2 \approx 10^{-5}$), and a second stiff solver of a different type (`radau` vs `bdf`) agrees. For example:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+rober <- function(t, y, p) {
+  r1 <- 0.04 * y[1]; r2 <- 3e7 * y[2]^2; r3 <- 1e4 * y[2] * y[3]
+  list(c(-r1 + r3, r1 - r2 - r3, r2))
+}
+for (m in c("bdf", "radau")) for (tol in c(1e-6, 1e-10)) {
+  out <- ode(c(1, 0, 0), c(0, 40), rober, NULL, method = m, rtol = tol, atol = tol * 1e-4)
+  cat(sprintf("%-5s rtol %.0e: y2(40) = %.7e  sum - 1 = %.1e\n", m, tol, out[2, 3], sum(out[2, -1]) - 1))
+}
+# bdf   rtol 1e-06: y2(40) = 9.1855330e-06  sum - 1 = 2.0e-15
+# bdf   rtol 1e-10: y2(40) = 9.1855348e-06  sum - 1 = -6.7e-16
+# radau rtol 1e-06: y2(40) = 9.1855323e-06  sum - 1 = 0.0e+00
+# radau rtol 1e-10: y2(40) = 9.1855348e-06  sum - 1 = 0.0e+00
+```
+
+### Python
+
+```python
+from scipy.integrate import solve_ivp
+
+def rober(t, y):
+    r1 = 0.04 * y[0]; r2 = 3e7 * y[1]**2; r3 = 1e4 * y[1] * y[2]
+    return [-r1 + r3, r1 - r2 - r3, r2]
+
+for m in ["BDF", "Radau"]:
+    for tol in [1e-6, 1e-10]:
+        y = solve_ivp(rober, (0, 40), [1, 0, 0], method=m, rtol=tol, atol=tol * 1e-4).y[:, -1]
+        print(f"{m:5s} rtol {tol:.0e}: y2(40) = {y[1]:.7e}  sum - 1 = {y.sum() - 1:.1e}")
+# BDF   rtol 1e-06: y2(40) = 9.1855549e-06  sum - 1 = 2.4e-15
+# BDF   rtol 1e-10: y2(40) = 9.1855348e-06  sum - 1 = -7.8e-16
+# Radau rtol 1e-06: y2(40) = 9.1855348e-06  sum - 1 = -1.1e-14
+# Radau rtol 1e-10: y2(40) = 9.1855348e-06  sum - 1 = 0.0e+00
+```
+
+### Rust
+
+```rust
+// rust/examples/stiffness_q11.rs  —  cargo run --example stiffness_q11
+// Q11: no stiff library solver in Rust, so check the hand-written backward Euler
+// (log-spaced steps from 1e-6 to 40) by refining the grid and by the conservation law.
+use nalgebra::{DMatrix, DVector};
+
+fn f(y: &DVector<f64>) -> DVector<f64> {
+    let (r1, r2, r3) = (0.04 * y[0], 3e7 * y[1] * y[1], 1e4 * y[1] * y[2]);
+    DVector::from_vec(vec![-r1 + r3, r1 - r2 - r3, r2])
+}
+fn jac(y: &DVector<f64>) -> DMatrix<f64> {
+    DMatrix::from_row_slice(3, 3, &[
+        -0.04, 1e4 * y[2],                 1e4 * y[1],
+         0.04, -6e7 * y[1] - 1e4 * y[2], -1e4 * y[1],
+         0.0,   6e7 * y[1],                0.0])
+}
+
+fn main() {
+    let id = DMatrix::<f64>::identity(3, 3);
+    for m in [100, 1000, 10000] {                       // steps per decade
+        let n = (m as f64 * (40f64.log10() + 6.0)).round() as usize;
+        let times: Vec<f64> = std::iter::once(0.0)
+            .chain((0..=n).map(|k| 1e-6 * (40e6f64).powf(k as f64 / n as f64))).collect();
+        let mut y = DVector::from_vec(vec![1.0, 0.0, 0.0]);
+        for k in 1..times.len() {
+            let (h, yold) = (times[k] - times[k - 1], y.clone());
+            for _ in 0..20 {
+                let delta = (&id - h * jac(&y)).lu().solve(&(-(&y - &yold - h * f(&y)))).unwrap();
+                y += &delta;
+                if delta.norm() < 1e-14 { break; }
+            }
+        }
+        println!("{:5} steps per decade: y2(40) = {:.7e}  sum - 1 = {:.1e}", m, y[1], y.sum() - 1.0);
+    }
+}
+
+// Output:
+//   100 steps per decade: y2(40) = 9.2203964e-6  sum - 1 = -1.8e-15
+//  1000 steps per decade: y2(40) = 9.1890280e-6  sum - 1 = 2.2e-16
+// 10000 steps per decade: y2(40) = 9.1858842e-6  sum - 1 = -4.3e-15
+```
+
+:::
+:::

@@ -1,0 +1,1288 @@
+---
+title: "Exercise: implicit schemes and the method of lines"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- write one **backward Euler** and one **Crank–Nicolson** step for the diffusion equation as a tridiagonal system, solve it by hand for three unknowns and in code with the **Thomas algorithm**,
+- compute the **growth factor** of each scheme for a Fourier mode and use it to explain unconditional stability, and why Crank–Nicolson **oscillates** after a sharp start,
+- **verify** a solver against an exact solution (a decaying sine mode) and read the **order** in time and in space from error ratios; recognise an error **floor** and lucky **cancellation**,
+- estimate the order by **grid refinement** when there is no exact solution,
+- hand the grid to a **stiff ODE solver** (method of lines) and tell it that the Jacobian is banded,
+- answer two microfluidic heat questions: how sharp a temperature step a *Drosophila* embryo feels between a cold and a warm stream [M1, M2], and why the wall of a PCR chip should be thin and not made of PDMS [H1, H2].
+
+The by-hand part needs pen, paper and a calculator. The code part checks the hand answers and then goes to grids where only code works.
+
+## Background
+
+**Facts used below.** Grid $x_i = i\,\Delta x$, $i = 0, \dots, N$; $c_i^n \approx c(x_i, t_n)$; mesh ratio $r = D\,\Delta t/\Delta x^2$; $A$ = tridiagonal matrix with $-2$ on the diagonal and $1$ beside it.
+
+1. **The chamber** (from *The diffusion (heat) equation by finite differences*): a channel of length $L = 500$ µm, small molecule $D = 1000$ µm²/s, $N = 50$ ($\Delta x = 10$ µm), source $c_0 = 1$, sink $c_N = 0$, empty at $t = 0$. `exact(x, t, L, D)` is its Fourier-series solution.
+2. **Backward Euler**: $-r\,c_{i-1}^{n+1} + (1 + 2r)\,c_i^{n+1} - r\,c_{i+1}^{n+1} = c_i^n$, i.e. $(I - rA)\,\mathbf c^{n+1} = \mathbf c^n + \mathbf b$; the boundary values enter $\mathbf b$ as $r c_0$ (first row) and $r c_N$ (last row).
+3. **Crank–Nicolson**: $-\tfrac r2 c_{i-1}^{n+1} + (1 + r)\,c_i^{n+1} - \tfrac r2 c_{i+1}^{n+1} = c_i^n + \tfrac r2\bigl(c_{i-1}^n - 2c_i^n + c_{i+1}^n\bigr)$, plus $\tfrac r2 c_0$ and $\tfrac r2 c_N$ in the first and last rows.
+4. **Thomas** `thomas(a, b, c, d)` from *Structure: symmetric, banded, sparse*: sub-diagonal (first entry unused), diagonal, super-diagonal (last entry unused), right-hand side; about $8N$ operations.
+5. **Growth factors** for a mode with $z = 4r\sin^2(\theta/2)$ ($\theta = \pi$: the zigzag, $z = 4r$): exact $e^{-z}$, FTCS $1 - z$, backward Euler $1/(1 + z)$, Crank–Nicolson $(1 - z/2)/(1 + z/2)$.
+6. **Exact sine mode**: with $c = 0$ at both ends, $c(x, 0) = \sin(\pi x/L)$ gives $c(x, t) = e^{-D(\pi/L)^2 t}\sin(\pi x/L)$.
+7. **Error** at a fixed time $\approx C_t\,\Delta t^p + C_x\,\Delta x^2$, $p = 1$ (backward Euler), $p = 2$ (Crank–Nicolson). Halving a step divides its part by $2^p$; $\log_2$ of the error ratio is the **observed order**.
+8. **No-flux end** (ghost point $c_{N+1} = c_{N-1}$): the last row becomes $-2r\,c_{N-1} + (1 + 2r)\,c_N$ for backward Euler. **Heat loss** at the end, $-k\,\partial T/\partial z = h\,(T - T_\text{air})$: ghost point $T_{N+1} = T_{N-1} - 2\Delta z\,(h/k)\,(T_N - T_\text{air})$.
+9. **Heat** obeys the same equation with the **thermal diffusivity** $D = k/(\rho c_p)$ ($k$ conductivity, $\rho$ density, $c_p$ heat capacity). Water: $D \approx 1.4\times10^{-7}$ m²/s $= 1.4\times10^5$ µm²/s.
+
+The basic tools in each language: Thomas, one backward Euler step, one Crank–Nicolson step, and 15 steps of 4 s on the chamber. Python users can replace `thomas` by [`scipy.linalg.solve_banded`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_banded.html); Rust has no tridiagonal solver in the allowed crates, so it is hand-written.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+thomas <- function(a, b, c, d) {                 # Structure: symmetric, banded, sparse
+  n <- length(d)
+  for (i in 2:n) {
+    w <- a[i] / b[i - 1]
+    b[i] <- b[i] - w * c[i - 1]
+    d[i] <- d[i] - w * d[i - 1]
+  }
+  x <- numeric(n)
+  x[n] <- d[n] / b[n]
+  for (i in (n - 1):1) x[i] <- (d[i] - c[i] * x[i + 1]) / b[i]
+  x
+}
+be_step <- function(c, r) {                      # c includes the two boundary values
+  m <- length(c) - 2; i <- 2:(m + 1)
+  d <- c[i]
+  d[1] <- d[1] + r * c[1]; d[m] <- d[m] + r * c[m + 2]
+  c[i] <- thomas(rep(-r, m), rep(1 + 2 * r, m), rep(-r, m), d)
+  c
+}
+cn_step <- function(c, r) {
+  m <- length(c) - 2; i <- 2:(m + 1)
+  d <- c[i] + r / 2 * (c[i - 1] - 2 * c[i] + c[i + 1])
+  d[1] <- d[1] + r / 2 * c[1]; d[m] <- d[m] + r / 2 * c[m + 2]
+  c[i] <- thomas(rep(-r / 2, m), rep(1 + r, m), rep(-r / 2, m), d)
+  c
+}
+exact <- function(x, t, L, D, nterm = 200) {    # chamber, previous unit
+  s <- 1 - x / L
+  for (n in 1:nterm) s <- s - 2 / (n * pi) * sin(n * pi * x / L) * exp(-(n * pi / L)^2 * D * t)
+  s
+}
+D <- 1000; L <- 500; N <- 50; dx <- L / N
+x <- seq(0, L, by = dx)
+r <- D * 4 / dx^2                                # dt = 4 s, r = 40
+c <- c(1, rep(0, N))                             # empty channel, source 1, sink 0
+for (k in 1:15) c <- be_step(c, r)               # to t = 60 s
+round(c[c(1, 11, 21, 31, 41, 51)], 4)            # x = 0, 100, ..., 500
+# [1] 1.0000 0.7583 0.5327 0.3330 0.1587 0.0000
+c2 <- c(1, rep(0, N))
+for (k in 1:15) c2 <- cn_step(c2, r)
+round(c2[c(1, 11, 21, 31, 41, 51)], 4)
+# [1] 1.0000 0.7656 0.5437 0.3436 0.1651 0.0000
+```
+
+### Python
+
+```python
+import numpy as np
+
+def thomas(a, b, c, d):                        # Structure: symmetric, banded, sparse
+    n = len(d)
+    b = np.array(b, dtype=float)       # copies: do not overwrite the caller's arrays
+    d = np.array(d, dtype=float)
+    for i in range(1, n):
+        w = a[i] / b[i - 1]
+        b[i] = b[i] - w * c[i - 1]
+        d[i] = d[i] - w * d[i - 1]
+    x = np.zeros(n)
+    x[n - 1] = d[n - 1] / b[n - 1]
+    for i in range(n - 2, -1, -1):
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i]
+    return x
+
+def be_step(c, r):
+    c = c.copy(); m = len(c) - 2       # c includes the two boundary values
+    d = c[1:-1].copy()
+    d[0] += r * c[0]; d[-1] += r * c[-1]
+    c[1:-1] = thomas(np.full(m, -r), np.full(m, 1 + 2 * r), np.full(m, -r), d)
+    return c
+
+def cn_step(c, r):
+    c = c.copy(); m = len(c) - 2
+    d = c[1:-1] + r / 2 * (c[:-2] - 2 * c[1:-1] + c[2:])
+    d[0] += r / 2 * c[0]; d[-1] += r / 2 * c[-1]
+    c[1:-1] = thomas(np.full(m, -r / 2), np.full(m, 1 + r), np.full(m, -r / 2), d)
+    return c
+
+def exact(x, t, L, D, nterm=200):          # chamber, previous unit
+    s = 1 - x / L
+    for n in range(1, nterm + 1):
+        s = s - 2 / (n * np.pi) * np.sin(n * np.pi * x / L) * np.exp(-(n * np.pi / L)**2 * D * t)
+    return s
+
+D, L, N = 1000.0, 500.0, 50
+dx = L / N
+x = np.linspace(0, L, N + 1)
+c = np.r_[1.0, np.zeros(N)]                # empty channel, source c = 1, sink c = 0
+r = D * 4 / dx**2                          # dt = 4 s
+for k in range(15):                        # to t = 60 s
+    c = be_step(c, r)
+print(np.round(c[::10], 4))                # x = 0, 100, ..., 500
+# [1.     0.7583 0.5327 0.333  0.1587 0.    ]
+c2 = np.r_[1.0, np.zeros(N)]
+for k in range(15):
+    c2 = cn_step(c2, r)
+print(np.round(c2[::10], 4))
+# [1.     0.7656 0.5437 0.3436 0.1651 0.    ]
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_implicit_background.rs  —  cargo run --example diffusion_implicit_background
+// Background: Thomas algorithm, one backward Euler step and one Crank-Nicolson
+// step for the chamber (hand-written; no crate needed).
+
+/// Thomas algorithm: a = below the diagonal (a[0] unused), b = diagonal,
+/// c = above the diagonal (c[n-1] unused), d = right-hand side.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// One backward Euler step; c includes the two boundary values (kept fixed).
+fn be_step(c: &mut [f64], r: f64) {
+    let m = c.len() - 2;
+    let mut d = c[1..=m].to_vec();
+    d[0] += r * c[0];
+    d[m - 1] += r * c[m + 1];
+    let x = thomas(&vec![-r; m], &vec![1.0 + 2.0 * r; m], &vec![-r; m], &d);
+    c[1..=m].copy_from_slice(&x);
+}
+
+/// One Crank-Nicolson step.
+fn cn_step(c: &mut [f64], r: f64) {
+    let m = c.len() - 2;
+    let mut d: Vec<f64> = (1..=m).map(|i| c[i] + r / 2.0 * (c[i - 1] - 2.0 * c[i] + c[i + 1])).collect();
+    d[0] += r / 2.0 * c[0];
+    d[m - 1] += r / 2.0 * c[m + 1];
+    let x = thomas(&vec![-r / 2.0; m], &vec![1.0 + r; m], &vec![-r / 2.0; m], &d);
+    c[1..=m].copy_from_slice(&x);
+}
+
+fn main() {
+    let (dd, l, n) = (1000.0, 500.0, 50);
+    let dx = l / n as f64;
+    let mut c = vec![0.0; n + 1];
+    c[0] = 1.0;                                // empty channel, source 1, sink 0
+    let r = dd * 4.0 / (dx * dx);              // dt = 4 s
+    for _ in 0..15 { be_step(&mut c, r); }     // to t = 60 s
+    let show = |c: &[f64]| {                   // x = 0, 100, ..., 500
+        let s: Vec<String> = (0..=n).step_by(10).map(|i| format!("{:.4}", c[i])).collect();
+        println!("[{}]", s.join(", "));
+    };
+    show(&c);
+    let mut c2 = vec![0.0; n + 1];
+    c2[0] = 1.0;
+    for _ in 0..15 { cn_step(&mut c2, r); }
+    show(&c2);
+}
+
+// Output:
+// [1.0000, 0.7583, 0.5327, 0.3330, 0.1587, 0.0000]
+// [1.0000, 0.7656, 0.5437, 0.3436, 0.1651, 0.0000]
+```
+
+:::
+
+All later code on this page uses `thomas`, `be_step`, `cn_step` and `exact` from this block (Rust files repeat what they need, so each runs on its own).
+
+## By hand
+
+**B1. Implicit steps by hand.** The chamber with $N = 4$ ($\Delta x = 125$ µm), empty at $t = 0$, source $c_0 = 1$, sink $c_4 = 0$, $r = 1$ ($\Delta t = 15.6$ s).
+(a) The lecture gives the first backward Euler step: $\mathbf c^1 = \tfrac1{21}(8, 3, 1)$. Write the system for the second step and solve it with Thomas (keep fractions or use 4 decimals).
+(b) Do one Crank–Nicolson step from the empty channel with $r = 1$. Write the $3\times3$ system first.
+(c) The exact values at $t = 15.6$ s are $(0.480, 0.157, 0.034)$ and at $t = 31.25$ s $(0.617, 0.315, 0.121)$. Which scheme is closer after one step? Is either of them accurate?
+
+**B2. Growth factors.**
+(a) Fill in the growth factor of the zigzag mode ($z = 4r$) for $r = 0.25, 1, 10, 100$ for FTCS, backward Euler, Crank–Nicolson and the exact solution.
+(b) A zigzag of amplitude 1 is present at $t = 0$. How large is it after 10 Crank–Nicolson steps with $r = 100$? After 10 backward Euler steps?
+(c) The slowest mode of the chamber decays at rate $0.0395$ per s. With $\Delta t = 4$ s, compute $z$ and the three factors (exact, backward Euler, Crank–Nicolson). What is left of that mode after 15 steps (60 s) in each case?
+(d) Which scheme is best for the slow mode and which for the zigzag? What does that suggest for a sharp start?
+
+**B3. What a step costs.** The embryo grid of the lecture: $N = 200$ ($\Delta x = 2.5$ µm), $D = 1.4\times10^5$ µm²/s, simulate 1 s.
+(a) FTCS needs $\Delta t \le \Delta x^2/(2D)$. How many steps, and roughly how many operations at about 5 per grid point per step?
+(b) Backward Euler with $\Delta t = 5$ ms and Thomas (about 8 operations per point): how many operations?
+(c) Same, but with a dense solve, $\tfrac23 N^3$ per step. And if you factorise once and reuse the factors ($2N^2$ per step for the two triangular solves)?
+(d) Repeat (a) and (b) for $\Delta x = 0.25$ µm.
+
+**B4. Reading orders.** On the sine-mode test (fine grid, $N = 400$), Crank–Nicolson gives error $4.22\times10^{-4}$ at $\Delta t = 3$ s and $1.04\times10^{-4}$ at $\Delta t = 1.5$ s; backward Euler gives $2.06\times10^{-2}$ at $\Delta t = 3$ s.
+(a) What is the observed order of Crank–Nicolson? Predict its error at $\Delta t = 0.75$ s.
+(b) On the coarse grid $N = 50$ the space error is about $1.2\times10^{-4}$. What happens to the Crank–Nicolson error there if you keep halving $\Delta t$ below 1.5 s?
+(c) How small must $\Delta t$ be for backward Euler to reach an error of $10^{-4}$, and how many steps is that up to $t = 30$ s? Compare with Crank–Nicolson.
+
+**B5. The embryo between two streams.** Model of the lecture: $\partial T/\partial t = D\,\partial^2 T/\partial x^2 + (T_\text{out} - T)/\tau$, $\tau = R^2/(2.405^2 D)$, steady length scale $\lambda = \sqrt{D\tau}$.
+(a) Compute $\tau$ and $\lambda$ for $R = 100$ µm and water.
+(b) The steady profile on the warm side is $T = 27 - 3.5\,e^{-d/\lambda}$ at distance $d$ from the middle. Show that the 10–90 % width (20.7 °C to 26.3 °C) is $2\lambda\ln 5$ and compute it. What fraction of the 500 µm embryo is that?
+(c) Show that $\lambda = R/2.405$. Would a medium with half the thermal diffusivity make the step sharper? What would change?
+(d) How long does the profile take to form (about $4\tau$)? Why may [M1] treat the temperature inside the embryo as steady during development?
+
+**B6. The wall of a PCR chip.** A chip sits on a heater; heat reaches the sample channel through a wall of thickness $H$. Values as in [H1]: PDMS $k = 0.15$ W/(m K), $\rho = 970$ kg/m³, $c_p = 1460$ J/(kg K); glass $k = 1.1$, $\rho = 2200$, $c_p = 700$ (approximate; real glasses and PDMS mixes vary).
+(a) Compute the thermal diffusivity of each in m²/s and in mm²/s.
+(b) The heater jumps from 65 °C to 95 °C (annealing to denaturation). With an insulated channel side, the slowest mode decays with time constant $4H^2/(\pi^2 D)$ and the channel-side temperature lags by about $\tfrac{4}{\pi}\cdot 30\,e^{-t\pi^2D/(4H^2)}$ °C. How long until it is within 0.5 °C of 95 °C, for $H = 1$ and 2 mm, PDMS and glass?
+(c) Now the channel side loses heat to air, $h \approx 10$ W/(m² K), air at 25 °C. At steady state the profile is linear; balance the conducted flux $k(95 - T_\text{top})/H$ with the loss $h(T_\text{top} - 25)$ and find the temperature drop $95 - T_\text{top}$ for each case.
+(d) A denaturation step lasts 15–30 s. Which designs work?
+
+## In code
+
+**C1. Backward Euler and Crank–Nicolson.**
+(a) Check your answers to B1 with `be_step` and `cn_step` on the vector `c(1, 0, 0, 0, 0)`.
+(b) On the chamber ($N = 50$), run both schemes to $t = 60$ s with $\Delta t = 4$, 1 and 0.25 s, and print the largest error against `exact`. Which scheme wins at which step? Why is Crank–Nicolson **worse** at $\Delta t = 4$ s?
+
+**C2. Verification against an exact sine mode.**
+(a) Write `sine_err(N, dt, step)`: start from $\sin(\pi x/L)$ with both ends at 0, take `step` up to $t = 30$ s, and return the largest error against fact 6.
+(b) With $N = 400$, halve $\Delta t$ from 6 s down to 0.094 s. Print the errors of both schemes and the observed orders $\log_2(e_{k}/e_{k+1})$. Plot error against $\Delta t$ on log–log axes.
+(c) Repeat Crank–Nicolson with $N = 50$. Where is the floor? Explain the one point that is far **below** the floor.
+(d) Fix $\Delta t = 0.01$ s and refine space, $N = 10, 20, \dots, 160$. Observed order?
+
+**C3. Crank–Nicolson after a sharp start.** Chamber, $N = 50$, empty at $t = 0$, $\Delta t = 4$ s ($r = 40$).
+(a) Record $c$ at $x = 10$ µm after each of 15 Crank–Nicolson steps. Describe what you see.
+(b) Write two **checks** that catch it automatically: the number of sign changes of the step-to-step increments, and values above the source concentration.
+(c) Try two fixes and compare the error at $t = 60$ s: (i) four backward Euler steps of 1 s, then Crank–Nicolson with 4 s; (ii) Crank–Nicolson with $\Delta t = 0.4$ s.
+
+**C4. Method of lines.** The chamber on a fine grid, $N = 200$ ($\Delta x = 2.5$ µm), from empty to $t = 60$ s. The interior points obey $\mathbf c' = \frac{D}{\Delta x^2}A\mathbf c + \mathbf b$.
+(a) Write the right-hand side (pad the vector with the boundary values 1 and 0 and take a second difference). In R solve it with [`ode.1D`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.1D.html) and `lsoda`, `bdf` and `ode45`; in Python with [`solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) and `"BDF"` (with `jac_sparsity`), `"LSODA"` (with `lband = uband = 1`) and `"RK45"`. Report steps, right-hand-side evaluations and the largest error against `exact`.
+(b) Now set `rtol = atol = 1e-10` and compare $N = 50$ with $N = 200$. What limits the error in each case?
+(c) Rust: `ode_solvers` has only explicit solvers. Run its `Dopri5` on the same system and compare with your own Crank–Nicolson (four backward Euler start steps, then $\Delta t = 0.25$ s).
+
+**C5. How sharp is the step inside the embryo?** Use the model of B5 with $L = 500$ µm, nodes $x_i = i\,L/N$, no flux through the tips, $T_\text{out} = 20$ °C for $x < L/2$, 27 °C for $x > L/2$ and 23.5 °C at the middle node.
+(a) The steady state solves $T_i - \lambda^2\,\frac{T_{i-1} - 2T_i + T_{i+1}}{\Delta x^2} = T_{\text{out},i}$ (backward Euler with $\Delta t \to \infty$). Write `embryo_steady(N, R)` that solves it with one call to `thomas` (end rows from fact 8).
+(b) For $N = 200$ compute $\tau$, $\lambda$ and the 10–90 % width (interpolate the crossing of 20.7 and 26.3 °C with [`approxfun`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/approxfun.html) / [`np.interp`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html)). Compare with B5 and with the formula profile.
+(c) Grid refinement: the temperature at $x = 200$ µm for $N = 25, 50, 100, 200, 400$. Compute the ratios of successive differences. Observed order? Which pair do you ignore, and why?
+(d) Widths for $R = 50$, 100 and 150 µm. Compare with B5(c).
+
+**C6. Heat through the wall of a PCR chip.** Nodes $z_i = i\,H/N$, $N = 50$; $z_0$ is the heater (fixed temperature), $z_N$ the channel side. Start at 65 °C everywhere; at $t = 0$ the heater jumps to 95 °C. Backward Euler, $\Delta t = 0.05$ s.
+(a) Insulated channel side ($h = 0$): the time until the channel side reaches 94.5 °C, for PDMS and glass, $H = 1$ and 2 mm. Compare with B6(b).
+(b) Heat loss to air with $h = 10$ W/(m² K) (fact 8; careful with mm and m): run 600 s and report the steady drop $95 - T_\text{top}$. Compare with B6(c).
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — the implicit systems (B1, C1)"}
+Write one equation per interior point with the unknowns $c_1, c_2, c_3$ on the left. Known values (the old level and the boundary values $c_0 = 1$, $c_4 = 0$) go to the right. For Crank–Nicolson the right-hand side contains the explicit half: at $i = 1$ it is $c_1^n + \tfrac r2(c_0 - 2c_1^n + c_2^n)$, plus $\tfrac r2 c_0$ for the boundary on the new level. Thomas by hand: $w = a_i/b_{i-1}$, $b_i \leftarrow b_i - w\,c_{i-1}$, $d_i \leftarrow d_i - w\,d_{i-1}$, then back substitution.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — growth factors and cost (B2, B3)"}
+After $n$ steps a mode is multiplied by $g^n$. $|g| < 1$ means it shrinks; a negative $g$ means it flips sign every step. For the cost, count steps = simulated time / $\Delta t$, then multiply by the work per step.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — orders (B4, C2)"}
+Error $\approx C\,\Delta t^p$, so halving $\Delta t$ divides it by $2^p$, and $p = \log_2(e(\Delta t)/e(\Delta t/2))$. In R use `log2`, in Python `np.log2`. When two error contributions have opposite sign, their sum can be accidentally small at one step size: always look at a sequence, never at one run. Plot with `plot(..., log = "xy")` (R) or `plt.loglog` (Python).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — oscillation checks (C3)"}
+`diff(c1)` gives the increments, `sign()` their signs, and a second `diff` of the signs is non-zero wherever the direction changes. Python: `np.diff`, `np.sign`. A smooth filling curve has no sign changes at all.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — method of lines (C4)"}
+R: [`diff(x, differences = 2)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/diff.html) or `diff(diff(x))` is the second difference. `ode.1D(y, times, func, parms, nspec = 1, method = ...)` returns a matrix whose first column is time; `attr(out, "istate")[2:3]` are steps and function evaluations. Increase `maxsteps` for `ode45`. Python: `np.diff(x, 2)`; pass `jac_sparsity=scipy.sparse.diags([1, 1, 1], [-1, 0, 1], shape=(n, n))` ([`scipy.sparse.diags`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.diags.html)) to `"BDF"`, and `lband=1, uband=1` to `"LSODA"`; `sol.t.size - 1` steps, `sol.nfev` evaluations. Rust: [`ode_solvers`](https://docs.rs/ode_solvers/latest/ode_solvers/) accepts a `DVector<f64>` state.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — the embryo and the wall (B5, B6, C5, C6)"}
+On the warm side, $27 - 3.5e^{-d/\lambda} = 26.3$ gives $e^{-d/\lambda} = 0.2$. For the wall, $\ln(120/(0.5\pi)) = 4.34$. With heat loss the last row of backward Euler is $-2r\,T_{N-1} + (1 + 2r + r\beta)\,T_N = T_N^\text{old} + r\beta\,T_\text{air}$ with $\beta = 2\Delta z\,h/k$; $h/k$ is in 1/m, so with $\Delta z$ in mm divide by 1000. The no-flux rows of `embryo_steady` have $-2s$ next to the diagonal, $s = (\lambda/\Delta x)^2$.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) Right-hand side $= \mathbf c^1 + (r c_0, 0, 0) = (\tfrac{8}{21} + 1, \tfrac{3}{21}, \tfrac{1}{21}) = \tfrac1{21}(29, 3, 1)$, same matrix $\begin{pmatrix} 3 & -1 & 0 \\ -1 & 3 & -1 \\ 0 & -1 & 3\end{pmatrix}$. Thomas: $w = -\tfrac13$, $b_2 = \tfrac83$, $d_2 = \tfrac{3}{21} + \tfrac{29}{63} = \tfrac{38}{63}$; $w = -\tfrac38$, $b_3 = \tfrac{21}{8}$, $d_3 = \tfrac1{21} + \tfrac{38}{168} = \tfrac{46}{168}$. Back: $c_3 = \tfrac{46}{168}\cdot\tfrac{8}{21} = \tfrac{46}{441} = 0.1043$, $c_2 = (\tfrac{38}{63} + 0.1043)/\tfrac83 = 0.2653$, $c_1 = (\tfrac{29}{21} + 0.2653)/3 = 0.5488$.
+(b) $\begin{pmatrix} 2 & -\tfrac12 & 0 \\ -\tfrac12 & 2 & -\tfrac12 \\ 0 & -\tfrac12 & 2\end{pmatrix}\mathbf c^1 = \begin{pmatrix} 0 + \tfrac12(1 - 0 + 0) + \tfrac12\cdot 1 \\ 0 \\ 0\end{pmatrix} = \begin{pmatrix} 1 \\ 0 \\ 0\end{pmatrix}$. Thomas: $b_2 = 2 - \tfrac18 = \tfrac{15}{8}$, $d_2 = \tfrac14$; $b_3 = 2 - \tfrac{2}{15} = \tfrac{28}{15}$, $d_3 = \tfrac1{15}$. $c_3 = \tfrac{1}{28} = 0.0357$, $c_2 = (\tfrac14 + \tfrac1{56})/\tfrac{15}{8} = \tfrac17 = 0.1429$, $c_1 = (1 + \tfrac1{14})/2 = \tfrac{15}{28} = 0.5357$.
+(c) Exact after one step: $(0.480, 0.157, 0.034)$. Backward Euler $(0.381, 0.143, 0.048)$ and Crank–Nicolson $(0.536, 0.143, 0.036)$ are both off by about 0.05–0.1 at the first point. After two backward Euler steps $(0.549, 0.265, 0.104)$ against $(0.617, 0.315, 0.121)$. With 3 interior points and $r = 1$ neither is accurate; both are stable and stay between 0 and 1 here.
+
+**B2.**
+(a)
+
+| $r$ | $z = 4r$ | FTCS $1 - z$ | BE $\frac1{1+z}$ | CN $\frac{1 - z/2}{1 + z/2}$ | exact $e^{-z}$ |
+|---|---|---|---|---|---|
+| 0.25 | 1 | 0 | 0.5 | 0.333 | 0.368 |
+| 1 | 4 | −3 | 0.2 | −0.333 | 0.018 |
+| 10 | 40 | −39 | 0.024 | −0.905 | $4\times10^{-18}$ |
+| 100 | 400 | −399 | 0.0025 | −0.990 | $\approx 0$ |
+
+(b) Crank–Nicolson: $(-0.990)^{10} = 0.905$: 90 % of the zigzag is still there after 10 steps, flipping sign every step. Backward Euler: $0.0025^{10} \approx 10^{-26}$: gone after one step.
+(c) $z = 4 \times 0.0395 = 0.158$. Exact $e^{-0.158} = 0.854$, backward Euler $1/1.158 = 0.864$, Crank–Nicolson $0.921/1.079 = 0.854$. After 15 steps: exact $e^{-2.37} = 0.093$, backward Euler $0.864^{15} = 0.111$, Crank–Nicolson $0.854^{15} = 0.093$.
+(d) Crank–Nicolson is far better for the slow mode (the biology), backward Euler for the zigzag (a grid artefact that should vanish). A sharp start puts a lot into the zigzag-like modes, so start with a few backward Euler steps, then switch to Crank–Nicolson (C3).
+
+**B3.**
+(a) $\Delta t \le 2.5^2/(2\cdot1.4\times10^5) = 2.23\times10^{-5}$ s: 44 800 steps for 1 s, $\times\,5 \times 201 \approx 1000$ operations $\approx 4.5\times10^7$.
+(b) 200 steps $\times\,8\times201 \approx 1600$ $= 3.2\times10^5$: about 140 times less.
+(c) Dense: $\tfrac23 201^3 = 5.4\times10^6$ per step, $1.1\times10^9$ for 200 steps: over 3000 times more than Thomas. Factorise once: $5.4\times10^6 + 200 \times 2\times201^2 \approx 2.2\times10^7$, still 70 times more than Thomas (the triangular factors of a tridiagonal matrix are bidiagonal; a dense code does not know that).
+(d) $\Delta x = 0.25$ µm, $N = 2000$: FTCS $\Delta t$ 100 times smaller, 4.5 million steps of about $10^4$ operations $= 4.5\times10^{10}$. Backward Euler: 200 steps $\times\,16\,000 = 3.2\times10^6$, 10 times the cost of (b).
+
+**B4.**
+(a) Ratio $4.22/1.04 = 4.06$, $\log_2 4.06 = 2.02$: second order. Predicted at 0.75 s: $1.04\times10^{-4}/4 = 2.6\times10^{-5}$ (C2 finds $2.46\times10^{-5}$).
+(b) The time error falls below the space error of $1.2\times10^{-4}$, so the total error stops falling and levels off at about $1.2\times10^{-4}$: a floor. On the way, where the two parts are similar in size and of opposite sign, the error can dip (C2).
+(c) Backward Euler is first order: $e \approx 2.06\times10^{-2}\,(\Delta t/3)$; $10^{-4}$ needs $\Delta t \approx 3 \times 10^{-4}/0.0206 = 0.0146$ s, about 2000 steps. Crank–Nicolson reaches $10^{-4}$ at $\Delta t = 1.5$ s, 20 steps. Same cost per step, so 100 times less work.
+
+**B5.**
+(a) $\tau = 100^2/(2.405^2 \times 1.4\times10^5) = 10^4/(5.784\times1.4\times10^5) = 0.0123$ s $= 12$ ms. $\lambda = \sqrt{1.4\times10^5 \times 0.0123} = 41.6$ µm.
+(b) $27 - 3.5e^{-d/\lambda} = 26.3$ gives $e^{-d/\lambda} = 0.2$, $d = \lambda\ln5$. By symmetry the 10 % point is at the same distance on the cold side, so the width is $2\lambda\ln5 = 3.22\lambda = 134$ µm, 27 % of the embryo.
+(c) $\lambda^2 = D\tau = D R^2/(2.405^2 D) = (R/2.405)^2$. $D$ cancels: the width depends only on the geometry. Halving $D$ doubles $\tau$ (the step forms twice as slowly) but leaves its width unchanged. A thinner embryo gives a sharper step.
+(d) $4\tau \approx 50$ ms. Development (stripes forming) takes minutes, so the temperature field is always at its steady state: quasi-steady. [M2] uses the same argument (heat crosses the embryo in about 0.9 s by their estimate) to justify a steady-state simulation.
+
+**B6.**
+(a) PDMS $0.15/(970\times1460) = 1.06\times10^{-7}$ m²/s $= 0.106$ mm²/s. Glass $1.1/(2200\times700) = 7.14\times10^{-7}$ m²/s $= 0.714$ mm²/s: about 7 times larger.
+(b) $\tfrac4\pi\cdot30\,e^{-t/t_1} = 0.5$ gives $t = t_1\ln(120/(0.5\pi)) = 4.34\,t_1$ with $t_1 = 4H^2/(\pi^2 D)$.
+
+| | $t_1$, 1 mm | to 94.5 °C | $t_1$, 2 mm | to 94.5 °C |
+|---|---|---|---|---|
+| PDMS | 3.83 s | 16.6 s | 15.3 s | 66.4 s |
+| glass | 0.57 s | 2.5 s | 2.27 s | 9.8 s |
+
+Doubling the thickness quadruples the time ($H^2$); PDMS is 7 times slower than glass.
+(c) $k(95 - T_\text{top})/H = h(T_\text{top} - 25)$ gives $95 - T_\text{top} = 70\,\frac{\text{Bi}}{1 + \text{Bi}}$ with $\text{Bi} = hH/k$. PDMS 1 mm: Bi $= 0.0667$, drop 4.4 °C; PDMS 2 mm: Bi $= 0.133$, drop 8.2 °C; glass 1 mm: Bi $= 0.0091$, drop 0.63 °C; glass 2 mm: 1.25 °C.
+(d) Glass, at least at 1 mm: reaches 95 °C within seconds and loses about 1 °C at most. A 2 mm PDMS wall needs more than a minute and then sits 8 °C too cold: denaturation would fail. This is the conclusion of [H1] (Gui and Ren 2006), whose 3D simulation found drops of 1.8 °C (glass, 2 mm, to the middle plane) and recommends glass for the heated side and thin chips. Our 1D numbers are rough; $h$ for natural convection in air ranges from about 5 to 25 W/(m² K).
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+c0 <- c(1, 0, 0, 0, 0)                      # B1: N = 4, r = 1
+c1 <- be_step(c0, 1)
+c1 * 21
+# [1] 21  8  3  1  0
+be_step(c1, 1)
+# [1] 1.0000000 0.5487528 0.2653061 0.1043084 0.0000000
+cn_step(c0, 1)
+# [1] 1.00000000 0.53571429 0.14285714 0.03571429 0.00000000
+D <- 1000; L <- 500; N <- 50; dx <- L / N
+x <- seq(0, L, by = dx); ce <- exact(x, 60, L, D)
+for (dt in c(4, 1, 0.25)) {
+  r <- D * dt / dx^2; cb <- cc <- c(1, rep(0, N))
+  for (k in 1:round(60 / dt)) { cb <- be_step(cb, r); cc <- cn_step(cc, r) }
+  cat(sprintf("dt = %4.2f  r = %5.1f  BE error %.2e  CN error %.2e\n",
+              dt, r, max(abs(cb - ce)), max(abs(cc - ce))))
+}
+# dt = 4.00  r =  40.0  BE error 1.10e-02  CN error 2.01e-01
+# dt = 1.00  r =  10.0  BE error 2.80e-03  CN error 8.85e-05
+# dt = 0.25  r =   2.5  BE error 7.23e-04  CN error 2.57e-05
+```
+
+### Python
+
+```python
+c0 = np.array([1.0, 0, 0, 0, 0])                 # B1: N = 4, r = 1
+c1 = be_step(c0, 1)
+print(c1 * 21)
+# [21.  8.  3.  1.  0.]
+print(be_step(c1, 1))
+# [1.         0.54875283 0.26530612 0.10430839 0.        ]
+print(cn_step(c0, 1))
+# [1.         0.53571429 0.14285714 0.03571429 0.        ]
+D, L, N = 1000.0, 500.0, 50
+dx = L / N
+x = np.linspace(0, L, N + 1); ce = exact(x, 60, L, D)
+for dt in [4, 1, 0.25]:
+    r = D * dt / dx**2
+    cb = np.r_[1.0, np.zeros(N)]; cc = cb.copy()
+    for k in range(round(60 / dt)):
+        cb = be_step(cb, r); cc = cn_step(cc, r)
+    print(f"dt = {dt:4.2f}  r = {r:5.1f}  BE error {np.max(np.abs(cb - ce)):.2e}"
+          f"  CN error {np.max(np.abs(cc - ce)):.2e}")
+# dt = 4.00  r =  40.0  BE error 1.10e-02  CN error 2.01e-01
+# dt = 1.00  r =  10.0  BE error 2.80e-03  CN error 8.85e-05
+# dt = 0.25  r =   2.5  BE error 7.23e-04  CN error 2.57e-05
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_implicit_c1.rs  —  cargo run --example diffusion_implicit_c1
+// C1: backward Euler and Crank-Nicolson steps (hand-written), checked by hand (B1)
+// and against the exact chamber solution at t = 60 s.
+
+/// Thomas algorithm (a[0] and c[n-1] unused), as in Structure: symmetric, banded, sparse.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// One backward Euler step; c includes the two (fixed) boundary values.
+fn be_step(c: &mut [f64], r: f64) {
+    let m = c.len() - 2;
+    let mut d = c[1..=m].to_vec();
+    d[0] += r * c[0];
+    d[m - 1] += r * c[m + 1];
+    let x = thomas(&vec![-r; m], &vec![1.0 + 2.0 * r; m], &vec![-r; m], &d);
+    c[1..=m].copy_from_slice(&x);
+}
+
+/// One Crank-Nicolson step.
+fn cn_step(c: &mut [f64], r: f64) {
+    let m = c.len() - 2;
+    let mut d: Vec<f64> = (1..=m).map(|i| c[i] + r / 2.0 * (c[i - 1] - 2.0 * c[i] + c[i + 1])).collect();
+    d[0] += r / 2.0 * c[0];
+    d[m - 1] += r / 2.0 * c[m + 1];
+    let x = thomas(&vec![-r / 2.0; m], &vec![1.0 + r; m], &vec![-r / 2.0; m], &d);
+    c[1..=m].copy_from_slice(&x);
+}
+
+/// Exact chamber profile (Fourier series of the previous unit).
+fn exact(x: f64, t: f64, l: f64, dd: f64) -> f64 {
+    let pi = std::f64::consts::PI;
+    let mut s = 1.0 - x / l;
+    for n in 1..=200 {
+        let k = n as f64 * pi / l;
+        s -= 2.0 / (n as f64 * pi) * (k * x).sin() * (-k * k * dd * t).exp();
+    }
+    s
+}
+
+fn max_abs_diff(a: &[f64], b: &[f64]) -> f64 {
+    a.iter().zip(b).map(|(p, q)| (p - q).abs()).fold(0.0, f64::max)
+}
+
+fn main() {
+    let c0 = [1.0, 0.0, 0.0, 0.0, 0.0];             // B1: N = 4, r = 1
+    let mut c1 = c0.to_vec();
+    be_step(&mut c1, 1.0);
+    println!("{:?}", c1.iter().map(|v| v * 21.0).collect::<Vec<_>>());
+    let mut c2 = c1.clone();
+    be_step(&mut c2, 1.0);
+    println!("{:?}", c2);
+    let mut c3 = c0.to_vec();
+    cn_step(&mut c3, 1.0);
+    println!("{:?}", c3);
+
+    let (dd, l, n) = (1000.0, 500.0, 50usize);
+    let dx = l / n as f64;
+    let ce: Vec<f64> = (0..=n).map(|i| exact(i as f64 * dx, 60.0, l, dd)).collect();
+    for dt in [4.0, 1.0, 0.25] {
+        let r = dd * dt / (dx * dx);
+        let mut cb = vec![0.0; n + 1];
+        cb[0] = 1.0;
+        let mut cc = cb.clone();
+        for _ in 0..(60.0 / dt) as usize { be_step(&mut cb, r); cn_step(&mut cc, r); }
+        println!("dt = {:4.2}  r = {:5.1}  BE error {:.2e}  CN error {:.2e}",
+                 dt, r, max_abs_diff(&cb, &ce), max_abs_diff(&cc, &ce));
+    }
+}
+
+// Output:
+// [21.0, 8.0, 3.0, 1.0, 0.0]
+// [1.0, 0.5487528344671202, 0.26530612244897955, 0.10430839002267572, 0.0]
+// [1.0, 0.5357142857142857, 0.14285714285714285, 0.03571428571428571, 0.0]
+// dt = 4.00  r =  40.0  BE error 1.10e-2  CN error 2.01e-1
+// dt = 1.00  r =  10.0  BE error 2.80e-3  CN error 8.85e-5
+// dt = 0.25  r =   2.5  BE error 7.23e-4  CN error 2.57e-5
+```
+
+:::
+
+(a) agrees with B1. (b) At $\Delta t = 4$ s Crank–Nicolson has a large error (0.20) near the source, where the empty channel meets the full reservoir; that is the oscillation of C3. At 1 s and 0.25 s Crank–Nicolson is about 30 times more accurate than backward Euler: second against first order. At 0.25 s the Crank–Nicolson error is close to the space error of the 10 µm grid.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+D <- 1000; L <- 500
+sine_err <- function(N, dt, step, tend = 30) {
+  dx <- L / N; x <- seq(0, L, by = dx)
+  c <- sin(pi * x / L)                          # both reservoirs at 0
+  for (k in 1:round(tend / dt)) c <- step(c, D * dt / dx^2)
+  max(abs(c - exp(-D * (pi / L)^2 * tend) * sin(pi * x / L)))
+}
+dts <- 6 / 2^(0:6)
+e_be   <- sapply(dts, function(h) sine_err(400, h, be_step))
+e_cn   <- sapply(dts, function(h) sine_err(400, h, cn_step))
+e_cn50 <- sapply(dts, function(h) sine_err(50, h, cn_step))
+signif(cbind(dt = dts, be = e_be, cn = e_cn, cn50 = e_cn50), 3)
+#          dt       be       cn     cn50
+# [1,] 6.0000 0.039500 1.70e-03 1.58e-03
+# [2,] 3.0000 0.020600 4.22e-04 3.05e-04
+# [3,] 1.5000 0.010500 1.04e-04 1.34e-05
+# [4,] 0.7500 0.005310 2.46e-05 9.28e-05
+# [5,] 0.3750 0.002670 4.76e-06 1.13e-04
+# [6,] 0.1880 0.001340 2.08e-07 1.18e-04
+# [7,] 0.0938 0.000671 1.45e-06 1.19e-04
+round(log2(e_be[-7] / e_be[-1]), 2)              # observed order, BE
+# [1] 0.94 0.97 0.98 0.99 1.00 1.00
+round(log2(e_cn[-7] / e_cn[-1]), 2)              # observed order, CN
+# [1]  2.01  2.02  2.08  2.37  4.51 -2.80
+Ns <- c(10, 20, 40, 80, 160)
+e_dx <- sapply(Ns, function(N) sine_err(N, 0.01, cn_step))
+round(log2(e_dx[-5] / e_dx[-1]), 2)              # order in space
+# [1] 2 2 2 2
+plot(dts, e_be, log = "xy", type = "b", ylim = range(e_cn, e_be))
+lines(dts, e_cn, type = "b", col = 2); lines(dts, e_cn50, type = "b", col = 2, lty = 2)
+```
+
+### Python
+
+```python
+D, L = 1000.0, 500.0
+def sine_err(N, dt, step, tend=30):
+    dx = L / N; x = np.linspace(0, L, N + 1)
+    c = np.sin(np.pi * x / L)                     # both reservoirs at 0
+    for k in range(round(tend / dt)):
+        c = step(c, D * dt / dx**2)
+    return np.max(np.abs(c - np.exp(-D * (np.pi / L)**2 * tend) * np.sin(np.pi * x / L)))
+
+dts = 6 / 2.0**np.arange(7)
+e_be = np.array([sine_err(400, h, be_step) for h in dts])
+e_cn = np.array([sine_err(400, h, cn_step) for h in dts])
+e_cn50 = np.array([sine_err(50, h, cn_step) for h in dts])
+for row in zip(dts, e_be, e_cn, e_cn50):
+    print("  ".join(f"{v:9.3g}" for v in row))
+#         6     0.0395     0.0017    0.00158
+#         3     0.0206   0.000422   0.000305
+#       1.5     0.0105   0.000104   1.34e-05
+#      0.75    0.00531   2.46e-05   9.28e-05
+#     0.375    0.00267   4.76e-06   0.000113
+#     0.188    0.00134   2.08e-07   0.000118
+#    0.0938   0.000671   1.45e-06   0.000119
+print(np.round(np.log2(e_be[:-1] / e_be[1:]), 2))     # observed order, BE
+# [0.94 0.97 0.98 0.99 1.   1.  ]
+print(np.round(np.log2(e_cn[:-1] / e_cn[1:]), 2))     # observed order, CN
+# [ 2.01  2.02  2.08  2.37  4.51 -2.8 ]
+Ns = [10, 20, 40, 80, 160]
+e_dx = np.array([sine_err(N, 0.01, cn_step) for N in Ns])
+print(np.round(np.log2(e_dx[:-1] / e_dx[1:]), 2))     # order in space
+# [2. 2. 2. 2.]
+import matplotlib.pyplot as plt
+plt.loglog(dts, e_be, "o-", dts, e_cn, "o-", dts, e_cn50, "o--")
+plt.xlabel("dt (s)"); plt.ylabel("max error at t = 30 s")
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_implicit_c2.rs  —  cargo run --example diffusion_implicit_c2
+// C2: verification with an exact sine mode: observed order in time and space.
+
+/// Thomas algorithm (a[0] and c[n-1] unused), as in Structure: symmetric, banded, sparse.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// One backward Euler step; c includes the two (fixed) boundary values.
+fn be_step(c: &mut [f64], r: f64) {
+    let m = c.len() - 2;
+    let mut d = c[1..=m].to_vec();
+    d[0] += r * c[0];
+    d[m - 1] += r * c[m + 1];
+    let x = thomas(&vec![-r; m], &vec![1.0 + 2.0 * r; m], &vec![-r; m], &d);
+    c[1..=m].copy_from_slice(&x);
+}
+
+/// One Crank-Nicolson step.
+fn cn_step(c: &mut [f64], r: f64) {
+    let m = c.len() - 2;
+    let mut d: Vec<f64> = (1..=m).map(|i| c[i] + r / 2.0 * (c[i - 1] - 2.0 * c[i] + c[i + 1])).collect();
+    d[0] += r / 2.0 * c[0];
+    d[m - 1] += r / 2.0 * c[m + 1];
+    let x = thomas(&vec![-r / 2.0; m], &vec![1.0 + r; m], &vec![-r / 2.0; m], &d);
+    c[1..=m].copy_from_slice(&x);
+}
+
+const DD: f64 = 1000.0;
+const L: f64 = 500.0;
+
+fn sine_err(n: usize, dt: f64, step: fn(&mut [f64], f64), tend: f64) -> f64 {
+    let pi = std::f64::consts::PI;
+    let dx = L / n as f64;
+    let x: Vec<f64> = (0..=n).map(|i| i as f64 * dx).collect();
+    let mut c: Vec<f64> = x.iter().map(|xi| (pi * xi / L).sin()).collect();
+    for _ in 0..(tend / dt).round() as usize { step(&mut c, DD * dt / (dx * dx)); }
+    let amp = (-DD * (pi / L).powi(2) * tend).exp();
+    x.iter().zip(&c).map(|(xi, ci)| (ci - amp * (pi * xi / L).sin()).abs()).fold(0.0, f64::max)
+}
+
+fn order(e: &[f64]) -> Vec<String> {
+    e.windows(2).map(|w| format!("{:.2}", (w[0] / w[1]).log2())).collect()
+}
+
+fn main() {
+    let dts: Vec<f64> = (0..7).map(|k| 6.0 / 2f64.powi(k)).collect();
+    let e_be: Vec<f64> = dts.iter().map(|&h| sine_err(400, h, be_step, 30.0)).collect();
+    let e_cn: Vec<f64> = dts.iter().map(|&h| sine_err(400, h, cn_step, 30.0)).collect();
+    let e_cn50: Vec<f64> = dts.iter().map(|&h| sine_err(50, h, cn_step, 30.0)).collect();
+    for k in 0..7 {
+        println!("{:9.4}  {:9.3e}  {:9.3e}  {:9.3e}", dts[k], e_be[k], e_cn[k], e_cn50[k]);
+    }
+    println!("{:?}", order(&e_be));
+    println!("{:?}", order(&e_cn));
+    let e_dx: Vec<f64> = [10, 20, 40, 80, 160].iter().map(|&n| sine_err(n, 0.01, cn_step, 30.0)).collect();
+    println!("{:?}", order(&e_dx));
+}
+
+// Output:
+//    6.0000   3.950e-2   1.702e-3   1.584e-3
+//    3.0000   2.056e-2   4.223e-4   3.047e-4
+//    1.5000   1.050e-2   1.041e-4   1.335e-5
+//    0.7500   5.308e-3   2.461e-5   9.276e-5
+//    0.3750   2.669e-3   4.755e-6   1.126e-4
+//    0.1875   1.339e-3   2.081e-7   1.176e-4
+//    0.0938   6.715e-4   1.449e-6   1.188e-4
+// ["0.94", "0.97", "0.98", "0.99", "1.00", "1.00"]
+// ["2.01", "2.02", "2.08", "2.37", "4.51", "-2.80"]
+// ["2.00", "2.00", "2.00", "2.00"]
+```
+
+:::
+
+Backward Euler: order 1 all the way. Crank–Nicolson on the fine grid: order 2 down to about 0.4 s, then the ratios go wild: the error reaches the space floor (about $1.5\times10^{-6}$ for $N = 400$), with a dip at $\Delta t = 0.19$ s. On the coarse grid ($N = 50$) the floor is $1.2\times10^{-4}$ and the dip is at 1.5 s ($1.3\times10^{-5}$). The dip is cancellation: Crank–Nicolson decays the sine slightly too fast, the grid slightly too slowly, and at one step size the two errors almost cancel. A single run there looks ten times more accurate than the method is. In space: order 2 exactly (the sine is an eigenvector of $A$, so only its decay rate is in error, by a factor $\propto\Delta x^2$).
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+D <- 1000; L <- 500; N <- 50; dx <- L / N
+x <- seq(0, L, by = dx)
+r <- D * 4 / dx^2                                 # dt = 4 s, r = 40
+c <- c(1, rep(0, N)); c1 <- numeric(15)
+for (k in 1:15) { c <- cn_step(c, r); c1[k] <- c[2] }
+round(c1, 3)                                      # c at x = 10 µm, step by step
+#  [1] 1.600 0.356 1.464 0.494 1.379 0.582 1.318 0.644 1.271 0.692 1.234 0.730
+# [13] 1.203 0.762 1.178
+sum(diff(sign(diff(c1))) != 0)                    # sign changes of the increments
+# [1] 13
+max(c) > 1                                        # above the source: impossible
+# [1] TRUE
+cr <- c(1, rep(0, N))                             # fix 1: 4 BE steps of 1 s, then CN
+for (k in 1:4) cr <- be_step(cr, r / 4)
+for (k in 1:14) cr <- cn_step(cr, r)
+cs <- c(1, rep(0, N))                             # fix 2: CN with dt = 0.4 s (r = 4)
+for (k in 1:150) cs <- cn_step(cs, r / 10)
+ce <- exact(x, 60, L, D)
+c(plain = max(abs(c - ce)), rannacher = max(abs(cr - ce)), small = max(abs(cs - ce)))
+#        plain    rannacher        small 
+# 2.012775e-01 6.776327e-05 2.389579e-05 
+```
+
+### Python
+
+```python
+D, L, N = 1000.0, 500.0, 50
+dx = L / N
+x = np.linspace(0, L, N + 1)
+r = D * 4 / dx**2                                  # dt = 4 s, r = 40
+c = np.r_[1.0, np.zeros(N)]; c1 = np.zeros(15)
+for k in range(15):
+    c = cn_step(c, r); c1[k] = c[1]
+print(np.round(c1, 3))                             # c at x = 10 µm, step by step
+# [1.6   0.356 1.464 0.494 1.379 0.582 1.318 0.644 1.271 0.692 1.234 0.73
+#  1.203 0.762 1.178]
+print(np.sum(np.diff(np.sign(np.diff(c1))) != 0))  # sign changes of the increments
+# 13
+print(c.max() > 1)                                 # above the source: impossible
+# True
+cr = np.r_[1.0, np.zeros(N)]                       # fix 1: 4 BE steps of 1 s, then CN
+for k in range(4): cr = be_step(cr, r / 4)
+for k in range(14): cr = cn_step(cr, r)
+cs = np.r_[1.0, np.zeros(N)]                       # fix 2: CN with dt = 0.4 s (r = 4)
+for k in range(150): cs = cn_step(cs, r / 10)
+ce = exact(x, 60, L, D)
+print([float(np.max(np.abs(v - ce))) for v in (c, cr, cs)])
+# [0.2012775276486738, 6.776327228885659e-05, 2.389579236922179e-05]
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_implicit_c3.rs  —  cargo run --example diffusion_implicit_c3
+// C3: Crank-Nicolson oscillations after a sharp start, how to detect them,
+// and two fixes (backward Euler start steps, smaller time step).
+
+/// Thomas algorithm (a[0] and c[n-1] unused), as in Structure: symmetric, banded, sparse.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// One backward Euler step; c includes the two (fixed) boundary values.
+fn be_step(c: &mut [f64], r: f64) {
+    let m = c.len() - 2;
+    let mut d = c[1..=m].to_vec();
+    d[0] += r * c[0];
+    d[m - 1] += r * c[m + 1];
+    let x = thomas(&vec![-r; m], &vec![1.0 + 2.0 * r; m], &vec![-r; m], &d);
+    c[1..=m].copy_from_slice(&x);
+}
+
+/// One Crank-Nicolson step.
+fn cn_step(c: &mut [f64], r: f64) {
+    let m = c.len() - 2;
+    let mut d: Vec<f64> = (1..=m).map(|i| c[i] + r / 2.0 * (c[i - 1] - 2.0 * c[i] + c[i + 1])).collect();
+    d[0] += r / 2.0 * c[0];
+    d[m - 1] += r / 2.0 * c[m + 1];
+    let x = thomas(&vec![-r / 2.0; m], &vec![1.0 + r; m], &vec![-r / 2.0; m], &d);
+    c[1..=m].copy_from_slice(&x);
+}
+
+/// Exact chamber profile (Fourier series of the previous unit).
+fn exact(x: f64, t: f64, l: f64, dd: f64) -> f64 {
+    let pi = std::f64::consts::PI;
+    let mut s = 1.0 - x / l;
+    for n in 1..=200 {
+        let k = n as f64 * pi / l;
+        s -= 2.0 / (n as f64 * pi) * (k * x).sin() * (-k * k * dd * t).exp();
+    }
+    s
+}
+
+fn max_abs_diff(a: &[f64], b: &[f64]) -> f64 {
+    a.iter().zip(b).map(|(p, q)| (p - q).abs()).fold(0.0, f64::max)
+}
+
+fn main() {
+    let (dd, l, n) = (1000.0, 500.0, 50usize);
+    let dx = l / n as f64;
+    let r = dd * 4.0 / (dx * dx);                      // dt = 4 s, r = 40
+    let mut empty = vec![0.0; n + 1];
+    empty[0] = 1.0;
+    let mut c = empty.clone();
+    let mut c1 = vec![0.0; 15];
+    for k in 0..15 { cn_step(&mut c, r); c1[k] = c[1]; }
+    println!("{:?}", c1.iter().map(|v| (v * 1000.0).round() / 1000.0).collect::<Vec<_>>());
+    let inc: Vec<f64> = c1.windows(2).map(|w| w[1] - w[0]).collect();
+    let flips = inc.windows(2).filter(|w| w[0].signum() != w[1].signum()).count();
+    println!("{}", flips);                              // sign changes of the increments
+    println!("{}", c.iter().cloned().fold(f64::MIN, f64::max) > 1.0);
+    let mut cr = empty.clone();                         // fix 1: 4 BE steps of 1 s, then CN
+    for _ in 0..4 { be_step(&mut cr, r / 4.0); }
+    for _ in 0..14 { cn_step(&mut cr, r); }
+    let mut cs = empty.clone();                         // fix 2: CN with dt = 0.4 s
+    for _ in 0..150 { cn_step(&mut cs, r / 10.0); }
+    let ce: Vec<f64> = (0..=n).map(|i| exact(i as f64 * dx, 60.0, l, dd)).collect();
+    println!("plain {:.6e}  rannacher {:.6e}  small {:.6e}",
+             max_abs_diff(&c, &ce), max_abs_diff(&cr, &ce), max_abs_diff(&cs, &ce));
+}
+
+// Output:
+// [1.6, 0.356, 1.464, 0.494, 1.379, 0.582, 1.318, 0.644, 1.271, 0.692, 1.234, 0.73, 1.203, 0.762, 1.178]
+// 13
+// true
+// plain 2.012775e-1  rannacher 6.776327e-5  small 2.389579e-5
+```
+
+:::
+
+(a) The first point jumps to 1.6, then 0.36, then 1.46, …: it swings around the true value (about 0.98) with slowly shrinking amplitude, because the zigzag-like modes get $g \approx -0.99$. (b) 13 sign changes in 14 increments: every step reverses direction. And $c > 1$ next to a source at 1 is impossible for diffusion (maximum principle). (c) Both fixes bring the error down about 3000-fold, to the level of the space error. The backward Euler start costs 4 extra cheap steps; the small step costs 10 times more steps throughout.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+D <- 1000; L <- 500
+mol <- function(N, method, rtol = 1e-6, atol = 1e-6) {
+  dx <- L / N; x <- seq(0, L, by = dx)
+  rhs <- function(t, c, p)                        # interior points only
+    list(D * diff(diff(c(1, c, 0))) / dx^2)       # source 1, sink 0
+  out <- ode.1D(rep(0, N - 1), c(0, 60), rhs, NULL, nspec = 1,
+                method = method, rtol = rtol, atol = atol, maxsteps = 1e5)
+  err <- max(abs(out[2, -1] - exact(x[2:N], 60, L, D)))
+  c(steps = attr(out, "istate")[2], fevals = attr(out, "istate")[3], error = err)
+}
+rbind(lsoda = mol(200, "lsoda"), bdf = mol(200, "bdf"), ode45 = mol(200, "ode45"))
+#       steps fevals        error
+# lsoda   268    537 1.949308e-06
+# bdf     174    306 1.977588e-06
+# ode45 15198  94779 1.994206e-06
+rbind(N50_tight = mol(50, "lsoda", 1e-10, 1e-10), N200_tight = mol(200, "lsoda", 1e-10, 1e-10))
+#            steps fevals        error
+# N50_tight    530   1026 2.682750e-05
+# N200_tight   890   1765 1.677441e-06
+```
+
+### Python
+
+```python
+from scipy.integrate import solve_ivp
+from scipy import sparse
+D, L = 1000.0, 500.0
+def mol(N, method, rtol=1e-6, atol=1e-6):
+    dx = L / N; x = np.linspace(0, L, N + 1)
+    def rhs(t, c):                                  # interior points only
+        return D * np.diff(np.r_[1.0, c, 0.0], 2) / dx**2   # source 1, sink 0
+    kw = {}
+    if method == "BDF":                             # tridiagonal Jacobian pattern
+        kw["jac_sparsity"] = sparse.diags([1, 1, 1], [-1, 0, 1], shape=(N - 1, N - 1))
+    if method == "LSODA":                           # LSODA takes the band widths
+        kw["lband"] = kw["uband"] = 1
+    s = solve_ivp(rhs, (0, 60), np.zeros(N - 1), method=method, rtol=rtol, atol=atol, **kw)
+    err = np.max(np.abs(s.y[:, -1] - exact(x[1:N], 60, L, D)))
+    return f"steps {s.t.size - 1:6d}  f-evals {s.nfev:6d}  error {err:.3e}"
+
+print("BDF banded ", mol(200, "BDF"))
+# BDF banded  steps    178  f-evals    360  error 1.853e-06
+print("LSODA      ", mol(200, "LSODA"))
+# LSODA       steps    268  f-evals    540  error 1.925e-06
+print("RK45       ", mol(200, "RK45"))
+# RK45        steps  11604  f-evals  81212  error 2.048e-06
+print("N=50,  tight", mol(50, "BDF", 1e-10, 1e-10))
+# N=50,  tight steps    524  f-evals   1397  error 2.683e-05
+print("N=200, tight", mol(200, "BDF", 1e-10, 1e-10))
+# N=200, tight steps    665  f-evals   1634  error 1.677e-06
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_implicit_c4.rs  —  cargo run --example diffusion_implicit_c4
+// C4: method of lines on the chamber (N = 200). ode_solvers has no stiff solver:
+// the explicit Dopri5 (= RK45) shows the cost of stiffness; the implicit side is our
+// hand-written Crank-Nicolson with Thomas (4 backward Euler start steps).
+use ode_solvers::{DVector, Dopri5, OutputType, System};
+
+/// Thomas algorithm (a[0] and c[n-1] unused), as in Structure: symmetric, banded, sparse.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// One backward Euler step; c includes the two (fixed) boundary values.
+fn be_step(c: &mut [f64], r: f64) {
+    let m = c.len() - 2;
+    let mut d = c[1..=m].to_vec();
+    d[0] += r * c[0];
+    d[m - 1] += r * c[m + 1];
+    let x = thomas(&vec![-r; m], &vec![1.0 + 2.0 * r; m], &vec![-r; m], &d);
+    c[1..=m].copy_from_slice(&x);
+}
+
+/// One Crank-Nicolson step.
+fn cn_step(c: &mut [f64], r: f64) {
+    let m = c.len() - 2;
+    let mut d: Vec<f64> = (1..=m).map(|i| c[i] + r / 2.0 * (c[i - 1] - 2.0 * c[i] + c[i + 1])).collect();
+    d[0] += r / 2.0 * c[0];
+    d[m - 1] += r / 2.0 * c[m + 1];
+    let x = thomas(&vec![-r / 2.0; m], &vec![1.0 + r; m], &vec![-r / 2.0; m], &d);
+    c[1..=m].copy_from_slice(&x);
+}
+
+/// Exact chamber profile (Fourier series of the previous unit).
+fn exact(x: f64, t: f64, l: f64, dd: f64) -> f64 {
+    let pi = std::f64::consts::PI;
+    let mut s = 1.0 - x / l;
+    for n in 1..=200 {
+        let k = n as f64 * pi / l;
+        s -= 2.0 / (n as f64 * pi) * (k * x).sin() * (-k * k * dd * t).exp();
+    }
+    s
+}
+
+fn max_abs_diff(a: &[f64], b: &[f64]) -> f64 {
+    a.iter().zip(b).map(|(p, q)| (p - q).abs()).fold(0.0, f64::max)
+}
+
+struct Chamber { dd: f64, dx: f64 }
+impl System<f64, DVector<f64>> for Chamber {
+    fn system(&self, _t: f64, c: &DVector<f64>, dc: &mut DVector<f64>) {
+        let m = c.len();                                // interior points only
+        let k = self.dd / (self.dx * self.dx);
+        for i in 0..m {
+            let left = if i == 0 { 1.0 } else { c[i - 1] };       // source 1
+            let right = if i == m - 1 { 0.0 } else { c[i + 1] };  // sink 0
+            dc[i] = k * (left - 2.0 * c[i] + right);
+        }
+    }
+}
+
+fn main() {
+    let (dd, l, n) = (1000.0, 500.0, 200usize);
+    let dx = l / n as f64;
+    let ce: Vec<f64> = (0..=n).map(|i| exact(i as f64 * dx, 60.0, l, dd)).collect();
+
+    // explicit Dopri5, stiffness test switched off
+    let mut s = Dopri5::from_param(Chamber { dd, dx }, 0.0, 60.0, 60.0, DVector::zeros(n - 1),
+                                   1e-6, 1e-6, 0.9, 0.04, 0.2, 10.0, 60.0, 0.0,
+                                   1_000_000, u32::MAX, OutputType::Sparse);
+    let st = s.integrate().unwrap();
+    let y = s.y_out().last().unwrap();
+    let err = (0..n - 1).map(|i| (y[i] - ce[i + 1]).abs()).fold(0.0, f64::max);
+    println!("Dopri5       steps {:6}  f-evals {:6}  error {:.3e}", st.accepted_steps, st.num_eval, err);
+
+    // hand-written Crank-Nicolson, dt = 0.25 s, after 4 backward Euler steps of 0.0625 s
+    let mut c = vec![0.0; n + 1];
+    c[0] = 1.0;
+    let r = dd * 0.25 / (dx * dx);
+    for _ in 0..4 { be_step(&mut c, r / 4.0); }
+    for _ in 0..239 { cn_step(&mut c, r); }
+    println!("CN by hand   steps    243  solves    243  error {:.3e}", max_abs_diff(&c, &ce));
+}
+
+// Output:
+// Dopri5       steps  11621  f-evals  69741  error 1.893e-6
+// CN by hand   steps    243  solves    243  error 1.260e-6
+```
+
+:::
+
+(a) The stiff solvers need 170–270 steps; the explicit `ode45`/`RK45` needs 11 000–15 000, set by stability ($\Delta t \lesssim 3.3\,\Delta x^2/(4D) \approx 5$ ms), not by accuracy: all reach the same error. `ode.1D` (R) and `jac_sparsity` / `lband`, `uband` (Python) tell the solver that the Jacobian is tridiagonal; without them each Jacobian costs $N - 1$ extra function evaluations (try leaving them out: Python's `LSODA` then needs 4264 instead of 540). (b) With $N = 50$ the error stays at $2.7\times10^{-5}$ however tight the tolerance: that is the space error of the 10 µm grid; with $N = 200$ it falls to $1.7\times10^{-6}$, 16 times smaller ($4^2$ for two halvings of $\Delta x$). The tolerance controls the time error only. (c) Rust: `Dopri5` behaves like `RK45`; our own Crank–Nicolson with 243 steps reaches the same accuracy.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+D <- 1.4e5; L <- 500                              # µm^2/s, µm
+tau_of <- function(R) R^2 / (2.405^2 * D)         # exchange time (s)
+embryo_steady <- function(N, R = 100) {           # steady T on nodes 0..N
+  dx <- L / N; x <- (0:N) * dx; m <- N + 1
+  Tout <- ifelse(x < L / 2, 20, ifelse(x > L / 2, 27, 23.5))
+  s <- D * tau_of(R) / dx^2                       # (lambda / dx)^2
+  thomas(c(0, rep(-s, m - 2), -2 * s), rep(1 + 2 * s, m),
+         c(-2 * s, rep(-s, m - 2), 0), Tout)
+}
+width <- function(T, x) {                         # 10-90 % transition
+  f <- approxfun(T, x); f(26.3) - f(20.7)
+}
+N <- 200; x <- (0:N) * (L / N); T <- embryo_steady(N)
+lam <- sqrt(D * tau_of(100))
+c(tau_ms = 1000 * tau_of(100), lambda = lam, width = width(T, x), formula = 2 * lam * log(5))
+#    tau_ms    lambda     width   formula 
+#  12.34928  41.58004 133.89923 133.84099 
+Tf <- 23.5 + 3.5 * sign(x - L / 2) * (1 - exp(-abs(x - L / 2) / lam))
+max(abs(T - Tf))                                  # formula ignores the tips
+# [1] 0.008583279
+T200 <- sapply(c(25, 50, 100, 200, 400), function(n) embryo_steady(n)[n * 200 / L + 1])
+d <- diff(T200); round(d[-4] / d[-1], 2)          # ratio 4: second order
+# [1] -9.05  3.98  4.00
+sapply(c(50, 100, 150), function(R) width(embryo_steady(N, R), x))
+# [1]  67.03268 133.89923 201.79889
+```
+
+### Python
+
+```python
+D, L = 1.4e5, 500.0                               # µm^2/s, µm
+def tau_of(R): return R**2 / (2.405**2 * D)       # exchange time (s)
+def embryo_steady(N, R=100.0):                    # steady T on nodes 0..N
+    dx = L / N; x = np.arange(N + 1) * dx; m = N + 1
+    Tout = np.where(x < L / 2, 20.0, np.where(x > L / 2, 27.0, 23.5))
+    s = D * tau_of(R) / dx**2                     # (lambda / dx)^2
+    a = np.r_[0.0, np.full(m - 2, -s), -2 * s]
+    c = np.r_[-2 * s, np.full(m - 2, -s), 0.0]
+    return thomas(a, np.full(m, 1 + 2 * s), c, Tout)
+def width(T, x):                                  # 10-90 % transition (T increasing)
+    return np.interp(26.3, T, x) - np.interp(20.7, T, x)
+
+N = 200; x = np.arange(N + 1) * (L / N); T = embryo_steady(N)
+lam = np.sqrt(D * tau_of(100))
+print(1000 * tau_of(100), lam, width(T, x), 2 * lam * np.log(5))
+# 12.34928469855705 41.58004158004158 133.89923114185598 133.8409906390104
+Tf = 23.5 + 3.5 * np.sign(x - L / 2) * (1 - np.exp(-np.abs(x - L / 2) / lam))
+print(np.max(np.abs(T - Tf)))                     # formula ignores the tips
+# 0.008583278671576267
+T200 = np.array([embryo_steady(n)[n * 200 // 500] for n in [25, 50, 100, 200, 400]])
+d = np.diff(T200); print(np.round(d[:-1] / d[1:], 2))   # ratio 4: second order
+# [-9.05  3.98  4.  ]
+print([round(float(width(embryo_steady(N, R), x)), 2) for R in [50, 100, 150]])
+# [67.03, 133.9, 201.8]
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_implicit_c5.rs  —  cargo run --example diffusion_implicit_c5
+// C5: the embryo between a 20 C and a 27 C stream: steady temperature profile
+// (one tridiagonal solve), 10-90 % width, observed order, and the effect of the radius.
+
+/// Thomas algorithm (a[0] and c[n-1] unused), as in Structure: symmetric, banded, sparse.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+const D: f64 = 1.4e5;   // thermal diffusivity of water, um^2/s
+const L: f64 = 500.0;   // embryo length, um
+
+fn tau_of(r: f64) -> f64 { r * r / (2.405 * 2.405 * D) }   // exchange time, s
+
+/// Steady temperature on the nodes 0..N; no flux through the tips.
+fn embryo_steady(n: usize, r: f64) -> Vec<f64> {
+    let dx = L / n as f64;
+    let m = n + 1;
+    let tout: Vec<f64> = (0..m).map(|i| {
+        let x = i as f64 * dx;
+        if x < L / 2.0 { 20.0 } else if x > L / 2.0 { 27.0 } else { 23.5 }
+    }).collect();
+    let s = D * tau_of(r) / (dx * dx);                     // (lambda / dx)^2
+    let mut a = vec![-s; m]; a[0] = 0.0; a[m - 1] = -2.0 * s;
+    let mut c = vec![-s; m]; c[0] = -2.0 * s; c[m - 1] = 0.0;
+    thomas(&a, &vec![1.0 + 2.0 * s; m], &c, &tout)
+}
+
+/// x where the increasing profile t crosses level v (linear interpolation).
+fn cross(t: &[f64], x: &[f64], v: f64) -> f64 {
+    let k = t.iter().position(|&ti| ti >= v).unwrap();
+    x[k - 1] + (v - t[k - 1]) / (t[k] - t[k - 1]) * (x[k] - x[k - 1])
+}
+fn width(t: &[f64], x: &[f64]) -> f64 { cross(t, x, 26.3) - cross(t, x, 20.7) }
+
+fn main() {
+    let n = 200;
+    let x: Vec<f64> = (0..=n).map(|i| i as f64 * L / n as f64).collect();
+    let t = embryo_steady(n, 100.0);
+    let lam = (D * tau_of(100.0)).sqrt();
+    println!("tau {:.5} ms  lambda {:.4} um  width {:.4} um  formula {:.4} um",
+             1000.0 * tau_of(100.0), lam, width(&t, &x), 2.0 * lam * 5f64.ln());
+    let err = x.iter().zip(&t).map(|(xi, ti)| {
+        let s = if *xi > L / 2.0 { 1.0 } else if *xi < L / 2.0 { -1.0 } else { 0.0 };
+        (ti - (23.5 + 3.5 * s * (1.0 - (-(xi - L / 2.0).abs() / lam).exp()))).abs()
+    }).fold(0.0, f64::max);
+    println!("{:.6e}", err);                                  // formula ignores the tips
+    let t200: Vec<f64> = [25, 50, 100, 200, 400].iter()
+        .map(|&m| embryo_steady(m, 100.0)[m * 200 / 500]).collect();
+    let d: Vec<f64> = t200.windows(2).map(|w| w[1] - w[0]).collect();
+    println!("{:?}", d.windows(2).map(|w| format!("{:.2}", w[0] / w[1])).collect::<Vec<_>>());
+    println!("{:?}", [50.0, 100.0, 150.0].iter()
+        .map(|&r| format!("{:.2}", width(&embryo_steady(n, r), &x))).collect::<Vec<_>>());
+}
+
+// Output:
+// tau 12.34928 ms  lambda 41.5800 um  width 133.8992 um  formula 133.8410 um
+// 8.583279e-3
+// ["-9.05", "3.98", "4.00"]
+// ["67.03", "133.90", "201.80"]
+```
+
+:::
+
+(b) $\tau = 12.3$ ms, $\lambda = 41.6$ µm, width 133.9 µm against $2\lambda\ln 5 = 133.8$ µm; the formula profile agrees to 0.009 °C everywhere (the difference comes from the tips, which the formula ignores). (c) Ratios $-9.05$, 3.98, 4.00: second order from $N = 50$ on. The first pair ($N = 25$, $\Delta x = 20$ µm, half of $\lambda$) is not in the asymptotic range: the grid barely resolves the transition. (d) 67, 134 and 202 µm: proportional to $R$, as $\lambda = R/2.405$ predicts. A real embryo is not a cylinder with a uniform surface temperature, and the streams themselves mix near the interface, so take 130 µm as an order of magnitude; [M2] solved the full 3D problem and also found a step-like profile inside the embryo.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+mat <- list(PDMS  = c(k = 0.15, rho = 970,  cp = 1460),   # W/(m K), kg/m^3, J/(kg K)
+            glass = c(k = 1.1,  rho = 2200, cp = 700))
+alpha <- sapply(mat, function(p) p[["k"]] / (p[["rho"]] * p[["cp"]]) * 1e6)  # mm^2/s
+alpha
+#      PDMS     glass 
+# 0.1059172 0.7142857 
+# wall from z = 0 (heater) to z = H (channel side, top); backward Euler
+wall <- function(H, a, k, h = 0, Tair = 25, dt = 0.05, tend = 120, N = 50) {
+  dz <- H / N; r <- a * dt / dz^2; m <- N               # unknowns z_1 .. z_N
+  beta <- 2 * dz * h / (k * 1000)                       # Robin ghost point (dz in mm)
+  lo <- c(0, rep(-r, m - 2), -2 * r)                    # last row: ghost point
+  di <- c(rep(1 + 2 * r, m - 1), 1 + 2 * r + r * beta)
+  up <- c(rep(-r, m - 1), 0)
+  T <- rep(65, m); top <- numeric(round(tend / dt))
+  for (s in seq_along(top)) {                           # heater at 95 C from t = 0
+    d <- T; d[1] <- d[1] + r * 95; d[m] <- d[m] + r * beta * Tair
+    T <- thomas(lo, di, up, d); top[s] <- T[m]
+  }
+  top
+}
+t_reach <- function(top, dt = 0.05) dt * which(top >= 94.5)[1]   # top within 0.5 C
+sapply(names(mat), function(nm) sapply(c(H1mm = 1, H2mm = 2), function(H)
+  t_reach(wall(H, alpha[[nm]], mat[[nm]][["k"]]))))
+#       PDMS glass
+# H1mm 16.75  2.60
+# H2mm 66.50  9.95
+sapply(names(mat), function(nm) sapply(c(H1mm = 1, H2mm = 2), function(H)
+  95 - tail(wall(H, alpha[[nm]], mat[[nm]][["k"]], h = 10, tend = 600), 1)))
+#          PDMS     glass
+# H1mm 4.375000 0.6306306
+# H2mm 8.235294 1.2500000
+```
+
+### Python
+
+```python
+mat = {"PDMS": (0.15, 970, 1460), "glass": (1.1, 2200, 700)}   # k, rho, cp (SI)
+alpha = {nm: k / (rho * cp) * 1e6 for nm, (k, rho, cp) in mat.items()}   # mm^2/s
+print(alpha)
+# {'PDMS': 0.10591724332721367, 'glass': 0.7142857142857143}
+# wall from z = 0 (heater) to z = H (channel side, top); backward Euler
+def wall(H, a, k, h=0.0, Tair=25.0, dt=0.05, tend=120.0, N=50):
+    dz = H / N; r = a * dt / dz**2; m = N            # unknowns z_1 .. z_N
+    beta = 2 * dz * h / (k * 1000)                   # Robin ghost point (dz in mm)
+    lo = np.r_[0.0, np.full(m - 2, -r), -2 * r]      # last row: ghost point
+    di = np.r_[np.full(m - 1, 1 + 2 * r), 1 + 2 * r + r * beta]
+    up = np.r_[np.full(m - 1, -r), 0.0]
+    T = np.full(m, 65.0); top = np.zeros(round(tend / dt))
+    for s in range(top.size):                        # heater at 95 C from t = 0
+        d = T.copy(); d[0] += r * 95; d[-1] += r * beta * Tair
+        T = thomas(lo, di, up, d); top[s] = T[-1]
+    return top
+def t_reach(top, dt=0.05): return dt * (np.argmax(top >= 94.5) + 1)  # within 0.5 C
+for nm, (k, rho, cp) in mat.items():
+    print(nm, [round(float(t_reach(wall(H, alpha[nm], k))), 2) for H in (1, 2)],
+          [round(float(95 - wall(H, alpha[nm], k, h=10, tend=600)[-1]), 3) for H in (1, 2)])
+# PDMS [16.75, 66.5] [4.375, 8.235]
+# glass [2.6, 9.95] [0.631, 1.25]
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_implicit_c6.rs  —  cargo run --example diffusion_implicit_c6
+// C6: heat conduction through the wall of a PCR chip: PDMS vs glass, 1 vs 2 mm.
+// Backward Euler with Thomas; heater at z = 0, channel side at z = H
+// (insulated, or losing heat to air through a Robin condition).
+
+/// Thomas algorithm (a[0] and c[n-1] unused), as in Structure: symmetric, banded, sparse.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// Top (channel-side) temperature after every step. Units: mm, s, W, K.
+fn wall(h_mm: f64, a: f64, k: f64, h: f64, tend: f64) -> Vec<f64> {
+    let (n, dt, tair) = (50usize, 0.05, 25.0);
+    let dz = h_mm / n as f64;
+    let r = a * dt / (dz * dz);
+    let m = n;                                           // unknowns z_1 .. z_N
+    let beta = 2.0 * dz * h / (k * 1000.0);              // Robin ghost point (dz in mm)
+    let mut lo = vec![-r; m]; lo[0] = 0.0; lo[m - 1] = -2.0 * r;
+    let mut di = vec![1.0 + 2.0 * r; m]; di[m - 1] += r * beta;
+    let mut up = vec![-r; m]; up[m - 1] = 0.0;
+    let mut t = vec![65.0; m];
+    let mut top = Vec::new();
+    for _ in 0..(tend / dt).round() as usize {           // heater at 95 C from t = 0
+        let mut d = t.clone();
+        d[0] += r * 95.0;
+        d[m - 1] += r * beta * tair;
+        t = thomas(&lo, &di, &up, &d);
+        top.push(t[m - 1]);
+    }
+    top
+}
+
+fn main() {
+    let mats = [("PDMS", 0.15, 970.0, 1460.0), ("glass", 1.1, 2200.0, 700.0)];
+    for (name, k, rho, cp) in mats {
+        let a = k / (rho * cp) * 1e6;                    // mm^2/s
+        let reach: Vec<f64> = [1.0, 2.0].iter().map(|&hh| {
+            let top = wall(hh, a, k, 0.0, 120.0);
+            0.05 * (top.iter().position(|&v| v >= 94.5).unwrap() + 1) as f64
+        }).collect();
+        let drop: Vec<f64> = [1.0, 2.0].iter()
+            .map(|&hh| 95.0 - wall(hh, a, k, 10.0, 600.0).last().unwrap()).collect();
+        println!("{:5}  alpha {:.4} mm^2/s  reach 94.5 C: {:.2} s, {:.2} s  steady drop: {:.3} C, {:.3} C",
+                 name, a, reach[0], reach[1], drop[0], drop[1]);
+    }
+}
+
+// Output:
+// PDMS   alpha 0.1059 mm^2/s  reach 94.5 C: 16.75 s, 66.50 s  steady drop: 4.375 C, 8.235 C
+// glass  alpha 0.7143 mm^2/s  reach 94.5 C: 2.60 s, 9.95 s  steady drop: 0.631 C, 1.250 C
+```
+
+:::
+
+(a) 16.75 and 66.5 s for PDMS, 2.6 and 9.95 s for glass, within 0.15 s of B6(b) (the difference is the first-order time error of backward Euler with 0.05 s steps and the step-by-step reading). (b) Drops of 4.38, 8.24, 0.63 and 1.25 °C, exactly the linear-profile values of B6(c): at steady state the profile is a straight line, which the second difference represents without error. Thickness enters as $H^2$ in the time and as $H$ in the steady drop; the material through $D$ (7× between glass and PDMS) and $k$.
+
+:::
+
+## Where this leads
+
+- **Steady state in two dimensions** (next unit): drop time completely and solve $D\nabla^2 c = $ sources in one step, as `embryo_steady` did in 1D. In 2D the matrix is sparse but no longer tridiagonal.
+- **Flow plus diffusion**: adding flow gives a non-symmetric matrix and new failure modes (numerical diffusion, wiggles); backward Euler and Crank–Nicolson carry over.
+- **Reaction–diffusion and pattern formation**: the exchange term of the embryo is a linear reaction; with nonlinear reactions one treats diffusion implicitly (one Thomas solve) and the reaction explicitly. The decay length $\sqrt{D/k}$ returns for morphogen gradients, including the *Drosophila* experiment of [M1].
+- **Iterative linear solvers in depth** (optional): when a 2D or 3D grid is too large for a direct solve at each implicit step.

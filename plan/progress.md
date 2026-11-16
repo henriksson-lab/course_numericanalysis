@@ -27,7 +27,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 22 | runge-kutta | done | done | done |
 | 23 | stiffness | running | | |
 | 24 | phase-plane | done | done | done |
-| 25 | gillespie | running | | |
+| 25 | gillespie | done | running | |
 | 26 | optimisation-1d | done | running | |
 | 27 | gradient-methods | running | | |
 | 28 | nonlinear-least-squares | running | | |
@@ -64,3 +64,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - constrained-lp: from memory — iML1515 2712 reactions / 1877 metabolites, Recon3D ~13 000 reactions. Install: lpSolve, numDeriv.
 - diffusion-explicit: slides not visually checked ('FTCS by hand', 'When is the gradient established?', 'No-flux boundary').
 - lu demo: E5/swap reveals B5(b)(c) answers; E1/E2 show counts asked in B3(b)/B6(a) — decide in audit. lu/exercise.html needs a re-render (stale vs latest lufactor.js layout — page text unchanged).
+- gillespie: gene params differ from euler's (10/min, 0.2/min) — noted in slide notes; reconcile wording in pass 2. Adds SIR early-extinction (2 slides). Only 2 slides screenshotted.
