@@ -1,0 +1,641 @@
+---
+title: "Exercise: error, conditioning and stability"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- compute **absolute** and **relative** errors and turn a relative error into a number of **correct digits**,
+- spot **catastrophic cancellation** and predict how many digits it costs,
+- compute the **condition number** $\kappa(x) = |x f'(x)/f(x)|$ by hand and estimate it numerically,
+- tell a sensitive **problem** (large $\kappa$) from an unstable **algorithm** (loses more than $\kappa$ explains),
+- **rewrite** a formula to avoid cancellation (centring, conjugates, the small root of a quadratic),
+- recognise when no formula can help (dose from a response near the plateau).
+
+## Background
+
+**Errors.** For a true value $x$ and an approximation $\hat x$, the absolute error is $|\hat x - x|$ and the relative error is $|\hat x - x|/|x|$. A relative error of about $10^{-k}$ means about $k$ correct significant digits. A double starts with about 16 (machine epsilon $\varepsilon \approx 2.2\times10^{-16}$, from How computers store numbers).
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+rel_err <- function(approx, true) abs(approx - true) / abs(true)
+digits  <- function(approx, true) -log10(rel_err(approx, true))
+rel_err(51, 50)
+# [1] 0.02
+digits(3.1416, pi)
+# [1] 5.631075
+```
+
+### Python
+
+```python
+import numpy as np
+
+def rel_err(approx, true):
+    return np.abs(approx - true) / np.abs(true)
+
+def digits(approx, true):
+    return -np.log10(rel_err(approx, true))
+
+print(rel_err(51, 50))
+# 0.02
+print(digits(3.1416, np.pi))
+# 5.631074697991995
+```
+
+:::
+
+**Cancellation.** Subtracting two nearly equal numbers $a \approx b$ keeps their absolute errors but shrinks the result, so the relative error grows by the factor $|a|/|a-b|$: you lose about $\log_{10}(|a|/|a-b|)$ digits.
+
+**Condition number.** For a problem $y = f(x)$, a small relative change in $x$ gives a relative change in $y$ about $\kappa$ times larger:
+
+$$\kappa(x) = \left|\frac{x\,f'(x)}{f(x)}\right|, \qquad \text{digits lost} \approx \log_{10}\kappa.$$
+
+When $f'$ is awkward, nudge the input and measure:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+kappa_num <- function(f, x, h = 1e-7) {
+  rel_out <- abs(f(x * (1 + h)) - f(x)) / abs(f(x))
+  rel_out / h                       # relative change out / relative change in
+}
+kappa_num(log, 1.001)
+# [1] 1000.5
+```
+
+### Python
+
+```python
+def kappa_num(f, x, h=1e-7):
+    rel_out = abs(f(x * (1 + h)) - f(x)) / abs(f(x))
+    return rel_out / h              # relative change out / relative change in
+
+print(kappa_num(np.log, 1.001))
+# 1000.4998673487844
+```
+
+:::
+
+**Stability.** $\kappa$ belongs to the problem. An algorithm is **stable** if it loses no more than about $\log_{10}\kappa$ digits; it is **backward stable** if its answer is the exact answer for an input within rounding distance of yours. A typical unstable algorithm routes the computation through a cancellation the problem did not need, such as the **one-pass variance**:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- 1e8 + c(1, 2, 3, 4)
+n <- length(x)
+sum(x^2) / n - mean(x)^2            # one-pass
+# [1] 2
+sum((x - mean(x))^2) / n            # two-pass
+# [1] 1.25
+```
+
+### Python
+
+```python
+x = 1e8 + np.array([1, 2, 3, 4])
+n = len(x)
+print(np.sum(x**2) / n - np.mean(x)**2)      # one-pass
+# 2.0
+print(np.sum((x - np.mean(x))**2) / n)       # two-pass
+# 1.25
+```
+
+:::
+
+The true population variance of $1, 2, 3, 4$ (and of any shift of it) is $1.25$. R's [`var()`](https://rdrr.io/r/stats/cor.html) and [`numpy.var`](https://numpy.org/doc/stable/reference/generated/numpy.var.html) centre first. (`var()` divides by $n-1$, `numpy.var` by $n$ unless `ddof=1`.)
+
+## By hand
+
+**B1. (errors and digits)** (a) A binding assay gives $K_d = 2.3$ µM; the true value is $2.0$ µM. (b) An automated counter reports $1.18\times10^6$ cells; the true count is $1.20\times10^6$. For each, compute the absolute error, the relative error and roughly how many correct significant digits the estimate has. Which estimate is more accurate?
+
+**B2. (cancellation)** Two absorbance readings, $a = 0.123456$ and $b = 0.123401$, are each correct to the 6 digits shown (absolute error at most $5\times10^{-7}$ each). (a) Compute $a - b$. (b) Give the largest possible absolute error and relative error of $a - b$. (c) How many significant digits of $a - b$ can you trust? (d) Compare with the rule "lose $\log_{10}(|a|/|a-b|)$ digits".
+
+**B3. (condition numbers)** Compute $\kappa(x) = |x f'(x)/f(x)|$ for:
+(a) $f(x) = x - 1$ at $x = 1.01$ and at $x = 100$;
+(b) $f(x) = \log x$ at $x = 1.01$ and at $x = 100$;
+(c) $f(x) = \sqrt x$ at $x = 7$;
+(d) $f(x) = 1/(1-x)$ at $x = 0.99$;
+(e) $f(x) = x^p$ for a constant $p$ (any $x > 0$).
+Which are ill-conditioned, and where?
+
+**B4. (fold change of near-identical measurements)** A spot has intensity $a = 2010$ in the treated sample and $b = 2000$ in the control, each with about 1 % measurement error. Treat $b$ as fixed and $a$ as the uncertain input.
+(a) What is $\kappa$ of the ratio $r = a/b$ with respect to $a$?
+(b) What is $\kappa$ of the difference $a - b$ with respect to $a$?
+(c) What is $\kappa$ of the log fold change $\log r$ with respect to $r$, at $r = 1.005$?
+(d) With 1 % input error, how many digits of the ratio, the difference and the log fold change can you trust?
+(e) Is this a floating-point problem? What would you change to get a reliable log fold change?
+
+**B5. (one-pass variance by hand)** Work in **5-significant-digit** decimal arithmetic: round every intermediate result to 5 significant digits. Data: $10001, 10002, 10003$.
+(a) One-pass: compute each $x_i^2$ (rounded), their mean, $\bar x^2$ (rounded) and the difference.
+(b) Two-pass: compute $\bar x$, the deviations $x_i - \bar x$, their squares and their mean.
+(c) What is the true population variance? Explain where the one-pass formula lost the information.
+
+**B6. (rewriting)** (a) Show that $\sqrt{x+1} - \sqrt{x} = 1/(\sqrt{x+1} + \sqrt{x})$. Evaluate both sides at $x = 10^4$ in **6-significant-digit** arithmetic ($\sqrt{10001} = 100.004999875\ldots$). How many digits does each version get right?
+(b) The bound complex in a binding experiment is the small root of $C^2 - S\,C + PL = 0$, with $S = P + L + K_d$. The textbook formula is $C = \big(S - \sqrt{S^2 - 4PL}\big)/2$. Using that the product of the two roots is $PL$, derive $C = 2PL/\big(S + \sqrt{S^2 - 4PL}\big)$. Why is the new form better when $K_d \gg P, L$?
+
+**B7. (dose from response)** A response follows $R = D/(K + D)$ (fraction of maximum).
+(a) Show that $\kappa$ of the forward map $D \mapsto R$ is $K/(K + D)$, which is never above 1.
+(b) Invert to get $D(R)$ and show that its condition number is $1/(1 - R)$.
+(c) With a 1 % relative error in $R$, what is the relative error in the inferred dose at $R = 0.5$, $0.9$ and $0.99$?
+(d) Into which range of responses should you dilute a sample if you want its dose?
+
+**B8. (backward error)** R computes `(1 + 1e-15) - 1` as $1.110223\times10^{-15}$.
+(a) What is the relative (forward) error, compared with the intended $10^{-15}$?
+(b) For which input $a$ is $a - 1 = 1.110223\times10^{-15}$ exactly? How far, relatively, is it from the intended $a = 1 + 10^{-15}$? This is the backward error.
+(c) Compute $\kappa$ of $f(a) = a - 1$ at $a = 1 + 10^{-15}$ and check that forward error $\approx \kappa \times$ backward error.
+
+**B9. (a 2 × 2 teaser)** Two dyes with overlapping spectra: $x_1 + 0.95\,x_2 = b_1$, $0.95\,x_1 + x_2 = b_2$. Solve by hand for $\mathbf b = (1.95, 1.95)$ and for $\mathbf b = (1.96, 1.94)$. By what percentage did $\mathbf b$ change, and by what percentage did $\mathbf x$ change?
+
+## In code
+
+**C1. (digits)** Compute the relative error and the number of correct digits of the approximations $2.718$, $2.7183$, $19/7$ and $2.71828183$ to $e$. Does $-\log_{10}$ of the relative error match your count of matching digits?
+
+**C2. (cancellation curve)** For $d = 10^{-1}, 10^{-2}, \ldots, 10^{-15}$, compute $(1 + d) - 1$, its relative error compared with $d$, and the number of correct digits. Plot the relative error against $d$ on log–log axes. Compare with the prediction "about $16 - \log_{10}(1/d)$ correct digits".
+
+**C3. (one-pass vs two-pass)**
+(a) For $m = 10^4, 10^6, 10^8, 10^9$, build the data `x <- m + (0:699 %% 7) - 3` (each of $m-3, \ldots, m+3$ a hundred times; true population variance exactly $4$) and compute the variance with the one-pass and the two-pass formulas.
+(b) Compute both for `x <- 7e8 + c(0.1, 0.2, 0.3)`. What is impossible about the one-pass answer?
+(c) **Shift check**: subtract `x[1]` from the data in (b) and rerun the one-pass formula. Explain why it now works.
+
+**C4. (condition numbers numerically)** Use `kappa_num` to check your answers to B3 (a)–(d). Then compute $\kappa$ of `dose <- function(R) K * R / (1 - R)` with `K <- 10` at $R = 0.5, 0.9, 0.99, 0.999$ and compare with $1/(1 - R)$ from B7.
+
+**C5. (rewrites)**
+(a) For $x = 10^2, 10^4, \ldots, 10^{16}$, compare `sqrt(x + 1) - sqrt(x)` with `1 / (sqrt(x + 1) + sqrt(x))` and count the correct digits of the first version (take the second as the reference).
+(b) Binding: with $P = L = 0.01$ nM and $K_d = 10^1, \ldots, 10^7$ nM, compare the textbook and the rewritten small root from B6, and print their relative difference. At which $K_d$ does the textbook formula become useless?
+
+**C6. (an ill-conditioned problem)** With `K <- 10`, compute the dose range implied by a response that is off by $\pm 0.5$ % around $R = 0.5$, $0.9$ and $0.99$. Compare the max/min dose ratio with what $\kappa$ predicts. Does computing in higher precision help?
+
+**C7. (matrix teaser)** For $A = \begin{pmatrix}1 & 0.95\\0.95 & 1\end{pmatrix}$, $\mathbf b = (1.95, 1.95)$ and the perturbation $\Delta\mathbf b = (0.01, -0.01)$, compute the amplification
+
+$$\frac{\|\Delta \mathbf x\| / \|\mathbf x\|}{\|\Delta \mathbf b\| / \|\mathbf b\|}$$
+
+with the Euclidean norm, and compare with the condition number from [`kappa(A, exact = TRUE)`](https://rdrr.io/r/base/kappa.html) / [`np.linalg.cond(A)`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html). Repeat with off-diagonal entries $0.5$ instead of $0.95$.
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — relative error and digits (B1, C1)"}
+Relative error $= |\hat x - x|/|x|$; digits $\approx -\log_{10}(\text{relative error})$. In R use [`abs`](https://rdrr.io/r/base/MathFun.html) and [`log10`](https://rdrr.io/r/base/Log.html); in Python [`np.abs`](https://numpy.org/doc/stable/reference/generated/numpy.absolute.html) and [`np.log10`](https://numpy.org/doc/stable/reference/generated/numpy.log10.html). Compare relative, not absolute, errors when the quantities have different units or scales.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — the worst-case error of a difference (B2)"}
+The absolute errors of $a$ and $b$ can have opposite signs, so the error of $a - b$ can be as large as the **sum** of the two absolute errors. Divide by $|a - b|$ for the relative error.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — computing κ (B3, B4, B7)"}
+Write down $f'(x)$, then simplify $x f'(x)/f(x)$ before plugging in numbers. For $\log x$: $f' = 1/x$. For $1/(1-x)$: $f' = 1/(1-x)^2$. For $D(R) = KR/(1-R)$: $D'(R) = K/(1-R)^2$ (quotient rule). Use $\ln(1.01) \approx 0.00995$ and $\ln(1.005) \approx 0.004988$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — 5-digit arithmetic (B5)"}
+$10001^2 = 100\,020\,001$, which rounds to $1.0002\times10^8$ in 5 significant digits. Do the same for the other squares and for $\bar x^2$. The two-pass version works with numbers of size 1, so rounding to 5 digits does no harm.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — the small root (B6b)"}
+If the roots are $C_-$ (small) and $C_+$ (large), then $C_- C_+ = PL$ and $C_+ = \big(S + \sqrt{S^2 - 4PL}\big)/2$. So $C_- = PL / C_+$. Which of the two formulas subtracts nearly equal numbers when $S^2 \gg 4PL$?
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — formatted tables in code (C2, C5)"}
+To print a table with the same layout in both languages, use [`sprintf`](https://rdrr.io/r/base/sprintf.html) in R (it is vectorised) and an f-string in a loop in Python. For log–log plots use `plot(d, relerr, log = "xy")` in R and [`plt.loglog`](https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.loglog.html) in Python.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — solving 2 × 2 systems (B9, C7)"}
+By hand: Cramer's rule, $x_1 = (b_1 a_{22} - a_{12} b_2)/\det A$ and $x_2 = (a_{11} b_2 - a_{21} b_1)/\det A$. In code: [`solve(A, b)`](https://rdrr.io/r/base/solve.html) and [`np.linalg.solve(A, b)`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html); the Euclidean norm is `sqrt(sum(v^2))` in R and [`np.linalg.norm(v)`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.norm.html) in Python.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solutions: by hand"}
+
+**B1.** (a) Absolute error $0.3$ µM, relative error $0.3/2.0 = 0.15$, so $-\log_{10} 0.15 \approx 0.8$: about **one** correct digit. (b) Absolute error $2\times10^4$ cells, relative error $2\times10^4 / 1.2\times10^6 \approx 0.017$, about **1.8** digits. The cell count is more accurate, although its absolute error is $10^5$ times larger in raw numbers: relative error is the fair comparison.
+
+**B2.** (a) $a - b = 0.000055$. (b) Worst case absolute error $5\times10^{-7} + 5\times10^{-7} = 10^{-6}$; relative error $10^{-6} / 5.5\times10^{-5} \approx 0.018$. (c) About $-\log_{10} 0.018 \approx 1.7$, so **one to two** digits: $0.000055$ is really "$0.000055 \pm 0.000001$". (d) $|a|/|a - b| = 0.123456 / 0.000055 \approx 2245$, so we lose $\log_{10} 2245 \approx 3.4$ of the 6 digits, keeping about $2.6$. Same picture (the rule uses the relative error of $a$, $\approx 4\times10^{-6}$, which is slightly better than "6 digits" suggests).
+
+**B3.**
+(a) $f' = 1$, so $\kappa = |x/(x-1)|$: $1.01/0.01 = 101$ at $x = 1.01$; $100/99 \approx 1.01$ at $x = 100$.
+(b) $f' = 1/x$, so $\kappa = 1/|\ln x|$: $1/0.00995 \approx 100.5$ at $x = 1.01$; $1/\ln 100 = 1/4.605 \approx 0.217$ at $x = 100$.
+(c) $f' = 1/(2\sqrt x)$, so $\kappa = \tfrac12$ for every $x$.
+(d) $f' = 1/(1-x)^2$, so $\kappa = |x/(1-x)|$: $0.99/0.01 = 99$.
+(e) $f' = p x^{p-1}$, so $\kappa = |p|$: squaring doubles relative errors, a square root halves them.
+Ill-conditioned: $x - 1$ and $\log x$ near $x = 1$, and $1/(1-x)$ near $x = 1$. All the others are fine.
+
+**B4.**
+(a) $r = a/b$, $r' = 1/b$, $\kappa = |a \cdot (1/b) / (a/b)| = 1$. The ratio is well-conditioned.
+(b) $\kappa = |a/(a - b)| = 2010/10 = 201$.
+(c) $\kappa = 1/|\ln r| = 1/\ln 1.005 \approx 200.5$.
+(d) Ratio: 1 % error, about 2 digits. Difference and log fold change: $201 \times 1\,\% \approx 200\,\%$, so **no** correct digits; even the sign is uncertain.
+(e) No. Double precision has 16 digits and loses only $\log_{10} 200 \approx 2.3$ of them. The trouble is the 1 % measurement error amplified by $\kappa \approx 200$. You need measurement error well below the 0.5 % change you want to detect, for example by averaging replicates.
+
+**B5.**
+(a) $x_i^2$: $100\,020\,001 \to 1.0002\times10^8$, $100\,040\,004 \to 1.0004\times10^8$, $100\,060\,009 \to 1.0006\times10^8$. Mean $= 3.0012\times10^8/3 = 1.0004\times10^8$. $\bar x = 10002$, $\bar x^2 = 100\,040\,004 \to 1.0004\times10^8$. One-pass variance: $1.0004\times10^8 - 1.0004\times10^8 = \mathbf{0}$.
+(b) $\bar x = 10002$; deviations $-1, 0, 1$; squares $1, 0, 1$; mean $2/3 \approx \mathbf{0.66667}$.
+(c) True population variance $2/3$. The squares need 9 digits to hold the information ($100\,020\,001$ vs $100\,040\,004$); rounding to 5 digits threw away exactly the last 4 digits that carried the spread. The subtraction then cancelled the 5 digits that were left. The two-pass version subtracts **first**, while the numbers are still exact, so nothing is lost. A double has 16 digits instead of 5, so the same thing happens when $x_i^2$ needs more than 16 digits, i.e. data around $10^8$ with a spread of a few units.
+
+**B6.**
+(a) Multiply and divide by the conjugate: $(\sqrt{x+1} - \sqrt x)(\sqrt{x+1} + \sqrt x) = (x + 1) - x = 1$. At $x = 10^4$ with 6 digits: $\sqrt{10001} \to 100.005$, $\sqrt{10000} = 100.000$, difference $0.005$, only **1** correct digit (the true value is $0.00499988$). Rewritten: $1/(100.005 + 100.000) = 1/200.005 = 0.00499988$, all **6** digits correct.
+(b) The roots are $C_\pm = \big(S \pm \sqrt{S^2 - 4PL}\big)/2$ and $C_- C_+ = PL$. So
+$$C_- = \frac{PL}{C_+} = \frac{2PL}{S + \sqrt{S^2 - 4PL}}.$$
+When $K_d \gg P, L$, $S^2 \gg 4PL$ and $\sqrt{S^2 - 4PL} \approx S$: the textbook formula subtracts two nearly equal numbers (cancellation), the new one adds them (no cancellation). Both are the same mathematical problem; only the algorithm changed.
+
+**B7.**
+(a) $R' = K/(K + D)^2$, so $D R'/R = D \cdot K/(K + D)^2 \cdot (K + D)/D = K/(K + D) \le 1$.
+(b) $R(K + D) = D \Rightarrow D = KR/(1 - R)$. $D' = K/(1 - R)^2$, so $R D'/D = R \cdot K/(1 - R)^2 \cdot (1 - R)/(KR) = 1/(1 - R)$.
+(c) $\kappa = 2, 10, 100$, so a 1 % error in $R$ gives about 2 %, 10 % and 100 % error in $D$.
+(d) In the steep middle of the curve, roughly $0.2 \lesssim R \lesssim 0.8$ ($\kappa \le 5$). Near the plateau the forward map is fine but the **inverse** problem is ill-conditioned.
+
+**B8.**
+(a) $|1.110223\times10^{-15} - 10^{-15}|/10^{-15} = 0.11$: 11 %.
+(b) $a = 1 + 1.110223\times10^{-15}$ (this is the double that `1 + 1e-15` was rounded to). Relative distance from $1 + 10^{-15}$: $1.1\times10^{-16}/1 \approx 1.1\times10^{-16}$, about $\varepsilon/2$.
+(c) $\kappa = |a/(a - 1)| \approx 1/10^{-15} = 10^{15}$. $\kappa \times$ backward error $= 10^{15} \times 1.1\times10^{-16} = 0.11$, the forward error. The subtraction is backward stable; all of the error is conditioning.
+
+**B9.** $\det A = 1 - 0.95^2 = 0.0975$. For $\mathbf b = (1.95, 1.95)$: $x_1 = (1.95 - 0.95\cdot1.95)/0.0975 = 0.0975/0.0975 = 1$, and by symmetry $x_2 = 1$. For $\mathbf b = (1.96, 1.94)$: $x_1 = (1.96 - 0.95\cdot1.94)/0.0975 = 0.117/0.0975 = 1.2$, $x_2 = (1.94 - 0.95\cdot1.96)/0.0975 = 0.078/0.0975 = 0.8$. $\mathbf b$ changed by about $0.5$ %, $\mathbf x$ by $20$ %: an amplification of about 40.
+:::
+
+::: {.callout-note collapse="true" title="Solution C1"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+approx <- c(2.718, 2.7183, 19 / 7, 2.71828183)
+rel_err(approx, exp(1))
+# [1] 1.036789e-04 6.684936e-06 1.470088e-03 5.668856e-10
+digits(approx, exp(1))
+# [1] 3.984310 5.174903 2.832657 9.246505
+```
+
+### Python
+
+```python
+approx = np.array([2.718, 2.7183, 19 / 7, 2.71828183])
+print(rel_err(approx, np.e))
+# [1.03678896e-04 6.68493633e-06 1.47008825e-03 5.66885635e-10]
+print(digits(approx, np.e))
+# [3.98430964 5.17490272 2.83265659 9.24650455]
+```
+
+:::
+
+$e = 2.718281828\ldots$: $2.718$ matches 4 digits ($-\log_{10}$ gives 4.0), $2.7183$ is correctly rounded to 5 digits (5.2), $19/7 = 2.714\ldots$ matches 3 digits (2.8), $2.71828183$ matches 9 (9.2). The digit count from $-\log_{10}$ agrees within one.
+:::
+
+::: {.callout-note collapse="true" title="Solution C2"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+d <- 10^-(1:15)
+computed <- (1 + d) - 1
+relerr <- abs(computed - d) / d
+cat(sprintf("%.0e  %.1e  %4.1f\n", d, relerr, -log10(relerr)), sep = "")
+plot(d, relerr, log = "xy", xlab = "d", ylab = "relative error")
+lines(d, .Machine$double.eps / d, lty = 2)   # prediction eps / d
+```
+
+### Python
+
+```python
+import matplotlib.pyplot as plt
+
+d = 10.0 ** -np.arange(1, 16)
+computed = (1 + d) - 1
+relerr = np.abs(computed - d) / d
+for di, r in zip(d, relerr):
+    print(f"{di:.0e}  {r:.1e}  {-np.log10(r):4.1f}")
+plt.loglog(d, relerr, "o", label="computed")
+plt.loglog(d, np.finfo(float).eps / d, "--", label="eps / d")
+plt.xlabel("d"); plt.ylabel("relative error"); plt.legend(); plt.show()
+```
+
+:::
+
+Output (identical in both):
+
+```
+1e-01  8.3e-16  15.1
+1e-02  8.7e-16  15.1
+1e-03  1.1e-13  13.0
+1e-04  1.1e-13  13.0
+1e-05  6.6e-12  11.2
+1e-06  8.2e-11  10.1
+1e-07  5.8e-10   9.2
+1e-08  6.1e-09   8.2
+1e-09  8.3e-08   7.1
+1e-10  8.3e-08   7.1
+1e-11  8.3e-08   7.1
+1e-12  8.9e-05   4.1
+1e-13  8.0e-04   3.1
+1e-14  8.0e-04   3.1
+1e-15  1.1e-01   1.0
+```
+
+The correct digits fall by about one for every factor 10 decrease in $d$, close to $16 - \log_{10}(1/d)$ (some values are luckier than the prediction, which is a worst case). On the log–log plot the points lie on or below the line $\varepsilon/d$, a straight line of slope $-1$.
+:::
+
+::: {.callout-note collapse="true" title="Solution C3"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+for (m in c(1e4, 1e6, 1e8, 1e9)) {
+  x <- m + (0:699 %% 7) - 3          # values m-3, ..., m+3, 100 of each
+  n <- length(x)
+  one <- sum(x^2) / n - mean(x)^2
+  two <- sum((x - mean(x))^2) / n
+  cat(sprintf("m = %.0e   one-pass = %g   two-pass = %g\n", m, one, two))
+}
+# m = 1e+04   one-pass = 4   two-pass = 4
+# m = 1e+06   one-pass = 4   two-pass = 4
+# m = 1e+08   one-pass = 2   two-pass = 4
+# m = 1e+09   one-pass = 0   two-pass = 4
+
+x <- 7e8 + c(0.1, 0.2, 0.3)
+mean(x^2) - mean(x)^2               # (b) one-pass
+# [1] -64
+mean((x - mean(x))^2)               # (b) two-pass
+# [1] 0.006666662
+x0 <- x - x[1]                      # (c) shift check
+mean(x0^2) - mean(x0)^2
+# [1] 0.006666662
+```
+
+### Python
+
+```python
+for m in [1e4, 1e6, 1e8, 1e9]:
+    x = m + (np.arange(700) % 7) - 3        # values m-3, ..., m+3, 100 of each
+    n = len(x)
+    one = np.sum(x**2) / n - np.mean(x)**2
+    two = np.sum((x - np.mean(x))**2) / n
+    print(f"m = {m:.0e}   one-pass = {one:g}   two-pass = {two:g}")
+# m = 1e+04   one-pass = 4   two-pass = 4
+# m = 1e+06   one-pass = 4   two-pass = 4
+# m = 1e+08   one-pass = 2   two-pass = 4
+# m = 1e+09   one-pass = 0   two-pass = 4
+
+x = 7e8 + np.array([0.1, 0.2, 0.3])
+print(np.mean(x**2) - np.mean(x)**2)        # (b) one-pass
+# -64.0
+print(np.mean((x - np.mean(x))**2))         # (b) two-pass
+# 0.0066666618982983055
+x0 = x - x[0]                               # (c) shift check
+print(np.mean(x0**2) - np.mean(x0)**2)
+# 0.0066666618982967295
+```
+
+:::
+
+(a) One-pass loses about $2\log_{10}(m/s)$ digits ($s = 2$ here): at $m = 10^8$ the answer is off by a factor 2, at $10^9$ it is 0. Two-pass is right throughout.
+(b) A **negative variance**, $-64$, which is impossible. The terms $\overline{x^2}$ and $\bar x^2$ are near $4.9\times10^{17}$, where doubles are spaced 64 apart, so the one-pass answer can only be a multiple of 64. (The two-pass answer $0.006666662$ instead of $0.0066666\overline{6}$ is not the algorithm's fault: $7\times10^8 + 0.1$ cannot be stored exactly, so the stored data themselves are off by up to $6\times10^{-8}$, which changes the variance in the 7th digit.)
+(c) After the shift the data are $0, 0.1, 0.2$: no large common part is left, so there is nothing big to cancel. Variance does not change under a shift, so a disagreement between the shifted and unshifted results is a red flag. (Careful: with other data, R and numpy can give *different wrong* one-pass answers, because R's `sum` accumulates in extended precision. The correct two-pass answer agrees.)
+:::
+
+::: {.callout-note collapse="true" title="Solution C4"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+kappa_num(function(x) x - 1, 1.01)
+# [1] 101
+kappa_num(function(x) x - 1, 100)
+# [1] 1.010101
+kappa_num(log, 1.01)
+# [1] 100.4992
+kappa_num(log, 100)
+# [1] 0.2171472
+kappa_num(sqrt, 7)
+# [1] 0.5
+kappa_num(function(x) 1 / (1 - x), 0.99)
+# [1] 99.00098
+
+K <- 10
+dose <- function(R) K * R / (1 - R)
+for (R in c(0.5, 0.9, 0.99, 0.999)) cat(R, kappa_num(dose, R), 1 / (1 - R), "\n")
+# 0.5 2 2
+# 0.9 10.00001 10
+# 0.99 100.001 100
+# 0.999 1000.1 1000
+```
+
+### Python
+
+```python
+print(kappa_num(lambda x: x - 1, 1.01))
+# 101.000000141127
+print(kappa_num(lambda x: x - 1, 100))
+# 1.01010101042163
+print(kappa_num(np.log, 1.01))
+# 100.49916592157524
+print(kappa_num(np.log, 100))
+# 0.21714722998864516
+print(kappa_num(np.sqrt, 7))
+# 0.499999987468932
+print(kappa_num(lambda x: 1 / (1 - x), 0.99))
+# 99.00098019670631
+
+K = 10
+def dose(R):
+    return K * R / (1 - R)
+
+for R in [0.5, 0.9, 0.99, 0.999]:
+    print(R, kappa_num(dose, R), 1 / (1 - R))
+# 0.5 2.000000201007879 2.0
+# 0.9 10.000009001803138 10.000000000000002
+# 0.99 100.00099009653479 99.99999999999991
+# 0.999 1000.0999104836551 999.9999999999991
+```
+
+:::
+
+All agree with the hand values from B3 and B7 to 4 or more digits. The small differences come from the finite nudge $h = 10^{-7}$: `kappa_num` is a finite-difference estimate (Numerical differentiation explains its error).
+:::
+
+::: {.callout-note collapse="true" title="Solution C5"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- 10^seq(2, 16, by = 2)
+naive  <- sqrt(x + 1) - sqrt(x)
+stable <- 1 / (sqrt(x + 1) + sqrt(x))
+cat(sprintf("%.0e  %.6e  %.6e  %5.1f\n", x, naive, stable,
+            pmax(0, pmin(16, -log10(abs(naive - stable) / stable)))), sep = "")
+
+P <- 0.01; L <- 0.01
+Kd <- 10^(1:7)
+S <- P + L + Kd
+C_naive  <- (S - sqrt(S^2 - 4 * P * L)) / 2
+C_stable <- 2 * P * L / (S + sqrt(S^2 - 4 * P * L))
+cat(sprintf("%.0e  %.6e  %.6e  %.1e\n", Kd, C_naive, C_stable,
+            abs(C_naive - C_stable) / C_stable), sep = "")
+```
+
+### Python
+
+```python
+x = 10.0 ** np.arange(2, 17, 2)
+naive = np.sqrt(x + 1) - np.sqrt(x)
+stable = 1 / (np.sqrt(x + 1) + np.sqrt(x))
+dig = np.maximum(0, np.minimum(16, -np.log10(np.abs(naive - stable) / stable))) + 0.0
+for xi, a, b, g in zip(x, naive, stable, dig):
+    print(f"{xi:.0e}  {a:.6e}  {b:.6e}  {g:5.1f}")
+
+P, L = 0.01, 0.01
+Kd = 10.0 ** np.arange(1, 8)
+S = P + L + Kd
+C_naive = (S - np.sqrt(S**2 - 4 * P * L)) / 2
+C_stable = 2 * P * L / (S + np.sqrt(S**2 - 4 * P * L))
+for k, a, b in zip(Kd, C_naive, C_stable):
+    print(f"{k:.0e}  {a:.6e}  {b:.6e}  {abs(a - b) / b:.1e}")
+```
+
+:::
+
+Output (identical in both; the `+ 0.0` in Python turns a printed `-0.0` into `0.0`):
+
+```
+1e+02  4.987562e-02  4.987562e-02   14.2
+1e+04  4.999875e-03  4.999875e-03   12.7
+1e+06  4.999999e-04  4.999999e-04   10.0
+1e+08  5.000000e-05  5.000000e-05    7.9
+1e+10  4.999994e-06  5.000000e-06    6.0
+1e+12  5.000038e-07  5.000000e-07    5.1
+1e+14  5.029142e-08  5.000000e-08    2.2
+1e+16  0.000000e+00  5.000000e-09    0.0
+
+1e+01  9.980050e-06  9.980050e-06  1.2e-11
+1e+02  9.998001e-07  9.998000e-07  7.6e-10
+1e+03  9.999798e-08  9.999800e-08  2.4e-07
+1e+04  9.999894e-09  9.999980e-09  8.6e-06
+1e+05  1.004082e-09  9.999998e-10  4.1e-03
+1e+06  5.820766e-11  1.000000e-10  4.2e-01
+1e+07  0.000000e+00  1.000000e-11  1.0e+00
+```
+
+(a) The naive version loses about one digit per factor 10 in $x$ (the two square roots agree in more and more leading digits) and returns exactly 0 at $x = 10^{16}$, where $x + 1$ is rounded back to $x$. The rewritten version is accurate throughout.
+(b) The textbook root is off by 0.4 % at $K_d = 10^5$ nM (100 µM), by 42 % at $10^6$ and returns 0 at $10^7$. Weak binders at low concentration are common (fragment screening), so this is not an exotic case. The rewritten form matches $PL/K_d$ throughout.
+:::
+
+::: {.callout-note collapse="true" title="Solution C6"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+K <- 10
+dose <- function(R) K * R / (1 - R)
+for (R0 in c(0.5, 0.9, 0.99)) {
+  D <- dose(R0 * c(0.995, 1.005))   # response off by -0.5 % and +0.5 %
+  cat(sprintf("R = %.2f   dose from %.1f to %.1f   ratio %.2f\n", R0, D[1], D[2], D[2] / D[1]))
+}
+# R = 0.50   dose from 9.9 to 10.1   ratio 1.02
+# R = 0.90   dose from 85.7 to 94.7   ratio 1.11
+# R = 0.99   dose from 658.9 to 1970.2   ratio 2.99
+```
+
+### Python
+
+```python
+K = 10
+def dose(R):
+    return K * R / (1 - R)
+
+for R0 in [0.5, 0.9, 0.99]:
+    D = dose(R0 * np.array([0.995, 1.005]))   # response off by -0.5 % and +0.5 %
+    print(f"R = {R0:.2f}   dose from {D[0]:.1f} to {D[1]:.1f}   ratio {D[1] / D[0]:.2f}")
+# R = 0.50   dose from 9.9 to 10.1   ratio 1.02
+# R = 0.90   dose from 85.7 to 94.7   ratio 1.11
+# R = 0.99   dose from 658.9 to 1970.2   ratio 2.99
+```
+
+:::
+
+A total spread of 1 % in $R$ gives a spread of about $\kappa \times 1\,\%$ in $D$: 2 % at $R = 0.5$ and 11 % at $R = 0.9$ ($\kappa = 2$ and $10$). At $R = 0.99$ ($\kappa = 100$) the first-order estimate says 100 %; the actual range is a factor 3, because the error is no longer small and the linear (Taylor) approximation breaks down. Higher precision does not help: the formula is evaluated to 16 digits already, and the spread comes from the **data**. Only a different measurement (dilution into the steep part, replicates) helps.
+:::
+
+::: {.callout-note collapse="true" title="Solution C7"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+norm2 <- function(v) sqrt(sum(v^2))
+A <- matrix(c(1,    0.95,
+              0.95, 1   ), nrow = 2, byrow = TRUE)
+b  <- c(1.95, 1.95)
+db <- c(0.01, -0.01)
+x  <- solve(A, b)
+dx <- solve(A, b + db) - x
+(norm2(dx) / norm2(x)) / (norm2(db) / norm2(b))
+# [1] 39
+kappa(A, exact = TRUE)
+# [1] 39
+
+A2 <- matrix(c(1,   0.5,
+               0.5, 1  ), nrow = 2, byrow = TRUE)
+x2 <- solve(A2, b); dx2 <- solve(A2, b + db) - x2
+(norm2(dx2) / norm2(x2)) / (norm2(db) / norm2(b))
+# [1] 3
+kappa(A2, exact = TRUE)
+# [1] 3
+```
+
+### Python
+
+```python
+A = np.array([[1,    0.95],
+              [0.95, 1   ]])
+b = np.array([1.95, 1.95])
+db = np.array([0.01, -0.01])
+x = np.linalg.solve(A, b)
+dx = np.linalg.solve(A, b + db) - x
+print((np.linalg.norm(dx) / np.linalg.norm(x)) / (np.linalg.norm(db) / np.linalg.norm(b)))
+# 39.000000000000036
+print(np.linalg.cond(A))
+# 39.00000000000007
+
+A2 = np.array([[1,   0.5],
+               [0.5, 1  ]])
+x2 = np.linalg.solve(A2, b); dx2 = np.linalg.solve(A2, b + db) - x2
+print((np.linalg.norm(dx2) / np.linalg.norm(x2)) / (np.linalg.norm(db) / np.linalg.norm(b)))
+# 3.0000000000000027
+print(np.linalg.cond(A2))
+# 2.999999999999999
+```
+
+:::
+
+With strongly overlapping spectra (0.95) a relative change in $\mathbf b$ is amplified 39 times; with less overlap (0.5) only 3 times. Here the amplification equals the condition number exactly because $\Delta\mathbf b$ was chosen along the worst direction, $(1, -1)$; other perturbations are amplified less. Pivoting, norms and conditioning explains where the number comes from.
+:::
+
+## Where this leads
+
+- **Convergence and cost:** besides rounding, approximate methods have **truncation error**. The two trade off, and we read their sizes off log–log plots.
+- **Numerical differentiation:** a finite difference $\big(f(x+h) - f(x)\big)/h$ is a cancellation by design; the best step $h$ balances it against truncation error. `kappa_num` above is one.
+- **Newton and secant methods:** solving a Hill or Michaelis–Menten equation for a dose near the plateau is the ill-conditioned problem of B7 again.
+- **Pivoting, norms and conditioning:** the condition number of a matrix, why elimination needs pivoting to be stable, and "lose $\log_{10}\kappa$ digits" for spectral unmixing.
+- **Least squares: normal equations vs QR:** the normal equations **square** the condition number, which is the matrix version of the one-pass variance.

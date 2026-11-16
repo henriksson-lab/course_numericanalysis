@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.30">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Exercise: error, conditioning and stability – Numerical analysis for biologists</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-662ae1889177880cb371f83234c0a158.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-d37fb74fd9c61f52627c5754f4dbd5bd.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar docked nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../index.html">
+    <span class="navbar-title">Numerical analysis for biologists</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link active" href="../index.html" aria-current="page"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item">Part 1: Numbers on a computer</li><li class="breadcrumb-item"><a href="../error-conditioning/lec.html">Error, conditioning and stability</a></li><li class="breadcrumb-item"><a href="../error-conditioning/exercise.html">Exercise</a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation docked overflow-auto">
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Home</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Course info</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../intro/install.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Install R (and Python)</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../dictionary.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Glossary</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 1: Numbers on a computer</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start collapsed" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="false">
+ <span class="menu-text">Why numerical analysis?</span></a>
+          <a class="sidebar-item-toggle text-start collapsed" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="false" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth2 ">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../intro/lec.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Lecture (slides)</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../intro/quiz.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Quiz</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../intro/exercise.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Exercise</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start collapsed" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="false">
+ <span class="menu-text">How computers store numbers</span></a>
+          <a class="sidebar-item-toggle text-start collapsed" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="false" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth2 ">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../floating-point/lec.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Lecture (slides)</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../floating-point/quiz.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Quiz</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../floating-point/exercise.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Exercise</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text">Error, conditioning and stability</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../error-conditioning/lec.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Lecture (slides)</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../error-conditioning/quiz.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Quiz</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../error-conditioning/exercise.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">Exercise</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start collapsed" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="false">
+ <span class="menu-text">Convergence and cost</span></a>
+          <a class="sidebar-item-toggle text-start collapsed" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="false" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth2 ">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../convergence-cost/lec.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Lecture (slides)</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../convergence-cost/quiz.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Quiz</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../convergence-cost/exercise.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Exercise</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#goal" id="toc-goal" class="nav-link active" data-scroll-target="#goal">Goal</a></li>
+  <li><a href="#background" id="toc-background" class="nav-link" data-scroll-target="#background">Background</a></li>
+  <li><a href="#by-hand" id="toc-by-hand" class="nav-link" data-scroll-target="#by-hand">By hand</a></li>
+  <li><a href="#in-code" id="toc-in-code" class="nav-link" data-scroll-target="#in-code">In code</a></li>
+  <li><a href="#hints" id="toc-hints" class="nav-link" data-scroll-target="#hints">Hints</a></li>
+  <li><a href="#solutions" id="toc-solutions" class="nav-link" data-scroll-target="#solutions">Solutions</a></li>
+  <li><a href="#where-this-leads" id="toc-where-this-leads" class="nav-link" data-scroll-target="#where-this-leads">Where this leads</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item">Part 1: Numbers on a computer</li><li class="breadcrumb-item"><a href="../error-conditioning/lec.html">Error, conditioning and stability</a></li><li class="breadcrumb-item"><a href="../error-conditioning/exercise.html">Exercise</a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title">Exercise: error, conditioning and stability</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="goal" class="level2">
+<h2 class="anchored" data-anchor-id="goal">Goal</h2>
+<p>By the end of this exercise you should be able to:</p>
+<ul>
+<li>compute <strong>absolute</strong> and <strong>relative</strong> errors and turn a relative error into a number of <strong>correct digits</strong>,</li>
+<li>spot <strong>catastrophic cancellation</strong> and predict how many digits it costs,</li>
+<li>compute the <strong>condition number</strong> <span class="math inline">\(\kappa(x) = |x f'(x)/f(x)|\)</span> by hand and estimate it numerically,</li>
+<li>tell a sensitive <strong>problem</strong> (large <span class="math inline">\(\kappa\)</span>) from an unstable <strong>algorithm</strong> (loses more than <span class="math inline">\(\kappa\)</span> explains),</li>
+<li><strong>rewrite</strong> a formula to avoid cancellation (centring, conjugates, the small root of a quadratic),</li>
+<li>recognise when no formula can help (dose from a response near the plateau).</li>
+</ul>
+</section>
+<section id="background" class="level2">
+<h2 class="anchored" data-anchor-id="background">Background</h2>
+<p><strong>Errors.</strong> For a true value <span class="math inline">\(x\)</span> and an approximation <span class="math inline">\(\hat x\)</span>, the absolute error is <span class="math inline">\(|\hat x - x|\)</span> and the relative error is <span class="math inline">\(|\hat x - x|/|x|\)</span>. A relative error of about <span class="math inline">\(10^{-k}\)</span> means about <span class="math inline">\(k\)</span> correct significant digits. A double starts with about 16 (machine epsilon <span class="math inline">\(\varepsilon \approx 2.2\times10^{-16}\)</span>, from How computers store numbers).</p>
+<div class="tabset-margin-container"></div><div class="panel-tabset" data-group="language">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-2" role="tab" aria-controls="tabset-1-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content" data-group="language">
+<div id="tabset-1-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-1-1-tab">
+<div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>rel_err <span class="ot">&lt;-</span> <span class="cf">function</span>(approx, true) <span class="fu">abs</span>(approx <span class="sc">-</span> true) <span class="sc">/</span> <span class="fu">abs</span>(true)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>digits  <span class="ot">&lt;-</span> <span class="cf">function</span>(approx, true) <span class="sc">-</span><span class="fu">log10</span>(<span class="fu">rel_err</span>(approx, true))</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">rel_err</span>(<span class="dv">51</span>, <span class="dv">50</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.02</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">digits</span>(<span class="fl">3.1416</span>, pi)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 5.631075</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="tabset-1-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-2-tab">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rel_err(approx, true):</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.<span class="bu">abs</span>(approx <span class="op">-</span> true) <span class="op">/</span> np.<span class="bu">abs</span>(true)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> digits(approx, true):</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">-</span>np.log10(rel_err(approx, true))</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(rel_err(<span class="dv">51</span>, <span class="dv">50</span>))</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.02</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(digits(<span class="fl">3.1416</span>, np.pi))</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 5.631074697991995</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+<p><strong>Cancellation.</strong> Subtracting two nearly equal numbers <span class="math inline">\(a \approx b\)</span> keeps their absolute errors but shrinks the result, so the relative error grows by the factor <span class="math inline">\(|a|/|a-b|\)</span>: you lose about <span class="math inline">\(\log_{10}(|a|/|a-b|)\)</span> digits.</p>
+<p><strong>Condition number.</strong> For a problem <span class="math inline">\(y = f(x)\)</span>, a small relative change in <span class="math inline">\(x\)</span> gives a relative change in <span class="math inline">\(y\)</span> about <span class="math inline">\(\kappa\)</span> times larger:</p>
+<p><span class="math display">\[\kappa(x) = \left|\frac{x\,f'(x)}{f(x)}\right|, \qquad \text{digits lost} \approx \log_{10}\kappa.\]</span></p>
+<p>When <span class="math inline">\(f'\)</span> is awkward, nudge the input and measure:</p>
+<div class="tabset-margin-container"></div><div class="panel-tabset" data-group="language">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-2-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-2-1" role="tab" aria-controls="tabset-2-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-2-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-2-2" role="tab" aria-controls="tabset-2-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content" data-group="language">
+<div id="tabset-2-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-2-1-tab">
+<div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>kappa_num <span class="ot">&lt;-</span> <span class="cf">function</span>(f, x, <span class="at">h =</span> <span class="fl">1e-7</span>) {</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  rel_out <span class="ot">&lt;-</span> <span class="fu">abs</span>(<span class="fu">f</span>(x <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">+</span> h)) <span class="sc">-</span> <span class="fu">f</span>(x)) <span class="sc">/</span> <span class="fu">abs</span>(<span class="fu">f</span>(x))</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  rel_out <span class="sc">/</span> h                       <span class="co"># relative change out / relative change in</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="fu">kappa_num</span>(log, <span class="fl">1.001</span>)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1000.5</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="tabset-2-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-2-2-tab">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> kappa_num(f, x, h<span class="op">=</span><span class="fl">1e-7</span>):</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    rel_out <span class="op">=</span> <span class="bu">abs</span>(f(x <span class="op">*</span> (<span class="dv">1</span> <span class="op">+</span> h)) <span class="op">-</span> f(x)) <span class="op">/</span> <span class="bu">abs</span>(f(x))</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> rel_out <span class="op">/</span> h              <span class="co"># relative change out / relative change in</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kappa_num(np.log, <span class="fl">1.001</span>))</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 1000.4998673487844</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+<p><strong>Stability.</strong> <span class="math inline">\(\kappa\)</span> belongs to the problem. An algorithm is <strong>stable</strong> if it loses no more than about <span class="math inline">\(\log_{10}\kappa\)</span> digits; it is <strong>backward stable</strong> if its answer is the exact answer for an input within rounding distance of yours. A typical unstable algorithm routes the computation through a cancellation the problem did not need, such as the <strong>one-pass variance</strong>:</p>
+<div class="tabset-margin-container"></div><div class="panel-tabset" data-group="language">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-3-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-3-1" role="tab" aria-controls="tabset-3-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-3-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-3-2" role="tab" aria-controls="tabset-3-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content" data-group="language">
+<div id="tabset-3-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-3-1-tab">
+<div class="sourceCode" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fl">1e8</span> <span class="sc">+</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="fu">length</span>(x)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="fu">sum</span>(x<span class="sc">^</span><span class="dv">2</span>) <span class="sc">/</span> n <span class="sc">-</span> <span class="fu">mean</span>(x)<span class="sc">^</span><span class="dv">2</span>            <span class="co"># one-pass</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 2</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="fu">sum</span>((x <span class="sc">-</span> <span class="fu">mean</span>(x))<span class="sc">^</span><span class="dv">2</span>) <span class="sc">/</span> n            <span class="co"># two-pass</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.25</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="tabset-3-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-3-2-tab">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="fl">1e8</span> <span class="op">+</span> np.array([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>])</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="bu">len</span>(x)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.<span class="bu">sum</span>(x<span class="op">**</span><span class="dv">2</span>) <span class="op">/</span> n <span class="op">-</span> np.mean(x)<span class="op">**</span><span class="dv">2</span>)      <span class="co"># one-pass</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 2.0</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.<span class="bu">sum</span>((x <span class="op">-</span> np.mean(x))<span class="op">**</span><span class="dv">2</span>) <span class="op">/</span> n)       <span class="co"># two-pass</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 1.25</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+<p>The true population variance of <span class="math inline">\(1, 2, 3, 4\)</span> (and of any shift of it) is <span class="math inline">\(1.25\)</span>. R’s <a href="https://rdrr.io/r/stats/cor.html"><code>var()</code></a> and <a href="https://numpy.org/doc/stable/reference/generated/numpy.var.html"><code>numpy.var</code></a> centre first. (<code>var()</code> divides by <span class="math inline">\(n-1\)</span>, <code>numpy.var</code> by <span class="math inline">\(n\)</span> unless <code>ddof=1</code>.)</p>
+</section>
+<section id="by-hand" class="level2">
+<h2 class="anchored" data-anchor-id="by-hand">By hand</h2>
+<p><strong>B1. (errors and digits)</strong> (a) A binding assay gives <span class="math inline">\(K_d = 2.3\)</span> µM; the true value is <span class="math inline">\(2.0\)</span> µM. (b) An automated counter reports <span class="math inline">\(1.18\times10^6\)</span> cells; the true count is <span class="math inline">\(1.20\times10^6\)</span>. For each, compute the absolute error, the relative error and roughly how many correct significant digits the estimate has. Which estimate is more accurate?</p>
+<p><strong>B2. (cancellation)</strong> Two absorbance readings, <span class="math inline">\(a = 0.123456\)</span> and <span class="math inline">\(b = 0.123401\)</span>, are each correct to the 6 digits shown (absolute error at most <span class="math inline">\(5\times10^{-7}\)</span> each). (a) Compute <span class="math inline">\(a - b\)</span>. (b) Give the largest possible absolute error and relative error of <span class="math inline">\(a - b\)</span>. (c) How many significant digits of <span class="math inline">\(a - b\)</span> can you trust? (d) Compare with the rule “lose <span class="math inline">\(\log_{10}(|a|/|a-b|)\)</span> digits”.</p>
+<p><strong>B3. (condition numbers)</strong> Compute <span class="math inline">\(\kappa(x) = |x f'(x)/f(x)|\)</span> for: (a) <span class="math inline">\(f(x) = x - 1\)</span> at <span class="math inline">\(x = 1.01\)</span> and at <span class="math inline">\(x = 100\)</span>; (b) <span class="math inline">\(f(x) = \log x\)</span> at <span class="math inline">\(x = 1.01\)</span> and at <span class="math inline">\(x = 100\)</span>; (c) <span class="math inline">\(f(x) = \sqrt x\)</span> at <span class="math inline">\(x = 7\)</span>; (d) <span class="math inline">\(f(x) = 1/(1-x)\)</span> at <span class="math inline">\(x = 0.99\)</span>; (e) <span class="math inline">\(f(x) = x^p\)</span> for a constant <span class="math inline">\(p\)</span> (any <span class="math inline">\(x &gt; 0\)</span>). Which are ill-conditioned, and where?</p>
+<p><strong>B4. (fold change of near-identical measurements)</strong> A spot has intensity <span class="math inline">\(a = 2010\)</span> in the treated sample and <span class="math inline">\(b = 2000\)</span> in the control, each with about 1 % measurement error. Treat <span class="math inline">\(b\)</span> as fixed and <span class="math inline">\(a\)</span> as the uncertain input. (a) What is <span class="math inline">\(\kappa\)</span> of the ratio <span class="math inline">\(r = a/b\)</span> with respect to <span class="math inline">\(a\)</span>? (b) What is <span class="math inline">\(\kappa\)</span> of the difference <span class="math inline">\(a - b\)</span> with respect to <span class="math inline">\(a\)</span>? (c) What is <span class="math inline">\(\kappa\)</span> of the log fold change <span class="math inline">\(\log r\)</span> with respect to <span class="math inline">\(r\)</span>, at <span class="math inline">\(r = 1.005\)</span>? (d) With 1 % input error, how many digits of the ratio, the difference and the log fold change can you trust? (e) Is this a floating-point problem? What would you change to get a reliable log fold change?</p>
+<p><strong>B5. (one-pass variance by hand)</strong> Work in <strong>5-significant-digit</strong> decimal arithmetic: round every intermediate result to 5 significant digits. Data: <span class="math inline">\(10001, 10002, 10003\)</span>. (a) One-pass: compute each <span class="math inline">\(x_i^2\)</span> (rounded), their mean, <span class="math inline">\(\bar x^2\)</span> (rounded) and the difference. (b) Two-pass: compute <span class="math inline">\(\bar x\)</span>, the deviations <span class="math inline">\(x_i - \bar x\)</span>, their squares and their mean. (c) What is the true population variance? Explain where the one-pass formula lost the information.</p>
+<p><strong>B6. (rewriting)</strong> (a) Show that <span class="math inline">\(\sqrt{x+1} - \sqrt{x} = 1/(\sqrt{x+1} + \sqrt{x})\)</span>. Evaluate both sides at <span class="math inline">\(x = 10^4\)</span> in <strong>6-significant-digit</strong> arithmetic (<span class="math inline">\(\sqrt{10001} = 100.004999875\ldots\)</span>). How many digits does each version get right? (b) The bound complex in a binding experiment is the small root of <span class="math inline">\(C^2 - S\,C + PL = 0\)</span>, with <span class="math inline">\(S = P + L + K_d\)</span>. The textbook formula is <span class="math inline">\(C = \big(S - \sqrt{S^2 - 4PL}\big)/2\)</span>. Using that the product of the two roots is <span class="math inline">\(PL\)</span>, derive <span class="math inline">\(C = 2PL/\big(S + \sqrt{S^2 - 4PL}\big)\)</span>. Why is the new form better when <span class="math inline">\(K_d \gg P, L\)</span>?</p>
+<p><strong>B7. (dose from response)</strong> A response follows <span class="math inline">\(R = D/(K + D)\)</span> (fraction of maximum). (a) Show that <span class="math inline">\(\kappa\)</span> of the forward map <span class="math inline">\(D \mapsto R\)</span> is <span class="math inline">\(K/(K + D)\)</span>, which is never above 1. (b) Invert to get <span class="math inline">\(D(R)\)</span> and show that its condition number is <span class="math inline">\(1/(1 - R)\)</span>. (c) With a 1 % relative error in <span class="math inline">\(R\)</span>, what is the relative error in the inferred dose at <span class="math inline">\(R = 0.5\)</span>, <span class="math inline">\(0.9\)</span> and <span class="math inline">\(0.99\)</span>? (d) Into which range of responses should you dilute a sample if you want its dose?</p>
+<p><strong>B8. (backward error)</strong> R computes <code>(1 + 1e-15) - 1</code> as <span class="math inline">\(1.110223\times10^{-15}\)</span>. (a) What is the relative (forward) error, compared with the intended <span class="math inline">\(10^{-15}\)</span>? (b) For which input <span class="math inline">\(a\)</span> is <span class="math inline">\(a - 1 = 1.110223\times10^{-15}\)</span> exactly? How far, relatively, is it from the intended <span class="math inline">\(a = 1 + 10^{-15}\)</span>? This is the backward error. (c) Compute <span class="math inline">\(\kappa\)</span> of <span class="math inline">\(f(a) = a - 1\)</span> at <span class="math inline">\(a = 1 + 10^{-15}\)</span> and check that forward error <span class="math inline">\(\approx \kappa \times\)</span> backward error.</p>
+<p><strong>B9. (a 2 × 2 teaser)</strong> Two dyes with overlapping spectra: <span class="math inline">\(x_1 + 0.95\,x_2 = b_1\)</span>, <span class="math inline">\(0.95\,x_1 + x_2 = b_2\)</span>. Solve by hand for <span class="math inline">\(\mathbf b = (1.95, 1.95)\)</span> and for <span class="math inline">\(\mathbf b = (1.96, 1.94)\)</span>. By what percentage did <span class="math inline">\(\mathbf b\)</span> change, and by what percentage did <span class="math inline">\(\mathbf x\)</span> change?</p>
+</section>
+<section id="in-code" class="level2">
+<h2 class="anchored" data-anchor-id="in-code">In code</h2>
+<p><strong>C1. (digits)</strong> Compute the relative error and the number of correct digits of the approximations <span class="math inline">\(2.718\)</span>, <span class="math inline">\(2.7183\)</span>, <span class="math inline">\(19/7\)</span> and <span class="math inline">\(2.71828183\)</span> to <span class="math inline">\(e\)</span>. Does <span class="math inline">\(-\log_{10}\)</span> of the relative error match your count of matching digits?</p>
+<p><strong>C2. (cancellation curve)</strong> For <span class="math inline">\(d = 10^{-1}, 10^{-2}, \ldots, 10^{-15}\)</span>, compute <span class="math inline">\((1 + d) - 1\)</span>, its relative error compared with <span class="math inline">\(d\)</span>, and the number of correct digits. Plot the relative error against <span class="math inline">\(d\)</span> on log–log axes. Compare with the prediction “about <span class="math inline">\(16 - \log_{10}(1/d)\)</span> correct digits”.</p>
+<p><strong>C3. (one-pass vs two-pass)</strong> (a) For <span class="math inline">\(m = 10^4, 10^6, 10^8, 10^9\)</span>, build the data <code>x &lt;- m + (0:699 %% 7) - 3</code> (each of <span class="math inline">\(m-3, \ldots, m+3\)</span> a hundred times; true population variance exactly <span class="math inline">\(4\)</span>) and compute the variance with the one-pass and the two-pass formulas. (b) Compute both for <code>x &lt;- 7e8 + c(0.1, 0.2, 0.3)</code>. What is impossible about the one-pass answer? (c) <strong>Shift check</strong>: subtract <code>x[1]</code> from the data in (b) and rerun the one-pass formula. Explain why it now works.</p>
+<p><strong>C4. (condition numbers numerically)</strong> Use <code>kappa_num</code> to check your answers to B3 (a)–(d). Then compute <span class="math inline">\(\kappa\)</span> of <code>dose &lt;- function(R) K * R / (1 - R)</code> with <code>K &lt;- 10</code> at <span class="math inline">\(R = 0.5, 0.9, 0.99, 0.999\)</span> and compare with <span class="math inline">\(1/(1 - R)\)</span> from B7.</p>
+<p><strong>C5. (rewrites)</strong> (a) For <span class="math inline">\(x = 10^2, 10^4, \ldots, 10^{16}\)</span>, compare <code>sqrt(x + 1) - sqrt(x)</code> with <code>1 / (sqrt(x + 1) + sqrt(x))</code> and count the correct digits of the first version (take the second as the reference). (b) Binding: with <span class="math inline">\(P = L = 0.01\)</span> nM and <span class="math inline">\(K_d = 10^1, \ldots, 10^7\)</span> nM, compare the textbook and the rewritten small root from B6, and print their relative difference. At which <span class="math inline">\(K_d\)</span> does the textbook formula become useless?</p>
+<p><strong>C6. (an ill-conditioned problem)</strong> With <code>K &lt;- 10</code>, compute the dose range implied by a response that is off by <span class="math inline">\(\pm 0.5\)</span> % around <span class="math inline">\(R = 0.5\)</span>, <span class="math inline">\(0.9\)</span> and <span class="math inline">\(0.99\)</span>. Compare the max/min dose ratio with what <span class="math inline">\(\kappa\)</span> predicts. Does computing in higher precision help?</p>
+<p><strong>C7. (matrix teaser)</strong> For <span class="math inline">\(A = \begin{pmatrix}1 &amp; 0.95\\0.95 &amp; 1\end{pmatrix}\)</span>, <span class="math inline">\(\mathbf b = (1.95, 1.95)\)</span> and the perturbation <span class="math inline">\(\Delta\mathbf b = (0.01, -0.01)\)</span>, compute the amplification</p>
+<p><span class="math display">\[\frac{\|\Delta \mathbf x\| / \|\mathbf x\|}{\|\Delta \mathbf b\| / \|\mathbf b\|}\]</span></p>
+<p>with the Euclidean norm, and compare with the condition number from <a href="https://rdrr.io/r/base/kappa.html"><code>kappa(A, exact = TRUE)</code></a> / <a href="https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html"><code>np.linalg.cond(A)</code></a>. Repeat with off-diagonal entries <span class="math inline">\(0.5\)</span> instead of <span class="math inline">\(0.95\)</span>.</p>
+</section>
+<section id="hints" class="level2">
+<h2 class="anchored" data-anchor-id="hints">Hints</h2>
+<div class="callout callout-style-default callout-tip callout-titled" title="Hint 1 — relative error and digits (B1, C1)">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-1-contents" aria-controls="callout-1" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Hint 1 — relative error and digits (B1, C1)
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-1" class="callout-1-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>Relative error <span class="math inline">\(= |\hat x - x|/|x|\)</span>; digits <span class="math inline">\(\approx -\log_{10}(\text{relative error})\)</span>. In R use <a href="https://rdrr.io/r/base/MathFun.html"><code>abs</code></a> and <a href="https://rdrr.io/r/base/Log.html"><code>log10</code></a>; in Python <a href="https://numpy.org/doc/stable/reference/generated/numpy.absolute.html"><code>np.abs</code></a> and <a href="https://numpy.org/doc/stable/reference/generated/numpy.log10.html"><code>np.log10</code></a>. Compare relative, not absolute, errors when the quantities have different units or scales.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled" title="Hint 2 — the worst-case error of a difference (B2)">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Hint 2 — the worst-case error of a difference (B2)
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-2" class="callout-2-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>The absolute errors of <span class="math inline">\(a\)</span> and <span class="math inline">\(b\)</span> can have opposite signs, so the error of <span class="math inline">\(a - b\)</span> can be as large as the <strong>sum</strong> of the two absolute errors. Divide by <span class="math inline">\(|a - b|\)</span> for the relative error.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled" title="Hint 3 — computing κ (B3, B4, B7)">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-3-contents" aria-controls="callout-3" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Hint 3 — computing κ (B3, B4, B7)
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-3" class="callout-3-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>Write down <span class="math inline">\(f'(x)\)</span>, then simplify <span class="math inline">\(x f'(x)/f(x)\)</span> before plugging in numbers. For <span class="math inline">\(\log x\)</span>: <span class="math inline">\(f' = 1/x\)</span>. For <span class="math inline">\(1/(1-x)\)</span>: <span class="math inline">\(f' = 1/(1-x)^2\)</span>. For <span class="math inline">\(D(R) = KR/(1-R)\)</span>: <span class="math inline">\(D'(R) = K/(1-R)^2\)</span> (quotient rule). Use <span class="math inline">\(\ln(1.01) \approx 0.00995\)</span> and <span class="math inline">\(\ln(1.005) \approx 0.004988\)</span>.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled" title="Hint 4 — 5-digit arithmetic (B5)">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Hint 4 — 5-digit arithmetic (B5)
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><span class="math inline">\(10001^2 = 100\,020\,001\)</span>, which rounds to <span class="math inline">\(1.0002\times10^8\)</span> in 5 significant digits. Do the same for the other squares and for <span class="math inline">\(\bar x^2\)</span>. The two-pass version works with numbers of size 1, so rounding to 5 digits does no harm.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled" title="Hint 5 — the small root (B6b)">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-5-contents" aria-controls="callout-5" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Hint 5 — the small root (B6b)
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-5" class="callout-5-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>If the roots are <span class="math inline">\(C_-\)</span> (small) and <span class="math inline">\(C_+\)</span> (large), then <span class="math inline">\(C_- C_+ = PL\)</span> and <span class="math inline">\(C_+ = \big(S + \sqrt{S^2 - 4PL}\big)/2\)</span>. So <span class="math inline">\(C_- = PL / C_+\)</span>. Which of the two formulas subtracts nearly equal numbers when <span class="math inline">\(S^2 \gg 4PL\)</span>?</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled" title="Hint 6 — formatted tables in code (C2, C5)">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-6-contents" aria-controls="callout-6" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Hint 6 — formatted tables in code (C2, C5)
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-6" class="callout-6-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>To print a table with the same layout in both languages, use <a href="https://rdrr.io/r/base/sprintf.html"><code>sprintf</code></a> in R (it is vectorised) and an f-string in a loop in Python. For log–log plots use <code>plot(d, relerr, log = "xy")</code> in R and <a href="https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.loglog.html"><code>plt.loglog</code></a> in Python.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled" title="Hint 7 — solving 2 × 2 systems (B9, C7)">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-7-contents" aria-controls="callout-7" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Hint 7 — solving 2 × 2 systems (B9, C7)
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-7" class="callout-7-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>By hand: Cramer’s rule, <span class="math inline">\(x_1 = (b_1 a_{22} - a_{12} b_2)/\det A\)</span> and <span class="math inline">\(x_2 = (a_{11} b_2 - a_{21} b_1)/\det A\)</span>. In code: <a href="https://rdrr.io/r/base/solve.html"><code>solve(A, b)</code></a> and <a href="https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html"><code>np.linalg.solve(A, b)</code></a>; the Euclidean norm is <code>sqrt(sum(v^2))</code> in R and <a href="https://numpy.org/doc/stable/reference/generated/numpy.linalg.norm.html"><code>np.linalg.norm(v)</code></a> in Python.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="solutions" class="level2">
+<h2 class="anchored" data-anchor-id="solutions">Solutions</h2>
+<div class="callout callout-style-default callout-note callout-titled" title="Solutions: by hand">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-8-contents" aria-controls="callout-8" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Solutions: by hand
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-8" class="callout-8-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><strong>B1.</strong> (a) Absolute error <span class="math inline">\(0.3\)</span> µM, relative error <span class="math inline">\(0.3/2.0 = 0.15\)</span>, so <span class="math inline">\(-\log_{10} 0.15 \approx 0.8\)</span>: about <strong>one</strong> correct digit. (b) Absolute error <span class="math inline">\(2\times10^4\)</span> cells, relative error <span class="math inline">\(2\times10^4 / 1.2\times10^6 \approx 0.017\)</span>, about <strong>1.8</strong> digits. The cell count is more accurate, although its absolute error is <span class="math inline">\(10^5\)</span> times larger in raw numbers: relative error is the fair comparison.</p>
+<p><strong>B2.</strong> (a) <span class="math inline">\(a - b = 0.000055\)</span>. (b) Worst case absolute error <span class="math inline">\(5\times10^{-7} + 5\times10^{-7} = 10^{-6}\)</span>; relative error <span class="math inline">\(10^{-6} / 5.5\times10^{-5} \approx 0.018\)</span>. (c) About <span class="math inline">\(-\log_{10} 0.018 \approx 1.7\)</span>, so <strong>one to two</strong> digits: <span class="math inline">\(0.000055\)</span> is really “<span class="math inline">\(0.000055 \pm 0.000001\)</span>”. (d) <span class="math inline">\(|a|/|a - b| = 0.123456 / 0.000055 \approx 2245\)</span>, so we lose <span class="math inline">\(\log_{10} 2245 \approx 3.4\)</span> of the 6 digits, keeping about <span class="math inline">\(2.6\)</span>. Same picture (the rule uses the relative error of <span class="math inline">\(a\)</span>, <span class="math inline">\(\approx 4\times10^{-6}\)</span>, which is slightly better than “6 digits” suggests).</p>
+<p><strong>B3.</strong> (a) <span class="math inline">\(f' = 1\)</span>, so <span class="math inline">\(\kappa = |x/(x-1)|\)</span>: <span class="math inline">\(1.01/0.01 = 101\)</span> at <span class="math inline">\(x = 1.01\)</span>; <span class="math inline">\(100/99 \approx 1.01\)</span> at <span class="math inline">\(x = 100\)</span>. (b) <span class="math inline">\(f' = 1/x\)</span>, so <span class="math inline">\(\kappa = 1/|\ln x|\)</span>: <span class="math inline">\(1/0.00995 \approx 100.5\)</span> at <span class="math inline">\(x = 1.01\)</span>; <span class="math inline">\(1/\ln 100 = 1/4.605 \approx 0.217\)</span> at <span class="math inline">\(x = 100\)</span>. (c) <span class="math inline">\(f' = 1/(2\sqrt x)\)</span>, so <span class="math inline">\(\kappa = \tfrac12\)</span> for every <span class="math inline">\(x\)</span>. (d) <span class="math inline">\(f' = 1/(1-x)^2\)</span>, so <span class="math inline">\(\kappa = |x/(1-x)|\)</span>: <span class="math inline">\(0.99/0.01 = 99\)</span>. (e) <span class="math inline">\(f' = p x^{p-1}\)</span>, so <span class="math inline">\(\kappa = |p|\)</span>: squaring doubles relative errors, a square root halves them. Ill-conditioned: <span class="math inline">\(x - 1\)</span> and <span class="math inline">\(\log x\)</span> near <span class="math inline">\(x = 1\)</span>, and <span class="math inline">\(1/(1-x)\)</span> near <span class="math inline">\(x = 1\)</span>. All the others are fine.</p>
+<p><strong>B4.</strong> (a) <span class="math inline">\(r = a/b\)</span>, <span class="math inline">\(r' = 1/b\)</span>, <span class="math inline">\(\kappa = |a \cdot (1/b) / (a/b)| = 1\)</span>. The ratio is well-conditioned. (b) <span class="math inline">\(\kappa = |a/(a - b)| = 2010/10 = 201\)</span>. (c) <span class="math inline">\(\kappa = 1/|\ln r| = 1/\ln 1.005 \approx 200.5\)</span>. (d) Ratio: 1 % error, about 2 digits. Difference and log fold change: <span class="math inline">\(201 \times 1\,\% \approx 200\,\%\)</span>, so <strong>no</strong> correct digits; even the sign is uncertain. (e) No.&nbsp;Double precision has 16 digits and loses only <span class="math inline">\(\log_{10} 200 \approx 2.3\)</span> of them. The trouble is the 1 % measurement error amplified by <span class="math inline">\(\kappa \approx 200\)</span>. You need measurement error well below the 0.5 % change you want to detect, for example by averaging replicates.</p>
+<p><strong>B5.</strong> (a) <span class="math inline">\(x_i^2\)</span>: <span class="math inline">\(100\,020\,001 \to 1.0002\times10^8\)</span>, <span class="math inline">\(100\,040\,004 \to 1.0004\times10^8\)</span>, <span class="math inline">\(100\,060\,009 \to 1.0006\times10^8\)</span>. Mean <span class="math inline">\(= 3.0012\times10^8/3 = 1.0004\times10^8\)</span>. <span class="math inline">\(\bar x = 10002\)</span>, <span class="math inline">\(\bar x^2 = 100\,040\,004 \to 1.0004\times10^8\)</span>. One-pass variance: <span class="math inline">\(1.0004\times10^8 - 1.0004\times10^8 = \mathbf{0}\)</span>. (b) <span class="math inline">\(\bar x = 10002\)</span>; deviations <span class="math inline">\(-1, 0, 1\)</span>; squares <span class="math inline">\(1, 0, 1\)</span>; mean <span class="math inline">\(2/3 \approx \mathbf{0.66667}\)</span>. (c) True population variance <span class="math inline">\(2/3\)</span>. The squares need 9 digits to hold the information (<span class="math inline">\(100\,020\,001\)</span> vs <span class="math inline">\(100\,040\,004\)</span>); rounding to 5 digits threw away exactly the last 4 digits that carried the spread. The subtraction then cancelled the 5 digits that were left. The two-pass version subtracts <strong>first</strong>, while the numbers are still exact, so nothing is lost. A double has 16 digits instead of 5, so the same thing happens when <span class="math inline">\(x_i^2\)</span> needs more than 16 digits, i.e.&nbsp;data around <span class="math inline">\(10^8\)</span> with a spread of a few units.</p>
+<p><strong>B6.</strong> (a) Multiply and divide by the conjugate: <span class="math inline">\((\sqrt{x+1} - \sqrt x)(\sqrt{x+1} + \sqrt x) = (x + 1) - x = 1\)</span>. At <span class="math inline">\(x = 10^4\)</span> with 6 digits: <span class="math inline">\(\sqrt{10001} \to 100.005\)</span>, <span class="math inline">\(\sqrt{10000} = 100.000\)</span>, difference <span class="math inline">\(0.005\)</span>, only <strong>1</strong> correct digit (the true value is <span class="math inline">\(0.00499988\)</span>). Rewritten: <span class="math inline">\(1/(100.005 + 100.000) = 1/200.005 = 0.00499988\)</span>, all <strong>6</strong> digits correct. (b) The roots are <span class="math inline">\(C_\pm = \big(S \pm \sqrt{S^2 - 4PL}\big)/2\)</span> and <span class="math inline">\(C_- C_+ = PL\)</span>. So <span class="math display">\[C_- = \frac{PL}{C_+} = \frac{2PL}{S + \sqrt{S^2 - 4PL}}.\]</span> When <span class="math inline">\(K_d \gg P, L\)</span>, <span class="math inline">\(S^2 \gg 4PL\)</span> and <span class="math inline">\(\sqrt{S^2 - 4PL} \approx S\)</span>: the textbook formula subtracts two nearly equal numbers (cancellation), the new one adds them (no cancellation). Both are the same mathematical problem; only the algorithm changed.</p>
+<p><strong>B7.</strong> (a) <span class="math inline">\(R' = K/(K + D)^2\)</span>, so <span class="math inline">\(D R'/R = D \cdot K/(K + D)^2 \cdot (K + D)/D = K/(K + D) \le 1\)</span>. (b) <span class="math inline">\(R(K + D) = D \Rightarrow D = KR/(1 - R)\)</span>. <span class="math inline">\(D' = K/(1 - R)^2\)</span>, so <span class="math inline">\(R D'/D = R \cdot K/(1 - R)^2 \cdot (1 - R)/(KR) = 1/(1 - R)\)</span>. (c) <span class="math inline">\(\kappa = 2, 10, 100\)</span>, so a 1 % error in <span class="math inline">\(R\)</span> gives about 2 %, 10 % and 100 % error in <span class="math inline">\(D\)</span>. (d) In the steep middle of the curve, roughly <span class="math inline">\(0.2 \lesssim R \lesssim 0.8\)</span> (<span class="math inline">\(\kappa \le 5\)</span>). Near the plateau the forward map is fine but the <strong>inverse</strong> problem is ill-conditioned.</p>
+<p><strong>B8.</strong> (a) <span class="math inline">\(|1.110223\times10^{-15} - 10^{-15}|/10^{-15} = 0.11\)</span>: 11 %. (b) <span class="math inline">\(a = 1 + 1.110223\times10^{-15}\)</span> (this is the double that <code>1 + 1e-15</code> was rounded to). Relative distance from <span class="math inline">\(1 + 10^{-15}\)</span>: <span class="math inline">\(1.1\times10^{-16}/1 \approx 1.1\times10^{-16}\)</span>, about <span class="math inline">\(\varepsilon/2\)</span>. (c) <span class="math inline">\(\kappa = |a/(a - 1)| \approx 1/10^{-15} = 10^{15}\)</span>. <span class="math inline">\(\kappa \times\)</span> backward error <span class="math inline">\(= 10^{15} \times 1.1\times10^{-16} = 0.11\)</span>, the forward error. The subtraction is backward stable; all of the error is conditioning.</p>
+<p><strong>B9.</strong> <span class="math inline">\(\det A = 1 - 0.95^2 = 0.0975\)</span>. For <span class="math inline">\(\mathbf b = (1.95, 1.95)\)</span>: <span class="math inline">\(x_1 = (1.95 - 0.95\cdot1.95)/0.0975 = 0.0975/0.0975 = 1\)</span>, and by symmetry <span class="math inline">\(x_2 = 1\)</span>. For <span class="math inline">\(\mathbf b = (1.96, 1.94)\)</span>: <span class="math inline">\(x_1 = (1.96 - 0.95\cdot1.94)/0.0975 = 0.117/0.0975 = 1.2\)</span>, <span class="math inline">\(x_2 = (1.94 - 0.95\cdot1.96)/0.0975 = 0.078/0.0975 = 0.8\)</span>. <span class="math inline">\(\mathbf b\)</span> changed by about <span class="math inline">\(0.5\)</span> %, <span class="math inline">\(\mathbf x\)</span> by <span class="math inline">\(20\)</span> %: an amplification of about 40.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled" title="Solution C1">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-9-contents" aria-controls="callout-9" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Solution C1
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-9" class="callout-9-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="tabset-margin-container"></div><div class="panel-tabset" data-group="language">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-4-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-4-1" role="tab" aria-controls="tabset-4-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-4-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-4-2" role="tab" aria-controls="tabset-4-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content" data-group="language">
+<div id="tabset-4-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-4-1-tab">
+<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>approx <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">2.718</span>, <span class="fl">2.7183</span>, <span class="dv">19</span> <span class="sc">/</span> <span class="dv">7</span>, <span class="fl">2.71828183</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">rel_err</span>(approx, <span class="fu">exp</span>(<span class="dv">1</span>))</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.036789e-04 6.684936e-06 1.470088e-03 5.668856e-10</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="fu">digits</span>(approx, <span class="fu">exp</span>(<span class="dv">1</span>))</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 3.984310 5.174903 2.832657 9.246505</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="tabset-4-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-4-2-tab">
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>approx <span class="op">=</span> np.array([<span class="fl">2.718</span>, <span class="fl">2.7183</span>, <span class="dv">19</span> <span class="op">/</span> <span class="dv">7</span>, <span class="fl">2.71828183</span>])</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(rel_err(approx, np.e))</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="co"># [1.03678896e-04 6.68493633e-06 1.47008825e-03 5.66885635e-10]</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(digits(approx, np.e))</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="co"># [3.98430964 5.17490272 2.83265659 9.24650455]</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+<p><span class="math inline">\(e = 2.718281828\ldots\)</span>: <span class="math inline">\(2.718\)</span> matches 4 digits (<span class="math inline">\(-\log_{10}\)</span> gives 4.0), <span class="math inline">\(2.7183\)</span> is correctly rounded to 5 digits (5.2), <span class="math inline">\(19/7 = 2.714\ldots\)</span> matches 3 digits (2.8), <span class="math inline">\(2.71828183\)</span> matches 9 (9.2). The digit count from <span class="math inline">\(-\log_{10}\)</span> agrees within one.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled" title="Solution C2">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-10-contents" aria-controls="callout-10" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Solution C2
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-10" class="callout-10-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="tabset-margin-container"></div><div class="panel-tabset" data-group="language">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-5-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-5-1" role="tab" aria-controls="tabset-5-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-5-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-5-2" role="tab" aria-controls="tabset-5-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content" data-group="language">
+<div id="tabset-5-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-5-1-tab">
+<div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="dv">10</span><span class="sc">^-</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">15</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>computed <span class="ot">&lt;-</span> (<span class="dv">1</span> <span class="sc">+</span> d) <span class="sc">-</span> <span class="dv">1</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>relerr <span class="ot">&lt;-</span> <span class="fu">abs</span>(computed <span class="sc">-</span> d) <span class="sc">/</span> d</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"%.0e  %.1e  %4.1f</span><span class="sc">\n</span><span class="st">"</span>, d, relerr, <span class="sc">-</span><span class="fu">log10</span>(relerr)), <span class="at">sep =</span> <span class="st">""</span>)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(d, relerr, <span class="at">log =</span> <span class="st">"xy"</span>, <span class="at">xlab =</span> <span class="st">"d"</span>, <span class="at">ylab =</span> <span class="st">"relative error"</span>)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="fu">lines</span>(d, .Machine<span class="sc">$</span>double.eps <span class="sc">/</span> d, <span class="at">lty =</span> <span class="dv">2</span>)   <span class="co"># prediction eps / d</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="tabset-5-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-5-2-tab">
+<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> <span class="fl">10.0</span> <span class="op">**</span> <span class="op">-</span>np.arange(<span class="dv">1</span>, <span class="dv">16</span>)</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>computed <span class="op">=</span> (<span class="dv">1</span> <span class="op">+</span> d) <span class="op">-</span> <span class="dv">1</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>relerr <span class="op">=</span> np.<span class="bu">abs</span>(computed <span class="op">-</span> d) <span class="op">/</span> d</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> di, r <span class="kw">in</span> <span class="bu">zip</span>(d, relerr):</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>di<span class="sc">:.0e}</span><span class="ss">  </span><span class="sc">{</span>r<span class="sc">:.1e}</span><span class="ss">  </span><span class="sc">{</span><span class="op">-</span>np<span class="sc">.</span>log10(r)<span class="sc">:4.1f}</span><span class="ss">"</span>)</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>plt.loglog(d, relerr, <span class="st">"o"</span>, label<span class="op">=</span><span class="st">"computed"</span>)</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>plt.loglog(d, np.finfo(<span class="bu">float</span>).eps <span class="op">/</span> d, <span class="st">"--"</span>, label<span class="op">=</span><span class="st">"eps / d"</span>)</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">"d"</span>)<span class="op">;</span> plt.ylabel(<span class="st">"relative error"</span>)<span class="op">;</span> plt.legend()<span class="op">;</span> plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+<p>Output (identical in both):</p>
+<pre><code>1e-01  8.3e-16  15.1
+1e-02  8.7e-16  15.1
+1e-03  1.1e-13  13.0
+1e-04  1.1e-13  13.0
+1e-05  6.6e-12  11.2
+1e-06  8.2e-11  10.1
+1e-07  5.8e-10   9.2
+1e-08  6.1e-09   8.2
+1e-09  8.3e-08   7.1
+1e-10  8.3e-08   7.1
+1e-11  8.3e-08   7.1
+1e-12  8.9e-05   4.1
+1e-13  8.0e-04   3.1
+1e-14  8.0e-04   3.1
+1e-15  1.1e-01   1.0</code></pre>
+<p>The correct digits fall by about one for every factor 10 decrease in <span class="math inline">\(d\)</span>, close to <span class="math inline">\(16 - \log_{10}(1/d)\)</span> (some values are luckier than the prediction, which is a worst case). On the log–log plot the points lie on or below the line <span class="math inline">\(\varepsilon/d\)</span>, a straight line of slope <span class="math inline">\(-1\)</span>.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled" title="Solution C3">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-11-contents" aria-controls="callout-11" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Solution C3
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-11" class="callout-11-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="tabset-margin-container"></div><div class="panel-tabset" data-group="language">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-6-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-6-1" role="tab" aria-controls="tabset-6-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-6-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-6-2" role="tab" aria-controls="tabset-6-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content" data-group="language">
+<div id="tabset-6-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-6-1-tab">
+<div class="sourceCode" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (m <span class="cf">in</span> <span class="fu">c</span>(<span class="fl">1e4</span>, <span class="fl">1e6</span>, <span class="fl">1e8</span>, <span class="fl">1e9</span>)) {</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  x <span class="ot">&lt;-</span> m <span class="sc">+</span> (<span class="dv">0</span><span class="sc">:</span><span class="dv">699</span> <span class="sc">%%</span> <span class="dv">7</span>) <span class="sc">-</span> <span class="dv">3</span>          <span class="co"># values m-3, ..., m+3, 100 of each</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  n <span class="ot">&lt;-</span> <span class="fu">length</span>(x)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  one <span class="ot">&lt;-</span> <span class="fu">sum</span>(x<span class="sc">^</span><span class="dv">2</span>) <span class="sc">/</span> n <span class="sc">-</span> <span class="fu">mean</span>(x)<span class="sc">^</span><span class="dv">2</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  two <span class="ot">&lt;-</span> <span class="fu">sum</span>((x <span class="sc">-</span> <span class="fu">mean</span>(x))<span class="sc">^</span><span class="dv">2</span>) <span class="sc">/</span> n</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"m = %.0e   one-pass = %g   two-pass = %g</span><span class="sc">\n</span><span class="st">"</span>, m, one, two))</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="co"># m = 1e+04   one-pass = 4   two-pass = 4</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="co"># m = 1e+06   one-pass = 4   two-pass = 4</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="co"># m = 1e+08   one-pass = 2   two-pass = 4</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="co"># m = 1e+09   one-pass = 0   two-pass = 4</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fl">7e8</span> <span class="sc">+</span> <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.2</span>, <span class="fl">0.3</span>)</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="fu">mean</span>(x<span class="sc">^</span><span class="dv">2</span>) <span class="sc">-</span> <span class="fu">mean</span>(x)<span class="sc">^</span><span class="dv">2</span>               <span class="co"># (b) one-pass</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -64</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a><span class="fu">mean</span>((x <span class="sc">-</span> <span class="fu">mean</span>(x))<span class="sc">^</span><span class="dv">2</span>)               <span class="co"># (b) two-pass</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.006666662</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>x0 <span class="ot">&lt;-</span> x <span class="sc">-</span> x[<span class="dv">1</span>]                      <span class="co"># (c) shift check</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a><span class="fu">mean</span>(x0<span class="sc">^</span><span class="dv">2</span>) <span class="sc">-</span> <span class="fu">mean</span>(x0)<span class="sc">^</span><span class="dv">2</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.006666662</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="tabset-6-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-6-2-tab">
+<div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> m <span class="kw">in</span> [<span class="fl">1e4</span>, <span class="fl">1e6</span>, <span class="fl">1e8</span>, <span class="fl">1e9</span>]:</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> m <span class="op">+</span> (np.arange(<span class="dv">700</span>) <span class="op">%</span> <span class="dv">7</span>) <span class="op">-</span> <span class="dv">3</span>        <span class="co"># values m-3, ..., m+3, 100 of each</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="bu">len</span>(x)</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    one <span class="op">=</span> np.<span class="bu">sum</span>(x<span class="op">**</span><span class="dv">2</span>) <span class="op">/</span> n <span class="op">-</span> np.mean(x)<span class="op">**</span><span class="dv">2</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    two <span class="op">=</span> np.<span class="bu">sum</span>((x <span class="op">-</span> np.mean(x))<span class="op">**</span><span class="dv">2</span>) <span class="op">/</span> n</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"m = </span><span class="sc">{</span>m<span class="sc">:.0e}</span><span class="ss">   one-pass = </span><span class="sc">{</span>one<span class="sc">:g}</span><span class="ss">   two-pass = </span><span class="sc">{</span>two<span class="sc">:g}</span><span class="ss">"</span>)</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="co"># m = 1e+04   one-pass = 4   two-pass = 4</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="co"># m = 1e+06   one-pass = 4   two-pass = 4</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="co"># m = 1e+08   one-pass = 2   two-pass = 4</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="co"># m = 1e+09   one-pass = 0   two-pass = 4</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="fl">7e8</span> <span class="op">+</span> np.array([<span class="fl">0.1</span>, <span class="fl">0.2</span>, <span class="fl">0.3</span>])</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.mean(x<span class="op">**</span><span class="dv">2</span>) <span class="op">-</span> np.mean(x)<span class="op">**</span><span class="dv">2</span>)        <span class="co"># (b) one-pass</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="co"># -64.0</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.mean((x <span class="op">-</span> np.mean(x))<span class="op">**</span><span class="dv">2</span>))         <span class="co"># (b) two-pass</span></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.0066666618982983055</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>x0 <span class="op">=</span> x <span class="op">-</span> x[<span class="dv">0</span>]                               <span class="co"># (c) shift check</span></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.mean(x0<span class="op">**</span><span class="dv">2</span>) <span class="op">-</span> np.mean(x0)<span class="op">**</span><span class="dv">2</span>)</span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.0066666618982967295</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+<ol type="a">
+<li>One-pass loses about <span class="math inline">\(2\log_{10}(m/s)\)</span> digits (<span class="math inline">\(s = 2\)</span> here): at <span class="math inline">\(m = 10^8\)</span> the answer is off by a factor 2, at <span class="math inline">\(10^9\)</span> it is 0. Two-pass is right throughout.</li>
+<li>A <strong>negative variance</strong>, <span class="math inline">\(-64\)</span>, which is impossible. The terms <span class="math inline">\(\overline{x^2}\)</span> and <span class="math inline">\(\bar x^2\)</span> are near <span class="math inline">\(4.9\times10^{17}\)</span>, where doubles are spaced 64 apart, so the one-pass answer can only be a multiple of 64. (The two-pass answer <span class="math inline">\(0.006666662\)</span> instead of <span class="math inline">\(0.0066666\overline{6}\)</span> is not the algorithm’s fault: <span class="math inline">\(7\times10^8 + 0.1\)</span> cannot be stored exactly, so the stored data themselves are off by up to <span class="math inline">\(6\times10^{-8}\)</span>, which changes the variance in the 7th digit.)</li>
+<li>After the shift the data are <span class="math inline">\(0, 0.1, 0.2\)</span>: no large common part is left, so there is nothing big to cancel. Variance does not change under a shift, so a disagreement between the shifted and unshifted results is a red flag. (Careful: with other data, R and numpy can give <em>different wrong</em> one-pass answers, because R’s <code>sum</code> accumulates in extended precision. The correct two-pass answer agrees.)</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled" title="Solution C4">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-12-contents" aria-controls="callout-12" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Solution C4
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-12" class="callout-12-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="tabset-margin-container"></div><div class="panel-tabset" data-group="language">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-7-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-7-1" role="tab" aria-controls="tabset-7-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-7-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-7-2" role="tab" aria-controls="tabset-7-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content" data-group="language">
+<div id="tabset-7-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-7-1-tab">
+<div class="sourceCode" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">kappa_num</span>(<span class="cf">function</span>(x) x <span class="sc">-</span> <span class="dv">1</span>, <span class="fl">1.01</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 101</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="fu">kappa_num</span>(<span class="cf">function</span>(x) x <span class="sc">-</span> <span class="dv">1</span>, <span class="dv">100</span>)</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.010101</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="fu">kappa_num</span>(log, <span class="fl">1.01</span>)</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 100.4992</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="fu">kappa_num</span>(log, <span class="dv">100</span>)</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.2171472</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="fu">kappa_num</span>(sqrt, <span class="dv">7</span>)</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.5</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="fu">kappa_num</span>(<span class="cf">function</span>(x) <span class="dv">1</span> <span class="sc">/</span> (<span class="dv">1</span> <span class="sc">-</span> x), <span class="fl">0.99</span>)</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 99.00098</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>K <span class="ot">&lt;-</span> <span class="dv">10</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>dose <span class="ot">&lt;-</span> <span class="cf">function</span>(R) K <span class="sc">*</span> R <span class="sc">/</span> (<span class="dv">1</span> <span class="sc">-</span> R)</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (R <span class="cf">in</span> <span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.9</span>, <span class="fl">0.99</span>, <span class="fl">0.999</span>)) <span class="fu">cat</span>(R, <span class="fu">kappa_num</span>(dose, R), <span class="dv">1</span> <span class="sc">/</span> (<span class="dv">1</span> <span class="sc">-</span> R), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.5 2 2</span></span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.9 10.00001 10</span></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.99 100.001 100</span></span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.999 1000.1 1000</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="tabset-7-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-7-2-tab">
+<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kappa_num(<span class="kw">lambda</span> x: x <span class="op">-</span> <span class="dv">1</span>, <span class="fl">1.01</span>))</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="co"># 101.000000141127</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kappa_num(<span class="kw">lambda</span> x: x <span class="op">-</span> <span class="dv">1</span>, <span class="dv">100</span>))</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 1.01010101042163</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kappa_num(np.log, <span class="fl">1.01</span>))</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 100.49916592157524</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kappa_num(np.log, <span class="dv">100</span>))</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.21714722998864516</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kappa_num(np.sqrt, <span class="dv">7</span>))</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.499999987468932</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kappa_num(<span class="kw">lambda</span> x: <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> x), <span class="fl">0.99</span>))</span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 99.00098019670631</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>K <span class="op">=</span> <span class="dv">10</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> dose(R):</span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> K <span class="op">*</span> R <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> R)</span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> R <span class="kw">in</span> [<span class="fl">0.5</span>, <span class="fl">0.9</span>, <span class="fl">0.99</span>, <span class="fl">0.999</span>]:</span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(R, kappa_num(dose, R), <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> R))</span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.5 2.000000201007879 2.0</span></span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.9 10.000009001803138 10.000000000000002</span></span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.99 100.00099009653479 99.99999999999991</span></span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.999 1000.0999104836551 999.9999999999991</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+<p>All agree with the hand values from B3 and B7 to 4 or more digits. The small differences come from the finite nudge <span class="math inline">\(h = 10^{-7}\)</span>: <code>kappa_num</code> is a finite-difference estimate (Numerical differentiation explains its error).</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled" title="Solution C5">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-13-contents" aria-controls="callout-13" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Solution C5
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-13" class="callout-13-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="tabset-margin-container"></div><div class="panel-tabset" data-group="language">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-8-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-8-1" role="tab" aria-controls="tabset-8-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-8-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-8-2" role="tab" aria-controls="tabset-8-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content" data-group="language">
+<div id="tabset-8-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-8-1-tab">
+<div class="sourceCode" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="dv">10</span><span class="sc">^</span><span class="fu">seq</span>(<span class="dv">2</span>, <span class="dv">16</span>, <span class="at">by =</span> <span class="dv">2</span>)</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>naive  <span class="ot">&lt;-</span> <span class="fu">sqrt</span>(x <span class="sc">+</span> <span class="dv">1</span>) <span class="sc">-</span> <span class="fu">sqrt</span>(x)</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>stable <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">/</span> (<span class="fu">sqrt</span>(x <span class="sc">+</span> <span class="dv">1</span>) <span class="sc">+</span> <span class="fu">sqrt</span>(x))</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"%.0e  %.6e  %.6e  %5.1f</span><span class="sc">\n</span><span class="st">"</span>, x, naive, stable,</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>            <span class="fu">pmax</span>(<span class="dv">0</span>, <span class="fu">pmin</span>(<span class="dv">16</span>, <span class="sc">-</span><span class="fu">log10</span>(<span class="fu">abs</span>(naive <span class="sc">-</span> stable) <span class="sc">/</span> stable)))), <span class="at">sep =</span> <span class="st">""</span>)</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>P <span class="ot">&lt;-</span> <span class="fl">0.01</span>; L <span class="ot">&lt;-</span> <span class="fl">0.01</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>Kd <span class="ot">&lt;-</span> <span class="dv">10</span><span class="sc">^</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">7</span>)</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>S <span class="ot">&lt;-</span> P <span class="sc">+</span> L <span class="sc">+</span> Kd</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>C_naive  <span class="ot">&lt;-</span> (S <span class="sc">-</span> <span class="fu">sqrt</span>(S<span class="sc">^</span><span class="dv">2</span> <span class="sc">-</span> <span class="dv">4</span> <span class="sc">*</span> P <span class="sc">*</span> L)) <span class="sc">/</span> <span class="dv">2</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>C_stable <span class="ot">&lt;-</span> <span class="dv">2</span> <span class="sc">*</span> P <span class="sc">*</span> L <span class="sc">/</span> (S <span class="sc">+</span> <span class="fu">sqrt</span>(S<span class="sc">^</span><span class="dv">2</span> <span class="sc">-</span> <span class="dv">4</span> <span class="sc">*</span> P <span class="sc">*</span> L))</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"%.0e  %.6e  %.6e  %.1e</span><span class="sc">\n</span><span class="st">"</span>, Kd, C_naive, C_stable,</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>            <span class="fu">abs</span>(C_naive <span class="sc">-</span> C_stable) <span class="sc">/</span> C_stable), <span class="at">sep =</span> <span class="st">""</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="tabset-8-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-8-2-tab">
+<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="fl">10.0</span> <span class="op">**</span> np.arange(<span class="dv">2</span>, <span class="dv">17</span>, <span class="dv">2</span>)</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>naive <span class="op">=</span> np.sqrt(x <span class="op">+</span> <span class="dv">1</span>) <span class="op">-</span> np.sqrt(x)</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>stable <span class="op">=</span> <span class="dv">1</span> <span class="op">/</span> (np.sqrt(x <span class="op">+</span> <span class="dv">1</span>) <span class="op">+</span> np.sqrt(x))</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>dig <span class="op">=</span> np.maximum(<span class="dv">0</span>, np.minimum(<span class="dv">16</span>, <span class="op">-</span>np.log10(np.<span class="bu">abs</span>(naive <span class="op">-</span> stable) <span class="op">/</span> stable))) <span class="op">+</span> <span class="fl">0.0</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> xi, a, b, g <span class="kw">in</span> <span class="bu">zip</span>(x, naive, stable, dig):</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>xi<span class="sc">:.0e}</span><span class="ss">  </span><span class="sc">{</span>a<span class="sc">:.6e}</span><span class="ss">  </span><span class="sc">{</span>b<span class="sc">:.6e}</span><span class="ss">  </span><span class="sc">{</span>g<span class="sc">:5.1f}</span><span class="ss">"</span>)</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>P, L <span class="op">=</span> <span class="fl">0.01</span>, <span class="fl">0.01</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>Kd <span class="op">=</span> <span class="fl">10.0</span> <span class="op">**</span> np.arange(<span class="dv">1</span>, <span class="dv">8</span>)</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>S <span class="op">=</span> P <span class="op">+</span> L <span class="op">+</span> Kd</span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>C_naive <span class="op">=</span> (S <span class="op">-</span> np.sqrt(S<span class="op">**</span><span class="dv">2</span> <span class="op">-</span> <span class="dv">4</span> <span class="op">*</span> P <span class="op">*</span> L)) <span class="op">/</span> <span class="dv">2</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>C_stable <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> P <span class="op">*</span> L <span class="op">/</span> (S <span class="op">+</span> np.sqrt(S<span class="op">**</span><span class="dv">2</span> <span class="op">-</span> <span class="dv">4</span> <span class="op">*</span> P <span class="op">*</span> L))</span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k, a, b <span class="kw">in</span> <span class="bu">zip</span>(Kd, C_naive, C_stable):</span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>k<span class="sc">:.0e}</span><span class="ss">  </span><span class="sc">{</span>a<span class="sc">:.6e}</span><span class="ss">  </span><span class="sc">{</span>b<span class="sc">:.6e}</span><span class="ss">  </span><span class="sc">{</span><span class="bu">abs</span>(a <span class="op">-</span> b) <span class="op">/</span> b<span class="sc">:.1e}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+<p>Output (identical in both; the <code>+ 0.0</code> in Python turns a printed <code>-0.0</code> into <code>0.0</code>):</p>
+<pre><code>1e+02  4.987562e-02  4.987562e-02   14.2
+1e+04  4.999875e-03  4.999875e-03   12.7
+1e+06  4.999999e-04  4.999999e-04   10.0
+1e+08  5.000000e-05  5.000000e-05    7.9
+1e+10  4.999994e-06  5.000000e-06    6.0
+1e+12  5.000038e-07  5.000000e-07    5.1
+1e+14  5.029142e-08  5.000000e-08    2.2
+1e+16  0.000000e+00  5.000000e-09    0.0
+
+1e+01  9.980050e-06  9.980050e-06  1.2e-11
+1e+02  9.998001e-07  9.998000e-07  7.6e-10
+1e+03  9.999798e-08  9.999800e-08  2.4e-07
+1e+04  9.999894e-09  9.999980e-09  8.6e-06
+1e+05  1.004082e-09  9.999998e-10  4.1e-03
+1e+06  5.820766e-11  1.000000e-10  4.2e-01
+1e+07  0.000000e+00  1.000000e-11  1.0e+00</code></pre>
+<ol type="a">
+<li>The naive version loses about one digit per factor 10 in <span class="math inline">\(x\)</span> (the two square roots agree in more and more leading digits) and returns exactly 0 at <span class="math inline">\(x = 10^{16}\)</span>, where <span class="math inline">\(x + 1\)</span> is rounded back to <span class="math inline">\(x\)</span>. The rewritten version is accurate throughout.</li>
+<li>The textbook root is off by 0.4 % at <span class="math inline">\(K_d = 10^5\)</span> nM (100 µM), by 42 % at <span class="math inline">\(10^6\)</span> and returns 0 at <span class="math inline">\(10^7\)</span>. Weak binders at low concentration are common (fragment screening), so this is not an exotic case. The rewritten form matches <span class="math inline">\(PL/K_d\)</span> throughout.</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled" title="Solution C6">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-14-contents" aria-controls="callout-14" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Solution C6
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-14" class="callout-14-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="tabset-margin-container"></div><div class="panel-tabset" data-group="language">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-9-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-9-1" role="tab" aria-controls="tabset-9-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-9-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-9-2" role="tab" aria-controls="tabset-9-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content" data-group="language">
+<div id="tabset-9-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-9-1-tab">
+<div class="sourceCode" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>K <span class="ot">&lt;-</span> <span class="dv">10</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>dose <span class="ot">&lt;-</span> <span class="cf">function</span>(R) K <span class="sc">*</span> R <span class="sc">/</span> (<span class="dv">1</span> <span class="sc">-</span> R)</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (R0 <span class="cf">in</span> <span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.9</span>, <span class="fl">0.99</span>)) {</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>  D <span class="ot">&lt;-</span> <span class="fu">dose</span>(R0 <span class="sc">*</span> <span class="fu">c</span>(<span class="fl">0.995</span>, <span class="fl">1.005</span>))   <span class="co"># response off by -0.5 % and +0.5 %</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"R = %.2f   dose from %.1f to %.1f   ratio %.2f</span><span class="sc">\n</span><span class="st">"</span>, R0, D[<span class="dv">1</span>], D[<span class="dv">2</span>], D[<span class="dv">2</span>] <span class="sc">/</span> D[<span class="dv">1</span>]))</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="co"># R = 0.50   dose from 9.9 to 10.1   ratio 1.02</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a><span class="co"># R = 0.90   dose from 85.7 to 94.7   ratio 1.11</span></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a><span class="co"># R = 0.99   dose from 658.9 to 1970.2   ratio 2.99</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="tabset-9-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-9-2-tab">
+<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>K <span class="op">=</span> <span class="dv">10</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> dose(R):</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> K <span class="op">*</span> R <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> R)</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> R0 <span class="kw">in</span> [<span class="fl">0.5</span>, <span class="fl">0.9</span>, <span class="fl">0.99</span>]:</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    D <span class="op">=</span> dose(R0 <span class="op">*</span> np.array([<span class="fl">0.995</span>, <span class="fl">1.005</span>]))   <span class="co"># response off by -0.5 % and +0.5 %</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"R = </span><span class="sc">{</span>R0<span class="sc">:.2f}</span><span class="ss">   dose from </span><span class="sc">{</span>D[<span class="dv">0</span>]<span class="sc">:.1f}</span><span class="ss"> to </span><span class="sc">{</span>D[<span class="dv">1</span>]<span class="sc">:.1f}</span><span class="ss">   ratio </span><span class="sc">{</span>D[<span class="dv">1</span>] <span class="op">/</span> D[<span class="dv">0</span>]<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a><span class="co"># R = 0.50   dose from 9.9 to 10.1   ratio 1.02</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a><span class="co"># R = 0.90   dose from 85.7 to 94.7   ratio 1.11</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="co"># R = 0.99   dose from 658.9 to 1970.2   ratio 2.99</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+<p>A total spread of 1 % in <span class="math inline">\(R\)</span> gives a spread of about <span class="math inline">\(\kappa \times 1\,\%\)</span> in <span class="math inline">\(D\)</span>: 2 % at <span class="math inline">\(R = 0.5\)</span> and 11 % at <span class="math inline">\(R = 0.9\)</span> (<span class="math inline">\(\kappa = 2\)</span> and <span class="math inline">\(10\)</span>). At <span class="math inline">\(R = 0.99\)</span> (<span class="math inline">\(\kappa = 100\)</span>) the first-order estimate says 100 %; the actual range is a factor 3, because the error is no longer small and the linear (Taylor) approximation breaks down. Higher precision does not help: the formula is evaluated to 16 digits already, and the spread comes from the <strong>data</strong>. Only a different measurement (dilution into the steep part, replicates) helps.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled" title="Solution C7">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-15-contents" aria-controls="callout-15" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Solution C7
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-15" class="callout-15-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="tabset-margin-container"></div><div class="panel-tabset" data-group="language">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-10-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-10-1" role="tab" aria-controls="tabset-10-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-10-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-10-2" role="tab" aria-controls="tabset-10-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content" data-group="language">
+<div id="tabset-10-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-10-1-tab">
+<div class="sourceCode" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>norm2 <span class="ot">&lt;-</span> <span class="cf">function</span>(v) <span class="fu">sqrt</span>(<span class="fu">sum</span>(v<span class="sc">^</span><span class="dv">2</span>))</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>A <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="dv">1</span>,    <span class="fl">0.95</span>,</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>              <span class="fl">0.95</span>, <span class="dv">1</span>   ), <span class="at">nrow =</span> <span class="dv">2</span>, <span class="at">byrow =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>b  <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">1.95</span>, <span class="fl">1.95</span>)</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>db <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="sc">-</span><span class="fl">0.01</span>)</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>x  <span class="ot">&lt;-</span> <span class="fu">solve</span>(A, b)</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>dx <span class="ot">&lt;-</span> <span class="fu">solve</span>(A, b <span class="sc">+</span> db) <span class="sc">-</span> x</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>(<span class="fu">norm2</span>(dx) <span class="sc">/</span> <span class="fu">norm2</span>(x)) <span class="sc">/</span> (<span class="fu">norm2</span>(db) <span class="sc">/</span> <span class="fu">norm2</span>(b))</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 39</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(A, <span class="at">exact =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 39</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>A2 <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="dv">1</span>,   <span class="fl">0.5</span>,</span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>               <span class="fl">0.5</span>, <span class="dv">1</span>  ), <span class="at">nrow =</span> <span class="dv">2</span>, <span class="at">byrow =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a>x2 <span class="ot">&lt;-</span> <span class="fu">solve</span>(A2, b); dx2 <span class="ot">&lt;-</span> <span class="fu">solve</span>(A2, b <span class="sc">+</span> db) <span class="sc">-</span> x2</span>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>(<span class="fu">norm2</span>(dx2) <span class="sc">/</span> <span class="fu">norm2</span>(x2)) <span class="sc">/</span> (<span class="fu">norm2</span>(db) <span class="sc">/</span> <span class="fu">norm2</span>(b))</span>
+<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 3</span></span>
+<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(A2, <span class="at">exact =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 3</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="tabset-10-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-10-2-tab">
+<div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>A <span class="op">=</span> np.array([[<span class="dv">1</span>,    <span class="fl">0.95</span>],</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>              [<span class="fl">0.95</span>, <span class="dv">1</span>   ]])</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> np.array([<span class="fl">1.95</span>, <span class="fl">1.95</span>])</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>db <span class="op">=</span> np.array([<span class="fl">0.01</span>, <span class="op">-</span><span class="fl">0.01</span>])</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> np.linalg.solve(A, b)</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>dx <span class="op">=</span> np.linalg.solve(A, b <span class="op">+</span> db) <span class="op">-</span> x</span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>((np.linalg.norm(dx) <span class="op">/</span> np.linalg.norm(x)) <span class="op">/</span> (np.linalg.norm(db) <span class="op">/</span> np.linalg.norm(b)))</span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 39.000000000000036</span></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.linalg.cond(A))</span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 39.00000000000007</span></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>A2 <span class="op">=</span> np.array([[<span class="dv">1</span>,   <span class="fl">0.5</span>],</span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>               [<span class="fl">0.5</span>, <span class="dv">1</span>  ]])</span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>x2 <span class="op">=</span> np.linalg.solve(A2, b)<span class="op">;</span> dx2 <span class="op">=</span> np.linalg.solve(A2, b <span class="op">+</span> db) <span class="op">-</span> x2</span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>((np.linalg.norm(dx2) <span class="op">/</span> np.linalg.norm(x2)) <span class="op">/</span> (np.linalg.norm(db) <span class="op">/</span> np.linalg.norm(b)))</span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a><span class="co"># 3.0000000000000027</span></span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.linalg.cond(A2))</span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a><span class="co"># 2.999999999999999</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+<p>With strongly overlapping spectra (0.95) a relative change in <span class="math inline">\(\mathbf b\)</span> is amplified 39 times; with less overlap (0.5) only 3 times. Here the amplification equals the condition number exactly because <span class="math inline">\(\Delta\mathbf b\)</span> was chosen along the worst direction, <span class="math inline">\((1, -1)\)</span>; other perturbations are amplified less. Pivoting, norms and conditioning explains where the number comes from.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="where-this-leads" class="level2">
+<h2 class="anchored" data-anchor-id="where-this-leads">Where this leads</h2>
+<ul>
+<li><strong>Convergence and cost:</strong> besides rounding, approximate methods have <strong>truncation error</strong>. The two trade off, and we read their sizes off log–log plots.</li>
+<li><strong>Numerical differentiation:</strong> a finite difference <span class="math inline">\(\big(f(x+h) - f(x)\big)/h\)</span> is a cancellation by design; the best step <span class="math inline">\(h\)</span> balances it against truncation error. <code>kappa_num</code> above is one.</li>
+<li><strong>Newton and secant methods:</strong> solving a Hill or Michaelis–Menten equation for a dose near the plateau is the ill-conditioned problem of B7 again.</li>
+<li><strong>Pivoting, norms and conditioning:</strong> the condition number of a matrix, why elimination needs pivoting to be stable, and “lose <span class="math inline">\(\log_{10}\kappa\)</span> digits” for spectral unmixing.</li>
+<li><strong>Least squares: normal equations vs QR:</strong> the normal equations <strong>square</strong> the condition number, which is the matrix version of the one-pass variance.</li>
+</ul>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

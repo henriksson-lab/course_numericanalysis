@@ -1,0 +1,175 @@
+---
+title: "Quiz: how computers store numbers"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of floating-point numbers. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** In one or two sentences: why is `0.1 + 0.2 == 0.3` `FALSE`?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Write 0.1 in binary. Does it end?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+0.1, 0.2 and 0.3 have infinite (repeating) binary expansions, so each is rounded to the nearest double. The rounded 0.1 plus the rounded 0.2, rounded again, lands one gap above the rounded 0.3: $0.30000000000000004441$ versus $0.29999999999999998890$.
+:::
+
+---
+
+**Q2.** Which of these numbers are stored **exactly** as doubles: $0.5$, $0.2$, $0.375$, $1/3$, $10^6$, $2^{60}$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+A fraction is exact only if its denominator is a power of 2. A whole number is exact if it needs at most 53 significant bits.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Exact: $0.5 = 0.1_2$, $0.375 = \tfrac38 = 0.011_2$, $10^6$ (a whole number far below $2^{53}$) and $2^{60}$ (a single 1 bit followed by zeros; only the exponent is large). Not exact: $0.2$ and $1/3$, which repeat forever in binary.
+:::
+
+---
+
+**Q3.** What is **machine epsilon** for doubles, roughly what is its value, and what does it tell you?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Think about the number just after 1.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\varepsilon = 2^{-52} \approx 2.2\times10^{-16}$, the gap between 1 and the next double (`.Machine$double.eps` in R, `np.finfo(float).eps` in Python). Rounding any number to the nearest double gives a **relative** error of at most $\varepsilon/2$, so doubles carry about 16 significant decimal digits.
+:::
+
+---
+
+**Q4.** Roughly how large is the gap between $10^6$ and the next double? Is that gap larger or smaller than the gap near 1, in absolute and in relative terms?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The gap near $x$ is about $\varepsilon\,|x|$; exactly, $2^{\lfloor\log_2 x\rfloor - 52}$, and $2^{19} = 524\,288$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+About $\varepsilon \cdot 10^6 \approx 2\times10^{-10}$; exactly $2^{19-52} = 2^{-33} \approx 1.2\times10^{-10}$. In **absolute** terms it is about a million times larger than the gap near 1. In **relative** terms it is the same size (around $10^{-16}$): doubles have the same number of significant digits at every size.
+:::
+
+---
+
+**Q5.** A colleague writes `if (all.equal(a, b)) { ... }` in R. Why is this a bug, and what should they write?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does `all.equal(1, 1.1)` return?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+When `a` and `b` differ, `all.equal` does not return `FALSE` but a character string such as `"Mean relative difference: 0.1"`, and `if` then stops with an error. Write `if (isTRUE(all.equal(a, b)))`. In Python, `math.isclose(a, b)` or `np.isclose(a, b)` return a proper boolean.
+:::
+
+---
+
+**Q6.** What do these lines return, and why?
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- 2^53
+x + 1 - x
+x - x + 1
+```
+
+### Python
+
+```python
+x = 2.0**53
+print(x + 1 - x)
+print(x - x + 1)
+```
+
+:::
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is the gap between doubles near $2^{53}$? Operations are done left to right.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The first gives `0`, the second `1`. Near $2^{53}$ the gap is 2, so $2^{53} + 1$ rounds back to $2^{53}$, and subtracting $x$ gives 0. In the second line $x - x = 0$ is exact and $0 + 1 = 1$. In exact arithmetic both are 1: with floats, **the order of operations matters**.
+:::
+
+---
+
+**Q7.** You compute the likelihood of 5000 sequencing reads, each with probability about $10^{-2}$ under your model, as `prod(p)`. What do you get, and what should you compute instead?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Write the product as a power of 10 and compare with the smallest double, about $10^{-308}$ (or $10^{-324}$ with subnormals).
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The product is about $10^{-10\,000}$, far below the smallest double, so `prod(p)` returns exactly `0` (underflow, no warning). Compute the log-likelihood `sum(log(p))` instead (about $-23\,026$ in natural log), or use `log = TRUE` in the density function. Compare models by **differences** of log-likelihoods.
+:::
+
+---
+
+**Q8.** Compute $\log(e^{-800} + e^{-800})$ by hand. What does `log(exp(-800) + exp(-800))` return on a computer?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Log-sum-exp: pull out the largest term, $m = -800$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$-800 + \log(e^0 + e^0) = -800 + \log 2 = -799.307$. On a computer, `exp(-800)` underflows to 0 (it is below $e^{-745}$), so the naive version returns `log(0) = -Inf`.
+:::
+
+---
+
+**Q9.** Why does log-sum-exp subtract the **largest** $a_k$ rather than, say, the mean or the smallest?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is the largest term after subtracting? What is the sum at least?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+After subtracting the largest $a_k$, every exponent is $\le 0$, so no `exp` can overflow, and the largest term is exactly $e^0 = 1$, so the sum is at least 1 and its log is never $-\infty$. Subtracting a smaller value can make some $e^{a_k - m}$ overflow; terms that still underflow after subtracting the maximum are too small to change the sum anyway.
+:::
+
+---
+
+**Q10.** For a per-base sequencing error rate $p = 10^{-12}$, which is more accurate: `log(1 - p)` or `log1p(-p)`? Why?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is the gap between doubles near 1, and what happens to $1 - p$ when it is stored?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+`log1p(-p)`. `log(1 - p)` first rounds $1 - p$ to a double near 1, with an error up to $\varepsilon/2 \approx 10^{-16}$; relative to $p = 10^{-12}$ that is a relative error of up to $10^{-4}$ (in practice $2\times10^{-5}$), and `log` cannot recover the lost digits. `log1p` computes $\log(1+x)$ without ever forming $1 + x$, so it is accurate to all 16 digits. The same goes for `expm1(x)` instead of `exp(x) - 1`.
+:::
+
+---
+
+**Q11.** Match each result to the computation: `Inf`, `-Inf`, `NaN`, `0`. Computations: `log(0)`, `exp(-1000)`, `0/0`, `1e308 * 10`.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Two are overflow and underflow; one is a limit; one is undefined.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+`log(0)` = `-Inf` (the limit of $\log x$ as $x \to 0$); `exp(-1000)` = `0` (underflow); `0/0` = `NaN` (undefined); `1e308 * 10` = `Inf` (overflow). None of them stops the program, so check results with `is.finite()` (R) or `np.isfinite()` (Python).
+:::
+
+---
+
+**Q12.** You store genomic positions on the concatenated human genome (about $3.1\times10^9$ bp) as R integers and take a cumulative sum. What goes wrong, and what is the fix?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The largest R integer is `.Machine$integer.max` $= 2^{31} - 1$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Values above $2^{31} - 1 = 2\,147\,483\,647$ do not fit; R returns `NA` with an integer-overflow warning (numpy `int32` silently wraps around to a negative number). Convert to doubles first (`as.numeric()` in R, `.astype(np.float64)` in numpy): doubles hold every whole number exactly up to $2^{53} \approx 9\times10^{15}$.
+:::

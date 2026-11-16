@@ -1,0 +1,147 @@
+---
+title: "Glossary"
+---
+
+A running glossary of the numerical, mathematical and programming terms used in
+this course. Each entry links to the unit that treats it properly.
+
+## Part 1: Numbers on a computer
+
+### Why numerical analysis?
+
+**Numerical method** — a finite sequence of arithmetic operations that
+approximates a mathematical answer. See [Why numerical analysis?](intro/lec.qmd).
+
+**Rounding error** — error from storing and computing with finitely many digits
+(about 16 significant digits for a double). Its relative size per operation is at
+most $\varepsilon/2$.
+
+**Truncation error** — error from stopping early: a finite sum, a finite step
+$h$, finitely many iterations. It is there even with exact arithmetic.
+
+**Instability** — an algorithm amplifying small errors, step after step.
+
+**Taylor polynomial $P_n$** — the polynomial that matches $f$ and its first $n$
+derivatives at a point.
+
+**Remainder term (Lagrange form)** — $R_n = \dfrac{f^{(n+1)}(\xi)}{(n+1)!}(x-a)^{n+1}$
+for some $\xi$ between $a$ and $x$; it bounds the error of the Taylor polynomial.
+
+**Convergence (of an optimiser)** — the routine stopped because it no longer
+improves. It does *not* prove the answer is right.
+
+**Multistart** — fitting from several starting values and keeping the best
+objective value.
+
+### How computers store numbers
+
+**Floating-point number** — a number stored as $\pm 1.f \times 2^e$ with a fixed
+number of significant bits. See [How computers store numbers](floating-point/lec.qmd).
+
+**IEEE double** — the 64-bit format: 1 sign bit, 11 exponent bits, 52 fraction
+bits; about 16 significant decimal digits.
+
+**Machine epsilon ($\varepsilon$)** — the gap between 1 and the next double,
+$2^{-52} \approx 2.2\times10^{-16}$. In R `.Machine$double.eps`, in Python
+`np.finfo(float).eps`.
+
+**Overflow** — a result larger than about $1.8\times10^{308}$; it becomes `Inf`.
+
+**Underflow** — a result smaller than about $4.9\times10^{-324}$ (the smallest
+subnormal); it becomes 0.
+
+**Subnormal number** — a tiny double below $2.2\times10^{-308}$, stored with
+reduced precision.
+
+**`NaN`** — "not a number": the result of an undefined operation such as
+`0/0` or `Inf - Inf`.
+
+**Integer overflow** — exceeding $2^{31}-1$ in a 32-bit integer. R gives `NA`;
+a numpy `int32` silently wraps around to a negative number.
+
+**Log-likelihood** — the sum of log-probabilities, used instead of the product
+of probabilities, which underflows.
+
+**Log-sum-exp** — computes $\log\sum_k e^{a_k}$ safely as
+$m + \log\sum_k e^{a_k - m}$ with $m = \max_k a_k$.
+
+**`log1p` / `expm1`** — accurate $\log(1+x)$ and $e^x - 1$ for small $x$.
+
+### Error, conditioning and stability
+
+**Absolute error** — $|\hat x - x|$, in the units of $x$. See
+[Error, conditioning and stability](error-conditioning/lec.qmd).
+
+**Relative error** — $|\hat x - x| / |x|$. A relative error of about $10^{-k}$
+means about $k$ correct significant digits.
+
+**Significant digits** — the leading digits of a number that are correct;
+roughly $-\log_{10}$ of the relative error.
+
+**Catastrophic cancellation** — loss of correct digits when subtracting nearly
+equal numbers; costs about $\log_{10}\big(|a| / |a-b|\big)$ digits.
+
+**Condition number (of a function)** — $\kappa = \left|\dfrac{x f'(x)}{f(x)}\right|$,
+the factor by which a problem amplifies relative errors in its input. You lose
+about $\log_{10}\kappa$ digits.
+
+**Well-conditioned / ill-conditioned** — $\kappa$ near 1 / $\kappa \gg 1$.
+Conditioning is a property of the *problem*.
+
+**Stability (of an algorithm)** — an algorithm is stable if it loses no more
+accuracy than the problem's conditioning explains. Stability is a property of the
+*algorithm*.
+
+**Backward error** — the smallest relative change to the input for which the
+computed answer would be exact.
+
+**Backward stable** — having backward error about $\varepsilon$; then the
+forward error is at most about $\kappa\,\varepsilon$.
+
+**One-pass / two-pass variance** — $\sum x^2/n - \bar x^2$ (unstable) vs
+$\sum (x-\bar x)^2/n$ (centre first, stable).
+
+**Welford's algorithm** — a one-pass running update of mean and variance that
+avoids cancellation.
+
+### Convergence and cost
+
+**Order of accuracy** — the power $p$ in error $\approx C h^p$. Halving $h$
+divides the error by $2^p$; $p$ is the slope of $\log(\text{error})$ against
+$\log h$. See [Convergence and cost](convergence-cost/lec.qmd).
+
+**Big-O notation** — $O(g)$ means "at most a constant times $g$": as $h\to 0$
+for errors, as $n\to\infty$ for cost.
+
+**Linear convergence** — $e_{k+1} \approx c\, e_k$ with $c<1$: a fixed number of
+digits gained per step.
+
+**Quadratic convergence** — $e_{k+1} \approx C e_k^2$: the number of correct
+digits roughly doubles per step.
+
+**Flop** — one floating-point operation (an addition or a multiplication), the
+unit for counting cost.
+
+**Doubling experiment** — timing code at $n, 2n, 4n, \dots$; a time ratio of
+$2^p$ per doubling reveals cost $O(n^p)$.
+
+**Vectorisation** — replacing an explicit loop by one call to compiled code.
+It changes the constant, not the exponent.
+
+**Sparse matrix** — stores only the non-zero entries (value plus index): about
+12 bytes per non-zero in compressed sparse column (CSC) format, against 8 bytes
+for *every* entry of a dense matrix.
+
+<!-- Terms to add as later parts are written:
+  - fixed point, bisection, Newton's method, secant method
+  - LU / Cholesky / QR factorisation, pivoting
+  - normal equations, SVD, pseudoinverse, rank deficiency, regularisation
+  - power iteration, Rayleigh quotient, Krylov method
+  - interpolation, Runge phenomenon, spline, FFT, aliasing
+  - finite difference, quadrature, Richardson extrapolation, Monte Carlo
+  - initial value problem, Euler, Runge–Kutta, adaptive step, stiffness
+  - Gillespie algorithm
+  - gradient descent, Newton / quasi-Newton (BFGS), Nelder–Mead,
+    Gauss–Newton, Levenberg–Marquardt, local vs global minimum, identifiability
+  - finite-difference stencil, CFL condition, Péclet number, method of lines
+-->

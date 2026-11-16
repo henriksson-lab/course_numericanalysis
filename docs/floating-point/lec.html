@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-html/tabby.min.js"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/light-border.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-662ae1889177880cb371f83234c0a158.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
+  <meta name="generator" content="quarto-1.7.30">
+
+  <meta name="author" content="Numerical analysis for biologists">
+  <title>Numerical analysis for biologists – How computers store numbers</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reset.css">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reveal.css">
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+      }
+    pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+    div.sourceCode
+      { color: #24292e;  }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span { color: #24292e; } /* Normal */
+    code span.al { color: #ff5555; font-weight: bold; } /* Alert */
+    code span.an { color: #6a737d; } /* Annotation */
+    code span.at { color: #d73a49; } /* Attribute */
+    code span.bn { color: #005cc5; } /* BaseN */
+    code span.bu { color: #d73a49; } /* BuiltIn */
+    code span.cf { color: #d73a49; } /* ControlFlow */
+    code span.ch { color: #032f62; } /* Char */
+    code span.cn { color: #005cc5; } /* Constant */
+    code span.co { color: #6a737d; } /* Comment */
+    code span.cv { color: #6a737d; } /* CommentVar */
+    code span.do { color: #6a737d; } /* Documentation */
+    code span.dt { color: #d73a49; } /* DataType */
+    code span.dv { color: #005cc5; } /* DecVal */
+    code span.er { color: #ff5555; text-decoration: underline; } /* Error */
+    code span.ex { color: #d73a49; font-weight: bold; } /* Extension */
+    code span.fl { color: #005cc5; } /* Float */
+    code span.fu { color: #6f42c1; } /* Function */
+    code span.im { color: #032f62; } /* Import */
+    code span.in { color: #6a737d; } /* Information */
+    code span.kw { color: #d73a49; } /* Keyword */
+    code span.op { color: #24292e; } /* Operator */
+    code span.ot { color: #6f42c1; } /* Other */
+    code span.pp { color: #d73a49; } /* Preprocessor */
+    code span.re { color: #6a737d; } /* RegionMarker */
+    code span.sc { color: #005cc5; } /* SpecialChar */
+    code span.ss { color: #032f62; } /* SpecialString */
+    code span.st { color: #032f62; } /* String */
+    code span.va { color: #e36209; } /* Variable */
+    code span.vs { color: #032f62; } /* VerbatimString */
+    code span.wa { color: #ff5555; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/theme/quarto-bf56578b9c06c165c166475cd19dbcd1.css">
+  <script>window.backupDefine = window.define; window.define = undefined;</script><script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css">
+  <link href="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/quarto-support/footer.css" rel="stylesheet">
+  <style type="text/css">
+    .reveal div.sourceCode {
+      margin: 0;
+      overflow: auto;
+    }
+    .reveal div.hanging-indent {
+      margin-left: 1em;
+      text-indent: -1em;
+    }
+    .reveal .slide:not(.center) {
+      height: 100%;
+    }
+    .reveal .slide.scrollable {
+      overflow-y: auto;
+    }
+    .reveal .footnotes {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .reveal .slide .absolute {
+      position: absolute;
+      display: block;
+    }
+    .reveal .footnotes ol {
+      counter-reset: ol;
+      list-style-type: none; 
+      margin-left: 0;
+    }
+    .reveal .footnotes ol li:before {
+      counter-increment: ol;
+      content: counter(ol) ". "; 
+    }
+    .reveal .footnotes ol li > p:first-child {
+      display: inline-block;
+    }
+    .reveal .slide ul,
+    .reveal .slide ol {
+      margin-bottom: 0.5em;
+    }
+    .reveal .slide ul li,
+    .reveal .slide ol li {
+      margin-top: 0.4em;
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide ul[role="tablist"] li {
+      margin-bottom: 0;
+    }
+    .reveal .slide ul li > *:first-child,
+    .reveal .slide ol li > *:first-child {
+      margin-block-start: 0;
+    }
+    .reveal .slide ul li > *:last-child,
+    .reveal .slide ol li > *:last-child {
+      margin-block-end: 0;
+    }
+    .reveal .slide .columns:nth-child(3) {
+      margin-block-start: 0.8em;
+    }
+    .reveal blockquote {
+      box-shadow: none;
+    }
+    .reveal .tippy-content>* {
+      margin-top: 0.2em;
+      margin-bottom: 0.7em;
+    }
+    .reveal .tippy-content>*:last-child {
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide > img.stretch.quarto-figure-center,
+    .reveal .slide > img.r-stretch.quarto-figure-center {
+      display: block;
+      margin-left: auto;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-left,
+    .reveal .slide > img.r-stretch.quarto-figure-left  {
+      display: block;
+      margin-left: 0;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-right,
+    .reveal .slide > img.r-stretch.quarto-figure-right  {
+      display: block;
+      margin-left: auto;
+      margin-right: 0; 
+    }
+  </style>
+</head>
+<body class="quarto-light">
+  <div class="reveal">
+    <div class="slides">
+
+<section id="title-slide" class="quarto-title-block center">
+  <h1 class="title">How computers store numbers</h1>
+  <p class="subtitle">Part 1 — Numbers on a computer</p>
+
+<div class="quarto-title-authors">
+<div class="quarto-title-author">
+<div class="quarto-title-author-name">
+Numerical analysis for biologists 
+</div>
+</div>
+</div>
+
+</section>
+<section id="about-this-lecture" class="slide level2">
+<h2>About this lecture</h2>
+<p>In the introduction we met three ways a computation goes wrong: <strong>rounding</strong>, truncation and instability. This lecture is about the first one: where rounding comes from.</p>
+<ul>
+<li>A computer stores a real number in <strong>64 bits</strong>, in <strong>binary</strong>. Most decimals (even 0.1) cannot be stored exactly.</li>
+<li>The numbers it <em>can</em> store are spaced <strong>relative</strong> to their size: about 16 significant digits, everywhere. That spacing is <strong>machine epsilon</strong>.</li>
+<li>There is a <strong>largest</strong> and a <strong>smallest</strong> number. Go past them and you get <code>Inf</code> or <code>0</code> (<strong>overflow</strong> / <strong>underflow</strong>), or <code>NaN</code>.</li>
+<li>Never test floats with <code>==</code>; compare with a <strong>tolerance</strong>.</li>
+<li>Biology: the likelihood of a long alignment (or of 10 000 reads) underflows to <strong>0</strong>. The fix is to work with <strong>logs</strong>, add probabilities with <strong>log-sum-exp</strong>, and use <code>log1p</code>/<code>expm1</code> for small rates.</li>
+</ul>
+<aside class="notes">
+<p>This is the “what is a number on a computer” unit. Everything later in the course (error analysis, convergence plots that flatten out at 1e-16, stopping tolerances in root finders) leans on the ideas here, so spend the time. The biology payoff is concrete and very common: anyone who has computed a likelihood over many sites, reads or time points has met (or silently suffered) underflow. The log-likelihood trick and log-sum-exp are what HMM and phylogenetics software does internally.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-biology-problem-first" class="slide level2 smaller">
+<h2>A biology problem first</h2>
+<p>A phylogenetics program computes the likelihood of a tree from an alignment of 10 000 sites. Each site contributes a probability between 0.01 and 0.5; the sites are independent, so the likelihood is the <strong>product</strong>.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
+<span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="fu">runif</span>(<span class="dv">10000</span>, <span class="at">min =</span> <span class="fl">0.01</span>, <span class="at">max =</span> <span class="fl">0.5</span>)   <span class="co"># per-site likelihoods</span></span>
+<span id="cb1-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">prod</span>(p)</span>
+<span id="cb1-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0</span></span>
+<span id="cb1-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sum</span>(<span class="fu">log</span>(p))</span>
+<span id="cb1-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -16177.67</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The true likelihood is about <span class="math inline">e^{-16178} \approx 10^{-7026}</span>. Not zero, but <strong>smaller than any number R can store</strong>.</li>
+<li>Two trees with likelihood “0” cannot be compared. The <strong>log</strong> of the same quantity is a perfectly ordinary number.</li>
+<li>Why does this happen, and where exactly is the limit? That needs a look at how numbers are stored.</li>
+</ul>
+<aside class="notes">
+<p>Start with the problem the student will actually hit. Per-site likelihoods in a real phylogenetics program are of this size (often smaller). The same thing happens for the likelihood of 10 000 sequencing reads, or of a long time series under an HMM. prod returns exactly 0, with no warning. sum(log(p)) returns a finite number, and that is what every serious program reports: the log-likelihood. Promise that by the end of the lecture they will know the limit (about 1e-308) and the tools to stay away from it.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-second-surprise" class="slide level2 smaller">
+<h2>A second surprise</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a aria-hidden="true" tabindex="-1"></a><span class="fl">0.1</span> <span class="sc">+</span> <span class="fl">0.2</span> <span class="sc">==</span> <span class="fl">0.3</span></span>
+<span id="cb2-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] FALSE</span></span>
+<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a><span class="fl">0.1</span> <span class="sc">+</span> <span class="fl">0.2</span></span>
+<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.3                       # R prints 7 significant digits by default</span></span>
+<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sprintf</span>(<span class="st">"%.20f"</span>, <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.2</span>, <span class="fl">0.1</span> <span class="sc">+</span> <span class="fl">0.2</span>, <span class="fl">0.3</span>))</span>
+<span id="cb2-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] "0.10000000000000000555" "0.20000000000000001110" "0.30000000000000004441"</span></span>
+<span id="cb2-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [4] "0.29999999999999998890"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>None of 0.1, 0.2, 0.3 is stored exactly. The sum lands on a <strong>different</strong> stored number than 0.3.</li>
+<li><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/sprintf.html"><code>sprintf</code></a> with <code>"%.20f"</code> shows more digits than <code>print</code> does; use it to see what is really stored.</li>
+</ul>
+<aside class="notes">
+<p>Everyone has seen this once. The default print hides it because R rounds to 7 significant digits for display. sprintf with %.20f shows the stored value. Note the stored 0.1 is slightly too big, 0.3 slightly too small, and the sum one step above 0.3. This is not an R bug: Python, C, Excel and your GPU give the same answer, because all use the same IEEE 754 standard. The rest of the lecture explains why.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="binary-integers" class="slide level2 smaller">
+<h2>Binary integers</h2>
+<p>Decimal uses powers of 10; binary uses powers of 2, with digits 0 and 1.</p>
+<p><span class="math display">13 = 8 + 4 + 1 = 1\cdot 2^3 + 1\cdot 2^2 + 0\cdot 2^1 + 1\cdot 2^0 = 1101_2</span></p>
+<p><strong>Recipe (decimal → binary):</strong> divide by 2, write down the remainder, repeat; read the remainders <strong>bottom-up</strong>.</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>step</th>
+<th>quotient</th>
+<th>remainder</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>13 / 2</td>
+<td>6</td>
+<td><strong>1</strong></td>
+</tr>
+<tr class="even">
+<td>6 / 2</td>
+<td>3</td>
+<td><strong>0</strong></td>
+</tr>
+<tr class="odd">
+<td>3 / 2</td>
+<td>1</td>
+<td><strong>1</strong></td>
+</tr>
+<tr class="even">
+<td>1 / 2</td>
+<td>0</td>
+<td><strong>1</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Bottom-up: <span class="math inline">1101_2</span>. Check: <span class="math inline">8+4+0+1 = 13</span>.</p>
+<aside class="notes">
+<p>Pen and paper. Every whole number has a finite binary expansion, so integers (up to a limit) are stored exactly. The exercise has more of these. The bits are just a place-value system like decimal, only with base 2.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="binary-fractions" class="slide level2 smaller">
+<h2>Binary fractions</h2>
+<p>After the binary point the places are <span class="math inline">\tfrac12, \tfrac14, \tfrac18, \dots</span></p>
+<p><span class="math display">0.625 = \tfrac12 + \tfrac18 = 0.101_2</span></p>
+<p><strong>Recipe (fraction → binary):</strong> multiply by 2, the integer part is the next bit, keep the fraction, repeat.</p>
+<div class="columns">
+<div class="column" style="width:50%;">
+<p><span class="math inline">0.625</span>:</p>
+<ul>
+<li><span class="math inline">0.625 \cdot 2 = \mathbf{1}.25</span></li>
+<li><span class="math inline">0.25 \cdot 2 = \mathbf{0}.5</span></li>
+<li><span class="math inline">0.5 \cdot 2 = \mathbf{1}.0</span> → stop</li>
+</ul>
+<p><span class="math inline">0.625 = 0.101_2</span>, exact.</p>
+</div><div class="column" style="width:50%;">
+<p><span class="math inline">0.1</span>:</p>
+<ul>
+<li><span class="math inline">0.1 \to \mathbf{0}.2 \to \mathbf{0}.4 \to \mathbf{0}.8 \to \mathbf{1}.6</span></li>
+<li><span class="math inline">0.6 \to \mathbf{1}.2 \to \mathbf{0}.4 \to \dots</span> (repeats)</li>
+</ul>
+<p><span class="math inline">0.1 = 0.0\overline{0011}_2</span>, <strong>never</strong> stops.</p>
+</div></div>
+<p>Only fractions with a power of 2 in the denominator (<span class="math inline">\tfrac12, \tfrac38, \tfrac{5}{16}</span>) end. Like <span class="math inline">\tfrac13 = 0.333\ldots</span> in decimal, <span class="math inline">\tfrac1{10}</span> repeats forever in binary, so it <strong>must</strong> be cut off.</p>
+<aside class="notes">
+<p>This is the root of 0.1 + 0.2 != 0.3. In decimal we cannot write 1/3 exactly; in binary we cannot write 1/10 exactly. The computer keeps 53 significant bits and rounds the rest. Ask: which of 0.5, 0.75, 0.2, 0.125 are exact in binary? (0.2 is not: it is 0.1 times 2.)</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="scientific-notation-in-base-2" class="slide level2">
+<h2>Scientific notation in base 2</h2>
+<p>Write every nonzero number as</p>
+<p><span class="math display">x = \pm\, 1.f \times 2^{e}, \qquad \text{e.g. } 13 = 1.101_2 \times 2^3, \quad 0.625 = 1.01_2 \times 2^{-1}</span></p>
+<ul>
+<li>The leading digit is always 1, so it does not need to be stored.</li>
+<li>Only the <strong>sign</strong>, the <strong>exponent</strong> <span class="math inline">e</span> and the <strong>fraction</strong> <span class="math inline">f</span> are stored.</li>
+<li>A fixed number of bits for <span class="math inline">f</span> means a fixed number of <strong>significant</strong> digits, whatever the size of <span class="math inline">x</span>.</li>
+</ul>
+<p>Same idea as <span class="math inline">6.02 \times 10^{23}</span>: the digits and the size are kept apart.</p>
+<aside class="notes">
+<p>Floating point is just scientific notation in base 2 with a fixed number of digits. The point “floats”: the exponent says where it goes. Because the number of fraction bits is fixed, the relative precision is the same for 1e-200 and 1e200. The trick of not storing the leading 1 buys one extra bit for free.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-ieee-double-64-bits" class="slide level2">
+<h2>The IEEE double: 64 bits</h2>
+
+<img data-src="fig01-double-bits.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:95.0%"><ul>
+<li><strong>1</strong> sign bit, <strong>11</strong> exponent bits (<span class="math inline">e</span> from <span class="math inline">-1022</span> to <span class="math inline">1023</span>), <strong>52</strong> fraction bits.</li>
+<li>52 stored + 1 hidden = <strong>53 significant bits</strong> <span class="math inline">\approx</span> 15–16 decimal digits.</li>
+<li>R’s <code>numeric</code> and Python’s <code>float</code> (and numpy’s <code>float64</code>) are all this format.</li>
+</ul>
+<aside class="notes">
+<p>These are the real 64 bits of 0.1. The exponent field 01111111011 is 1019, and the stored exponent is offset by 1023, so e = -4. The fraction is the repeating 1001 pattern, rounded up in the last bit (that is why the stored 0.1 is slightly larger than 0.1). The standard is IEEE 754, from 1985; essentially every processor follows it, which is why the same surprise appears in every language. Single precision (32 bits, about 7 digits) exists too, mainly on GPUs; we do not use it in this course.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="floats-are-not-evenly-spaced" class="slide level2">
+<h2>Floats are not evenly spaced</h2>
+<p>A toy system with only <strong>3</strong> fraction bits: <span class="math inline">1.f_1f_2f_3 \times 2^e</span>.</p>
+
+<img data-src="fig02-toy-floats.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:95.0%"><ul>
+<li>8 numbers between each power of 2 and the next. Each time you go up a power of 2, the <strong>gap doubles</strong>.</li>
+<li>The <strong>relative</strong> gap is roughly constant: gap / <span class="math inline">x</span> is between <span class="math inline">\tfrac1{16}</span> and <span class="math inline">\tfrac18</span>.</li>
+<li>Any real number in between is <strong>rounded</strong> to the nearest tick.</li>
+</ul>
+<aside class="notes">
+<p>Real doubles are the same picture with 52 fraction bits instead of 3, so 2^52 numbers between each pair of powers of 2. In the toy system, 1 + 1/16 is exactly halfway between 1 and 1.125 and gets rounded (ties go to the even neighbour, here 1). The exercise asks them to work with this toy system by hand: list numbers, find gaps, round.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="machine-epsilon" class="slide level2">
+<h2>Machine epsilon</h2>
+<p><strong>Machine epsilon</strong> <span class="math inline">\varepsilon</span> is the gap between 1 and the next double: <span class="math inline">\varepsilon = 2^{-52} \approx 2.2 \times 10^{-16}</span>.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>.Machine<span class="sc">$</span>double.eps</span>
+<span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 2.220446e-16</span></span>
+<span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a><span class="dv">1</span> <span class="sc">+</span> .Machine<span class="sc">$</span>double.eps <span class="sc">==</span> <span class="dv">1</span></span>
+<span id="cb3-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] FALSE</span></span>
+<span id="cb3-5"><a aria-hidden="true" tabindex="-1"></a><span class="dv">1</span> <span class="sc">+</span> .Machine<span class="sc">$</span>double.eps <span class="sc">/</span> <span class="dv">2</span> <span class="sc">==</span> <span class="dv">1</span></span>
+<span id="cb3-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] TRUE                   # rounded back down to 1</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/zMachine.html"><code>.Machine</code></a> lists the limits of the number system on your computer.</li>
+<li>Rounding <span class="math inline">x</span> to the nearest double has <strong>relative</strong> error at most <span class="math inline">\varepsilon/2 \approx 1.1 \times 10^{-16}</span>.</li>
+<li>That is why doubles are good to “about 16 significant digits”.</li>
+</ul>
+<aside class="notes">
+<p>Two definitions float around: the gap at 1 (2^-52, what R and numpy call eps) and the maximum relative rounding error (2^-53, sometimes called unit roundoff). They differ by a factor of 2; we use the R/numpy one. The second code line shows a number smaller than epsilon disappearing when added to 1. That is the seed of everything in the error-conditioning unit.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-gap-grows-with-the-number" class="slide level2 smaller">
+<h2>The gap grows with the number</h2>
+
+<img data-src="fig03-spacing.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:62.0%"><ul>
+<li>Near <span class="math inline">x</span>, the gap to the next double is about <span class="math inline">\varepsilon\,|x|</span>. Exactly: <span class="math inline">2^{\lfloor \log_2 |x| \rfloor - 52}</span>.</li>
+<li>Near <span class="math inline">1000</span>: gap <span class="math inline">2^{9-52} = 2^{-43} \approx 1.1\times10^{-13}</span>. Near <span class="math inline">2^{53} \approx 9\times10^{15}</span>: gap <span class="math inline">= 2</span>.</li>
+<li><strong>Relative</strong> precision is fixed; <strong>absolute</strong> precision depends on the size of <span class="math inline">x</span>.</li>
+</ul>
+<aside class="notes">
+<p>The staircase is the exact gap; the dashed line is the eps times |x| rule of thumb. At 1 the gap is eps. At 2^53 the gap reaches 2, so odd integers can no longer be stored: 2^53 + 1 rounds to 2^53. That is the integer limit we come back to in two slides. A practical consequence: a genomic coordinate near 3e9 stored as a double has a gap of about 5e-7, which is no problem since coordinates are whole numbers. Python has np.spacing(x) to show the gap directly; in R we compute it from the formula.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="every-operation-rounds" class="slide level2">
+<h2>Every operation rounds</h2>
+<p>IEEE rule: the result of <span class="math inline">+, -, \times, /, \sqrt{\ }</span> is the <strong>exact</strong> result, <strong>rounded</strong> to the nearest double.</p>
+<p><span class="math inline">0.1 + 0.2</span>:</p>
+<ul>
+<li>stored 0.1 + stored 0.2 <span class="math inline">= 0.3000000000000000166\ldots</span> (exact sum of two stored numbers)</li>
+<li>nearest double: <span class="math inline">0.30000000000000004441</span></li>
+<li>stored 0.3: <span class="math inline">0.29999999999999998890</span>, one gap (<span class="math inline">2^{-54} \approx 5.6\times10^{-17}</span>) below</li>
+</ul>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a>(<span class="fl">0.1</span> <span class="sc">+</span> <span class="fl">0.2</span>) <span class="sc">-</span> <span class="fl">0.3</span></span>
+<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 5.551115e-17</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Each step adds a relative error of up to <span class="math inline">\varepsilon/2</span>. Over millions of steps these errors can add up, or (worse) be magnified. That is unit 3, error-conditioning.</p>
+<aside class="notes">
+<p>Walk through the three numbers. The errors are tiny, one unit in the last place, but the equality test asks for exact agreement, so it fails. The good news is that a single operation is as accurate as possible. The bad news is that errors made earlier are carried along, and some operations magnify them. Leave the magnification to the error-conditioning unit.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="never-test-floats-with" class="slide level2 smaller">
+<h2>Never test floats with <code>==</code></h2>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a aria-hidden="true" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="at">by =</span> <span class="fl">0.1</span>)</span>
+<span id="cb5-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">which</span>(x <span class="sc">==</span> <span class="fl">0.3</span>)</span>
+<span id="cb5-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># integer(0)                                  # not found!</span></span>
+<span id="cb5-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">which</span>(<span class="fu">abs</span>(x <span class="sc">-</span> <span class="fl">0.3</span>) <span class="sc">&lt;</span> <span class="fl">1e-9</span>)</span>
+<span id="cb5-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 4</span></span>
+<span id="cb5-6"><a aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">all.equal</span>(<span class="fl">0.1</span> <span class="sc">+</span> <span class="fl">0.2</span>, <span class="fl">0.3</span>)</span>
+<span id="cb5-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] TRUE</span></span>
+<span id="cb5-9"><a aria-hidden="true" tabindex="-1"></a><span class="fu">all.equal</span>(<span class="dv">1</span>, <span class="fl">1.1</span>)</span>
+<span id="cb5-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] "Mean relative difference: 0.1"         # not FALSE!</span></span>
+<span id="cb5-11"><a aria-hidden="true" tabindex="-1"></a><span class="fu">isTRUE</span>(<span class="fu">all.equal</span>(<span class="dv">1</span>, <span class="fl">1.1</span>))</span>
+<span id="cb5-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] FALSE</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Compare with a tolerance: <span class="math inline">|a - b| \le \text{tol} \cdot \max(|a|, |b|)</span> (relative), or <span class="math inline">|a-b| \le \text{tol}</span> (absolute, near 0).</li>
+<li><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/all.equal.html"><code>all.equal</code></a> uses a relative tolerance of <span class="math inline">1.5\times10^{-8}</span>. In an <code>if</code>, wrap it in <code>isTRUE()</code>.</li>
+</ul>
+<aside class="notes">
+<p>The seq example is a classic bug: filtering a grid of concentrations or time points with == silently returns nothing. all.equal returns either TRUE or a character string describing the difference, which is why if (all.equal(a, b)) gives an error when they differ; always use isTRUE(all.equal(a, b)). The default tolerance is sqrt(eps), about 1.5e-8: loose enough to forgive rounding, tight enough to catch real bugs. Pick a tolerance that matches the problem: comparing two simulations that differ in rounding needs a relative tolerance; checking whether something is zero needs an absolute one.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="subtraction-can-lose-digits" class="slide level2">
+<h2>Subtraction can lose digits</h2>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a>(<span class="dv">1</span> <span class="sc">+</span> <span class="fl">1e-15</span>) <span class="sc">-</span> <span class="dv">1</span></span>
+<span id="cb6-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.110223e-15             # should be 1e-15: 11% wrong</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><span class="math inline">1 + 10^{-15}</span> is rounded to the nearest double near 1 (gap <span class="math inline">2.2\times10^{-16}</span>), so only about <strong>one</strong> significant digit of <span class="math inline">10^{-15}</span> survives.</li>
+<li>The subtraction itself is exact; it just <strong>exposes</strong> the earlier rounding.</li>
+<li>This is <strong>catastrophic cancellation</strong>: the topic of unit 3, error-conditioning (e.g.&nbsp;variances of large counts).</li>
+</ul>
+<aside class="notes">
+<p>One slide only, to show that rounding errors of size eps can become large relative errors. The full story (relative error, condition number, the one-pass variance formula) is the next unit. Here the point is just: a tiny difference of two large-ish numbers keeps only the digits that the two numbers did not share.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="integers" class="slide level2 smaller">
+<h2>Integers</h2>
+<p>R has a separate <strong>integer</strong> type (32 bits, written <code>5L</code>); plain <code>5</code> is a double.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a>.Machine<span class="sc">$</span>integer.max                       <span class="co"># 2^31 - 1</span></span>
+<span id="cb7-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 2147483647</span></span>
+<span id="cb7-3"><a aria-hidden="true" tabindex="-1"></a>len <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">248956422</span>L, <span class="dv">242193529</span>L, <span class="dv">198295559</span>L, <span class="dv">190214555</span>L, <span class="dv">181538259</span>L,</span>
+<span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a>         <span class="dv">170805979</span>L, <span class="dv">159345973</span>L, <span class="dv">145138636</span>L, <span class="dv">138394717</span>L, <span class="dv">133797422</span>L,</span>
+<span id="cb7-5"><a aria-hidden="true" tabindex="-1"></a>         <span class="dv">135086622</span>L, <span class="dv">133275309</span>L, <span class="dv">114364328</span>L)     <span class="co"># chr1-13, GRCh38</span></span>
+<span id="cb7-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">cumsum</span>(len)[<span class="dv">11</span><span class="sc">:</span><span class="dv">13</span>]</span>
+<span id="cb7-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1943767673 2077042982         NA</span></span>
+<span id="cb7-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># Warning message: integer overflow in 'cumsum'; use 'cumsum(as.numeric(.))'</span></span>
+<span id="cb7-9"><a aria-hidden="true" tabindex="-1"></a><span class="dv">2</span><span class="sc">^</span><span class="dv">53</span> <span class="sc">+</span> <span class="dv">1</span> <span class="sc">==</span> <span class="dv">2</span><span class="sc">^</span><span class="dv">53</span></span>
+<span id="cb7-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] TRUE</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The human genome (3.1 × 10⁹ bp) does not fit in a 32-bit integer. Integer overflow gives <code>NA</code>.</li>
+<li>Doubles store <strong>every</strong> whole number exactly up to <span class="math inline">2^{53} \approx 9\times10^{15}</span>. Above that, the gap is 2 or more.</li>
+</ul>
+<aside class="notes">
+<p>Genomic coordinates on a concatenated genome are a real case: tools that use 32-bit integers for positions break on genomes larger than 2.1 Gb, and R’s integer type is 32-bit. Data read from files often comes in as integer (counts, positions), so cumsum and similar can overflow. Converting with as.numeric fixes it, since doubles are exact for whole numbers up to 2^53. Python’s built-in int never overflows (it grows as needed), but numpy int32 arrays do, silently wrapping around; int64 is the numpy default on most systems.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-range-of-doubles" class="slide level2 smaller">
+<h2>The range of doubles</h2>
+
+<img data-src="fig04-range.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:95.0%"><div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a aria-hidden="true" tabindex="-1"></a>.Machine<span class="sc">$</span>double.xmax      <span class="co"># largest double</span></span>
+<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.797693e+308</span></span>
+<span id="cb8-3"><a aria-hidden="true" tabindex="-1"></a>.Machine<span class="sc">$</span>double.xmin      <span class="co"># smallest normal double</span></span>
+<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 2.225074e-308</span></span>
+<span id="cb8-5"><a aria-hidden="true" tabindex="-1"></a><span class="dv">2</span><span class="sc">^-</span><span class="dv">1074</span>                   <span class="co"># smallest subnormal</span></span>
+<span id="cb8-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 4.940656e-324</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Below <span class="math inline">2.2\times10^{-308}</span>, <strong>subnormal</strong> numbers fill the gap to zero, with fewer and fewer significant digits.</p>
+<aside class="notes">
+<p>The 11-bit exponent limits the range to roughly 1e-308 to 1e308. Subnormal (denormal) numbers use the smallest exponent with no hidden 1, trading precision for range; the smallest is 2^-1074. Below half of that, the result is 0. Anything above 1.8e308 becomes Inf. These limits look enormous, but products of probabilities reach them quickly, as we saw on slide 2.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="overflow-and-underflow" class="slide level2 smaller">
+<h2>Overflow and underflow</h2>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a aria-hidden="true" tabindex="-1"></a><span class="fl">1e308</span> <span class="sc">*</span> <span class="dv">10</span>                <span class="co"># overflow</span></span>
+<span id="cb9-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] Inf</span></span>
+<span id="cb9-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">exp</span>(<span class="dv">709</span>); <span class="fu">exp</span>(<span class="dv">710</span>)</span>
+<span id="cb9-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 8.218407e+307</span></span>
+<span id="cb9-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] Inf</span></span>
+<span id="cb9-6"><a aria-hidden="true" tabindex="-1"></a><span class="dv">2</span><span class="sc">^-</span><span class="dv">1075</span>                   <span class="co"># underflow</span></span>
+<span id="cb9-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0</span></span>
+<span id="cb9-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">exp</span>(<span class="sc">-</span><span class="dv">745</span>); <span class="fu">exp</span>(<span class="sc">-</span><span class="dv">746</span>)</span>
+<span id="cb9-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 4.940656e-324</span></span>
+<span id="cb9-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><strong>Overflow</strong> → <code>Inf</code>; <strong>underflow</strong> → <code>0</code> (or a subnormal with few digits). <strong>No warning</strong> in either case.</li>
+<li><code>exp</code> overflows for arguments above 709.8 and underflows below about <span class="math inline">-745</span>. In likelihoods, <code>exp</code> of a log-likelihood is the usual culprit.</li>
+</ul>
+<aside class="notes">
+<p>The silence is the dangerous part. An Inf or 0 in the middle of a computation flows on: a ratio of two underflowed likelihoods is 0/0 = NaN; a normalising constant of Inf turns every probability into 0. Remember the thresholds for exp: 709 and -745. A log-likelihood of -800 is nothing unusual, so exp(loglik) is almost always a mistake.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="inf--inf-and-nan" class="slide level2 smaller">
+<h2><code>Inf</code>, <code>-Inf</code> and <code>NaN</code></h2>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a aria-hidden="true" tabindex="-1"></a><span class="dv">1</span> <span class="sc">/</span> <span class="dv">0</span>;  <span class="sc">-</span><span class="dv">1</span> <span class="sc">/</span> <span class="dv">0</span>;  <span class="fu">log</span>(<span class="dv">0</span>)</span>
+<span id="cb10-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] Inf</span></span>
+<span id="cb10-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -Inf</span></span>
+<span id="cb10-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -Inf</span></span>
+<span id="cb10-5"><a aria-hidden="true" tabindex="-1"></a><span class="dv">0</span> <span class="sc">/</span> <span class="dv">0</span>;  <span class="cn">Inf</span> <span class="sc">-</span> <span class="cn">Inf</span>;  <span class="cn">Inf</span> <span class="sc">*</span> <span class="dv">0</span></span>
+<span id="cb10-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] NaN</span></span>
+<span id="cb10-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] NaN</span></span>
+<span id="cb10-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] NaN</span></span>
+<span id="cb10-9"><a aria-hidden="true" tabindex="-1"></a><span class="fu">is.finite</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="cn">Inf</span>, <span class="cn">NaN</span>, <span class="cn">NA</span>))</span>
+<span id="cb10-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  TRUE FALSE FALSE FALSE</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><code>NaN</code> = “not a number”: the result is undefined. Any arithmetic with <code>NaN</code> gives <code>NaN</code>; even <code>NaN == NaN</code> is not <code>TRUE</code> (it is <code>NA</code> in R).</li>
+<li>In R, <code>NA</code> (missing value) is different from <code>NaN</code> (failed arithmetic); <code>is.na()</code> is <code>TRUE</code> for both, <a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/is.finite.html"><code>is.nan()</code></a> only for <code>NaN</code>.</li>
+<li><strong>Check:</strong> <code>stopifnot(all(is.finite(x)))</code> after a long computation.</li>
+</ul>
+<aside class="notes">
+<p>Inf and -Inf are useful: log(0) = -Inf is the correct log-probability of an impossible event, and it behaves sensibly in max and sum. NaN signals that something went wrong, usually Inf - Inf or 0/0 from two overflowed or underflowed quantities. NaN propagates, so it usually shows up far from its cause; is.finite at checkpoints narrows down where. In Python: np.isfinite, np.isnan, math.inf, math.nan.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="back-to-the-likelihood" class="slide level2">
+<h2>Back to the likelihood</h2>
+
+<img data-src="fig05-underflow.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:62.0%"><ul>
+<li>Each site multiplies the likelihood by about 0.1–0.3, so it loses about 0.7 decimal orders per site.</li>
+<li>After <strong>470</strong> sites the product is below the smallest subnormal and becomes exactly <strong>0</strong>.</li>
+<li>The sum of the logs is the same information, as an ordinary number of size <span class="math inline">10^{4}</span>.</li>
+</ul>
+<aside class="notes">
+<p>Same simulated per-site likelihoods as on slide 2. The orange product follows the blue log-sum exactly until it reaches the bottom of the range, then is 0 forever. Note that with 10 000 sites the full log-likelihood is about -16 178 (natural log), or -7026 in log10. The same happens for reads: 10 000 reads each with probability 1e-3 under a model gives 1e-30000.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="fix-1-work-with-log-likelihoods" class="slide level2 smaller">
+<h2>Fix 1: work with log-likelihoods</h2>
+<p><span class="math display">\log L = \log \prod_i p_i = \sum_i \log p_i</span></p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a aria-hidden="true" tabindex="-1"></a>loglik <span class="ot">&lt;-</span> <span class="fu">sum</span>(<span class="fu">log</span>(p))                       <span class="co"># -16177.67</span></span>
+<span id="cb11-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">dbinom</span>(<span class="dv">3</span>, <span class="at">size =</span> <span class="dv">10</span>, <span class="at">prob =</span> <span class="fl">0.2</span>, <span class="at">log =</span> <span class="cn">TRUE</span>) <span class="co"># log of a density, directly</span></span>
+<span id="cb11-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -1.602827                             # = log(0.2013266)</span></span>
+<span id="cb11-4"><a aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># compare two trees: likelihood ratio from a difference of logs</span></span>
+<span id="cb11-6"><a aria-hidden="true" tabindex="-1"></a>loglik_A <span class="ot">&lt;-</span> <span class="sc">-</span><span class="fl">16177.67</span>;  loglik_B <span class="ot">&lt;-</span> <span class="sc">-</span><span class="fl">16180.12</span></span>
+<span id="cb11-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">exp</span>(loglik_A <span class="sc">-</span> loglik_B)                    <span class="co"># L_A / L_B</span></span>
+<span id="cb11-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 11.58835</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Products become sums; tiny numbers become moderate negative numbers.</li>
+<li>Every R density function (<code>dnorm</code>, <code>dbinom</code>, <code>dpois</code>, …) has <code>log = TRUE</code>, which avoids even the single underflow of a very small density.</li>
+<li>Take <code>exp</code> only of <strong>differences</strong> of log-likelihoods, which are moderate.</li>
+</ul>
+<aside class="notes">
+<p>This is the standard remedy and the reason likelihood software reports log-likelihoods. The likelihood ratio between two trees, or a Bayes factor, needs only the difference of the logs. Using log = TRUE in density functions matters for extreme values: dnorm(40) underflows to 0, but dnorm(40, log = TRUE) is -800.9.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="but-sometimes-we-must-add-probabilities" class="slide level2 smaller">
+<h2>But sometimes we must <strong>add</strong> probabilities</h2>
+<p>Logs turn products into sums, but some models need a <strong>sum of probabilities</strong>:</p>
+<ul>
+<li><strong>Genotype calling:</strong> <span class="math inline">P(\text{reads}) = \sum_{g \in \{AA, AB, BB\}} P(\text{reads} \mid g)\,P(g)</span></li>
+<li><strong>HMMs</strong> (gene finding, copy number): the forward algorithm sums over the hidden states at each step.</li>
+<li><strong>Phylogenetics</strong> (Felsenstein’s pruning): at each node, sum over the 4 possible bases.</li>
+</ul>
+<p>With 1000 reads, each term <span class="math inline">P(\text{reads} \mid g)</span> is something like <span class="math inline">e^{-1000}</span>. We have the <strong>logs</strong> <span class="math inline">a_k = \log x_k</span> and need <span class="math inline">\log \sum_k x_k</span>.</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a aria-hidden="true" tabindex="-1"></a>a <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">1000</span>, <span class="sc">-</span><span class="dv">1001</span>, <span class="sc">-</span><span class="dv">1003</span>)         <span class="co"># log P(reads | g) + log P(g)</span></span>
+<span id="cb12-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">log</span>(<span class="fu">sum</span>(<span class="fu">exp</span>(a)))</span>
+<span id="cb12-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -Inf                           # every exp(a) underflowed to 0</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<aside class="notes">
+<p>This is the second half of the story. Products are easy on the log scale; sums are not, because log(x + y) is not log x + log y. The naive route exp-sum-log underflows (or overflows for large positive a). The three examples are exactly where professional software uses log-sum-exp: GATK-style genotype likelihoods, HMMER and other HMM tools, and phylogenetic likelihood programs.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="log-sum-exp" class="slide level2 smaller">
+<h2>Log-sum-exp</h2>
+<p>Pull out the largest term <span class="math inline">m = \max_k a_k</span>:</p>
+<p><span class="math display">\log \sum_k e^{a_k} = m + \log \sum_k e^{a_k - m}</span></p>
+<p>Now every <span class="math inline">a_k - m \le 0</span>, and the largest is exactly <span class="math inline">0</span>, so <span class="math inline">e^{0} = 1</span>: no overflow, and the sum is at least 1, so no <span class="math inline">\log 0</span>.</p>
+<p>With <span class="math inline">a = (-1000, -1001, -1003)</span>, <span class="math inline">m = -1000</span>:</p>
+<p><span class="math display">e^{0} + e^{-1} + e^{-3} = 1 + 0.3679 + 0.0498 = 1.4177, \quad \log 1.4177 = 0.3490</span></p>
+<p><span class="math display">\log \sum_k e^{a_k} = -1000 + 0.3490 = -999.651</span></p>
+<aside class="notes">
+<p>Do this on the board. The identity is just factoring e^m out of the sum. Terms much smaller than the largest (a_k - m below about -745) still underflow, but they would not change the sum anyway. The answer is close to the largest term, which is typical: the log of a sum is dominated by its biggest term. Students do one by hand in the exercise.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="log-sum-exp-in-r" class="slide level2 smaller">
+<h2>Log-sum-exp in R</h2>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a aria-hidden="true" tabindex="-1"></a>logsumexp <span class="ot">&lt;-</span> <span class="cf">function</span>(a) {</span>
+<span id="cb13-2"><a aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">max</span>(a)</span>
+<span id="cb13-3"><a aria-hidden="true" tabindex="-1"></a>  m <span class="sc">+</span> <span class="fu">log</span>(<span class="fu">sum</span>(<span class="fu">exp</span>(a <span class="sc">-</span> m)))</span>
+<span id="cb13-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb13-5"><a aria-hidden="true" tabindex="-1"></a>a <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">1000</span>, <span class="sc">-</span><span class="dv">1001</span>, <span class="sc">-</span><span class="dv">1003</span>)</span>
+<span id="cb13-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">logsumexp</span>(a)</span>
+<span id="cb13-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -999.651</span></span>
+<span id="cb13-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">exp</span>(a <span class="sc">-</span> <span class="fu">logsumexp</span>(a))               <span class="co"># posterior P(g | reads)</span></span>
+<span id="cb13-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.70538451 0.25949646 0.03511903</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Normalising on the log scale gives the posterior probabilities directly; they sum to 1.</li>
+<li>Base R has no <code>logsumexp</code>; Python has <a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.logsumexp.html"><code>scipy.special.logsumexp</code></a>.</li>
+<li>Edge case: if every <span class="math inline">a_k = -\infty</span>, then <span class="math inline">m - m</span> is <code>NaN</code>. Production code handles that case separately.</li>
+</ul>
+<aside class="notes">
+<p>Five lines that every likelihood programmer writes once. The posterior line is the same identity again: x_k / sum x = exp(a_k - logsumexp(a)). The edge case appears when all hypotheses are impossible (log-probability -Inf); return -Inf directly. The exercise asks them to add that guard.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="small-rates-log1p-and-expm1" class="slide level2 smaller">
+<h2>Small rates: <code>log1p</code> and <code>expm1</code></h2>
+<p>Mutation rate <span class="math inline">\mu = 10^{-9}</span> per site per generation. <span class="math inline">P(\text{at least one mutation}) = 1 - e^{-\mu}</span>.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a aria-hidden="true" tabindex="-1"></a>mu <span class="ot">&lt;-</span> <span class="fl">1e-9</span></span>
+<span id="cb14-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="dv">1</span> <span class="sc">-</span> <span class="fu">exp</span>(<span class="sc">-</span>mu), <span class="at">digits =</span> <span class="dv">15</span>)</span>
+<span id="cb14-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 9.99999971718069e-10           # wrong from the 8th digit</span></span>
+<span id="cb14-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="sc">-</span><span class="fu">expm1</span>(<span class="sc">-</span>mu), <span class="at">digits =</span> <span class="dv">15</span>)</span>
+<span id="cb14-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 9.999999995e-10                # correct</span></span>
+<span id="cb14-6"><a aria-hidden="true" tabindex="-1"></a>mu <span class="ot">&lt;-</span> <span class="fl">1e-17</span></span>
+<span id="cb14-7"><a aria-hidden="true" tabindex="-1"></a><span class="dv">1</span> <span class="sc">-</span> <span class="fu">exp</span>(<span class="sc">-</span>mu);  <span class="sc">-</span><span class="fu">expm1</span>(<span class="sc">-</span>mu)</span>
+<span id="cb14-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0</span></span>
+<span id="cb14-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1e-17</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><span class="math inline">e^{-\mu}</span> is rounded to the nearest double near 1 (gap <span class="math inline">\varepsilon</span>), and $1 - $ that keeps only the digits that survived.</li>
+<li><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/Log.html"><code>expm1(x)</code></a> <span class="math inline">= e^x - 1</span> and <code>log1p(x)</code> <span class="math inline">= \log(1+x)</span> are computed without forming <span class="math inline">1 + x</span>. Use them when <span class="math inline">|x| \ll 1</span>.</li>
+<li>The same holds for <span class="math inline">\log(1 - p)</span> with small <span class="math inline">p</span>: use <code>log1p(-p)</code>.</li>
+</ul>
+<aside class="notes">
+<p>Small rates are everywhere in biology: mutation rates, per-base error rates, death rates per small time step, survival probabilities over short intervals. 1 - exp(-mu) is the probability of at least one event in a Poisson process. The problem is the same as on the subtraction slide: first rounding near 1, then subtracting 1. expm1 and log1p are evaluated with a special formula (essentially the Taylor series for small x) and are accurate to full precision. They are in every language: numpy has np.expm1 and np.log1p.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="checklist-detecting-floating-point-trouble" class="slide level2">
+<h2>Checklist: detecting floating-point trouble</h2>
+<ul>
+<li><strong>Exact zeros or <code>-Inf</code></strong> in a likelihood → underflow. Work on the log scale.</li>
+<li><strong><code>Inf</code> or <code>NaN</code></strong> anywhere → overflow or 0/0. Check with <code>is.finite()</code> after each step.</li>
+<li><strong><code>==</code> on computed numbers</strong> → replace with <code>isTRUE(all.equal(a, b))</code> or an explicit tolerance.</li>
+<li><strong><code>1 - exp(-x)</code> or <code>log(1 + x)</code></strong> with small <span class="math inline">x</span> → <code>-expm1(-x)</code>, <code>log1p(x)</code>.</li>
+<li><strong><code>exp()</code> of a log-likelihood</strong> → take differences first, or use log-sum-exp.</li>
+<li><strong>Large whole numbers</strong> (coordinates, counts) as R integers → convert with <code>as.numeric()</code> before summing.</li>
+<li><strong>Doubt about the stored value</strong> → <code>sprintf("%.20f", x)</code>.</li>
+</ul>
+<aside class="notes">
+<p>A short list to keep next to the keyboard. Each item is something students will meet in their own analyses. The underlying cause is always one of the three facts of this lecture: finite precision (epsilon), finite range (overflow and underflow), and rounding at every step.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="summary" class="slide level2 smaller">
+<h2>Summary</h2>
+<ul>
+<li>A double is <span class="math inline">\pm 1.f \times 2^e</span> in 64 bits: 53 significant bits, about <strong>16 decimal digits</strong>, range about <span class="math inline">10^{-308}</span> to <span class="math inline">10^{308}</span>.</li>
+<li>Most decimals (0.1) are <strong>not</strong> stored exactly. Every operation <strong>rounds</strong> to the nearest double, with relative error at most <span class="math inline">\varepsilon/2</span>, <span class="math inline">\varepsilon = 2.2\times10^{-16}</span>.</li>
+<li>The gap between doubles near <span class="math inline">x</span> is about <span class="math inline">\varepsilon |x|</span>: relative precision is constant.</li>
+<li>Compare floats with a <strong>tolerance</strong> (<code>isTRUE(all.equal())</code>), never <code>==</code>.</li>
+<li>Doubles hold whole numbers exactly up to <span class="math inline">2^{53}</span>; R integers only to <span class="math inline">2^{31}-1</span>.</li>
+<li>Overflow gives <code>Inf</code>, underflow gives <code>0</code>, undefined gives <code>NaN</code>, all <strong>silently</strong>.</li>
+<li>Likelihoods: sum <strong>log</strong>-probabilities, add probabilities with <strong>log-sum-exp</strong>, and use <code>log1p</code>/<code>expm1</code> for small rates.</li>
+</ul>
+<p><strong>Next:</strong> error-conditioning, where we measure errors and see when they grow.</p>
+<aside class="notes">
+<p>Recap the three facts and the three likelihood tools. The next unit asks how rounding errors of size epsilon can become large errors in the result (catastrophic cancellation, condition numbers). After that, convergence-cost puts rounding error next to truncation error.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+
+
+</section>
+    </div>
+  <div class="quarto-auto-generated-content" style="display: none;">
+<div class="footer footer-default">
+
+</div>
+</div></div>
+
+  <script>window.backupDefine = window.define; window.define = undefined;</script>
+  <script src="../site_libs/revealjs/dist/reveal.js"></script>
+  <!-- reveal.js plugins -->
+  <script src="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.js"></script>
+  <script src="../site_libs/revealjs/plugin/pdf-export/pdfexport.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/quarto-support/support.js"></script>
+  
+
+  <script src="../site_libs/revealjs/plugin/notes/notes.js"></script>
+  <script src="../site_libs/revealjs/plugin/search/search.js"></script>
+  <script src="../site_libs/revealjs/plugin/zoom/zoom.js"></script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://revealjs.com/config/
+      Reveal.initialize({
+'controlsAuto': false,
+'previewLinksAuto': false,
+'pdfSeparateFragments': false,
+'autoAnimateEasing': "ease",
+'autoAnimateDuration': 1,
+'autoAnimateUnmatched': true,
+'jumpToSlide': true,
+'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
+'smaller': false,
+ 
+        // Display controls in the bottom right corner
+        controls: true,
+
+        // Help the user learn the controls by providing hints, for example by
+        // bouncing the down arrow when they first encounter a vertical slide
+        controlsTutorial: false,
+
+        // Determines where controls appear, "edges" or "bottom-right"
+        controlsLayout: 'edges',
+
+        // Visibility rule for backwards navigation arrows; "faded", "hidden"
+        // or "visible"
+        controlsBackArrows: 'visible',
+
+        // Display a presentation progress bar
+        progress: true,
+
+        // Display the page number of the current slide
+        slideNumber: 'c/t',
+
+        // 'all', 'print', or 'speaker'
+        showSlideNumber: 'all',
+
+        // Add the current slide number to the URL hash so that reloading the
+        // page/copying the URL will return you to the same slide
+        hash: true,
+
+        // Start with 1 for the hash rather than 0
+        hashOneBasedIndex: false,
+
+        // Flags if we should monitor the hash and change slides accordingly
+        respondToHashChanges: true,
+
+        // Push each slide change to the browser history
+        history: false,
+
+        // Enable keyboard shortcuts for navigation
+        keyboard: true,
+
+        // Enable the slide overview mode
+        overview: true,
+
+        // Disables the default reveal.js slide layout (scaling and centering)
+        // so that you can use custom CSS layout
+        disableLayout: false,
+
+        // Vertical centering of slides
+        center: false,
+
+        // Enables touch navigation on devices with touch input
+        touch: true,
+
+        // Loop the presentation
+        loop: false,
+
+        // Change the presentation direction to be RTL
+        rtl: false,
+
+        // see https://revealjs.com/vertical-slides/#navigation-mode
+        navigationMode: 'linear',
+
+        // Randomizes the order of slides each time the presentation loads
+        shuffle: false,
+
+        // Turns fragments on and off globally
+        fragments: true,
+
+        // Flags whether to include the current fragment in the URL,
+        // so that reloading brings you to the same fragment position
+        fragmentInURL: false,
+
+        // Flags if the presentation is running in an embedded mode,
+        // i.e. contained within a limited portion of the screen
+        embedded: false,
+
+        // Flags if we should show a help overlay when the questionmark
+        // key is pressed
+        help: true,
+
+        // Flags if it should be possible to pause the presentation (blackout)
+        pause: true,
+
+        // Flags if speaker notes should be visible to all viewers
+        showNotes: false,
+
+        // Global override for autoplaying embedded media (null/true/false)
+        autoPlayMedia: null,
+
+        // Global override for preloading lazy-loaded iframes (null/true/false)
+        preloadIframes: null,
+
+        // Number of milliseconds between automatically proceeding to the
+        // next slide, disabled when set to 0, this value can be overwritten
+        // by using a data-autoslide attribute on your slides
+        autoSlide: 0,
+
+        // Stop auto-sliding after user input
+        autoSlideStoppable: true,
+
+        // Use this method for navigation when auto-sliding
+        autoSlideMethod: null,
+
+        // Specify the average time in seconds that you think you will spend
+        // presenting each slide. This is used to show a pacing timer in the
+        // speaker view
+        defaultTiming: null,
+
+        // Enable slide navigation via mouse wheel
+        mouseWheel: false,
+
+        // The display mode that will be used to show slides
+        display: 'block',
+
+        // Hide cursor if inactive
+        hideInactiveCursor: true,
+
+        // Time before the cursor is hidden (in ms)
+        hideCursorTime: 5000,
+
+        // Opens links in an iframe preview overlay
+        previewLinks: false,
+
+        // Transition style (none/fade/slide/convex/concave/zoom)
+        transition: 'none',
+
+        // Transition speed (default/fast/slow)
+        transitionSpeed: 'default',
+
+        // Transition style for full page slide backgrounds
+        // (none/fade/slide/convex/concave/zoom)
+        backgroundTransition: 'none',
+
+        // Number of slides away from the current that are visible
+        viewDistance: 3,
+
+        // Number of slides away from the current that are visible on mobile
+        // devices. It is advisable to set this to a lower number than
+        // viewDistance in order to save resources.
+        mobileViewDistance: 2,
+
+        // The "normal" size of the presentation, aspect ratio will be preserved
+        // when the presentation is scaled to fit different resolutions. Can be
+        // specified using percentage units.
+        width: 1280,
+
+        height: 720,
+
+        // Factor of the display size that should remain empty around the content
+        margin: 0.1,
+
+        // reveal.js plugins
+        plugins: [QuartoLineHighlight, PdfExport, RevealMenu, QuartoSupport,
+
+          RevealNotes,
+          RevealSearch,
+          RevealZoom
+        ]
+      });
+    </script>
+    <script id="quarto-html-after-body" type="application/javascript">
+      window.document.addEventListener("DOMContentLoaded", function (event) {
+        const tabsets =  window.document.querySelectorAll(".panel-tabset-tabby")
+        tabsets.forEach(function(tabset) {
+          const tabby = new Tabby('#' + tabset.id);
+        });
+        const isCodeAnnotation = (el) => {
+          for (const clz of el.classList) {
+            if (clz.startsWith('code-annotation-')) {                     
+              return true;
+            }
+          }
+          return false;
+        }
+        const onCopySuccess = function(e) {
+          // button target
+          const button = e.trigger;
+          // don't keep focus
+          button.blur();
+          // flash "checked"
+          button.classList.add('code-copy-button-checked');
+          var currentTitle = button.getAttribute("title");
+          button.setAttribute("title", "Copied!");
+          let tooltip;
+          if (window.bootstrap) {
+            button.setAttribute("data-bs-toggle", "tooltip");
+            button.setAttribute("data-bs-placement", "left");
+            button.setAttribute("data-bs-title", "Copied!");
+            tooltip = new bootstrap.Tooltip(button, 
+              { trigger: "manual", 
+                customClass: "code-copy-button-tooltip",
+                offset: [0, -8]});
+            tooltip.show();    
+          }
+          setTimeout(function() {
+            if (tooltip) {
+              tooltip.hide();
+              button.removeAttribute("data-bs-title");
+              button.removeAttribute("data-bs-toggle");
+              button.removeAttribute("data-bs-placement");
+            }
+            button.setAttribute("title", currentTitle);
+            button.classList.remove('code-copy-button-checked');
+          }, 1000);
+          // clear code selection
+          e.clearSelection();
+        }
+        const getTextToCopy = function(trigger) {
+            const codeEl = trigger.previousElementSibling.cloneNode(true);
+            for (const childEl of codeEl.children) {
+              if (isCodeAnnotation(childEl)) {
+                childEl.remove();
+              }
+            }
+            return codeEl.innerText;
+        }
+        const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+          text: getTextToCopy
+        });
+        clipboard.on('success', onCopySuccess);
+        if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+          const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+            text: getTextToCopy,
+            container: window.document.getElementById('quarto-embedded-source-code-modal')
+          });
+          clipboardModal.on('success', onCopySuccess);
+        }
+          var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+          var mailtoRegex = new RegExp(/^mailto:/);
+            var filterRegex = new RegExp('/' + window.location.host + '/');
+          var isInternal = (href) => {
+              return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+          }
+          // Inspect non-navigation links and adorn them if external
+         var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+          for (var i=0; i<links.length; i++) {
+            const link = links[i];
+            if (!isInternal(link.href)) {
+              // undo the damage that might have been done by quarto-nav.js in the case of
+              // links that we want to consider external
+              if (link.dataset.originalHref !== undefined) {
+                link.href = link.dataset.originalHref;
+              }
+            }
+          }
+        function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+          const config = {
+            allowHTML: true,
+            maxWidth: 500,
+            delay: 100,
+            arrow: false,
+            appendTo: function(el) {
+                return el.closest('section.slide') || el.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'light-border',
+            placement: 'bottom-start',
+          };
+          if (contentFn) {
+            config.content = contentFn;
+          }
+          if (onTriggerFn) {
+            config.onTrigger = onTriggerFn;
+          }
+          if (onUntriggerFn) {
+            config.onUntrigger = onUntriggerFn;
+          }
+            config['offset'] = [0,0];
+            config['maxWidth'] = 700;
+          window.tippy(el, config); 
+        }
+        const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+        for (var i=0; i<noterefs.length; i++) {
+          const ref = noterefs[i];
+          tippyHover(ref, function() {
+            // use id or data attribute instead here
+            let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+            try { href = new URL(href).hash; } catch {}
+            const id = href.replace(/^#\/?/, "");
+            const note = window.document.getElementById(id);
+            if (note) {
+              return note.innerHTML;
+            } else {
+              return "";
+            }
+          });
+        }
+        const findCites = (el) => {
+          const parentEl = el.parentElement;
+          if (parentEl) {
+            const cites = parentEl.dataset.cites;
+            if (cites) {
+              return {
+                el,
+                cites: cites.split(' ')
+              };
+            } else {
+              return findCites(el.parentElement)
+            }
+          } else {
+            return undefined;
+          }
+        };
+        var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+        for (var i=0; i<bibliorefs.length; i++) {
+          const ref = bibliorefs[i];
+          const citeInfo = findCites(ref);
+          if (citeInfo) {
+            tippyHover(citeInfo.el, function() {
+              var popup = window.document.createElement('div');
+              citeInfo.cites.forEach(function(cite) {
+                var citeDiv = window.document.createElement('div');
+                citeDiv.classList.add('hanging-indent');
+                citeDiv.classList.add('csl-entry');
+                var biblioDiv = window.document.getElementById('ref-' + cite);
+                if (biblioDiv) {
+                  citeDiv.innerHTML = biblioDiv.innerHTML;
+                }
+                popup.appendChild(citeDiv);
+              });
+              return popup.innerHTML;
+            });
+          }
+        }
+      });
+      </script>
+    
+
+</body></html>

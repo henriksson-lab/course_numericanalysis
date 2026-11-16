@@ -1,0 +1,193 @@
+---
+title: "Quiz: error, conditioning and stability"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of error, conditioning and stability. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** A qPCR estimate of a copy number is 1050; the true value is 1000. A pipetted volume is 2.2 µL; the intended volume is 2.0 µL. Which has the larger relative error, and about how many correct digits does each have?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Relative error $= |\hat x - x|/|x|$; correct digits $\approx -\log_{10}$ of it.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Copy number: $50/1000 = 0.05$, about $1.3$ digits. Volume: $0.2/2.0 = 0.1$, about $1$ digit. The volume has the larger relative error, although its absolute error (0.2 µL) is much smaller in raw numbers than 50 copies.
+:::
+
+---
+
+**Q2.** Two numbers agree in their first 6 significant digits and each is stored with about 16 correct digits. Roughly how many correct digits does their difference have?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The leading digits that agree cancel; the absolute error stays.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+About $16 - 6 = 10$. Cancellation costs about $\log_{10}(|a|/|a-b|)$ digits, and $|a|/|a-b| \approx 10^6$ when the first 6 digits agree.
+:::
+
+---
+
+**Q3.** What is the condition number $\kappa(x) = |x f'(x)/f(x)|$ of $f(x) = x^3$? Of $f(x) = \log x$ at $x = 1.0001$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$f'(x) = 3x^2$ and $f'(x) = 1/x$. Use $\ln(1.0001) \approx 0.0001$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$x^3$: $\kappa = |x \cdot 3x^2 / x^3| = 3$ everywhere: relative errors triple. $\log x$ at $1.0001$: $\kappa = 1/|\ln x| \approx 1/0.0001 = 10^4$: expect to lose about 4 digits.
+:::
+
+---
+
+**Q4.** True or false: "If a result is wrong because of rounding, computing it with a better algorithm will always fix it."
+
+::: {.callout-tip collapse="true" title="Hint"}
+Separate the problem from the algorithm.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+False. If the problem is ill-conditioned, even a perfectly stable algorithm loses about $\log_{10}\kappa$ digits, because the rounding of the **input** alone is amplified by $\kappa$. A better algorithm only helps when the algorithm, not the problem, is the cause (unstable algorithm on a well-conditioned problem).
+:::
+
+---
+
+**Q5.** Why does $\frac1n\sum x_i^2 - \bar x^2$ fail for read positions near $2.4\times10^8$ with a spread of a few base pairs, while $\frac1n\sum(x_i - \bar x)^2$ works?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How big are the two terms of the first formula, and how big is their difference?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Both terms are about $(2.4\times10^8)^2 \approx 5.8\times10^{16}$, and their difference (the variance, about 9) is $10^{-16}$ of them: catastrophic cancellation removes all 16 digits. The two-pass formula subtracts the mean **first**, from numbers that are exact, so only small deviations are squared and summed; nothing large cancels.
+:::
+
+---
+
+**Q6.** A colleague computes a variance and gets $-3.2$. They replace it by `max(0, v)` and continue. What would you suggest instead?
+
+::: {.callout-tip collapse="true" title="Hint"}
+A variance cannot be negative. What does an impossible value tell you?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A negative variance is a symptom of cancellation in the one-pass formula, not noise. The clipped 0 is just as wrong. Use a centring (two-pass) formula or the library function: `var()` in R, `numpy.var` in Python. A quick check is to shift the data by a typical value and recompute: the variance must not change.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- 7e8 + c(0.1, 0.2, 0.3)
+mean(x^2) - mean(x)^2               # one-pass: impossible
+# [1] -64
+var(x) * 2 / 3                      # library, population scaling
+# [1] 0.006666662
+```
+
+### Python
+
+```python
+import numpy as np
+x = 7e8 + np.array([0.1, 0.2, 0.3])
+print(np.mean(x**2) - np.mean(x)**2)   # one-pass: impossible
+# -64.0
+print(np.var(x))                       # library, population scaling
+# 0.0066666618982983055
+```
+
+:::
+:::
+
+---
+
+**Q7.** Rewrite $\sqrt{x^2 + 1} - x$ so that it can be evaluated accurately for large $x$.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Multiply and divide by the conjugate $\sqrt{x^2 + 1} + x$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$$\sqrt{x^2+1} - x = \frac{(x^2 + 1) - x^2}{\sqrt{x^2+1} + x} = \frac{1}{\sqrt{x^2+1} + x}.$$
+The rewritten form adds two positive numbers instead of subtracting two nearly equal ones. At $x = 10^8$ the original gives exactly 0 in double precision, the rewritten form gives $5\times10^{-9}$.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- 1e8
+sqrt(x^2 + 1) - x
+# [1] 0
+1 / (sqrt(x^2 + 1) + x)
+# [1] 5e-09
+```
+
+### Python
+
+```python
+x = 1e8
+print(np.sqrt(x**2 + 1) - x)
+# 0.0
+print(1 / (np.sqrt(x**2 + 1) + x))
+# 5e-09
+```
+
+:::
+:::
+
+---
+
+**Q8.** Treated and control intensities are 5050 and 5000, each with 2 % measurement error. Can you trust the sign of the log fold change? Use the condition number.
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\kappa$ of $a - b$ (or of $\log(a/b)$) is about $|a|/|a - b|$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\kappa \approx 5050/50 = 101$, so a 2 % input error becomes about $200$ % error in the difference or the log fold change. The sign is not trustworthy. This is not a floating-point issue: it is an ill-conditioned question for data of this quality. Replicates (or a more precise assay) are needed.
+:::
+
+---
+
+**Q9.** A response curve $R = D/(K + D)$ is used to infer the dose $D$ from a measured $R$. The condition number of the inverse is $1/(1 - R)$. A sample gives $R = 0.98$ with a 1 % measurement error. What relative error do you expect in $D$, and what would you do?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Relative error out $\approx \kappa \times$ relative error in.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\kappa = 1/0.02 = 50$, so about $50 \times 1\,\% = 50$ % error in $D$. No algorithm can fix that; the problem is ill-conditioned near the plateau. Dilute the sample so that its response falls in the steep middle of the curve (where $\kappa$ is 2 to 5), then multiply back by the dilution factor.
+:::
+
+---
+
+**Q10.** In plain words, what does it mean that an algorithm is **backward stable**?
+
+::: {.callout-tip collapse="true" title="Hint"}
+For which input is the computed answer exactly right?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Its computed answer is the **exact** answer for an input that differs from yours by only about a rounding error ($\approx\varepsilon$ relative). Then the forward error is at most about $\kappa \times \varepsilon$: everything left is the conditioning of the problem. Library routines such as `solve`, `lm` and `var` are designed to be backward stable.
+:::
+
+---
+
+**Q11.** The matrix $A = \begin{pmatrix}1 & 0.99\\0.99 & 1\end{pmatrix}$ (two dyes with almost identical spectra) has condition number 199. Your measured fluorescence has about 3 correct digits. How many correct digits do you expect in the unmixed dye amounts?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Lose about $\log_{10}\kappa$ digits.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\log_{10} 199 \approx 2.3$, so about $3 - 2.3 \approx 0.7$: less than one correct digit in the worst case. The matrix version of the condition number is the topic of Pivoting, norms and conditioning.
+:::

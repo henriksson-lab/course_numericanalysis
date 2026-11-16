@@ -1,0 +1,660 @@
+---
+title: "Exercise: how computers store numbers"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- convert small whole numbers and fractions between decimal and **binary**, and explain why 0.1 cannot be stored exactly,
+- explain what an IEEE **double** stores (sign, exponent, fraction) and why it has about 16 significant digits,
+- find the **gap** between neighbouring doubles near a given number, and state **machine epsilon**,
+- predict when a computation will **overflow** (`Inf`), **underflow** (`0`) or give `NaN`,
+- compare floating-point numbers with a **tolerance** instead of `==`,
+- compute a likelihood on the **log scale**, add probabilities with **log-sum-exp**, and use `log1p`/`expm1` for small rates.
+
+The by-hand part uses pen, paper and (for `exp` and `log` in B6 and B7) a pocket calculator. The code part checks your hand answers and then works at sizes where only code works.
+
+## Background
+
+A **double** (R's `numeric`, Python's `float`, numpy's `float64`) stores a number as
+
+$$x = \pm\, 1.f \times 2^{e}$$
+
+in 64 bits: 1 sign bit, 11 bits for the exponent $e$ (from $-1022$ to $1023$) and 52 bits for the fraction $f$. With the hidden leading 1 that is **53 significant bits**, about 15–16 decimal digits.
+
+**Facts used below:**
+
+1. **Binary.** Whole numbers: divide by 2 repeatedly, read the remainders bottom-up. Fractions: multiply by 2 repeatedly, the integer parts are the bits. A fraction ends in binary only if its denominator is a power of 2; $0.1 = 0.0\overline{0011}_2$ repeats forever, so it is rounded.
+2. **Machine epsilon** $\varepsilon = 2^{-52} \approx 2.2\times10^{-16}$ is the gap between 1 and the next double. Each arithmetic operation returns the exact result **rounded** to the nearest double, with relative error at most $\varepsilon/2$.
+3. **Gap near $x$**: $2^{\lfloor \log_2|x| \rfloor - 52} \approx \varepsilon |x|$. The relative gap is constant; the absolute gap grows with $|x|$.
+4. **Range.** Largest double $\approx 1.8\times10^{308}$ (above: `Inf`, **overflow**). Smallest normal double $\approx 2.2\times10^{-308}$; **subnormal** numbers go down to $4.9\times10^{-324}$ with fewer digits; below that: `0`, **underflow**. `exp(x)` overflows for $x > 709.8$ and underflows for $x < -745$.
+5. **Special values.** `1/0 = Inf`, `log(0) = -Inf`, `0/0 = NaN`, `Inf - Inf = NaN`. None of these gives an error or (in R) a warning.
+6. **Integers.** Doubles store every whole number exactly up to $2^{53}\approx 9.0\times10^{15}$. R's `integer` type (`5L`) is 32 bits, maximum $2^{31}-1 = 2\,147\,483\,647$; overflow gives `NA`.
+7. **Log-likelihoods.** $\log \prod_i p_i = \sum_i \log p_i$. To add probabilities stored as logs $a_k = \log x_k$, use **log-sum-exp**: with $m = \max_k a_k$,
+   $$\log \sum_k e^{a_k} = m + \log \sum_k e^{a_k - m}.$$
+8. **Small arguments.** `log1p(x)` $= \log(1+x)$ and `expm1(x)` $= e^x - 1$ stay accurate when $|x| \ll 1$, where `log(1 + x)` and `exp(x) - 1` lose digits.
+
+The basic tools in both languages:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+0.1 + 0.2 == 0.3
+# [1] FALSE
+sprintf("%.20f", 0.1 + 0.2)            # show 20 decimals of the stored value
+# [1] "0.30000000000000004441"
+.Machine$double.eps                    # machine epsilon
+# [1] 2.220446e-16
+isTRUE(all.equal(0.1 + 0.2, 0.3))      # compare with a tolerance
+# [1] TRUE
+```
+
+### Python
+
+```python
+import math
+import numpy as np
+
+print(0.1 + 0.2 == 0.3)
+# False
+print(f"{0.1 + 0.2:.20f}")             # show 20 decimals of the stored value
+# 0.30000000000000004441
+print(np.finfo(float).eps)             # machine epsilon
+# 2.220446049250313e-16
+print(math.isclose(0.1 + 0.2, 0.3))    # compare with a tolerance
+# True
+```
+
+:::
+
+## By hand
+
+**B1. Binary integers.**
+(a) Convert 6, 13, 37 and 255 to binary.
+(b) Convert $10110_2$ and $1000000_2$ to decimal.
+(c) How many bits does it take to write 255? What is the largest whole number you can write with 8 bits?
+
+**B2. Binary fractions.**
+(a) Convert 0.75, 0.3125 and 5.375 to binary.
+(b) Run the "multiply by 2" recipe on 0.2 for 8 steps. Show that the bits repeat and write 0.2 as a repeating binary fraction.
+(c) Without a computer: is `0.5 + 0.25 == 0.75` `TRUE` or `FALSE` in R? What about `0.1 + 0.7 == 0.8`? Explain the difference.
+
+**B3. A toy floating-point system.** Imagine a computer that stores numbers as $1.f_1f_2f_3 \times 2^e$: **3** fraction bits, exponent $e \in \{-1, 0, 1, 2\}$ (the picture on the "Floats are not evenly spaced" slide).
+(a) List all the numbers this system has in $[2, 4)$.
+(b) What is the gap between neighbouring numbers in $[1, 2)$? In $[4, 8)$?
+(c) Round 1.3, 5.3 and 6.2 to the nearest number in the system. Give the relative error of each.
+(d) What is machine epsilon for this system? What is the largest possible relative rounding error?
+(e) What is $1 + 0.1$ in this system? And $1 + 0.05$?
+(f) What is the largest number in the system? What happens to $7.5 + 4$?
+
+**B4. The gap between doubles.** Use $\text{gap}(x) = 2^{\lfloor \log_2|x| \rfloor - 52}$.
+(a) Find the gap near $x = 1$, $1000$, $0.001$, $3.1\times10^9$ (a position in a concatenated human genome) and $10^{16}$. First find the power of 2 just below each $x$.
+(b) Is `1e16 + 1 == 1e16` `TRUE` or `FALSE`?
+(c) A genome browser stores the position $3\,100\,000\,000.5$ (a point between two bases) as a double. Is it stored exactly?
+(d) For each $x$ in (a), compute gap$(x)/x$. What do you notice?
+
+**B5. Spot the overflow and underflow.** For each computation, say whether a double gives a normal number, `Inf`, `0` or `NaN`. Estimate the true value with powers of 10.
+(a) `1e200 * 1e200`
+(b) `1e-200 * 1e-200`
+(c) `0.01^200`
+(d) `exp(1000)`
+(e) `factorial(200)` (use $200! \approx 7.9\times10^{374}$)
+(f) `1e300 * 1e10 / 1e20` and `1e300 / 1e20 * 1e10`
+(g) The probability that 2000 reads all map correctly, if each maps correctly with probability 0.999: `0.999^2000`. (Use $\ln 0.999 \approx -0.001$.)
+(h) The likelihood of 2000 reads, each with probability $10^{-3}$ under model 1: `(1e-3)^2000`.
+(i) The likelihood ratio of model 1 against model 2 (each read probability $2\times10^{-3}$): `(1e-3)^2000 / (2e-3)^2000`. What is the log of the true ratio?
+
+**B6. Log-sum-exp by hand.** Use a calculator for `exp` and `log` (natural log). Useful values: $e^{-1} = 0.3679$, $e^{-2} = 0.1353$, $e^{-12} = 6.14\times10^{-6}$, $\ln 3 = 1.0986$.
+(a) Compute $\log(e^{-500} + e^{-502})$ with the log-sum-exp formula. Then compute the two "posterior" weights $e^{a_k} / \sum_j e^{a_j}$.
+(b) Compute $\log(e^{2} + e^{2} + e^{2})$. Check against a simple rule.
+(c) **Genotype calling.** At one site, the log-probabilities $\log P(\text{reads} \mid g) + \log P(g)$ for the genotypes AA, AB, BB are $-1200$, $-1198$ and $-1210$. Compute $\log P(\text{reads})$ and the posterior probability of each genotype.
+(d) Why does `log(sum(exp(a)))` fail for the numbers in (c)?
+(e) What would go wrong if you pulled out the **smallest** $a_k$ instead of the largest, for $a = (-1000, 0)$?
+
+**B7. Small rates.**
+(a) Use the Taylor polynomial $\log(1+x) \approx x - x^2/2$ to compute $\log(1 + 10^{-10})$ to 11 significant digits.
+(b) The computer first rounds $1 + 10^{-10}$ to the nearest double (gap $\varepsilon \approx 2.2\times10^{-16}$ near 1). How large can the error in the stored $1 + x$ be, **relative to $x$**? About how many significant digits of $\log(1 + 10^{-10})$ can `log(1 + x)` get right?
+(c) What does `log(1 + 1e-17)` return, and why?
+(d) A mutation rate is $\mu = 10^{-9}$ per site per generation. Use $e^{-\mu} \approx 1 - \mu + \mu^2/2$ to compute $P(\text{at least one mutation}) = 1 - e^{-\mu}$ to 10 significant digits.
+
+**B8. Integers.**
+(a) The human genome is about $3.1\times10^9$ bp. Can a position on the concatenated genome be stored in R's `integer` type? In a double?
+(b) A single-cell count matrix has 20 000 genes and 100 000 cells. Does the number of entries fit in a 32-bit integer? What about 30 000 genes?
+(c) Is $2^{53} + 1$ a double? What does `2^53 + 1 - 2^53` return?
+
+## In code
+
+**C1. See the stored numbers.**
+(a) Print 0.1, 0.25, 0.3, 1/3 and 0.5 with 20 decimals. Which are exact? Does that match B2?
+(b) Add 0.1 to itself ten times in a loop, starting from 0. Is the result `== 1`? Print it with 20 decimals, then compare with a tolerance.
+
+**C2. Machine epsilon and the gap.**
+(a) Find machine epsilon yourself: start with `eps <- 1` and halve it while `1 + eps / 2 != 1`. Compare with the built-in value.
+(b) Write a function `gap(x)` from the formula and check your answers to B4(a). (Python: compare with [`np.spacing`](https://numpy.org/doc/stable/reference/generated/numpy.spacing.html).)
+(c) Check B4(b) in code.
+
+**C3. A grid of concentrations.** A dose–response experiment uses the concentrations `seq(0, 1, by = 0.1)` (Python: `np.arange(0, 1.05, 0.1)`). You want the index of concentration 0.3.
+(a) Try `which(conc == 0.3)` (Python: `np.where(conc == 0.3)[0]`). What happens?
+(b) Write a function `near(a, b, tol)` that returns `TRUE` when $|a - b| \le \text{tol}\cdot\max(|a|, |b|, 1)$, and use it to find the index.
+
+**C4. Overflow, underflow and integers.**
+(a) Check all your answers to B5 (a)–(i) in code (for (e), R has `factorial`; in Python use `np.exp(1000.0)` for (d) and skip (e)).
+(b) Store the lengths of human chromosomes 1–13 (GRCh38, given in the solution below) as R integers (Python: `np.int32`), and take the cumulative sum. Where does it go wrong? Fix it.
+
+**C5. Underflow in a likelihood.** UMI counts of one gene in 10 000 cells are modelled as Poisson with mean $\lambda$. Use the counts `rep(c(2, 4, 3, 1, 5, 3, 2, 6, 3, 2), 1000)`.
+(a) For each $\lambda$ on the grid `seq(2, 4, by = 0.01)`, compute the likelihood $\prod_i P(\text{count}_i \mid \lambda)$ with [`dpois`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Poisson.html) (Python: [`scipy.stats.poisson.pmf`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.poisson.html)). Which $\lambda$ has the largest likelihood?
+(b) Do the same with the log-likelihood, using `dpois(..., log = TRUE)` (Python: `poisson.logpmf`). Which $\lambda$ now? Compare with the mean of the counts (the exact maximum-likelihood estimate).
+(c) How many cells does it take before the product of the first $n$ likelihoods (at $\lambda = 3$) underflows? Try $n = 300$ and $n = 400$.
+
+**C6. Log-sum-exp.**
+(a) Write `logsumexp(a)`. Make it return `-Inf` when every element is `-Inf` (otherwise `m - m` gives `NaN`).
+(b) Check B6 (a)–(c). In Python, also compare with [`scipy.special.logsumexp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.logsumexp.html).
+(c) **Genotype calling from 2000 reads.** At a site with $n = 2000$ reads, $k = 1010$ show the alternative base. With sequencing error rate 0.01, the probability that a read shows the alternative base is $q = 0.01$ (genotype AA), $0.5$ (AB) or $0.99$ (BB). For fixed reads, $\log P(\text{reads} \mid g) = k \log q + (n-k)\log(1-q)$. Add the log prior $\log(0.25, 0.5, 0.25)$, then compute $\log P(\text{reads})$ both naively and with `logsumexp`, and the posterior of each genotype.
+
+**C7. `expm1` and `log1p`.** For $\mu = 10^{-3}, 10^{-4}, \dots, 10^{-17}$, compute $1 - e^{-\mu}$ naively and with [`expm1`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Log.html) (Python: [`np.expm1`](https://numpy.org/doc/stable/reference/generated/numpy.expm1.html)). Print the relative difference. From which $\mu$ on is the naive version useless? Compare with B7(b).
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — decimal to binary (B1, B2)"}
+Whole part: divide by 2 and keep the remainders; the **last** remainder is the **first** bit. Fraction part: multiply by 2; the integer part (0 or 1) is the next bit, then drop it and continue with the fraction. For 5.375, do 5 and 0.375 separately and join them with a binary point. To check, add up the place values ($2^2, 2^1, 2^0, 2^{-1}, \dots$).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — the toy system (B3)"}
+Between $2^e$ and $2^{e+1}$ there are $2^3 = 8$ numbers, evenly spaced with gap $2^e/8$. Machine epsilon is the gap just above 1. To round, find the two neighbours and pick the closer one.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — the gap near x (B4)"}
+Find the integer $k$ with $2^k \le |x| < 2^{k+1}$: $2^9 = 512$, $2^{10} = 1024$, $2^{-10} \approx 0.000977$, $2^{31} \approx 2.15\times10^9$, $2^{53} \approx 9.0\times10^{15}$. The gap is $2^{k-52}$. In code: `2^(floor(log2(abs(x))) - 52)` in R; `np.spacing(x)` in Python.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — overflow and underflow (B5)"}
+Work with powers of 10: a double is between about $10^{-308}$ (or $10^{-324}$ with subnormals) and $10^{308}$. For powers, $a^n = 10^{n \log_{10} a}$, or $e^{n \ln a}$. Operations are done **left to right**, so the order in (f) matters. In (i), what is $0/0$?
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — log-sum-exp (B6, C6)"}
+Subtract the largest $a_k$ from every $a_k$, exponentiate (now the largest term is $e^0 = 1$), add, take the log, and add the largest $a_k$ back. The posterior weights are $e^{a_k - \text{LSE}}$, where LSE is the log-sum-exp; they add up to 1. In R, [`max`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Extremes.html), `exp`, `sum`, `log`; in Python, `np.max`, `np.exp`, `np.sum`, `np.log`, or [`scipy.special.logsumexp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.logsumexp.html).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — comparing with a tolerance (C1, C3)"}
+R: [`all.equal(a, b)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/all.equal.html) returns `TRUE` or a description of the difference, so use `isTRUE(all.equal(a, b))` in an `if`. Python: [`math.isclose(a, b)`](https://docs.python.org/3/library/math.html#math.isclose) for single numbers, [`np.isclose(a, b)`](https://numpy.org/doc/stable/reference/generated/numpy.isclose.html) for arrays. For your own `near`, use `abs` and `pmax` (R) or `np.abs` and `np.maximum` (Python). See [`sprintf`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/sprintf.html) (R) or an f-string `f"{x:.20f}"` (Python) to print digits.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — limits of the number system (C2, C4)"}
+R: [`.Machine`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/zMachine.html) has `double.eps`, `double.xmax`, `double.xmin` and `integer.max`. Python: [`np.finfo(float)`](https://numpy.org/doc/stable/reference/generated/numpy.finfo.html) has `.eps`, `.max`, `.tiny`, `.smallest_subnormal`; [`np.iinfo(np.int32)`](https://numpy.org/doc/stable/reference/generated/numpy.iinfo.html) has `.max`. Convert integers to doubles with `as.numeric()` (R) or `.astype(np.float64)` (Python). Check results with [`is.finite`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/is.finite.html) / `np.isfinite`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 8 — log-likelihoods (C5)"}
+Use `sapply(lambda, function(l) ...)` in R or a list comprehension in Python to loop over the grid. `which.max` (R) and `np.argmax` (Python) return the **first** maximum, so if every value is 0 they return the first grid point.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $6$: $6/2 = 3$ r $0$, $3/2 = 1$ r $1$, $1/2 = 0$ r $1$ → $110_2$. $13 = 1101_2$ (lecture). $37 = 32 + 4 + 1 = 100101_2$. $255 = 128+64+32+16+8+4+2+1 = 11111111_2$.
+(b) $10110_2 = 16 + 4 + 2 = 22$. $1000000_2 = 2^6 = 64$.
+(c) 8 bits; $11111111_2 = 2^8 - 1 = 255$ is the largest. In general $n$ bits hold $0$ to $2^n - 1$, which is why a 32-bit signed integer (one bit for the sign) stops at $2^{31} - 1$.
+
+**B2.**
+(a) $0.75$: $1.5$ → 1, $1.0$ → 1, so $0.11_2$. $0.3125$: $0.625$ → 0, $1.25$ → 1, $0.5$ → 0, $1.0$ → 1, so $0.0101_2$ ($= \tfrac14 + \tfrac1{16}$). $5.375 = 101_2 + 0.011_2 = 101.011_2$.
+(b) $0.2 \to 0.4$ (0) $\to 0.8$ (0) $\to 1.6$ (1) $\to 1.2$ (1) $\to 0.4$ (0) $\to 0.8$ (0) $\to 1.6$ (1) $\to 1.2$ (1). After four steps we are back at 0.4, so the block $0011$ repeats: $0.2 = 0.\overline{0011}_2$.
+(c) `0.5 + 0.25 == 0.75` is `TRUE`: all three are exact in binary and the sum is exact. `0.1 + 0.7 == 0.8` is `FALSE` (try it): none of the three is exact, and the rounded sum need not land on the rounded 0.8.
+
+**B3.**
+(a) The gap in $[2, 4)$ is $2/8 = 0.25$: $2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75$.
+(b) $[1, 2)$: gap $1/8 = 0.125$. $[4, 8)$: gap $4/8 = 0.5$.
+(c) $1.3$ lies between $1.25$ and $1.375$; it is $0.05$ from $1.25$, so it rounds to $1.25$ (relative error $0.05/1.3 = 3.8\%$). $5.3$ lies between $5.0$ and $5.5$; it is $0.2$ from $5.5$, so $5.5$ (error $0.2/5.3 = 3.8\%$). $6.2$ lies between $6.0$ and $6.5$; it rounds to $6.0$ (error $0.2/6.2 = 3.2\%$).
+(d) $\varepsilon_\text{toy} = 1/8 = 0.125$. The worst rounding error is half a gap, so the relative error is at most $\varepsilon_\text{toy}/2 = 6.25\%$. All three in (c) are below that.
+(e) $1.1$ lies between $1$ and $1.125$ and is closer to $1.125$, so $1 + 0.1 = 1.125$. $1.05$ is closer to $1$, so $1 + 0.05 = 1$: the 0.05 is lost completely. Any $x$ below $\varepsilon_\text{toy}/2 = 1/16$ vanishes when added to 1.
+(f) Largest: $1.111_2 \times 2^2 = 1.875 \times 4 = 7.5$. $7.5 + 4 = 11.5$ is beyond the range: **overflow**. (An IEEE system would return `Inf`.)
+
+**B4.**
+(a)
+
+| $x$ | power of 2 below | gap $= 2^{k-52}$ | gap$/x$ |
+|---|---|---|---|
+| $1$ | $2^0$ | $2^{-52} \approx 2.2\times10^{-16}$ | $2.2\times10^{-16}$ |
+| $1000$ | $2^9 = 512$ | $2^{-43} \approx 1.1\times10^{-13}$ | $1.1\times10^{-16}$ |
+| $0.001$ | $2^{-10} \approx 0.000977$ | $2^{-62} \approx 2.2\times10^{-19}$ | $2.2\times10^{-16}$ |
+| $3.1\times10^9$ | $2^{31} \approx 2.15\times10^9$ | $2^{-21} \approx 4.8\times10^{-7}$ | $1.5\times10^{-16}$ |
+| $10^{16}$ | $2^{53} \approx 9.0\times10^{15}$ | $2^{1} = 2$ | $2\times10^{-16}$ |
+
+(b) Near $10^{16}$ the gap is 2, so the neighbours of $10^{16}$ are $10^{16} \pm 2$. $10^{16} + 1$ is exactly halfway; IEEE breaks ties towards the neighbour whose last bit is 0 ("round half to even"), which here is $10^{16}$ itself. So `1e16 + 1 == 1e16` is `TRUE` (C2 confirms).
+(c) Yes. The gap near $3.1\times10^9$ is $2^{-21}$, and $0.5 = 2^{-1}$ is a whole multiple of it, so $3\,100\,000\,000.5$ is a double. (Positions with up to 6 decimals would be rounded, at the 7th decimal.)
+(d) gap$/x$ is always between $1.1\times10^{-16}$ and $2.2\times10^{-16}$: the **relative** gap is the same for every size of $x$, between $\varepsilon/2$ and $\varepsilon$.
+
+**B5.**
+(a) $10^{400}$ → `Inf` (overflow).
+(b) $10^{-400}$ → `0` (underflow; below even the subnormals).
+(c) $0.01^{200} = 10^{-400}$ → `0`.
+(d) $e^{1000} \approx 10^{434}$ → `Inf` (above 709.8).
+(e) $7.9\times10^{374}$ → `Inf`.
+(f) Left to right: $10^{300}\cdot10^{10} = 10^{310}$ → `Inf`, and `Inf / 1e20` is still `Inf`. The other order: $10^{300}/10^{20} = 10^{280}$, times $10^{10}$ is $10^{290}$, a normal number. The **order of operations** decides whether an intermediate result overflows.
+(g) $0.999^{2000} = e^{2000 \ln 0.999} \approx e^{-2} \approx 0.135$, a normal number. Multiplying many numbers **close to 1** is harmless.
+(h) $10^{-6000}$ → `0`.
+(i) Both are `0`, so the ratio is $0/0$ = `NaN`. The true ratio is $(1/2)^{2000}$; its log is $2000 \ln(1/2) = -1386.3$. (The ratio itself, $10^{-602}$, would underflow too; the log is the only form a computer can hold.) On the log scale: $2000(\ln 10^{-3} - \ln (2\times10^{-3})) = -2000 \ln 2$.
+
+**B6.**
+(a) $m = -500$. $e^{0} + e^{-2} = 1 + 0.1353 = 1.1353$; $\ln 1.1353 = 0.1269$. So $\log(e^{-500} + e^{-502}) = -500 + 0.1269 = -499.873$. Weights: $e^{0}/1.1353 = 0.881$ and $e^{-2}/1.1353 = 0.119$; they add up to 1.
+(b) $m = 2$; $1 + 1 + 1 = 3$; result $2 + \ln 3 = 3.0986$. Rule: $\log(n\,e^{a}) = a + \log n$.
+(c) $m = -1198$ (AB). $e^{-2} + e^{0} + e^{-12} = 0.13534 + 1 + 0.00000614 = 1.13534$; $\ln 1.13534 = 0.12693$. So $\log P(\text{reads}) = -1198 + 0.12693 = -1197.873$. Posteriors: AA $0.13534/1.13534 = 0.119$, AB $1/1.13534 = 0.881$, BB $6.14\times10^{-6}/1.13534 = 5.4\times10^{-6}$.
+(d) $e^{-1198}$ is far below $e^{-745}$, so every `exp(a)` underflows to 0, the sum is 0, and $\log 0 = -\infty$.
+(e) With $m = -1000$, the terms are $e^{0} = 1$ and $e^{1000}$, which **overflows** to `Inf`, so the result is `Inf`. Pulling out the **largest** term guarantees every exponent is $\le 0$.
+
+**B7.**
+(a) $10^{-10} - \tfrac12 10^{-20} = 9.9999999995\times10^{-11}$ (the next Taylor term, $x^3/3$, is $3\times10^{-31}$, far too small to matter).
+(b) The stored $1 + x$ can be off by up to half a gap, $1.1\times10^{-16}$. Relative to $x = 10^{-10}$ that is $1.1\times10^{-6}$, so only about 6–7 significant digits of $x$ (and so of $\log(1+x)$) survive. R gives `log(1 + 1e-10)` $= 1.000000082690371\times10^{-10}$: correct to 7 digits.
+(c) $10^{-17} < \varepsilon/2$, so $1 + 10^{-17}$ rounds to exactly 1 and `log(1)` returns `0`: 100% error. `log1p(1e-17)` returns `1e-17`.
+(d) $1 - (1 - \mu + \mu^2/2) = \mu - \mu^2/2 = 10^{-9} - 5\times10^{-19} = 9.999999995\times10^{-10}$. This is what `-expm1(-mu)` returns on the slide; the naive `1 - exp(-mu)` gives $9.99999971718069\times10^{-10}$, wrong from the 8th digit.
+
+**B8.**
+(a) Not as an R integer: $3.1\times10^9 > 2^{31} - 1 \approx 2.147\times10^9$. As a double, yes: every whole number up to $9\times10^{15}$ is exact.
+(b) $20\,000 \times 100\,000 = 2\times10^9 < 2.147\times10^9$: it fits, barely. $30\,000 \times 100\,000 = 3\times10^9$ does not. This is why large sparse-matrix libraries switched to 64-bit indices.
+(c) No: the gap at $2^{53}$ is 2, so $2^{53} + 1$ is a tie and rounds to $2^{53}$ (round half to even). `2^53 + 1 - 2^53` returns `0`.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+sprintf("%.20f", c(0.1, 0.25, 0.3, 1/3, 0.5))
+# [1] "0.10000000000000000555" "0.25000000000000000000" "0.29999999999999998890"
+# [4] "0.33333333333333331483" "0.50000000000000000000"
+
+s <- 0
+for (i in 1:10) s <- s + 0.1
+s == 1
+# [1] FALSE
+sprintf("%.20f", s)
+# [1] "0.99999999999999988898"
+isTRUE(all.equal(s, 1))
+# [1] TRUE
+```
+
+### Python
+
+```python
+for v in [0.1, 0.25, 0.3, 1/3, 0.5]:
+    print(f"{v:.20f}")
+# 0.10000000000000000555
+# 0.25000000000000000000
+# 0.29999999999999998890
+# 0.33333333333333331483
+# 0.50000000000000000000
+
+s = 0.0
+for i in range(10):
+    s = s + 0.1
+print(s == 1)
+# False
+print(f"{s:.20f}")
+# 0.99999999999999988898
+print(math.isclose(s, 1))
+# True
+```
+
+:::
+
+Only 0.25 and 0.5 (powers of 2) are exact, as B2 predicts. Ten additions of the rounded 0.1 accumulate ten rounding errors, and the result misses 1 by one gap ($1.1\times10^{-16}$ below 1). (The built-in `sum(rep(0.1, 10))` in R and `sum([0.1] * 10)` in Python happen to give exactly 1, because they add with extra precision internally; do not rely on that.)
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+eps <- 1
+while (1 + eps / 2 != 1) eps <- eps / 2
+eps
+# [1] 2.220446e-16
+.Machine$double.eps
+# [1] 2.220446e-16
+
+gap <- function(x) 2^(floor(log2(abs(x))) - 52)
+gap(c(1, 1000, 0.001, 3.1e9, 1e16))
+# [1] 2.220446e-16 1.136868e-13 2.168404e-19 4.768372e-07 2.000000e+00
+1e16 + 1 == 1e16
+# [1] TRUE
+```
+
+### Python
+
+```python
+eps = 1.0
+while 1 + eps / 2 != 1:
+    eps = eps / 2
+print(eps)
+# 2.220446049250313e-16
+print(np.finfo(float).eps)
+# 2.220446049250313e-16
+
+def gap(x):
+    return 2.0 ** (np.floor(np.log2(np.abs(x))) - 52)
+print(gap(np.array([1, 1000, 0.001, 3.1e9, 1e16])))
+# [2.22044605e-16 1.13686838e-13 2.16840434e-19 4.76837158e-07
+#  2.00000000e+00]
+print(np.spacing(np.array([1, 1000, 0.001, 3.1e9, 1e16])))
+# [2.22044605e-16 1.13686838e-13 2.16840434e-19 4.76837158e-07
+#  2.00000000e+00]
+print(1e16 + 1 == 1e16)
+# True
+```
+
+:::
+
+The loop stops at the last `eps` for which `1 + eps` is still bigger than 1: that is exactly machine epsilon. The gaps match the B4 table and `np.spacing`.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+conc <- seq(0, 1, by = 0.1)
+which(conc == 0.3)
+# integer(0)
+near <- function(a, b, tol = 1e-9) abs(a - b) <= tol * pmax(abs(a), abs(b), 1)
+which(near(conc, 0.3))
+# [1] 4
+sprintf("%.20f", conc[4])
+# [1] "0.30000000000000004441"
+```
+
+### Python
+
+```python
+conc = np.arange(0, 1.05, 0.1)
+print(np.where(conc == 0.3)[0])
+# []
+def near(a, b, tol=1e-9):
+    return np.abs(a - b) <= tol * np.maximum(np.maximum(np.abs(a), np.abs(b)), 1)
+print(np.where(near(conc, 0.3))[0])
+# [3]
+print(f"{conc[3]:.20f}")
+# 0.30000000000000004441
+```
+
+:::
+
+The grid point is computed as $3 \times 0.1$, which is not the stored 0.3, so `==` finds nothing, without any error. (Python indices start at 0, so `[3]` is the same element as R's `4`.) The `max(..., 1)` in `near` makes the tolerance absolute for numbers below 1, so `near(x, 0)` also works.
+
+**C4.**
+(a) R prints `Inf`, `0`, `0`, `Inf`, `Inf`, `Inf`, `1e+290`, `0.1351999`, `0`, `NaN` for (a)–(i), matching B5. numpy returns `inf`, `0.0`, ... the same values, but also prints a `RuntimeWarning` for overflow and for $0/0$. (Plain Python floats differ again: `math.exp(1000)` raises an `OverflowError`.)
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+1e300 * 1e10 / 1e20
+# [1] Inf
+1e300 / 1e20 * 1e10
+# [1] 1e+290
+(1e-3)^2000 / (2e-3)^2000
+# [1] NaN
+2000 * (log(1e-3) - log(2e-3))      # the log of the ratio is fine
+# [1] -1386.294
+```
+
+### Python
+
+```python
+x = np.float64
+print(x(1e300) * x(1e10) / x(1e20))
+# inf                                 (plus a RuntimeWarning)
+print(x(1e300) / x(1e20) * x(1e10))
+# 1e+290
+print(x(1e-3) ** 2000 / x(2e-3) ** 2000)
+# nan                                 (plus a RuntimeWarning)
+print(2000 * (np.log(1e-3) - np.log(2e-3)))
+# -1386.2943611198907
+```
+
+:::
+
+(b)
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+len <- c(248956422L, 242193529L, 198295559L, 190214555L, 181538259L,
+         170805979L, 159345973L, 145138636L, 138394717L, 133797422L,
+         135086622L, 133275309L, 114364328L)     # chr1-13, GRCh38
+cumsum(len)[11:13]
+# [1] 1943767673 2077042982         NA
+# Warning message: integer overflow in 'cumsum'; use 'cumsum(as.numeric(.))'
+cumsum(as.numeric(len))[11:13]
+# [1] 1943767673 2077042982 2191407310
+```
+
+### Python
+
+```python
+lens = np.array([248956422, 242193529, 198295559, 190214555, 181538259,
+                 170805979, 159345973, 145138636, 138394717, 133797422,
+                 135086622, 133275309, 114364328], dtype=np.int32)
+print(np.cumsum(lens, dtype=np.int32)[10:13])
+# [ 1943767673  2077042982 -2103559986]
+print(np.cumsum(lens.astype(np.float64))[10:13])
+# [1.94376767e+09 2.07704298e+09 2.19140731e+09]
+```
+
+:::
+
+The cumulative length passes $2^{31} - 1$ at chromosome 13. R returns `NA` with a warning; numpy `int32` **wraps around** to a negative number with no warning at all, which is worse. Converting to doubles fixes both.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+counts <- rep(c(2, 4, 3, 1, 5, 3, 2, 6, 3, 2), 1000)   # 10 000 cells
+lambda <- seq(2, 4, by = 0.01)
+lik    <- sapply(lambda, function(l) prod(dpois(counts, l)))
+loglik <- sapply(lambda, function(l) sum(dpois(counts, l, log = TRUE)))
+range(lik)
+# [1] 0 0
+lambda[which.max(lik)]
+# [1] 2
+lambda[which.max(loglik)]
+# [1] 3.1
+mean(counts)
+# [1] 3.1
+prod(dpois(counts[1:300], 3)); prod(dpois(counts[1:400], 3))
+# [1] 1.69696e-234
+# [1] 2.024085e-312
+```
+
+### Python
+
+```python
+from scipy.stats import poisson
+counts = np.tile([2, 4, 3, 1, 5, 3, 2, 6, 3, 2], 1000)   # 10 000 cells
+lam = np.round(np.arange(2, 4.005, 0.01), 2)
+lik = np.array([np.prod(poisson.pmf(counts, l)) for l in lam])
+loglik = np.array([np.sum(poisson.logpmf(counts, l)) for l in lam])
+print(lik.min(), lik.max())
+# 0.0 0.0
+print(lam[np.argmax(lik)])
+# 2.0
+print(lam[np.argmax(loglik)])
+# 3.1
+print(counts.mean())
+# 3.1
+print(np.prod(poisson.pmf(counts[:300], 3)), np.prod(poisson.pmf(counts[:400], 3)))
+# 1.696959612854424e-234 2.024084667733e-312
+```
+
+:::
+
+Every likelihood is exactly 0, so `which.max` returns the **first** grid point, $\lambda = 2$: a confident wrong answer with no error message. The log-likelihood (between $-20512$ and $-17926$) peaks at $\lambda = 3.1$, the mean of the counts. The product underflows after a few hundred cells: at 400 cells it is already a subnormal ($2\times10^{-312}$, with only a few correct digits).
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+logsumexp <- function(a) {
+  m <- max(a)
+  if (m == -Inf) return(-Inf)               # all terms impossible
+  m + log(sum(exp(a - m)))
+}
+logsumexp(c(-500, -502))
+# [1] -499.8731
+logsumexp(c(2, 2, 2))
+# [1] 3.098612
+logsumexp(c(-1200, -1198, -1210))
+# [1] -1197.873
+logsumexp(c(-Inf, -Inf))
+# [1] -Inf
+```
+
+### Python
+
+```python
+from scipy.special import logsumexp
+
+def my_logsumexp(a):
+    a = np.asarray(a, dtype=float)
+    m = np.max(a)
+    if m == -np.inf:                       # all terms impossible
+        return -np.inf
+    return m + np.log(np.sum(np.exp(a - m)))
+
+for v in [[-500, -502], [2, 2, 2], [-1200, -1198, -1210], [-np.inf, -np.inf]]:
+    print(my_logsumexp(v), logsumexp(v))
+# -499.873071988957 -499.873071988957
+# 3.09861228866811 3.09861228866811
+# -1197.8730665771675 -1197.8730665771675
+# -inf -inf
+```
+
+:::
+
+All match B6. (c), genotype calling:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+n <- 2000; k <- 1010; err <- 0.01            # reads, alt reads, error rate
+q <- c(AA = err, AB = 0.5, BB = 1 - err)     # P(alt read | genotype)
+a <- k * log(q) + (n - k) * log(1 - q) + log(c(0.25, 0.5, 0.25))
+a
+#        AA        AB        BB
+# -4662.558 -1386.988 -4570.656
+log(sum(exp(a)))
+# [1] -Inf
+logsumexp(a)
+# [1] -1386.988
+exp(a - logsumexp(a))                         # posterior
+# AA AB BB
+#  0  1  0
+```
+
+### Python
+
+```python
+n, k, err = 2000, 1010, 0.01                 # reads, alt reads, error rate
+q = np.array([err, 0.5, 1 - err])            # P(alt read | genotype): AA, AB, BB
+a = k * np.log(q) + (n - k) * np.log(1 - q) + np.log([0.25, 0.5, 0.25])
+print(a)
+# [-4662.5580147 -1386.9875083 -4570.6556177]
+print(np.log(np.sum(np.exp(a))))
+# -inf                                (plus a RuntimeWarning)
+print(my_logsumexp(a))
+# -1386.9875083004506
+print(np.exp(a - my_logsumexp(a)))          # posterior
+# [0. 1. 0.]
+```
+
+:::
+
+The naive version returns $-\infty$, which would make every posterior $0/0$. With log-sum-exp, $\log P(\text{reads}) = -1386.988$ and AB has posterior 1: with 1010 of 2000 reads showing the alternative base, the heterozygote is overwhelmingly more likely. The other two posteriors are about $e^{-3200}$, which is 0 in doubles, and that is fine: they are 0 to every digit we can store.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+mu <- 10^-(3:17)
+naive  <- 1 - exp(-mu)
+stable <- -expm1(-mu)
+data.frame(mu, relerr = signif(abs(naive - stable) / stable, 2))
+#       mu  relerr
+# 1  1e-03 3.0e-14
+# 2  1e-04 1.3e-14
+# 3  1e-05 5.7e-13
+# 4  1e-06 1.6e-11
+# 5  1e-07 4.9e-10
+# 6  1e-08 1.0e-08
+# 7  1e-09 2.8e-08
+# 8  1e-10 8.3e-08
+# 9  1e-11 8.3e-08
+# 10 1e-12 2.2e-05
+# 11 1e-13 3.1e-04
+# 12 1e-14 8.0e-04
+# 13 1e-15 8.0e-04
+# 14 1e-16 1.1e-01
+# 15 1e-17 1.0e+00
+```
+
+### Python
+
+```python
+mu = 10.0 ** -np.arange(3, 18)
+naive = 1 - np.exp(-mu)
+stable = -np.expm1(-mu)
+relerr = np.abs(naive - stable) / stable
+for m_, r in zip(mu, relerr):
+    print(f"{m_:.0e}  {r:.1e}")
+# 1e-03  3.0e-14
+# 1e-04  1.3e-14
+# 1e-05  5.7e-13
+# 1e-06  1.6e-11
+# 1e-07  6.2e-10
+# 1e-08  1.1e-09
+# 1e-09  2.8e-08
+# 1e-10  8.3e-08
+# 1e-11  8.3e-08
+# 1e-12  2.2e-05
+# 1e-13  3.1e-04
+# 1e-14  8.0e-04
+# 1e-15  8.0e-04
+# 1e-16  1.1e-01
+# 1e-17  1.0e+00
+```
+
+:::
+
+The relative error grows roughly like $\varepsilon/\mu$, as B7(b) predicts: about $10^{-8}$ at $\mu = 10^{-9}$ (half the digits gone), $10^{-4}$ at $\mu = 10^{-13}$, and 100% from $\mu \approx 10^{-16}$ on, where $e^{-\mu}$ rounds to exactly 1. (A few small entries differ between R and Python because the two use slightly different `exp` routines; the pattern is the same.) The rule: whenever you compute $1 - e^{-x}$, $e^x - 1$ or $\log(1 \pm x)$ with a small $x$, use `expm1`/`log1p`.
+:::
+
+## Where this leads
+
+- **error-conditioning (unit 3):** we measure errors as absolute and relative errors, and study **catastrophic cancellation** (B7 and the subtraction slide are first examples) and the **condition number**, which says how much a problem magnifies the rounding errors of this unit.
+- **convergence-cost (unit 4):** machine epsilon sets a floor. On an error-vs-step-size plot, errors stop falling at around $10^{-16}$ (or much earlier) because of rounding; that is the trade-off between truncation and rounding error.
+- Stopping tolerances in root finding and optimisation (Parts 2 and 9) are chosen relative to $\varepsilon$, and the likelihoods we maximise in Part 9 are always **log**-likelihoods, for the reasons in C5.

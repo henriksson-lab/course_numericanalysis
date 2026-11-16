@@ -1,0 +1,641 @@
+---
+title: "Exercise: convergence and cost"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- separate **truncation error** (from the formula) and **rounding error** (from floating point) in a numerical derivative, and predict the step $h$ where their sum is smallest,
+- read the **order of accuracy** $p$ in error $\approx C h^p$ from a table or from the **slope of a log–log plot**, and check it without knowing the exact answer,
+- tell **linear** from **quadratic** convergence of an iteration by the digits gained per step,
+- **count operations** for vector and matrix computations and use big-O to predict how the run time grows,
+- run a **doubling experiment**, read the cost exponent from a log–log plot of time against $n$, and extrapolate to a full single-cell data set,
+- estimate the **memory** of a matrix (8 bytes per double) and say when **sparse** storage saves you.
+
+Do the pen-and-paper problems first. The code problems measure the same things at sizes where only code works.
+
+## Background
+
+**Truncation vs rounding.** The forward difference $D(h) = \dfrac{f(t+h) - f(t)}{h}$ approximates $f'(t)$. Taylor's theorem gives
+
+$$D(h) = f'(t) + \tfrac{h}{2} f''(\xi), \qquad \text{so the truncation error} \approx \tfrac{|f''|}{2}\,h.$$
+
+Each value of $f$ is stored with a relative error up to $\varepsilon \approx 2.2\times10^{-16}$; the subtraction keeps that absolute error and the division by $h$ amplifies it:
+
+$$\text{rounding error} \approx \frac{\varepsilon\,|f(t)|}{h}.$$
+
+The total error is V-shaped on a log–log plot, with its minimum near $h \approx \sqrt{\varepsilon} \approx 10^{-8}$ for the forward difference.
+
+**Order of accuracy.** A method has order $p$ if its error $\approx C h^p$, written $O(h^p)$. On a log–log plot, $\log_{10}\text{err} = \log_{10}C + p\log_{10}h$: a straight line with slope $p$. From two points: $p = \dfrac{\log_{10}(\text{err}_1/\text{err}_2)}{\log_{10}(h_1/h_2)}$. Without the exact answer: $\dfrac{D(h) - D(h/2)}{D(h/2) - D(h/4)} \approx 2^p$.
+
+**Convergence of iterations.** Linear: $e_{k+1} \approx c\,e_k$ ($0 < c < 1$), a fixed $-\log_{10}c$ digits per step. Quadratic: $e_{k+1} \approx C e_k^2$, the number of correct digits roughly doubles each step.
+
+**Cost.** For vectors of length $n$ and $n\times n$ matrices: dot product $\approx 2n$ operations, matrix–vector $\approx 2n^2$, matrix–matrix $\approx 2n^3$. A cost $O(n^p)$ is multiplied by $2^p$ when $n$ doubles. Time it at several $n$ and fit the slope of $\log(\text{time})$ against $\log n$.
+
+**Memory.** One double = 8 bytes. A dense $r \times c$ matrix takes $8rc$ bytes. A sparse matrix (compressed sparse column) stores about 12 bytes per non-zero: 8 for the value, 4 for its row index.
+
+Timing and measuring memory in R and Python:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- runif(1e6)
+system.time(sort(x))["elapsed"]   # seconds, wall clock
+object.size(x)                    # bytes
+# 8000048 bytes
+```
+
+### Python
+
+```python
+import time
+import numpy as np
+x = np.random.default_rng(1).random(10**6)
+start = time.perf_counter()
+np.sort(x)
+print(time.perf_counter() - start)   # seconds, wall clock
+print(x.nbytes)                      # bytes
+# 8000000
+```
+
+:::
+
+R: [`system.time()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/system.time.html), [`object.size()`](https://stat.ethz.ch/R-manual/R-devel/library/utils/html/object.size.html). Python: [`time.perf_counter()`](https://docs.python.org/3/library/time.html#time.perf_counter), [`ndarray.nbytes`](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.nbytes.html) (also the [`timeit`](https://docs.python.org/3/library/timeit.html) module for repeated timings). Timings depend on your machine: in the solutions below, the times are examples from one machine; your numbers will differ, the ratios and slopes should not.
+
+## By hand
+
+**B1. (two difference formulas)**
+(a) For $f(x) = x^2$ at $x = 1$ (true derivative $2$), compute the forward difference $\dfrac{f(1+h) - f(1)}{h}$ for $h = 0.1$ and $h = 0.01$, and the errors. Show that the error is exactly $h$, and connect this to $\tfrac{h}{2}f''$.
+(b) Compute the central difference $\dfrac{f(1+h) - f(1-h)}{2h}$ for $h = 0.1$. What is its error?
+(c) Repeat (a) and (b) for $f(x) = x^3$ at $x = 1$ (true derivative $3$). Expand $(1 \pm h)^3$ to get each error as a polynomial in $h$. What happens to each error when $h$ is divided by 10? What are the two orders?
+
+**B2. (reading the order from a table)** Three methods, three error tables:
+
+| $h$ | method A | method B | method C |
+|----:|----:|----:|----:|
+| $0.2$ | $4.0\times10^{-3}$ | $8.0\times10^{-2}$ | |
+| $0.1$ | $1.0\times10^{-3}$ | $1.0\times10^{-2}$ | |
+| $0.05$ | $2.5\times10^{-4}$ | $1.25\times10^{-3}$ | |
+| $10^{-10}$ | | | $1.0\times10^{-6}$ |
+| $5\times10^{-11}$ | | | $2.1\times10^{-6}$ |
+| $2.5\times10^{-11}$ | | | $3.9\times10^{-6}$ |
+
+(a) Find the order $p$ of methods A and B, and the constant $C$ in error $\approx C h^p$.
+(b) For each of A and B, how small must $h$ be for an error of $10^{-8}$ (ignoring rounding)?
+(c) What is happening in method C? What would you change?
+
+**B3. (the best step)** The total error of the forward difference is about $E(h) = a\,h + \dfrac{b}{h}$ with $a = |f''|/2$ and $b = \varepsilon|f|$.
+(a) Set $E'(h) = 0$ and show that the best step is $h^* = \sqrt{b/a}$ and the smallest error is $E(h^*) = 2\sqrt{ab}$.
+(b) For the OD curve of the lecture at $t = 3$ h: $f = 0.389$, $|f''| = 0.0592$, $\varepsilon = 2.2\times10^{-16}$. Compute $h^*$ and $E(h^*)$. (The lecture measured an error of $2.0\times10^{-9}$ at $h = 10^{-7}$ and $3.0\times10^{-9}$ at $h = 10^{-8}$.)
+(c) For the central difference, $E(h) \approx c\,h^2 + b/h$. Show that $h^* \propto \varepsilon^{1/3}$, and estimate it.
+
+**B4. (digits per step)** Errors of three iterations:
+
+- (a) $0.1,\ 0.05,\ 0.025,\ 0.0125, \ldots$
+- (b) $10^{-1},\ 10^{-2},\ 10^{-4},\ 10^{-8}, \ldots$
+- (c) $0.5,\ 0.45,\ 0.405,\ 0.3645, \ldots$
+
+For each: linear or quadratic? Give $c$ (linear) or $C$ (quadratic). How many steps does (a) need to get from $0.1$ below $10^{-10}$? What is the next error in (b)? How many digits does (c) gain per step, and roughly how many steps does it need to get below $10^{-10}$?
+
+**B5. (counting operations)** Assume $10^9$ operations per second.
+(a) For $n\times n$ matrices $A$, $B$ and a vector $\mathbf x$ with $n = 20\,000$, count the operations for $(AB)\mathbf x$ and for $A(B\mathbf x)$. Both give the same vector. How long does each take?
+(b) How many gene pairs are there for 100 genes, and for 20 000 genes? By what factor does an all-pairs correlation get slower?
+(c) A clustering step needs the Euclidean distance between every pair of 100 000 cells, each described by 50 principal components. Count the pairs and the operations per distance. How long does it take, and how much memory does a full $100\,000 \times 100\,000$ distance matrix need?
+
+**B6. (doubling experiments)**
+(a) A method takes $0.40$, $1.6$ and $6.5$ s for $n = 1000, 2000, 4000$. What is $p$? Predict the time for $n = 32\,000$.
+(b) Another method takes $0.010$, $0.011$ and $0.013$ s for $n = 10, 20, 40$. What can you conclude about its cost?
+(c) A colleague's $O(n^3)$ method takes 2 s for $n = 1000$. How long for $n = 20\,000$?
+
+**B7. (memory)** A single-cell atlas has 30 000 genes × 1 000 000 cells.
+(a) How much memory does it need as a dense matrix of doubles?
+(b) As a sparse matrix with 5 % non-zeros, at 12 bytes per non-zero?
+(c) How large is the gene–gene correlation matrix? The cell–cell distance matrix?
+(d) Why does centring each gene (subtracting its mean) turn (b) into (a)?
+
+## In code
+
+Write and run each task in R or Python. The setup for C1 and C2 is the OD curve of the lecture:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+K <- 1.2; N0 <- 0.05; r <- 0.8            # OD units, per hour
+od <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
+t0 <- 3
+exact <- r * od(t0) * (1 - od(t0) / K)    # logistic: N' = r N (1 - N/K)
+```
+
+### Python
+
+```python
+import numpy as np
+K, N0, r = 1.2, 0.05, 0.8                 # OD units, per hour
+def od(t):
+    return K / (1 + (K / N0 - 1) * np.exp(-r * t))
+t0 = 3.0
+exact = r * od(t0) * (1 - od(t0) / K)     # logistic: N' = r N (1 - N/K)
+```
+
+:::
+
+**C1. (the V)** Compute the forward-difference error for $h = 10^{-1}, 10^{-2}, \ldots, 10^{-15}$ in one vectorised line. Print a table and plot the error against $h$ on log–log axes. Which $h$ gives the smallest error? Compare with $\sqrt{\varepsilon}$ and with your $h^*$ from B3.
+
+**C2. (measure the order)** For $h = 10^{-1}, 10^{-1.5}, \ldots, 10^{-4}$, fit the slope of $\log_{10}$ error against $\log_{10} h$ for the forward and for the central difference. Then, pretending you do not know the exact answer, compute the ratios $\dfrac{D(h) - D(h/2)}{D(h/2) - D(h/4)}$ for the central difference starting at $h_0 = 0.1$ and at $h_0 = 10^{-8}$. What do they tell you?
+
+**C3. (linear vs quadratic)** Run 60 steps of bisection on $[1, 2]$ and of Newton $x_{k+1} = \tfrac12(x_k + 2/x_k)$ from $x_0 = 1$ for $\sqrt{2}$. For bisection use the bracket width as the error; for Newton use $|x_k - \sqrt2|$. After how many steps is each error below $10^{-12}$? Compute $e_{k+1}/e_k$ for bisection and $e_{k+1}/e_k^2$ for Newton. Print the number of correct digits, $-\log_{10} e_k$, for the first five Newton steps.
+
+**C4. (doubling experiment: gene correlation)** Simulate a cells × genes count matrix with 1000 cells and 500, 1000, 2000, 4000 genes (Poisson counts with mean 2). Time the gene–gene correlation matrix for each size. Print the ratios of successive times, fit the slope on a log–log scale, and extrapolate to 20 000 genes × 100 000 cells.
+
+**C5. (order of operations)** With $n = 2000$ random $n\times n$ matrices $A$, $B$ and a random vector $\mathbf x$, time $(AB)\mathbf x$ and $A(B\mathbf x)$. Check that the results agree. Compare the speed-up with your prediction from B5(a).
+
+**C6. (loops vs vectorised)** Compute the dot product of two random vectors of length $10^7$ with an explicit loop, with an element-wise product and sum, and with a library dot product. Time all three. What is the cost order of each? How much does vectorising buy you in your language?
+
+**C7. (memory and sparsity)** (a) Check that a $1000\times1000$ matrix of zeros takes 8 MB. Compute the size of the dense 20 000 × 100 000 matrix and of the 20 000 × 20 000 correlation matrix in GB.
+(b) Make a random sparse 2000 × 10 000 (genes × cells) matrix with 10 % non-zero counts. Compare its memory with the same matrix stored dense.
+(c) Centre each gene (subtract its row mean). What happens to the storage?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — Taylor expansions (B1)"}
+$(1+h)^2 = 1 + 2h + h^2$ and $(1+h)^3 = 1 + 3h + 3h^2 + h^3$. For $(1-h)^3$ flip the sign of the odd powers. In the central difference the even powers cancel.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — the order from two rows (B2)"}
+Halving $h$ divides an $O(h^p)$ error by $2^p$: a factor 4 means $p = 2$, a factor 8 means $p = 3$. Then $C = \text{err}/h^p$ from any row, and $h = (\text{target}/C)^{1/p}$. If the error **grows** as $h$ shrinks, you are on the rounding side of the V.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — the best step (B3)"}
+$E'(h) = a - b/h^2$. For the central difference $E'(h) = 2ch - b/h^2$, so $h^3 = b/(2c)$. Since $b \propto \varepsilon$, $h^* \propto \varepsilon^{1/3}$; with $|f|$ and $c$ of order one, $h^* \approx \varepsilon^{1/3}$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — linear or quadratic (B4)"}
+Compute $e_{k+1}/e_k$: constant means linear. If not constant, compute $e_{k+1}/e_k^2$. Digits per step for linear convergence: $-\log_{10} c$. Steps needed: (digits to gain) / (digits per step).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — counting (B5)"}
+A matrix–vector product is $2n^2$ operations, a matrix–matrix product $2n^3$. The number of pairs among $n$ items is $n(n-1)/2$. A Euclidean distance in $d$ dimensions needs $d$ subtractions, $d$ multiplications and $d-1$ additions (the square root is negligible).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — doubling (B6)"}
+Ratio $= 2^p$, so $p = \log_2(\text{ratio})$. Going from $n$ to $8n$ is three doublings: the time is multiplied by $(2^p)^3$. When the times barely change, ask what else could take 10 ms.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — vectorised derivative and log–log plots (C1, C2)"}
+`od(t0 + h)` works for a vector `h` in both languages, so the whole table is one line. R: `plot(h, err, log = "xy")`; slope with [`lm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html)`(log10(err) ~ log10(h))`. Python: [`plt.loglog`](https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.loglog.html); slope with [`np.polyfit`](https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html)`(np.log10(h), np.log10(err), 1)[0]`. Machine epsilon: [`.Machine$double.eps`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/zMachine.html) / [`np.finfo(float).eps`](https://numpy.org/doc/stable/reference/generated/numpy.finfo.html).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 8 — timing (C4, C5, C6)"}
+R: `system.time(expr)["elapsed"]`; correlation of columns with [`cor()`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/cor.html); counts with [`rpois`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Poisson.html); library dot product [`crossprod`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/crossprod.html). Python: `start = time.perf_counter()` before and `time.perf_counter() - start` after; [`np.corrcoef(X, rowvar=False)`](https://numpy.org/doc/stable/reference/generated/numpy.corrcoef.html) correlates columns; counts with [`rng.poisson`](https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.poisson.html); dot product `x @ y`. If a run takes less than ~0.1 s, the time is mostly overhead.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 9 — sparse matrices (C7)"}
+R: the [Matrix](https://cran.r-project.org/package=Matrix) package ships with R; [`rsparsematrix()`](https://rdrr.io/cran/Matrix/man/rsparsematrix.html) makes a random sparse matrix, `as.matrix()` makes it dense. Python: [`scipy.sparse.random`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.random.html) with `format="csc"`; the storage is `S.data.nbytes + S.indices.nbytes + S.indptr.nbytes`; `S.toarray()` makes it dense.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution — by hand"}
+
+**B1.**
+(a) $h = 0.1$: $(1.21 - 1)/0.1 = 2.1$, error $0.1$. $h = 0.01$: $(1.0201 - 1)/0.01 = 2.01$, error $0.01$. In general $\big((1+h)^2 - 1\big)/h = 2 + h$, so the error is exactly $h$. With $f'' = 2$: $\tfrac{h}{2}f'' = h$. Taylor's remainder is exact here because $f''$ is constant.
+(b) $(1.21 - 0.81)/0.2 = 0.4/0.2 = 2$: error $0$. In general $\big((1+h)^2 - (1-h)^2\big)/(2h) = 4h/(2h) = 2$: the central difference is exact for any quadratic.
+(c) Forward: $\big((1+h)^3 - 1\big)/h = 3 + 3h + h^2$, error $3h + h^2$: $0.31$ for $h = 0.1$, $0.0301$ for $h = 0.01$. Dividing $h$ by 10 divides the error by about 10: **order 1**.
+Central: $\big((1+h)^3 - (1-h)^3\big)/(2h) = (6h + 2h^3)/(2h) = 3 + h^2$, error $h^2$: $0.01$ for $h = 0.1$ ($= (1.331 - 0.729)/0.2 - 3$), $10^{-4}$ for $h = 0.01$. Dividing $h$ by 10 divides the error by 100: **order 2**.
+
+**B2.**
+(a) A: each halving divides the error by 4, so $p = 2$; $C = 4.0\times10^{-3}/0.2^2 = 0.1$. B: each halving divides by 8, so $p = 3$; $C = 8.0\times10^{-2}/0.2^3 = 10$.
+(b) A: $0.1\,h^2 = 10^{-8}$ gives $h = \sqrt{10^{-7}} \approx 3.2\times10^{-4}$. B: $10\,h^3 = 10^{-8}$ gives $h = (10^{-9})^{1/3} = 10^{-3}$. The higher-order method reaches the target with a 3 times larger step.
+(c) The error roughly **doubles** when $h$ halves: slope $-1$, error $\propto 1/h$. Method C is on the rounding side of the V. Use a **larger** $h$ (for a forward difference around $10^{-8}$).
+
+**B3.**
+(a) $E'(h) = a - b/h^2 = 0$ gives $h^* = \sqrt{b/a}$. Then $E(h^*) = a\sqrt{b/a} + b\sqrt{a/b} = \sqrt{ab} + \sqrt{ab} = 2\sqrt{ab}$. At the optimum the two errors are equal.
+(b) $a = 0.0592/2 = 0.0296$, $b = 2.2\times10^{-16} \times 0.389 = 8.6\times10^{-17}$.
+$h^* = \sqrt{8.6\times10^{-17}/0.0296} = \sqrt{2.9\times10^{-15}} \approx 5.4\times10^{-8}$.
+$E(h^*) = 2\sqrt{0.0296 \times 8.6\times10^{-17}} = 2\sqrt{2.5\times10^{-18}} \approx 3.2\times10^{-9}$.
+The measured errors, $2\times10^{-9}$ and $3\times10^{-9}$ on either side of $h^*$, match. Only about 8 of the 16 digits of a double survive.
+(c) $E'(h) = 2ch - b/h^2 = 0$ gives $h^{*3} = b/(2c)$, so $h^* = (b/2c)^{1/3} \propto \varepsilon^{1/3} \approx (2.2\times10^{-16})^{1/3} \approx 6\times10^{-6}$. The best error is then of order $\varepsilon^{2/3} \approx 4\times10^{-11}$: about 10–11 digits instead of 8.
+
+**B4.**
+(a) Ratio $0.5$ every step: **linear**, $c = 1/2$ (this is bisection). $0.1 \times 2^{-k} < 10^{-10}$ needs $2^k > 10^9$, so $k = 30$ steps ($2^{30} \approx 1.07\times10^9$).
+(b) $e_{k+1} = e_k^2$: **quadratic** with $C = 1$. Next error $10^{-16}$, i.e. machine precision after 5 steps.
+(c) Ratio $0.9$ every step: **linear**, $c = 0.9$. Digits per step $-\log_{10}0.9 \approx 0.046$. From $0.5$ (0.3 digits) to $10^{-10}$ (10 digits) is $9.7$ digits: $9.7/0.046 \approx 210$ steps. Linear convergence with $c$ close to 1 is very slow.
+
+**B5.**
+(a) $(AB)\mathbf x$: $2n^3 + 2n^2 \approx 2 \times 8\times10^{12} = 1.6\times10^{13}$ operations, $\approx 16\,000$ s $\approx 4.4$ hours. $A(B\mathbf x)$: two matrix–vector products, $4n^2 = 1.6\times10^9$ operations, $\approx 1.6$ s. Same answer, a factor $n/2 = 10\,000$ in work. Brackets matter.
+(b) $100 \times 99/2 = 4950$ pairs; $20\,000 \times 19\,999/2 = 199\,990\,000 \approx 2\times10^8$ pairs. Factor $\approx 40\,400$, i.e. $(20\,000/100)^2 = 40\,000$.
+(c) Pairs: $100\,000 \times 99\,999/2 \approx 5\times10^9$. Per distance $50 + 50 + 49 \approx 150$ operations. Total $\approx 7.5\times10^{11}$ operations, $\approx 750$ s $\approx 12$ minutes. The full distance matrix has $10^{10}$ entries $\times 8$ bytes $= 80$ GB (40 GB if only one triangle is stored): it does not fit on a laptop. This is why tools that build nearest-neighbour graphs for clustering and UMAP never store all distances.
+
+**B6.**
+(a) Ratios $1.6/0.40 = 4.0$ and $6.5/1.6 \approx 4.1$: $p = \log_2 4 = 2$. From 4000 to 32 000 is three doublings: $6.5 \times 4^3 = 416$ s $\approx 7$ minutes.
+(b) Almost nothing. The times barely change because they are dominated by fixed overhead (starting the function, allocating memory, the clock itself), not by the work that grows with $n$. The apparent slope ($\approx 0.2$) is meaningless; time it at much larger $n$, until each run takes at least ~0.1 s.
+(c) $2 \times 20^3 = 16\,000$ s $\approx 4.4$ hours.
+
+**B7.**
+(a) $3\times10^4 \times 10^6 = 3\times10^{10}$ entries $\times 8$ bytes $= 2.4\times10^{11}$ bytes $= 240$ GB.
+(b) $5\,\% \times 3\times10^{10} = 1.5\times10^9$ non-zeros $\times 12$ bytes $= 18$ GB (plus 4 MB of column pointers). Large, but workstation-sized.
+(c) Gene–gene: $(3\times10^4)^2 \times 8 = 7.2$ GB. Cell–cell: $(10^6)^2 \times 8 = 8\times10^{12}$ bytes $= 8$ TB: impossible to store.
+(d) Subtracting the gene mean (positive for any gene that is detected at all) turns every zero into a non-zero negative number. Every entry must then be stored: 240 GB dense, or even more as a "sparse" matrix with no zeros (12 instead of 8 bytes per entry).
+:::
+
+::: {.callout-note collapse="true" title="Solution — in code"}
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+h   <- 10^-(1:15)
+err <- abs((od(t0 + h) - od(t0)) / h - exact)
+for (i in seq_along(h)) cat(sprintf("%.0e  %.3g\n", h[i], err[i]))
+# 1e-01  0.00289
+# 1e-02  0.000295
+# 1e-03  2.96e-05
+# 1e-04  2.96e-06
+# 1e-05  2.96e-07
+# 1e-06  2.96e-08
+# 1e-07  1.99e-09
+# 1e-08  3e-09
+# 1e-09  1.92e-08
+# 1e-10  1.47e-07
+# 1e-11  5.7e-06
+# 1e-12  3.9e-05
+# 1e-13  0.000428
+# 1e-14  0.00487
+# 1e-15  0.0992
+h[which.min(err)]
+# [1] 1e-07
+sqrt(.Machine$double.eps)
+# [1] 1.490116e-08
+plot(h, err, log = "xy", type = "b", xlab = "h", ylab = "|error|")
+```
+
+### Python
+
+```python
+import matplotlib.pyplot as plt
+h   = 10.0 ** -np.arange(1, 16)
+err = np.abs((od(t0 + h) - od(t0)) / h - exact)
+for hi, e in zip(h, err):
+    print(f"{hi:.0e}  {e:.3g}")
+# 1e-01  0.00289
+# 1e-02  0.000295
+# 1e-03  2.96e-05
+# 1e-04  2.96e-06
+# 1e-05  2.96e-07
+# 1e-06  2.96e-08
+# 1e-07  1.99e-09
+# 1e-08  3e-09
+# 1e-09  1.92e-08
+# 1e-10  1.47e-07
+# 1e-11  5.7e-06
+# 1e-12  3.9e-05
+# 1e-13  0.000428
+# 1e-14  0.00487
+# 1e-15  0.0992
+print(h[np.argmin(err)])
+# 1e-07
+print(np.sqrt(np.finfo(float).eps))
+# 1.4901161193847656e-08
+plt.loglog(h, err, "o-"); plt.xlabel("h"); plt.ylabel("|error|"); plt.show()
+```
+
+:::
+
+The error falls by a factor 10 per row down to $h = 10^{-7}$, then rises again. The best step on this grid is $h = 10^{-7}$ (error $2\times10^{-9}$), with $10^{-8}$ almost as good; both are close to $\sqrt\varepsilon = 1.5\times10^{-8}$ and to $h^* = 5.4\times10^{-8}$ from B3. The plot is the V of the lecture: slope $+1$ on the right, about $-1$ (jagged) on the left.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+h   <- 10^-seq(1, 4, by = 0.5)
+fwd <- abs((od(t0 + h) - od(t0)) / h - exact)
+cen <- abs((od(t0 + h) - od(t0 - h)) / (2 * h) - exact)
+coef(lm(log10(fwd) ~ log10(h)))
+# (Intercept)    log10(h)
+#  -1.5380002   0.9971424
+coef(lm(log10(cen) ~ log10(h)))
+# (Intercept)    log10(h)
+#   -2.150500    2.000896
+D <- function(h) (od(t0 + h) - od(t0 - h)) / (2 * h)
+ratios <- function(h0) {
+  d <- diff(sapply(h0 / 2^(0:5), D))   # D(h) - D(h/2), D(h/2) - D(h/4), ...
+  d[-length(d)] / d[-1]                # should be 2^p
+}
+ratios(0.1)
+# [1] 3.999289 3.999823 3.999956 3.999990
+ratios(1e-8)
+# [1]  0.05555556  2.25000000  0.50000000 -0.33333333
+```
+
+### Python
+
+```python
+h   = 10.0 ** -np.arange(1, 4.01, 0.5)
+fwd = np.abs((od(t0 + h) - od(t0)) / h - exact)
+cen = np.abs((od(t0 + h) - od(t0 - h)) / (2 * h) - exact)
+print(np.polyfit(np.log10(h), np.log10(fwd), 1))   # [slope, intercept]
+# [ 0.99714241 -1.53800023]
+print(np.polyfit(np.log10(h), np.log10(cen), 1))
+# [ 2.00089632 -2.15049963]
+def D(h):
+    return (od(t0 + h) - od(t0 - h)) / (2 * h)
+def ratios(h0):
+    d = np.diff(D(h0 / 2.0 ** np.arange(6)))   # D(h) - D(h/2), D(h/2) - D(h/4), ...
+    return d[:-1] / d[1:]                      # should be 2^p
+print(ratios(0.1))
+# [3.99928944 3.99982251 3.99995562 3.99998952]
+print(ratios(1e-8))
+# [ 0.05555556  2.25        0.5        -0.33333333]
+```
+
+:::
+
+Slopes $1.00$ (forward) and $2.00$ (central): first and second order. The intercept $10^{-1.54} \approx 0.029$ is $|f''|/2$. The ratios from $h_0 = 0.1$ approach $4 = 2^2$: second order, and these steps are in the truncation regime. From $h_0 = 10^{-8}$ the ratios are noise (even negative): those steps are on the rounding side of the V for the central difference, whose best step is near $\varepsilon^{1/3} \approx 6\times10^{-6}$ (B3c). The ratio test needs no exact answer, so you can run it on any method with a step size.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+nstep <- 60
+lo <- 1; hi <- 2; x <- 1
+e_bis <- e_new <- numeric(nstep)
+for (k in 1:nstep) {
+  mid <- (lo + hi) / 2
+  if (mid^2 > 2) hi <- mid else lo <- mid
+  e_bis[k] <- hi - lo                 # bracket width: a guaranteed error bound
+  x <- (x + 2 / x) / 2
+  e_new[k] <- abs(x - sqrt(2))
+}
+which(e_bis < 1e-12)[1]               # first step below 1e-12
+# [1] 40
+which(e_new < 1e-12)[1]
+# [1] 5
+e_bis[2:6] / e_bis[1:5]               # linear: e[k+1] / e[k]
+# [1] 0.5 0.5 0.5 0.5 0.5
+e_new[2:4] / e_new[1:3]^2             # quadratic: e[k+1] / e[k]^2
+# [1] 0.3333333 0.3529412 0.3535224
+-log10(e_new[1:5])                    # correct digits, Newton
+# [1]  1.066581  2.610284  5.672866 11.797314 15.653560
+```
+
+### Python
+
+```python
+nstep = 60
+lo, hi, x = 1.0, 2.0, 1.0
+e_bis = np.zeros(nstep); e_new = np.zeros(nstep)
+for k in range(nstep):
+    mid = (lo + hi) / 2
+    if mid**2 > 2:
+        hi = mid
+    else:
+        lo = mid
+    e_bis[k] = hi - lo                  # bracket width: a guaranteed error bound
+    x = (x + 2 / x) / 2
+    e_new[k] = abs(x - np.sqrt(2))
+print(np.argmax(e_bis < 1e-12) + 1)     # first step below 1e-12 (counting from 1)
+# 40
+print(np.argmax(e_new < 1e-12) + 1)
+# 5
+print(e_bis[1:6] / e_bis[0:5])          # linear: e[k+1] / e[k]
+# [0.5 0.5 0.5 0.5 0.5]
+print(e_new[1:4] / e_new[0:3]**2)       # quadratic: e[k+1] / e[k]^2
+# [0.33333333 0.35294118 0.35352238]
+print(-np.log10(e_new[0:5]))            # correct digits, Newton
+# [ 1.06658137  2.61028399  5.67286565 11.79731437 15.65355977]
+```
+
+:::
+
+Bisection needs 40 steps for $10^{-12}$, Newton 5. Bisection's ratio is exactly $1/2$ (linear, $0.3$ digits per step). Newton's $e_{k+1}/e_k^2$ settles near $0.354 = 1/(2\sqrt2)$ (quadratic), and the correct digits go 1, 2.6, 5.7, 11.8, 15.7: roughly doubling, until machine precision stops them. Part 2 explains where the constant comes from.
+
+**C4.** Your times will differ (machine, BLAS library, other programs running). These are example outputs from one Linux server.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+set.seed(1)
+cells <- 1000
+genes <- c(500, 1000, 2000, 4000)
+secs  <- numeric(length(genes))
+for (i in seq_along(genes)) {
+  X <- matrix(rpois(cells * genes[i], 2), nrow = cells)   # cells x genes
+  secs[i] <- system.time(cor(X))["elapsed"]
+}
+data.frame(genes, secs, ratio = c(NA, secs[-1] / secs[-length(secs)]))
+#   genes   secs    ratio
+# 1   500  0.167       NA
+# 2  1000  0.654 3.916168
+# 3  2000  2.594 3.966361
+# 4  4000 10.946 4.219738
+coef(lm(log10(secs) ~ log10(genes)))[2]
+# log10(genes)
+#     2.009105
+secs[4] * (20000 / 4000)^2 * (100000 / cells) / 3600     # hours
+# [1] 7.601389
+```
+
+### Python
+
+```python
+import time
+rng = np.random.default_rng(1)
+cells = 1000
+genes = np.array([500, 1000, 2000, 4000])
+secs = np.zeros(len(genes))
+for i, g in enumerate(genes):
+    X = rng.poisson(2, size=(cells, g)).astype(float)   # cells x genes
+    start = time.perf_counter()
+    np.corrcoef(X, rowvar=False)
+    secs[i] = time.perf_counter() - start
+print(secs.round(3))
+# [0.014 0.018 0.062 0.199]
+print((secs[1:] / secs[:-1]).round(2))
+# [1.28 3.39 3.22]
+print(np.polyfit(np.log10(genes), np.log10(secs), 1)[0])
+# 1.3163755080288322
+print(secs[-1] * (20000 / genes[-1])**2 * (100000 / cells) / 3600)   # hours
+# 0.13850991462176251
+```
+
+:::
+
+In R the ratios are close to 4 and the slope is $2.01$: quadratic in genes, as predicted by the pair count. The extrapolation (quadratic in genes, linear in cells) gives about 7.6 hours for 20 000 genes × 100 000 cells. For 100 genes the same rule gives $0.167 \times (100/500)^2 \times 100 \approx 0.7$ s.
+
+In Python, `np.corrcoef` uses an optimised multi-threaded matrix product and is far faster, but the fitted slope ($1.3$) is **too low**: the smallest runs take about 10 ms, where overhead dominates, and more cores join in as $n$ grows. Larger sizes push the slope towards 2; with `genes = [1000, 2000, 4000, 8000]` the same machine gave times `[0.019 0.119 0.254 0.711]` and slope $1.68$. Trust only an exponent from runs long enough to measure, and use $p = 2$ from the operation count for the extrapolation: about 8 minutes on this machine. R's `cor()` is slow because it does not use the optimised library; a correlation via `crossprod(scale(X))` was about 20 times faster here. A better constant, the same exponent.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+set.seed(1)
+n <- 2000
+A <- matrix(runif(n * n), n); B <- matrix(runif(n * n), n); x <- runif(n)
+system.time(y1 <- (A %*% B) %*% x)["elapsed"]
+# elapsed
+#   0.107
+system.time(y2 <- A %*% (B %*% x))["elapsed"]
+# elapsed
+#   0.014
+max(abs(y1 - y2)) / max(abs(y1))
+# [1] 4.818009e-15
+```
+
+### Python
+
+```python
+import time
+rng = np.random.default_rng(1)
+n = 2000
+A = rng.random((n, n)); B = rng.random((n, n)); x = rng.random(n)
+start = time.perf_counter(); y1 = (A @ B) @ x; print(round(time.perf_counter() - start, 3))
+# 0.081
+start = time.perf_counter(); y2 = A @ (B @ x); print(round(time.perf_counter() - start, 3))
+# 0.007
+print(np.max(np.abs(y1 - y2)) / np.max(np.abs(y1)))
+# 2.443153098537417e-15
+```
+
+:::
+
+The results agree to rounding error ($\sim 10^{-15}$ relative). $A(B\mathbf x)$ is about 8–12 times faster in the example runs above, not the $n/2 = 1000$ times the operation count predicts for $n = 2000$. The reason: the matrix–matrix product is the most optimised routine in numerical computing (it reuses data in the cache and uses all cores), so it runs at many more operations per second than a matrix–vector product. Operation counts predict how the time **grows**, not the constant. With one thread (`OPENBLAS_NUM_THREADS=1`) the R gap on this machine grew to about 25×, and it grows with $n$: at $n = 20\,000$ the difference is hours against a second.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+set.seed(1)
+x <- runif(1e7); y <- runif(1e7)
+dot_loop <- function(x, y) {
+  s <- 0
+  for (i in seq_along(x)) s <- s + x[i] * y[i]
+  s
+}
+system.time(dot_loop(x, y))["elapsed"]
+# elapsed
+#   0.619
+system.time(sum(x * y))["elapsed"]
+# elapsed
+#   0.071
+system.time(crossprod(x, y))["elapsed"]
+# elapsed
+#   0.032
+```
+
+### Python
+
+```python
+import time
+rng = np.random.default_rng(1)
+x = rng.random(10**7); y = rng.random(10**7)
+def dot_loop(x, y):
+    s = 0.0
+    for i in range(len(x)):
+        s += x[i] * y[i]
+    return s
+def elapsed(f):                       # seconds for one call of f()
+    start = time.perf_counter(); f(); return time.perf_counter() - start
+print(round(elapsed(lambda: dot_loop(x, y)), 3))
+# 3.035
+print(round(elapsed(lambda: np.sum(x * y)), 3))
+# 0.034
+print(round(elapsed(lambda: x @ y), 3))
+# 0.005
+```
+
+:::
+
+All three are $O(n)$: double $n$ and each time doubles. The constants differ: in R the loop was about 9–20 times slower than the vectorised versions; in Python about 90–600 times. Vectorising is worth a large constant factor, especially in Python, but it never changes the exponent: an $O(n^2)$ all-pairs computation stays $O(n^2)$ when vectorised.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+X <- matrix(0, nrow = 1000, ncol = 1000)
+object.size(X)
+# 8000216 bytes
+c(20000 * 100000 * 8 / 1e9, 20000^2 * 8 / 1e9)          # GB
+# [1] 16.0  3.2
+library(Matrix)                                          # ships with R
+set.seed(1)
+S <- rsparsematrix(2000, 10000, density = 0.1,
+                   rand.x = function(k) rpois(k, 2) + 1)  # genes x cells
+D <- as.matrix(S)
+c(dense = object.size(D), sparse = object.size(S)) / 1e6  # MB
+#    dense   sparse
+# 160.0002  24.0415
+Sc <- S - rowMeans(S)                    # centre each gene
+class(Sc)
+# [1] "dgeMatrix"
+# attr(,"package")
+# [1] "Matrix"
+c(centred = object.size(Sc)) / 1e6
+#  centred
+# 160.0012
+```
+
+### Python
+
+```python
+import scipy.sparse as sp
+X = np.zeros((1000, 1000))
+print(X.nbytes)
+# 8000000
+print(20000 * 100000 * 8 / 1e9, 20000**2 * 8 / 1e9)    # GB
+# 16.0 3.2
+rng = np.random.default_rng(1)
+S = sp.random(2000, 10000, density=0.1, format="csc", rng=rng,
+              data_rvs=lambda k: rng.poisson(2, k) + 1.0)   # genes x cells
+D = S.toarray()
+sparse_bytes = S.data.nbytes + S.indices.nbytes + S.indptr.nbytes
+print(D.nbytes / 1e6, sparse_bytes / 1e6)       # MB
+# 160.0 24.040004
+Sc = S - S.mean(axis=1)                          # centre each gene
+print(type(Sc).__name__, Sc.nbytes / 1e6)
+# matrix 160.0
+```
+
+:::
+
+(a) $10^6$ entries × 8 bytes = 8 MB (R adds a 216-byte header). Full size: 16 GB dense, 3.2 GB for the correlation matrix.
+(b) $2\times10^6$ non-zeros × 12 bytes = 24 MB sparse, against 160 MB dense: 6.7 times smaller.
+(c) After centring, the result is an ordinary dense matrix (R: `dgeMatrix`, Python: `numpy.matrix`) of 160 MB. Every zero became $-\text{mean}$. At full size that is 2.4 GB → 16 GB, from one line of code. Check `class()` / `type()` and the memory after each step of a pipeline.
+:::
+
+## Where this leads
+
+- **Numerical differentiation** (Part 7): forward, backward and central differences, the optimal step, Richardson extrapolation, and what to do with **noisy** measured OD data, where the "rounding" error is measurement noise and is far larger than $\varepsilon$.
+- **Solving nonlinear equations** (Part 2): why bisection converges linearly and Newton quadratically, and how to stop an iteration.
+- **Linear systems** (Part 3): the $O(n^3)$ cost of elimination, factor once and solve many times, and sparse storage and solvers for count matrices.
+- **Large eigenvalue problems** (Part 5, `eigen-algorithms`): PCA of 100 000 cells without forming the centred or the covariance matrix.

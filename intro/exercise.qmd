@@ -1,0 +1,555 @@
+---
+title: "Exercise: why numerical analysis?"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- say what a **numerical method** is, and name the three ways a computation goes wrong: **rounding**, **truncation**, **instability**;
+- classify a failure you meet in practice into one of the three;
+- write down a **Taylor polynomial** $P_n$ and use the **remainder term** to bound its error, by hand;
+- read the **order** of an approximation from errors at halved steps, and from the slope of a log–log plot;
+- see that more work buys accuracy only down to a **rounding floor**;
+- detect a fit that **converged to a wrong answer**, with a plot, several starting values and a units check.
+
+The by-hand problems are the core of this unit. The code problems confirm them and show the same ideas at a size where only code works.
+
+## Background
+
+**Numerical method.** A finite list of arithmetic operations that approximates a mathematical answer we cannot write down exactly, usually with an approximation, an iteration and a stopping rule. Example: Heron's method for $\sqrt 2$, $x_{k+1} = \tfrac12\left(x_k + 2/x_k\right)$ from $x_0 = 1$.
+
+**Three ways it goes wrong.**
+
+1. **Rounding error**: the computer keeps about 16 significant digits, and every operation rounds. `0.1 + 0.2 == 0.3` is `FALSE`.
+2. **Truncation error**: the method stops early (a finite sum, a finite step $h$, a finite number of iterations). $(e^h - 1)/h$ with $h = 0.1$ gives $1.0517$ instead of the exact slope 1.
+3. **Instability**: the algorithm amplifies small errors step after step. Euler's method for $C' = -kC$ multiplies by $1 - hk$ each step; if $|1 - hk| > 1$ the errors grow.
+
+A fourth source is not the method's fault: an **ill-conditioned problem**, where small changes in the data change the answer a lot (unit 3).
+
+**Taylor's theorem.** Near a point $a$,
+
+$$f(x) = \underbrace{f(a) + f'(a)(x-a) + \dots + \frac{f^{(n)}(a)}{n!}(x-a)^n}_{P_n(x)} \;+\; \underbrace{\frac{f^{(n+1)}(\xi)}{(n+1)!}(x-a)^{n+1}}_{R_n(x)}$$
+
+for some unknown $\xi$ between $a$ and $x$. To **bound** the error $R_n$, find the smallest and largest value of $f^{(n+1)}$ between $a$ and $x$.
+
+Useful expansions around $a = 0$:
+
+| $f(x)$ | $P_3(x)$ | $f^{(n+1)}$ for the remainder |
+|---|---|---|
+| $e^x$ | $1 + x + \frac{x^2}{2} + \frac{x^3}{6}$ | $e^{x}$ (every derivative) |
+| $\log(1+x)$ | $x - \frac{x^2}{2} + \frac{x^3}{3}$ | $f''' = \frac{2}{(1+x)^3}$, $f'''' = -\frac{6}{(1+x)^4}$ |
+| $\sqrt{1+x}$ | $1 + \frac{x}{2} - \frac{x^2}{8} + \frac{x^3}{16}$ | $f''' = \frac{3}{8}(1+x)^{-5/2}$ |
+
+**Order.** If the error behaves like $C h^p$ for small $h$, we write error $= O(h^p)$ and call $p$ the **order**. Halving $h$ divides the error by $2^p$, and on a log–log plot the error is a line with slope $p$. The error of $P_n$ is $O(x^{n+1})$.
+
+Example: the errors of $P_1, P_2, P_3$ for $e^{0.1}$.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- 0.1
+P <- c(1 + x, 1 + x + x^2/2, 1 + x + x^2/2 + x^3/6)
+exp(x) - P
+# [1] 5.170918e-03 1.709181e-04 4.251409e-06
+```
+
+### Python
+
+```python
+import numpy as np
+x = 0.1
+P = np.array([1 + x, 1 + x + x**2/2, 1 + x + x**2/2 + x**3/6])
+print(np.exp(x) - P)
+# [5.17091808e-03 1.70918076e-04 4.25140898e-06]
+```
+
+:::
+
+**A fit that converged to a wrong answer.** On the slides, `optim` fitted a logistic growth curve to OD600 data with time in minutes, starting from $r = 0.5$ (a sensible rate *per hour*). It reported convergence and returned a doubling time of 1 minute. The checks: plot the fit over the data, try several starting values and compare the sum of squared errors (SSE), and check the units and the size of the parameters.
+
+## By hand
+
+**B1. (Taylor for $e^x$)**
+(a) Write down $P_3(x)$ for $e^x$ around $0$ and compute $P_3(0.2)$ as a fraction or to 7 digits.
+(b) Write the remainder $R_3(0.2)$ and bound it from below and above. (Use $e^{0.2} \approx 1.2214$.)
+(c) Given $e^{0.2} = 1.2214028$, check that the actual error is inside your bounds.
+
+**B2. (Taylor for $\log(1+x)$: a growth rate)** A culture grows by 5 % per hour, so the continuous rate is $r = \log(1.05)$.
+(a) Derive $f', f'', f'''$ for $f(x) = \log(1+x)$ and the coefficients of $P_2$.
+(b) Estimate $r$ with $P_1$ and with $P_2$.
+(c) Bound the error of $P_2$ with the remainder $R_2$. Given $\log(1.05) = 0.0487902$, check.
+
+**B3. (A new expansion)** For $f(x) = \sqrt{1+x}$:
+(a) compute $f(0), f'(0), f''(0)$ and write $P_2(x)$;
+(b) estimate $\sqrt{1.02}$ with $P_2$, without a calculator;
+(c) the next term is $x^3/16$. Estimate the error of your answer from it.
+
+**B4. (Order from numbers)** A method with step $h$ gives these errors:
+
+| $h$ | 0.1 | 0.05 | 0.025 |
+|---|---|---|---|
+| method A | $3.2\times10^{-3}$ | $8.1\times10^{-4}$ | $2.0\times10^{-4}$ |
+| method B | $1.6\times10^{-2}$ | $1.0\times10^{-3}$ | $6.3\times10^{-5}$ |
+
+(a) What is the order of each method?
+(b) Predict the error of each at $h = 0.0125$.
+(c) Method A needs an error below $10^{-8}$. Roughly how small must $h$ be? Why might that not work on a computer?
+
+**B5. (Truncation, explained by Taylor)** Expand $e^h$ to show that $\dfrac{e^h - 1}{h} = 1 + \dfrac{h}{2} + \dfrac{h^2}{6} + \dots$ Predict the error of this slope estimate for $h = 0.1$ and $h = 0.01$. What is its order?
+
+**B6. (Instability, by hand)** Drug clearance $C' = -0.8\,C$ (per hour), $C(0) = 10$ mg/L. Euler's method is $C_{n+1} = (1 - 0.8h)\,C_n$.
+(a) Compute $C_1, C_2, C_3$ for $h = 3$, $h = 2$ and $h = 0.5$.
+(b) Compare with the exact $C(t) = 10e^{-0.8t}$ at $t = 0.5, 1, 1.5$ for $h = 0.5$.
+(c) For which step sizes $h$ do errors shrink instead of grow? For which do the values stay positive?
+
+**B7. (Heron by hand)** Do two steps of $x_{k+1} = \tfrac12(x_k + 2/x_k)$ from $x_0 = 1$, as fractions. How many correct digits does $x_2$ have? ($\sqrt2 = 1.41421356\dots$)
+
+**B8. (Classify)** For each situation, say whether the main problem is **rounding**, **truncation**, **instability** or none of these, in one sentence each.
+(a) `sum(p) == 1` is `FALSE` for a vector of probabilities that should add up to 1.
+(b) The area under a pharmacokinetic curve, computed with the trapezoid rule on 4 time points, differs from the exact integral by 8 %.
+(c) Euler with 3-hour steps gives negative and growing drug concentrations (B6).
+(d) `uniroot` returns the EC50 of a dose–response curve as 2.30008 when the exact value is 2.30000.
+(e) The growth-curve fit from the slides stops at $r = 0.68$ per minute.
+
+## In code
+
+**C1. (Order of Taylor polynomials)** Compute the errors of $P_1, P_2, P_3$ for $e^x$ at $x = 0.4, 0.2, 0.1, 0.05$. Compute $\log_2$ of the ratio of consecutive errors, and compare with your expectation. Then plot $|e^x - P_1(x)|$ against $x$ on log–log axes for $x$ from $0.01$ to $1$ and fit the slope.
+
+**C2. (The rounding floor)** Compute the error of $(e^h - 1)/h$ as an estimate of the slope 1, for $h = 10^{-1}, 10^{-2}, \dots, 10^{-12}$. Which $h$ is best? Compare the errors for large $h$ with B5. What happens for small $h$?
+
+**C3. (Instability from rounding alone)** The numbers $x_n = (1/3)^n$ satisfy $x_{n+1} = \tfrac{10}{3}x_n - x_{n-1}$ exactly, with $x_0 = 1$, $x_1 = 1/3$. Compute $x_0, \dots, x_{30}$ with this recurrence and compare with $(1/3)^n$. Where does it go wrong, and why? (Hint: the recurrence is also satisfied by $3^n$.)
+
+**C4. (The growth curve)** Use the data from the slides:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t_min <- seq(0, 1440, by = 120)                 # minutes
+od <- c(0.001, 0.047, 0.139, 0.282, 0.581, 0.859, 1.049,
+        1.161, 1.152, 1.217, 1.182, 1.176, 1.185)
+logistic <- function(p, t)                      # p = (r, K, N0)
+  p[2] / (1 + (p[2] / p[3] - 1) * exp(-p[1] * t))
+sse <- function(p) sum((od - logistic(p, t_min))^2)
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import minimize
+
+t_min = np.arange(0, 1441, 120)                 # minutes
+od = np.array([0.001, 0.047, 0.139, 0.282, 0.581, 0.859, 1.049,
+               1.161, 1.152, 1.217, 1.182, 1.176, 1.185])
+def logistic(p, t):                             # p = (r, K, N0)
+    r, K, N0 = p
+    return K / (1 + (K / N0 - 1) * np.exp(-r * t))
+def sse(p):
+    return np.sum((od - logistic(p, t_min))**2)
+```
+
+:::
+
+(a) Fit from the start $(r, K, N_0) = (0.5, 1, 0.05)$ with Nelder–Mead ([`optim`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/optim.html) in R, [`scipy.optimize.minimize`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html) with `method="Nelder-Mead"` in Python). Print the convergence flag, the SSE, the parameters and the doubling time $\log 2 / r$. Plot the fitted curve over the data.
+(b) Repeat from $r_0 = 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1$ (keep $K = 1$, $N_0 = 0.05$). Which starts give the good fit? How do you tell, without knowing the true answer?
+(c) Convert time to hours and fit again from $(0.5, 1, 0.05)$. What changed, and why?
+
+**C5. (A silent failure in a library)** Integrate the standard normal density from 0 to 20000 with [`integrate`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/integrate.html) (Python: [`scipy.integrate.quad`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.quad.html) with [`scipy.stats.norm.pdf`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.norm.html)). The exact answer is 0.5. Then try the limits $(0, 20)$ and $(0, \infty)$. What should you do before trusting a library integral?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint B1–B3 — Taylor and the remainder"}
+Write the remainder as (derivative of order $n+1$ at an unknown $\xi$) $\times\, x^{n+1} / (n+1)!$. The derivative is the only unknown part: find its smallest and largest value for $\xi$ between $0$ and $x$. For $e^x$ that is $e^0 = 1$ and $e^x$. For $\log(1+x)$ and $\sqrt{1+x}$, the derivative is largest at $\xi = 0$ and smallest at $\xi = x$. Factorials: $2! = 2$, $3! = 6$, $4! = 24$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint B4 — order from a table"}
+Divide each error by the next one (step halved). A ratio near $2^p$ means order $p$: 4 means 2, 8 means 3, 16 means 4. To reach a target error, solve $C h^p = \text{target}$ with $C$ found from one row of the table.
+:::
+
+::: {.callout-tip collapse="true" title="Hint B6 — Euler as repeated multiplication"}
+Each Euler step multiplies by the same factor $g = 1 - 0.8h$, so $C_n = 10\,g^n$. Errors are multiplied by the same factor. They shrink when $|g| < 1$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint C1–C2 — vectorised errors"}
+Build $P_1, P_2, P_3$ as vectors over all $x$ at once, then put the errors in a matrix with one column per polynomial. For the ratios, divide all rows but the last by all rows but the first. For the slope, fit a straight line to $\log_{10}$ error against $\log_{10} x$: [`lm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html) in R, [`numpy.polyfit`](https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html) with degree 1 in Python.
+:::
+
+::: {.callout-tip collapse="true" title="Hint C3 — two solutions of one recurrence"}
+Any combination $x_n = a\,(1/3)^n + b\,3^n$ satisfies the recurrence. With exact starting values, $b = 0$. The stored $1/3$ is rounded, which makes $b$ tiny but not zero, about $10^{-17}$. How big is $10^{-17}\cdot 3^{n}$ at $n = 20$ and $n = 30$?
+:::
+
+::: {.callout-tip collapse="true" title="Hint C4 — fitting"}
+In R, `optim(c(0.5, 1, 0.05), sse)` uses Nelder–Mead by default; `fit$convergence == 0` means it stopped normally, and `fit$value` is the SSE. In Python, `minimize(sse, [0.5, 1, 0.05], method="Nelder-Mead")` returns `fit.success`, `fit.fun` and `fit.x`. For (c), `t_h <- t_min / 60` and a new SSE function that uses it.
+:::
+
+::: {.callout-tip collapse="true" title="Hint C5 — what adaptive quadrature sees"}
+An adaptive rule evaluates the function at a set of points spread over the interval, and refines only where the values disagree. If every point lands where the function is (numerically) zero, there is nothing to disagree about. Plot the integrand over the interval, and check that the answer does not change when you change the limits a little.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution — By hand"}
+
+**B1.**
+(a) $P_3(x) = 1 + x + \frac{x^2}{2} + \frac{x^3}{6}$, so $P_3(0.2) = 1 + 0.2 + 0.02 + 0.008/6 = 1.2213333$.
+(b) $R_3(0.2) = \dfrac{e^{\xi}}{24}(0.2)^4 = \dfrac{e^{\xi}}{24}\cdot 0.0016$ with $0 < \xi < 0.2$. Lower bound $\frac{0.0016}{24} = 6.67\times10^{-5}$; upper bound $1.2214 \times 6.67\times10^{-5} = 8.14\times10^{-5}$.
+(c) $1.2214028 - 1.2213333 = 6.94\times10^{-5}$, inside $[6.67, 8.14]\times10^{-5}$ ✓.
+
+**B2.**
+(a) $f' = \frac{1}{1+x}$, $f'' = -\frac{1}{(1+x)^2}$, $f''' = \frac{2}{(1+x)^3}$. At $0$: $f = 0$, $f' = 1$, $f'' = -1$, so $P_2(x) = x - \frac{x^2}{2}$.
+(b) $P_1(0.05) = 0.05$; $P_2(0.05) = 0.05 - 0.00125 = 0.04875$.
+(c) $R_2 = \dfrac{f'''(\xi)}{6}x^3 = \dfrac{x^3}{3(1+\xi)^3}$ with $0 < \xi < 0.05$. Largest at $\xi = 0$: $\frac{0.000125}{3} = 4.17\times10^{-5}$; smallest at $\xi = 0.05$: $4.17\times10^{-5}/1.05^3 = 3.60\times10^{-5}$. Actual: $0.0487902 - 0.04875 = 4.02\times10^{-5}$ ✓. So at 5 % per hour, using the growth fraction 0.05 as the rate is off by $0.0012$, about 2.5 %.
+
+**B3.**
+(a) $f(0) = 1$; $f'(x) = \frac12(1+x)^{-1/2}$, $f'(0) = \frac12$; $f''(x) = -\frac14(1+x)^{-3/2}$, $f''(0) = -\frac14$. So $P_2(x) = 1 + \frac{x}{2} - \frac{1}{4}\cdot\frac{x^2}{2} = 1 + \frac x2 - \frac{x^2}{8}$.
+(b) $P_2(0.02) = 1 + 0.01 - 0.0004/8 = 1.00995$.
+(c) Next term $0.02^3/16 = 5\times10^{-7}$. The true value is $1.0099505$, so the error is $4.9\times10^{-7}$: the first neglected term is a good estimate.
+
+**B4.**
+(a) A: $3.2/0.81 \approx 4$, $8.1/2.0 \approx 4$, so order 2. B: $16/1.0 = 16$, $1.0/0.063 \approx 16$, so order 4.
+(b) A: $2.0\times10^{-4}/4 = 5\times10^{-5}$. B: $6.3\times10^{-5}/16 \approx 3.9\times10^{-6}$.
+(c) From $C h^2 = 3.2\times10^{-3}$ at $h = 0.1$: $C = 0.32$. Need $0.32\,h^2 < 10^{-8}$, so $h < \sqrt{3.1\times10^{-8}} \approx 1.8\times10^{-4}$. That needs about 570 times more steps than $h = 0.1$, so it costs more; and if each step adds rounding error, the total rounding error may stop the error from falling that far (unit 4).
+
+**B5.** $e^h = 1 + h + \frac{h^2}{2} + \frac{h^3}{6} + \dots$, so $e^h - 1 = h + \frac{h^2}{2} + \frac{h^3}{6} + \dots$ and dividing by $h$ gives $1 + \frac h2 + \frac{h^2}{6} + \dots$. Error $\approx h/2$: $0.05$ at $h = 0.1$ (actual $0.0517$) and $0.005$ at $h = 0.01$ (actual $0.00502$). Halving $h$ halves the error: order 1.
+
+**B6.**
+(a) $h = 3$: $g = 1 - 2.4 = -1.4$, so $C = 10, -14, 19.6, -27.44$. $h = 2$: $g = -0.6$, so $C = 10, -6, 3.6, -2.16$. $h = 0.5$: $g = 0.6$, so $C = 10, 6, 3.6, 2.16$.
+(b) Exact at $t = 0.5, 1, 1.5$: $6.70, 4.49, 3.01$. Euler with $h = 0.5$ gives $6, 3.6, 2.16$: too low (truncation error), but decaying like the truth.
+(c) Errors shrink when $|1 - 0.8h| < 1$, that is $0 < h < 2.5$ hours. The values stay positive when $1 - 0.8h \ge 0$, that is $h \le 1.25$ hours. With $h = 2$ the method is stable (values decay) but still gives negative concentrations: stable is not the same as accurate.
+
+**B7.** $x_1 = \frac12(1 + 2) = \frac32$. $x_2 = \frac12\left(\frac32 + \frac43\right) = \frac12\cdot\frac{17}{6} = \frac{17}{12} = 1.41667$. Error $0.00245$, so 3 correct digits (1.41). One more step gives $\frac{577}{408}$, error $2\times10^{-6}$: the number of correct digits roughly doubles each step.
+
+**B8.**
+(a) **Rounding**: the probabilities are stored rounded, and the sum is rounded again; compare with a tolerance instead (unit 2).
+(b) **Truncation**: the trapezoid rule replaces the curve by straight lines between 4 points; more points would shrink the error (Part 7).
+(c) **Instability**: each step multiplies errors by $-1.4$ (Part 8).
+(d) **Truncation** in the sense of an early stop: `uniroot` stops when it is within its default tolerance of about $10^{-4}$; set `tol` smaller (Part 2).
+(e) None of the three: the optimiser did what it was asked, but started on a flat plateau caused by badly scaled units, and stopped where nothing improved. Arithmetic is fine; the **problem setup** (scaling, starting value) is the issue (Part 9).
+:::
+
+::: {.callout-note collapse="true" title="Solution — C1"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- c(0.4, 0.2, 0.1, 0.05)
+P1 <- 1 + x
+P2 <- P1 + x^2 / 2
+P3 <- P2 + x^3 / 6
+err <- cbind(P1 = exp(x) - P1, P2 = exp(x) - P2, P3 = exp(x) - P3)
+for (i in 1:4)
+  cat(sprintf("x = %4.2f   %.2e  %.2e  %.2e\n", x[i], err[i, 1], err[i, 2], err[i, 3]))
+# x = 0.40   9.18e-02  1.18e-02  1.16e-03
+# x = 0.20   2.14e-02  1.40e-03  6.94e-05
+# x = 0.10   5.17e-03  1.71e-04  4.25e-06
+# x = 0.05   1.27e-03  2.11e-05  2.63e-07
+ratio <- err[-4, ] / err[-1, ]           # error at x / error at x/2
+round(log2(ratio), 2)
+#        P1   P2   P3
+# [1,] 2.10 3.08 4.06
+# [2,] 2.05 3.04 4.03
+# [3,] 2.02 3.02 4.01
+
+xs <- 10^seq(-2, 0, length.out = 20)
+e1 <- abs(exp(xs) - (1 + xs))
+plot(xs, e1, log = "xy", type = "b", xlab = "x", ylab = "|error of P1|")
+coef(lm(log10(e1) ~ log10(xs)))
+# (Intercept)   log10(xs)
+#  -0.2050712   2.0609752
+```
+
+### Python
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+x = np.array([0.4, 0.2, 0.1, 0.05])
+P1 = 1 + x
+P2 = P1 + x**2 / 2
+P3 = P2 + x**3 / 6
+err = np.column_stack([np.exp(x) - P1, np.exp(x) - P2, np.exp(x) - P3])
+for i in range(4):
+    print(f"x = {x[i]:4.2f}   {err[i, 0]:.2e}  {err[i, 1]:.2e}  {err[i, 2]:.2e}")
+# x = 0.40   9.18e-02  1.18e-02  1.16e-03
+# x = 0.20   2.14e-02  1.40e-03  6.94e-05
+# x = 0.10   5.17e-03  1.71e-04  4.25e-06
+# x = 0.05   1.27e-03  2.11e-05  2.63e-07
+ratio = err[:-1, :] / err[1:, :]         # error at x / error at x/2
+print(np.round(np.log2(ratio), 2))
+# [[2.1  3.08 4.06]
+#  [2.05 3.04 4.03]
+#  [2.02 3.02 4.01]]
+
+xs = 10**np.linspace(-2, 0, 20)
+e1 = np.abs(np.exp(xs) - (1 + xs))
+plt.loglog(xs, e1, "o-"); plt.xlabel("x"); plt.ylabel("|error of P1|"); plt.show()
+print(np.polyfit(np.log10(xs), np.log10(e1), 1))   # slope first
+# [ 2.06097523 -0.20507116]
+```
+
+:::
+
+The $\log_2$ ratios approach 2, 3, 4: the error of $P_n$ is $O(x^{n+1})$, as the remainder term predicts. The fitted slope is 2.06 rather than 2 because at $x$ near 1 the next term, $x^3/6$, is not yet small; the ratios at small $x$ are closer to the true order.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C2"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+h <- 10^-(1:12)
+err <- abs((exp(h) - 1) / h - 1)
+cat(sprintf("%6.0e  %.3e\n", h, err), sep = "")
+cat(sprintf("best h = %.0e\n", h[which.min(err)]))
+```
+
+### Python
+
+```python
+import numpy as np
+h = 10.0**-np.arange(1, 13)
+err = np.abs((np.exp(h) - 1) / h - 1)
+for hi, ei in zip(h, err):
+    print(f"{hi:6.0e}  {ei:.3e}")
+print(f"best h = {h[np.argmin(err)]:.0e}")
+```
+
+:::
+
+Output (identical in both):
+
+```
+ 1e-01  5.171e-02
+ 1e-02  5.017e-03
+ 1e-03  5.002e-04
+ 1e-04  5.000e-05
+ 1e-05  5.000e-06
+ 1e-06  5.000e-07
+ 1e-07  4.943e-08
+ 1e-08  6.077e-09
+ 1e-09  8.274e-08
+ 1e-10  8.274e-08
+ 1e-11  8.274e-08
+ 1e-12  8.890e-05
+best h = 1e-08
+```
+
+Down to $h = 10^{-6}$ the error is $h/2$, exactly as B5 predicts (truncation, order 1). Below $h \approx 10^{-8}$ the error grows again: $e^h$ and 1 agree in almost all their 16 digits, and the subtraction leaves only rounding noise, which is then divided by a tiny $h$. The best possible accuracy is about 8 digits. Unit 4 explains why the optimum is near $\sqrt{10^{-16}} = 10^{-8}$.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C3"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- numeric(31)
+x[1] <- 1; x[2] <- 1/3                  # x_0 and x_1 (R indexes from 1)
+for (n in 2:30) x[n + 1] <- (10/3) * x[n] - x[n - 1]
+for (n in c(0, 5, 10, 15, 20, 25, 30))
+  cat(sprintf("%2d  %11.4g  %11.4g\n", n, x[n + 1], (1/3)^n))
+```
+
+### Python
+
+```python
+import numpy as np
+x = np.zeros(31)
+x[0] = 1; x[1] = 1/3
+for n in range(1, 30):
+    x[n + 1] = (10/3) * x[n] - x[n - 1]
+for n in [0, 5, 10, 15, 20, 25, 30]:
+    print(f"{n:2d}  {x[n]:11.4g}  {(1/3)**n:11.4g}")
+```
+
+:::
+
+Output (identical in both):
+
+```
+ 0            1            1
+ 5     0.004115     0.004115
+10    1.694e-05    1.694e-05
+15    6.982e-08    6.969e-08
+20    3.031e-08    2.868e-10
+25    7.295e-06     1.18e-12
+30     0.001773    4.857e-15
+```
+
+The recurrence is exact in mathematics, and there is no step size and no truncation. But $1/3$ and $10/3$ are stored rounded, which adds a tiny multiple of the other solution, $3^n$. That part grows by a factor 3 per step while the true solution shrinks by a factor 3, so after 15 steps the two are of similar size and after 30 steps the computed value is wrong by a factor of $10^{11}$. This is instability: an algorithm that amplifies rounding error. (Running the recurrence **backwards**, from large $n$ down, is stable.)
+:::
+
+::: {.callout-note collapse="true" title="Solution — C4"}
+
+(a) The bad fit.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+fit <- optim(c(0.5, 1, 0.05), sse)
+cat(sprintf("convergence %d  SSE %.4f  r %.4g  K %.4g  N0 %.4g\n",
+            fit$convergence, fit$value, fit$par[1], fit$par[2], fit$par[3]))
+cat(sprintf("doubling time %.3g min\n", log(2) / fit$par[1]))
+# convergence 0  SSE 2.2339  r 0.6759  K 0.8358  N0 0.000933
+# doubling time 1.03 min
+
+tt <- seq(0, 1440, length.out = 500)
+plot(t_min / 60, od, pch = 19, xlab = "time (hours)", ylab = "OD600")
+lines(tt / 60, logistic(fit$par, tt), col = "red")
+```
+
+### Python
+
+```python
+import matplotlib.pyplot as plt
+fit = minimize(sse, [0.5, 1, 0.05], method="Nelder-Mead")
+print(f"success {fit.success}  SSE {fit.fun:.4f}  r {fit.x[0]:.4g}  "
+      f"K {fit.x[1]:.4g}  N0 {fit.x[2]:.4g}")
+print(f"doubling time {np.log(2) / fit.x[0]:.3g} min")
+# success True  SSE 0.7867  r 0.01894  K 0.8342  N0 0.0003486
+# doubling time 36.6 min
+
+tt = np.linspace(0, 1440, 500)
+plt.plot(t_min / 60, od, "o")
+plt.plot(tt / 60, logistic(fit.x, tt), "r-")
+plt.xlabel("time (hours)"); plt.ylabel("OD600"); plt.show()
+```
+
+:::
+
+Both report success, and both are wrong. R's Nelder–Mead stops on the plateau where the curve jumps to $K$ at once (a flat line at the mean OD, doubling time 1 minute). SciPy's implementation takes different steps and stops somewhere else, also wrong (doubling time 37 minutes, SSE 0.79). The plot shows the problem at once.
+
+(b) Several starts.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+for (r0 in c(0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1)) {
+  f <- optim(c(r0, 1, 0.05), sse)
+  cat(sprintf("start r = %5.3f   SSE = %.4f   r = %.4g\n", r0, f$value, f$par[1]))
+}
+# start r = 0.001   SSE = 2.2339   r = 0.3332
+# start r = 0.003   SSE = 0.0030   r = 0.008736
+# start r = 0.010   SSE = 0.0030   r = 0.008736
+# start r = 0.030   SSE = 0.0030   r = 0.008738
+# start r = 0.100   SSE = 2.2339   r = 0.2374
+# start r = 0.300   SSE = 2.2339   r = 0.4374
+# start r = 1.000   SSE = 2.2339   r = 1.176
+```
+
+### Python
+
+```python
+for r0 in [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1]:
+    f = minimize(sse, [r0, 1, 0.05], method="Nelder-Mead")
+    print(f"start r = {r0:5.3f}   SSE = {f.fun:.4f}   r = {f.x[0]:.4g}")
+# start r = 0.001   SSE = 0.0030   r = 0.008735
+# start r = 0.003   SSE = 0.0030   r = 0.008739
+# start r = 0.010   SSE = 0.0030   r = 0.008738
+# start r = 0.030   SSE = 0.0030   r = 0.008736
+# start r = 0.100   SSE = 0.0031   r = 0.008868
+# start r = 0.300   SSE = 0.4600   r = 0.09583
+# start r = 1.000   SSE = 0.8354   r = 0.034
+```
+
+:::
+
+Starts near $r = 0.01$ per minute find SSE $= 0.0030$ and $r = 0.0087$ per minute ($0.52$ per hour, doubling time 79 minutes). You can tell which answer to keep without knowing the truth: the **lowest SSE** wins, and it is about 700 times lower than the plateau value. That different starts give different answers is itself a warning that the problem is hard for the optimiser. Which starts fail differs between R and Python, because the two Nelder–Mead implementations take different first steps.
+
+(c) Time in hours.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t_h <- t_min / 60
+sse_h <- function(p) sum((od - logistic(p, t_h))^2)
+fit_h <- optim(c(0.5, 1, 0.05), sse_h)
+cat(sprintf("convergence %d  SSE %.4f  r %.4g  K %.4g  N0 %.4g\n",
+            fit_h$convergence, fit_h$value, fit_h$par[1], fit_h$par[2], fit_h$par[3]))
+cat(sprintf("doubling time %.3g min\n", 60 * log(2) / fit_h$par[1]))
+# convergence 0  SSE 0.0030  r 0.5241  K 1.191  N0 0.01653
+# doubling time 79.4 min
+```
+
+### Python
+
+```python
+t_h = t_min / 60
+def sse_h(p):
+    return np.sum((od - logistic(p, t_h))**2)
+fit_h = minimize(sse_h, [0.5, 1, 0.05], method="Nelder-Mead")
+print(f"success {fit_h.success}  SSE {fit_h.fun:.4f}  r {fit_h.x[0]:.4g}  "
+      f"K {fit_h.x[1]:.4g}  N0 {fit_h.x[2]:.4g}")
+print(f"doubling time {60 * np.log(2) / fit_h.x[0]:.3g} min")
+# success True  SSE 0.0030  r 0.5242  K 1.191  N0 0.01651
+# doubling time 79.3 min
+```
+
+:::
+
+Nothing about the method changed; only the **units**. In hours, the sensible guess $r = 0.5$ is close to the answer, and all three parameters are of similar size, so the optimiser sees a slope to follow. In minutes the same guess was 60 times too large and landed on a flat plateau. Choosing units so that parameters are of order 1 is a cheap and effective habit (Part 9).
+:::
+
+::: {.callout-note collapse="true" title="Solution — C5"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+integrate(dnorm, 0, 20000)
+# 0 with absolute error < 0
+integrate(dnorm, 0, 20)
+# 0.5 with absolute error < 3.7e-05
+integrate(dnorm, 0, Inf)
+# 0.5 with absolute error < 4.7e-05
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import quad
+from scipy.stats import norm
+print(quad(norm.pdf, 0, 20000))
+# (0.0, 0.0)
+print(quad(norm.pdf, 0, 20))
+# (0.5000000000000001, 4.335515499194931e-10)
+print(quad(norm.pdf, 0, np.inf))
+# (0.4999999999999999, 5.089095660452871e-09)
+```
+
+:::
+
+Both libraries return 0 with an estimated error of 0 for $[0, 20000]$: every sample point lands where the density is numerically zero, so the method sees a flat zero function and is confident. With limits that fit the function, $[0, 20]$ or $[0, \infty)$ (which the routines transform to a finite interval), the answer is right. Before trusting a library integral: plot the integrand over the interval, make sure the interval does not hide a narrow peak, and check that the answer is stable when you change the limits or the tolerance (Part 7).
+:::
+
+## Where this leads
+
+- **How computers store numbers**: why rounding happens (binary, machine epsilon), overflow and underflow, comparing with a tolerance, and `log1p` for the $\log(1+x)$ of B2 when $x$ is tiny.
+- **Error, conditioning and stability**: relative error, cancellation (the small-$h$ side of C2), condition numbers, and stable versus unstable algorithms (C3).
+- **Convergence and cost**: the truncation–rounding trade-off of C2 in general, orders of accuracy from log–log plots (C1), and the cost side: operation counts and timing.
+- **Part 2**: Heron's method (B7) is Newton's method; its doubling of correct digits is quadratic convergence. **Part 8**: Euler's stability limit (B6) for ODEs. **Part 9**: fitting the growth curve properly, with scaling, multistart and Gauss–Newton.

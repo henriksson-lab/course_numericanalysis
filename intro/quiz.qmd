@@ -1,0 +1,163 @@
+---
+title: "Quiz: why numerical analysis?"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of numerical methods, the three ways they go wrong, and Taylor polynomials. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** In one sentence: what is a numerical method?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Think of Heron's method for $\sqrt 2$: what does it use, and what does it give?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A finite list of arithmetic operations that **approximates** a mathematical answer we cannot compute exactly, usually by an approximation, an iteration and a stopping rule.
+:::
+
+---
+
+**Q2.** Name the three ways a computation can go wrong, with one example each.
+
+::: {.callout-tip collapse="true" title="Hint"}
+One comes from how numbers are stored, one from stopping early, one from errors growing.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+**Rounding** (only about 16 significant digits are kept: `0.1 + 0.2 == 0.3` is `FALSE`). **Truncation** (the method stops early: $(e^h - 1)/h$ with $h = 0.1$ gives $1.0517$ instead of 1). **Instability** (the algorithm amplifies errors: Euler with too large a step gives growing, sign-flipping concentrations).
+:::
+
+---
+
+**Q3.** `optim` returns `convergence = 0` for a growth-curve fit. Does that mean the fitted parameters are correct?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does an optimiser check before it stops?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. It means the optimiser stopped normally because it could no longer improve the objective, not that it found the best fit. On the slides, a start on a flat plateau gave `convergence = 0` and a doubling time of 1 minute. Check by plotting the fit, trying several starts and comparing the SSE, and checking that the parameters are plausible.
+:::
+
+---
+
+**Q4.** Write the Taylor polynomial $P_2(x)$ of $e^x$ around 0, and use it to estimate $e^{0.1}$.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Every derivative of $e^x$ at 0 is 1. Divide the $k$-th term by $k!$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$P_2(x) = 1 + x + \frac{x^2}{2}$, so $e^{0.1} \approx 1 + 0.1 + 0.005 = 1.105$. (The true value is $1.1051709$; the error $1.7\times10^{-4}$ is close to the next term, $0.1^3/6 = 1.67\times10^{-4}$.)
+:::
+
+---
+
+**Q5.** The remainder of $P_2$ for $e^x$ is $R_2(x) = \frac{e^{\xi}}{6}x^3$ for some $\xi$ between 0 and $x$. Why can we bound the error even though we do not know $\xi$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What are the smallest and largest values $e^\xi$ can take for $0 < \xi < x$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+We only need the range of $e^\xi$ for $\xi$ between 0 and $x$: from $e^0 = 1$ to $e^x$. So $\frac{x^3}{6} \le R_2 \le \frac{e^x x^3}{6}$. For $x = 0.1$ that is between $1.667\times10^{-4}$ and $1.842\times10^{-4}$: a bound on the error without knowing the exact answer.
+:::
+
+---
+
+**Q6.** A method's error is $O(h^2)$. You halve the step $h$. By roughly what factor does the error change? And if the method is $O(h^4)$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Error $\approx C h^p$. Replace $h$ by $h/2$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$C(h/2)^2 = Ch^2/4$: the error is divided by 4. For $O(h^4)$ it is divided by $2^4 = 16$.
+:::
+
+---
+
+**Q7.** You plot the error of a method against its step $h$ on log–log axes and get a straight line with slope 3. What does that tell you?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Take the logarithm of error $\approx C h^p$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\log(\text{error}) = \log C + p\log h$, so the slope is the order: the method is **third order**, error $= O(h^3)$. Halving $h$ divides the error by 8.
+:::
+
+---
+
+**Q8.** Use $\log(1+x) \approx x - \frac{x^2}{2}$ to estimate the continuous growth rate $r = \log(1.02)$ of a culture that grows by 2 % per hour. How far off is the simple answer $r \approx 0.02$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The error of $r \approx x$ is about the first neglected term.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$0.02 - 0.0002 = 0.0198$. The simple answer $0.02$ is off by about $x^2/2 = 0.0002$, that is 1 %. (The true value is $\log(1.02) = 0.0198026$.)
+:::
+
+---
+
+**Q9.** Euler's method for $C' = -kC$ multiplies by $1 - hk$ each step. With $k = 2$ per hour, which step sizes keep errors from growing?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Errors are multiplied by the same factor as the solution. They shrink when that factor has absolute value below 1.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$|1 - 2h| < 1$ means $0 < h < 1$ hour. With $h > 1$ the computed concentration oscillates and grows: an unstable method. (For $0.5 < h < 1$ it is stable but oscillates and goes negative; it stays positive for $h \le 0.5$.)
+:::
+
+---
+
+**Q10.** You estimate a derivative with $(f(x+h) - f(x))/h$ and make $h$ smaller and smaller: $10^{-2}, 10^{-4}, \dots, 10^{-14}$. What happens to the error, and why?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Two kinds of error compete: one shrinks with $h$, one grows as $h$ shrinks.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+At first it falls (truncation error, about $\frac h2 f''$). Below $h \approx 10^{-8}$ it rises again: $f(x+h)$ and $f(x)$ agree in almost all digits, the subtraction leaves mostly rounding error, and dividing by a tiny $h$ magnifies it. The best accuracy is about 8 digits, not 16 (unit 4).
+:::
+
+---
+
+**Q11.** `integrate(dnorm, 0, 20000)` in R returns `0 with absolute error < 0`. Which check would have caught this?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The exact answer is 0.5. Where is the normal density not zero?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Plot the integrand over the interval: the density is non-zero only in a tiny part of $[0, 20000]$, which the rule's sample points miss. Or change the limits, for example to $[0, 20]$ or $[0, \infty)$, and see the answer jump to 0.5. A library's own error estimate is not a proof.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+integrate(dnorm, 0, 20)
+# 0.5 with absolute error < 3.7e-05
+```
+
+### Python
+
+```python
+from scipy.integrate import quad
+from scipy.stats import norm
+print(quad(norm.pdf, 0, 20))
+# (0.5000000000000001, 4.335515499194931e-10)
+```
+
+:::
+:::

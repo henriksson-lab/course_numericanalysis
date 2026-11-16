@@ -1,0 +1,155 @@
+---
+title: "Quiz: convergence and cost"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of convergence and cost. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** You estimate a growth rate with $\dfrac{N(t+h) - N(t)}{h}$. Name the two sources of error. Which one shrinks and which one grows as $h$ gets smaller?
+
+::: {.callout-tip collapse="true" title="Hint"}
+One comes from the formula (Taylor), the other from storing numbers with about 16 digits.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+**Truncation error** $\approx \tfrac{|N''|}{2}h$, from cutting off the Taylor series: it **shrinks** with $h$. **Rounding error** $\approx \varepsilon|N|/h$, from the floating-point values of $N$ whose difference is divided by a small $h$: it **grows** as $h$ shrinks. The total is V-shaped on a log–log plot.
+:::
+
+---
+
+**Q2.** A method gives error $6.0\times10^{-4}$ at $h = 0.1$ and $1.5\times10^{-4}$ at $h = 0.05$. What is its order? What error do you expect at $h = 0.025$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Halving $h$ divides an $O(h^p)$ error by $2^p$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The error dropped by a factor 4 when $h$ halved: $2^p = 4$, so $p = 2$ (second order). At $h = 0.025$: $1.5\times10^{-4}/4 \approx 3.75\times10^{-5}$, as long as $h$ stays in the truncation regime.
+:::
+
+---
+
+**Q3.** On a log–log plot of error against $h$ for a forward difference, part of the curve has slope $-1$. What is happening there, and what should you do?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which error term is proportional to $1/h$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Slope $-1$ means error $\propto 1/h$: that is the **rounding** side of the V. The step is too small; the subtraction $N(t+h) - N(t)$ cancels most digits and the division by $h$ amplifies what is left. Use a **larger** $h$ (near $\sqrt\varepsilon \approx 10^{-8}$ for a forward difference), and fit the order only on the straight part with positive slope.
+:::
+
+---
+
+**Q4.** Why can a forward difference in double precision not get much better than about 8 correct digits?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Balance $h$ against $\varepsilon/h$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The total error is about $a h + b/h$ with $b \propto \varepsilon$. It is smallest when the two terms are equal, near $h \approx \sqrt\varepsilon \approx 10^{-8}$, and the error there is also of order $\sqrt\varepsilon \approx 10^{-8}$. Half of the 16 digits of a double are lost, whatever $h$ you pick.
+:::
+
+---
+
+**Q5.** You do not know the exact derivative. You compute $D(h)$ for $h = 0.1, 0.05, 0.025, 0.0125$ and find $\dfrac{D(h) - D(h/2)}{D(h/2) - D(h/4)} \approx 3.98,\ 3.99$. What do you conclude?
+
+::: {.callout-tip collapse="true" title="Hint"}
+For an $O(h^p)$ method this ratio is close to $2^p$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The ratios are close to $4 = 2^2$: the method behaves as second order, and these steps are in the truncation regime, so the estimates can be trusted to improve as $h$ shrinks. If the ratios had jumped around (or were negative), you would be in the rounding regime.
+:::
+
+---
+
+**Q6.** An iteration has errors $10^{-2}, 10^{-4}, 10^{-8}$. Another has errors $10^{-2}, 10^{-3}, 10^{-4}$. Which converges linearly and which quadratically? What is the next error of each?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at $e_{k+1}/e_k$ and at $e_{k+1}/e_k^2$, or count digits per step.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The first doubles its number of correct digits each step ($e_{k+1} = e_k^2$): **quadratic**, next error $10^{-16}$ (machine precision). The second gains one digit per step ($e_{k+1} = 0.1\,e_k$): **linear** with $c = 0.1$, next error $10^{-5}$.
+:::
+
+---
+
+**Q7.** Bisection halves its bracket every step. Roughly how many steps does it need to go from a bracket of width 1 to $10^{-12}$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$2^{10} \approx 10^3$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$2^{-k} < 10^{-12}$ needs $2^k > 10^{12} \approx (2^{10})^4 = 2^{40}$: about **40 steps**. Bisection gains $\log_{10}2 \approx 0.3$ digits per step. (Newton for $\sqrt2$ got there in 5.)
+:::
+
+---
+
+**Q8.** A pilot run on 1000 genes takes 2 s. When you double to 2000 genes it takes 16 s. What is the cost exponent, and how long do you expect for 20 000 genes?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Doubling multiplies an $O(n^p)$ time by $2^p$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$16/2 = 8 = 2^3$, so $p = 3$: cubic. From 1000 to 20 000 genes is a factor 20 in $n$: $2 \times 20^3 = 16\,000$ s $\approx 4.4$ hours. (Check with a third size first: 2 s is long enough to be a real measurement, but one ratio is a thin basis for a 4-hour prediction.)
+:::
+
+---
+
+**Q9.** A gene–gene correlation for 100 genes takes 0.1 s. Why does it take far longer than $200 \times 0.1 = 20$ s for 20 000 genes (same cells)?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How does the number of gene pairs grow?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+All-pairs work is $O(n^2)$: there are $n(n-1)/2$ pairs. A factor 200 in genes is a factor $200^2 = 40\,000$ in pairs, so about $0.1 \times 40\,000 = 4000$ s, more than an hour, not 20 s. Doubling the cells as well would double that again (linear in cells).
+:::
+
+---
+
+**Q10.** How much memory does a dense matrix of doubles with 30 000 genes × 50 000 cells need? And the 30 000 × 30 000 gene correlation matrix?
+
+::: {.callout-tip collapse="true" title="Hint"}
+8 bytes per double; $10^9$ bytes = 1 GB.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$3\times10^4 \times 5\times10^4 = 1.5\times10^9$ entries × 8 bytes $= 1.2\times10^{10}$ bytes $= 12$ GB. The correlation matrix: $(3\times10^4)^2 \times 8 = 7.2\times10^9$ bytes $= 7.2$ GB.
+:::
+
+---
+
+**Q11.** You rewrite an $O(n^2)$ loop in vectorised form and it becomes 50 times faster at $n = 1000$. How much longer will the vectorised version take at $n = 10\,000$ than at $n = 1000$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Does vectorising change $C$ or $p$ in $C n^p$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+About $10^2 = 100$ times longer. Vectorising changed the constant $C$ (by 50), not the exponent: the code is still $O(n^2)$.
+:::
+
+---
+
+**Q12.** A single-cell count matrix is stored sparse (10 % non-zeros) and takes 2.4 GB. One line, `X - rowMeans(X)`, centres each gene. Why can this crash your laptop?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What happens to the zeros?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Subtracting the gene mean turns every zero into a non-zero number, so the result is a **dense** matrix: for 20 000 genes × 100 000 cells that is $2\times10^9 \times 8$ bytes $= 16$ GB, more than a typical laptop has. Check `class()` and `object.size()` after each step, and use methods that centre implicitly instead of forming the centred matrix.
+:::
