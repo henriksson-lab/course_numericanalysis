@@ -50,9 +50,8 @@ beuler <- function(f, jac, y0, h, n, tol = 1e-10) {
   }
   Y
 }
-bdf2 <- function(f, jac, y0, h, n, tol = 1e-10) {  # first step by backward Euler
-  Y <- matrix(NA, n + 1, length(y0)); Y[1, ] <- y0
-  Y[2, ] <- beuler(f, jac, y0, h, 1)[2, ]
+bdf2 <- function(f, jac, y0, y1, h, n, tol = 1e-10) {  # needs two start values
+  Y <- matrix(NA, n + 1, length(y0)); Y[1, ] <- y0; Y[2, ] <- y1
   I <- diag(length(y0))
   for (i in 2:n) {
     y <- Y[i, ]
@@ -200,7 +199,10 @@ dev.off()
 Pref <- full[full[, "time"] == 10, "P"]
 hs_imp <- c(0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001)
 err_be <- sapply(hs_imp, function(h) abs(beuler(f, jac, unname(y0), h, round(10 / h))[round(10 / h) + 1, 4] - Pref))
-err_b2 <- sapply(hs_imp, function(h) abs(bdf2(f, jac, unname(y0), h, round(10 / h))[round(10 / h) + 1, 4] - Pref))
+err_b2 <- sapply(hs_imp, function(h) {               # second start value from the reference
+  y1 <- ode(y0, c(0, h), enzyme, NULL, method = "lsoda", rtol = 1e-12, atol = 1e-14)[2, -1]
+  abs(bdf2(f, jac, unname(y0), unname(y1), h, round(10 / h))[round(10 / h) + 1, 4] - Pref)
+})
 hs_ex <- c(0.0016, 0.001, 5e-4, 2e-4, 1e-4)
 err_ex <- sapply(hs_ex, function(h) abs(euler(f, unname(y0), h, round(10 / h))[round(10 / h) + 1, 4] - Pref))
 print(rbind(hs_imp, err_be, err_b2)); print(rbind(hs_ex, err_ex))

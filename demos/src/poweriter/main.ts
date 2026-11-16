@@ -273,7 +273,8 @@ function mount(host: HTMLElement): void {
         const y = matvec(st.A, uk);
         arrow(g, y[0], y[1], COL.y, 2.5, 0.85);
         const s = Math.min(1, R * 0.9 / Math.max(Math.abs(y[0]), Math.abs(y[1]), 1e-9));
-        const ty = svgEl("text", { x: wx(y[0] * s) + 8, y: wy(y[1] * s) - 8, "font-weight": 600 }, g);
+        const right = y[0] * s > 0.3;
+        const ty = svgEl("text", { x: wx(y[0] * s) + (right ? -14 : 10), y: wy(y[1] * s) + (y[1] * s > 1 ? 24 : -12), "font-weight": 600, "text-anchor": right ? "end" : "start" }, g);
         ty.style.fill = COL.y; ty.textContent = "A xₖ";
       }
       arrow(g, uk[0], uk[1], COL.ink, 4);

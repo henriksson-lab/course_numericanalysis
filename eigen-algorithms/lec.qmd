@@ -224,7 +224,7 @@ This is shifted inverse iteration from Power iteration and friends, in disguise:
 - Tell `eigen` what you know: `symmetric = TRUE`, `only.values = TRUE`.
 
 ::: notes
-Timings from one desktop with single-threaded OpenBLAS; multithreaded BLAS is faster but scales the same way. Without symmetric = TRUE, eigen checks isSymmetric itself, which is fine for exact symmetry but a matrix that is symmetric only up to rounding (computed as t(X) %*% X in a different order, for example) is then treated as nonsymmetric: slower, and possibly with tiny imaginary parts. numpy has the same split: np.linalg.eigh / eigvalsh for symmetric, np.linalg.eig for general. The O(n^3) cost connects to Convergence and cost (Part 1): for n beyond a few thousand, dense eigen is no longer an option, which is the second half of this lecture.
+Timings from one desktop with single-threaded OpenBLAS; a multithreaded BLAS changes the constants but not the n^3 scaling. Without symmetric = TRUE, eigen checks isSymmetric itself, which is fine for exact symmetry but a matrix that is symmetric only up to rounding (computed as t(X) %*% X in a different order, for example) is then treated as nonsymmetric: slower, and possibly with tiny imaginary parts. numpy has the same split: np.linalg.eigh / eigvalsh for symmetric, np.linalg.eig for general. The O(n^3) cost connects to Convergence and cost (Part 1): for n beyond a few thousand, dense eigen is no longer an option, which is the second half of this lecture.
 :::
 
 ## Symmetric vs nonsymmetric {.smaller}
@@ -449,7 +449,7 @@ Both give the same singular values as the dense SVD to all printed digits. eigs_
 - `eigen` of the 2000 × 2000 covariance is not bad here, because there are only 2000 genes. With all 20 000 genes it would be 1000× slower.
 
 ::: notes
-Measured on one machine with single-threaded BLAS (with 40 threads, prcomp drops to about 8 s, irlba stays near 0.5 s: the truncated methods spend their time in sparse products, which do not use BLAS threads). Peak memory is the process maximum minus the 230 MB for R and the data. The covariance route has a second problem: it squares the condition number (Least squares: normal equations vs QR, The SVD unit). For the top PCs this does not matter; for small singular values it does. The scaling argument is the important one: dense methods cost O(n p^2) time and O(n p) memory whatever the sparsity; Lanczos costs O(nnz) per step and O((n + p) m) memory.
+Measured on one machine with single-threaded BLAS. With the default multithreaded OpenBLAS on the same 40-core machine the times were not better, and irlba was much slower (thread start-up overhead on many small dense operations); if timings look odd, try OPENBLAS_NUM_THREADS=1. Peak memory is the process maximum minus the 230 MB for R and the data. The covariance route has a second problem: it squares the condition number (Least squares: normal equations vs QR, The SVD unit). For the top PCs this does not matter; for small singular values it does. The scaling argument is the important one: dense methods cost O(n p^2) time and O(n p) memory whatever the sparsity; Lanczos costs O(nnz) per step and O((n + p) m) memory.
 :::
 
 ## Checks for truncated eigensolvers {.smaller}
