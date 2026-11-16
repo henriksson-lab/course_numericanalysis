@@ -21,7 +21,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 16 | splines | done | done | done |
 | 17 | fourier-fft | done | done | done |
 | 18 | finite-differences | done | done | done |
-| 19 | quadrature | done | running | |
+| 19 | quadrature | done | done | done |
 | 20 | monte-carlo | done | done | done |
 | 21 | euler | done | done | done |
 | 22 | runge-kutta | done | done | done |
@@ -78,3 +78,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - advection-diffusion: cell-centred grid across channel (vs nodes elsewhere?) — reconcile with steady-state-2d. Device numbers own round values; Kamholz & Yager 2001 cited cautiously. Some code blocks 13–14 lines.
 - gradient-methods deck now 29 slides (near ceiling). optrace race/click not tested headless. design demo: typecheck error in demos/src/design/math.ts:109 reported by two workers — fix in audit.
 - steady-state-2d lecture notes: 'core size changes little with threshold' — demo shows 5.7/10.0/16.3 % at 5/10/20 µM; soften sentence.
+- quadrature: QUADPACK actually works to ~4300 and fails from 4400 (one bisection when error cap hit); '~2300' is the first-pass/5σ rule — check intro + quadrature lecture wording matches. Exercise page horizontal scroll from MathJax.
