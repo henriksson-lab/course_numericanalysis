@@ -1,23 +1,23 @@
 # Cross-references: bisection-fixedpoint
 
-- bisection-fixedpoint/lec.qmd:33 (notes, About this lecture) -> convergence-cost (linear convergence vocabulary)
-- bisection-fixedpoint/lec.qmd:33 (notes, About this lecture) -> newton (Newton, secant, uniroot/brentq come next)
-- bisection-fixedpoint/lec.qmd:49 (Part 2: solving f(x)=0) -> convergence-cost (does it converge, how fast)
-- bisection-fixedpoint/lec.qmd:52 (notes, Part 2 slide) -> newton, newton-systems (rest of Part 2; toggle switch)
-- bisection-fixedpoint/lec.qmd:172 (notes, How fast?) -> convergence-cost (linear convergence e_{k+1} = c e_k)
-- bisection-fixedpoint/lec.qmd:183 (When to stop) -> floating-point (gap between doubles, eps floor)
-- bisection-fixedpoint/lec.qmd:209 (notes, When bisection fails) -> error-conditioning (double root is ill-conditioned)
-- bisection-fixedpoint/lec.qmd:273 (notes, Why it converges) -> intro (Taylor recap), convergence-cost (linear convergence); newton (g'(x*)=0 gives faster convergence)
-- bisection-fixedpoint/lec.qmd:358 (notes, Error against iteration) -> convergence-cost (rounding floor on error plots)
-- bisection-fixedpoint/lec.qmd:426 (notes, Chaos slide) -> floating-point (rounding errors amplified)
-- bisection-fixedpoint/lec.qmd:460 (Library routines) -> newton (how Brent's method works)
-- bisection-fixedpoint/lec.qmd:489 (Summary, Next) -> newton (quadratic convergence, Brent)
-- bisection-fixedpoint/exercise.qmd:107 (Background, library routines) -> newton (Brent's method explained)
-- bisection-fixedpoint/exercise.qmd:547 (Solution C2) -> optimisation-1d (maximum of surplus production = maximum sustainable catch)
-- bisection-fixedpoint/exercise.qmd:1094 (Where this leads) -> newton (Newton as fixed-point iteration with g'(x*)=0; Brent)
-- bisection-fixedpoint/exercise.qmd:1095 (Where this leads) -> newton-systems (toggle switch steady states)
-- bisection-fixedpoint/exercise.qmd:1096 (Where this leads) -> phase-plane (continuous-time stability: Jacobian eigenvalues)
-- bisection-fixedpoint/exercise.qmd:1097 (Where this leads) -> optimisation-1d (golden-section search for the maximum sustainable catch)
+- bisection-fixedpoint/lec.qmd:33 (notes, About this lecture) -> convergence-cost (linear convergence vocabulary) [ok]
+- bisection-fixedpoint/lec.qmd:33 (notes, About this lecture) -> newton (Newton, secant, uniroot/brentq come next) [ok]
+- bisection-fixedpoint/lec.qmd:49 (Part 2: solving f(x)=0) -> convergence-cost (does it converge, how fast) [ok, linked]
+- bisection-fixedpoint/lec.qmd:52 (notes, Part 2 slide) -> newton, newton-systems (rest of Part 2; toggle switch) [ok]
+- bisection-fixedpoint/lec.qmd:172 (notes, How fast?) -> convergence-cost (linear convergence e_{k+1} = c e_k) [ok]
+- bisection-fixedpoint/lec.qmd:183 (When to stop) -> floating-point (gap between doubles, eps floor) [ok, linked]
+- bisection-fixedpoint/lec.qmd:209 (notes, When bisection fails) -> error-conditioning (double root is ill-conditioned) [ok]
+- bisection-fixedpoint/lec.qmd:273 (notes, Why it converges) -> intro (Taylor recap), convergence-cost (linear convergence); newton (g'(x*)=0 gives faster convergence) [ok]
+- bisection-fixedpoint/lec.qmd:358 (notes, Error against iteration) -> convergence-cost (rounding floor on error plots) [ok]
+- bisection-fixedpoint/lec.qmd:426 (notes, Chaos slide) -> floating-point (rounding errors amplified) [ok]
+- bisection-fixedpoint/lec.qmd:460 (Library routines) -> newton (how Brent's method works) [ok, linked]
+- bisection-fixedpoint/lec.qmd:489 (Summary, Next) -> newton (quadratic convergence, Brent) [ok, linked]
+- bisection-fixedpoint/exercise.qmd:107 (Background, library routines) -> newton (Brent's method explained) [ok, linked]
+- bisection-fixedpoint/exercise.qmd:547 (Solution C2) -> optimisation-1d (maximum of surplus production = maximum sustainable catch) [ok, linked]
+- bisection-fixedpoint/exercise.qmd:1094 (Where this leads) -> newton (Newton as fixed-point iteration with g'(x*)=0; Brent) [ok, linked]
+- bisection-fixedpoint/exercise.qmd:1095 (Where this leads) -> newton-systems (toggle switch steady states) [ok, linked]
+- bisection-fixedpoint/exercise.qmd:1096 (Where this leads) -> phase-plane (continuous-time stability: Jacobian eigenvalues) [ok, linked]
+- bisection-fixedpoint/exercise.qmd:1097 (Where this leads) -> optimisation-1d (golden-section search for the maximum sustainable catch) [fixed: optimisation-1d does not use the fish/MSY example; reworded to "a maximum golden-section search would find (that unit uses its own examples)"]
 
 ## Running examples defined here
 

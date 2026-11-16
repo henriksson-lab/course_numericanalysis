@@ -1,30 +1,30 @@
 # Cross-references from nonlinear-least-squares
 
-- nonlinear-least-squares/lec.qmd:33 (notes, About this lecture) -> least-squares-qr (Part 4, linear LS by QR), newton-systems (Part 2, Jacobian), runge-kutta / stiffness (Part 8 ODE solvers), gradient-methods (LM's two limits), identifiability (flip-flop leads there)
-- nonlinear-least-squares/lec.qmd:102 (Recap slide) -> least-squares-qr (QR, qr.solve, kappa(A^T A) = kappa(A)^2)
-- nonlinear-least-squares/lec.qmd:107 (Recap slide) -> newton-systems (Jacobian, linearisation m(p + d) ~ m + J d)
-- nonlinear-least-squares/lec.qmd:134 (Linearise the model) -> newton-systems (finite-difference Jacobian, relative step)
-- nonlinear-least-squares/lec.qmd:137 (notes) -> convergence-cost (h ~ sqrt(eps) balances truncation and rounding)
-- nonlinear-least-squares/lec.qmd:155 (Gauss-Newton step) -> newton-systems (square J, solve(J, -F))
-- nonlinear-least-squares/lec.qmd:158 (notes) -> least-squares-qr (Householder QR, Part 4)
-- nonlinear-least-squares/lec.qmd:241 (notes, How fast?) -> gradient-methods (Gauss-Newton as quasi-Newton, Hessian J^T J)
-- nonlinear-least-squares/lec.qmd:277 (notes, LM slide) -> gradient-methods (gradient descent, trust regions)
-- nonlinear-least-squares/lec.qmd:352 (notes, log-parameters) -> constrained-lp (bounds)
-- nonlinear-least-squares/lec.qmd:377 (notes, Fitting an ODE model) -> stiffness (lsoda), runge-kutta (deSolve ode / solve_ivp / Dopri5)
-- nonlinear-least-squares/lec.qmd:396 (Inner tolerance vs FD step) -> convergence-cost (V-shaped FD error, h ~ sqrt(noise))
-- nonlinear-least-squares/lec.qmd:438 (notes, flip-flop) -> identifiability (structural non-identifiability, same model and data)
-- nonlinear-least-squares/lec.qmd:463 (Summary, Next) -> identifiability
-- nonlinear-least-squares/lec.qmd:466 (notes, Summary) -> identifiability (standard errors from J^T J, profile likelihood), constrained-lp
-- nonlinear-least-squares/exercise.qmd:45 (Background, Fact 7) -> convergence-cost (FD error with noise)
-- nonlinear-least-squares/exercise.qmd:209 (Hint 3) -> convergence-cost (V-shaped error curve)
-- nonlinear-least-squares/exercise.qmd:213 (Hint 4) -> least-squares-qr (QR least squares in Rust with q_tr_mul)
-- nonlinear-least-squares/exercise.qmd:221 (Hint 6) -> runge-kutta (Dopri5 continuous output model)
-- nonlinear-least-squares/exercise.qmd:242 (Solution B3) -> least-squares-qr (linear LS with design matrix J)
-- nonlinear-least-squares/exercise.qmd:365 (Solution C1) -> error-conditioning (catastrophic cancellation near ka = ke)
-- nonlinear-least-squares/exercise.qmd:1507 (Where this leads) -> identifiability
-- nonlinear-least-squares/exercise.qmd:1508 (Where this leads) -> gradient-methods
-- nonlinear-least-squares/exercise.qmd:1509 (Where this leads) -> constrained-lp
-- nonlinear-least-squares/exercise.qmd:1510 (Where this leads) -> stiffness
+- [ok] nonlinear-least-squares/lec.qmd:33 (notes, About this lecture) -> least-squares-qr (Part 4, linear LS by QR), newton-systems (Part 2, Jacobian), runge-kutta / stiffness (Part 8 ODE solvers), gradient-methods (LM's two limits), identifiability (flip-flop leads there)
+- [ok: linked] nonlinear-least-squares/lec.qmd:102 (Recap slide) -> least-squares-qr (QR, qr.solve, kappa(A^T A) = kappa(A)^2)
+- [ok: linked] nonlinear-least-squares/lec.qmd:107 (Recap slide) -> newton-systems (Jacobian, linearisation m(p + d) ~ m + J d)
+- [ok: linked] nonlinear-least-squares/lec.qmd:134 (Linearise the model) -> newton-systems (finite-difference Jacobian, relative step)
+- [ok] nonlinear-least-squares/lec.qmd:137 (notes) -> convergence-cost (h ~ sqrt(eps) balances truncation and rounding)
+- [ok: linked] nonlinear-least-squares/lec.qmd:155 (Gauss-Newton step) -> newton-systems (square J, solve(J, -F))
+- [ok] nonlinear-least-squares/lec.qmd:158 (notes) -> least-squares-qr (Householder QR, Part 4)
+- [ok] nonlinear-least-squares/lec.qmd:241 (notes, How fast?) -> gradient-methods (Gauss-Newton as quasi-Newton, Hessian J^T J)
+- [ok] nonlinear-least-squares/lec.qmd:277 (notes, LM slide) -> gradient-methods (gradient descent, trust regions)
+- [ok] nonlinear-least-squares/lec.qmd:352 (notes, log-parameters) -> constrained-lp (bounds)
+- [ok] nonlinear-least-squares/lec.qmd:377 (notes, Fitting an ODE model) -> stiffness (lsoda), runge-kutta (deSolve ode / solve_ivp / Dopri5)
+- [ok: linked] nonlinear-least-squares/lec.qmd:396 (Inner tolerance vs FD step) -> convergence-cost (V-shaped FD error, h ~ sqrt(noise))
+- [ok] nonlinear-least-squares/lec.qmd:438 (notes, flip-flop) -> identifiability (structural non-identifiability, same model and data)
+- [ok: linked] nonlinear-least-squares/lec.qmd:463 (Summary, Next) -> identifiability
+- [ok] nonlinear-least-squares/lec.qmd:466 (notes, Summary) -> identifiability (standard errors from J^T J, profile likelihood), constrained-lp
+- [ok: linked] nonlinear-least-squares/exercise.qmd:45 (Background, Fact 7) -> convergence-cost (FD error with noise)
+- [ok] nonlinear-least-squares/exercise.qmd:209 (Hint 3) -> convergence-cost (V-shaped error curve)
+- [ok: linked] nonlinear-least-squares/exercise.qmd:213 (Hint 4) -> least-squares-qr (QR least squares in Rust with q_tr_mul)
+- [ok: linked] nonlinear-least-squares/exercise.qmd:221 (Hint 6) -> runge-kutta (Dopri5 continuous output model)
+- [ok] nonlinear-least-squares/exercise.qmd:242 (Solution B3) -> least-squares-qr (linear LS with design matrix J)
+- [ok: linked] nonlinear-least-squares/exercise.qmd:365 (Solution C1) -> error-conditioning (catastrophic cancellation near ka = ke)
+- [ok: linked] nonlinear-least-squares/exercise.qmd:1507 (Where this leads) -> identifiability
+- [ok: linked] nonlinear-least-squares/exercise.qmd:1508 (Where this leads) -> gradient-methods
+- [ok: linked] nonlinear-least-squares/exercise.qmd:1509 (Where this leads) -> constrained-lp
+- [ok: linked] nonlinear-least-squares/exercise.qmd:1510 (Where this leads) -> stiffness
 
 ## Running examples defined here
 
@@ -51,7 +51,7 @@ Facts established here (keep consistent):
   nls standard errors ka 0.06243, ke 0.01040, V 0.71647).
 - RSS at the true parameters (1, 0.2, 20): 0.08346328; at start (0.5, 0.1, 10): 93.53426.
 - True-parameter tmax = ln(5)/0.8 = 2.0118 h, Cmax = 3.3437 mg/L, AUC = D/(V ke) = 25 mg h/L.
-- **Flip-flop** (structural non-identifiability): (ka, ke, V) -> (ke, ka, V ke/ka)
+- [ok] **Flip-flop** (structural non-identifiability): (ka, ke, V) -> (ke, ka, V ke/ka)
   gives the identical curve. Mirror minimum: ka = 0.1906157, ke = 1.0150721,
   V = 3.7963083, same RSS 0.06646744. True-parameter mirror: (0.2, 1, 4).
 - Jacobian (forward differences) at the fit: kappa(J) = 169.93, kappa(J^T J) = 28876;

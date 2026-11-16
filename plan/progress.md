@@ -96,6 +96,7 @@ Brief: plan/xref-brief.md. Reports: plan/pass2/<group>.md.
 | parts7-8a | 18–22 | running |
 | parts8b-9a | 23–26 | running |
 | part9b | 27–30 | running |
-| part10a | 31–34 | running |
+| part10a | 31–34 | done |
 | part10b-11 | 35–37 | waits for reaction-diffusion demo |
 - pass2 parts5-6: check eigen-algorithms recap slide (dense two-column) for overflow. Optional: finite-differences note that splines used sparser/noisier run; quadrature note on trapezoid for periodic functions.
+- For part10b-11 worker: iterative-solvers lec notes ~line 59 wrongly call its model the culture-chamber problem of steady-state-2d (it's a 1×1 mm gel, Φ=12) — reword; reaction-diffusion should state minutes vs seconds in one sentence.

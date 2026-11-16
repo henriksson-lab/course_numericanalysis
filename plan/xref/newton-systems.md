@@ -1,34 +1,34 @@
 # Cross-references from newton-systems
 
-- newton-systems/lec.qmd:33 (notes, About this lecture) -> newton (one-variable Newton method, the "previous unit")
-- newton-systems/lec.qmd:33 (notes, About this lecture) -> convergence-cost (quadratic convergence, the sqrt(eps) step)
-- newton-systems/lec.qmd:33 (notes, About this lecture) -> phase-plane (Jacobian for stability)
-- newton-systems/lec.qmd:33 (notes, About this lecture) -> gradient-methods (Jacobian/Hessian in optimisation, "Part 9")
-- newton-systems/lec.qmd:48 (notes, toggle switch slide) -> phase-plane (reuses the toggle-switch model with alpha = 3, n = 2)
-- newton-systems/lec.qmd:72 (notes, steady states slide) -> phase-plane (nullclines; instability of the middle state)
-- newton-systems/lec.qmd:104 (Recap: Newton in one variable) -> newton (sqrt(2) example, tangent-line derivation)
-- newton-systems/lec.qmd:116 (notes, Recap) -> newton (derivation, failure modes, secant method)
-- newton-systems/lec.qmd:149 (notes, partial derivatives as slopes) -> convergence-cost (forward difference)
-- newton-systems/lec.qmd:247 (notes, one step by hand) -> lu (why never compute the inverse)
-- newton-systems/lec.qmd:270 (notes, Newton for systems in R) -> pivoting-conditioning (norms in general)
-- newton-systems/lec.qmd:297 (notes, Still quadratic) -> convergence-cost (reading linear vs quadratic convergence on a log axis)
-- newton-systems/lec.qmd:329 (notes, basins slide) -> phase-plane (stability from eigenvalues of the Jacobian)
-- newton-systems/lec.qmd:361 (No formula for J? Finite differences) -> convergence-cost (h = sqrt(eps) balances truncation and rounding)
-- newton-systems/lec.qmd:364 (notes, finite differences) -> convergence-cost (forward difference); gradient-methods (quasi-Newton / Broyden, "Part 9"); finite-differences (central differences)
-- newton-systems/lec.qmd:395 (notes, FD Jacobian in R) -> convergence-cost (the V-shaped error vs h plot)
-- newton-systems/lec.qmd:412 (notes, cost of a step) -> lu (LU factorisation, cost, not the inverse); structured-sparse (sparse Jacobians of gene networks)
-- newton-systems/lec.qmd:464 (Failure 2: checks) -> phase-plane (eigenvalues of J at a root decide stability)
-- newton-systems/lec.qmd:467 (notes, Failure 2) -> phase-plane (the middle state is a saddle)
-- newton-systems/lec.qmd:493 (Summary, "Next") -> lu (what solve does inside)
-- newton-systems/lec.qmd:496 (notes, Summary) -> phase-plane (stability of the steady states); gradient-methods (Hessian, Newton for optimisation); lu (Part 3 opens solve)
-- newton-systems/exercise.qmd:279 (Solution B8(b), "Part 3") -> lu / structured-sparse (cost of dense vs sparse solves)
-- newton-systems/exercise.qmd:794 (Solution C4, "Part 9") -> gradient-methods (quasi-Newton reuses an approximate Jacobian)
-- newton-systems/exercise.qmd:1281 (Where this leads) -> lu (what solve(J, -F) does, 2/3 n^3 cost); pivoting-conditioning (norms, nearly singular J amplifies errors)
-- newton-systems/exercise.qmd:1282 (Where this leads) -> structured-sparse (sparse Jacobians of gene networks)
-- newton-systems/exercise.qmd:1283 (Where this leads) -> finite-differences (central differences, Richardson extrapolation as in numDeriv)
-- newton-systems/exercise.qmd:1284 (Where this leads) -> phase-plane (same toggle switch; eigenvalues of J decide stability)
-- newton-systems/exercise.qmd:1285 (Where this leads) -> gradient-methods (Newton on the gradient, Hessian; quasi-Newton)
-- newton-systems/quiz.qmd:106 (Q8 answer) -> phase-plane (stability via eigenvalues of J)
+- newton-systems/lec.qmd:33 (notes, About this lecture) -> newton (one-variable Newton method, the "previous unit") [ok]
+- newton-systems/lec.qmd:33 (notes, About this lecture) -> convergence-cost (quadratic convergence, the sqrt(eps) step) [ok]
+- newton-systems/lec.qmd:33 (notes, About this lecture) -> phase-plane (Jacobian for stability) [ok]
+- newton-systems/lec.qmd:33 (notes, About this lecture) -> gradient-methods (Jacobian/Hessian in optimisation, "Part 9") [ok]
+- newton-systems/lec.qmd:48 (notes, toggle switch slide) -> phase-plane (reuses the toggle-switch model with alpha = 3, n = 2) [ok]
+- newton-systems/lec.qmd:72 (notes, steady states slide) -> phase-plane (nullclines; instability of the middle state) [ok]
+- newton-systems/lec.qmd:104 (Recap: Newton in one variable) -> newton (sqrt(2) example, tangent-line derivation) [fixed: recap table now uses newton's two-site dose–response EC50 run from c0 = 1 (errors 2.26, 0.36, 6.5e-3, 1.6e-6, 9.1e-14), linked]
+- newton-systems/lec.qmd:116 (notes, Recap) -> newton (derivation, failure modes, secant method) [ok]
+- newton-systems/lec.qmd:149 (notes, partial derivatives as slopes) -> convergence-cost (forward difference) [ok]
+- newton-systems/lec.qmd:247 (notes, one step by hand) -> lu (why never compute the inverse) [ok]
+- newton-systems/lec.qmd:270 (notes, Newton for systems in R) -> pivoting-conditioning (norms in general) [ok]
+- newton-systems/lec.qmd:297 (notes, Still quadratic) -> convergence-cost (reading linear vs quadratic convergence on a log axis) [ok]
+- newton-systems/lec.qmd:329 (notes, basins slide) -> phase-plane (stability from eigenvalues of the Jacobian) [ok]
+- newton-systems/lec.qmd:361 (No formula for J? Finite differences) -> convergence-cost (h = sqrt(eps) balances truncation and rounding) [ok, linked]
+- newton-systems/lec.qmd:364 (notes, finite differences) -> convergence-cost (forward difference); gradient-methods (quasi-Newton / Broyden, "Part 9"); finite-differences (central differences) [ok]
+- newton-systems/lec.qmd:395 (notes, FD Jacobian in R) -> convergence-cost (the V-shaped error vs h plot) [ok]
+- newton-systems/lec.qmd:412 (notes, cost of a step) -> lu (LU factorisation, cost, not the inverse); structured-sparse (sparse Jacobians of gene networks) [ok]
+- newton-systems/lec.qmd:464 (Failure 2: checks) -> phase-plane (eigenvalues of J at a root decide stability) [ok, linked]
+- newton-systems/lec.qmd:467 (notes, Failure 2) -> phase-plane (the middle state is a saddle) [ok]
+- newton-systems/lec.qmd:493 (Summary, "Next") -> lu (what solve does inside) [ok, linked]
+- newton-systems/lec.qmd:496 (notes, Summary) -> phase-plane (stability of the steady states); gradient-methods (Hessian, Newton for optimisation); lu (Part 3 opens solve) [ok]
+- newton-systems/exercise.qmd:279 (Solution B8(b), "Part 3") -> lu / structured-sparse (cost of dense vs sparse solves) [ok, linked]
+- newton-systems/exercise.qmd:794 (Solution C4, "Part 9") -> gradient-methods (quasi-Newton reuses an approximate Jacobian) [ok, linked]
+- newton-systems/exercise.qmd:1281 (Where this leads) -> lu (what solve(J, -F) does, 2/3 n^3 cost); pivoting-conditioning (norms, nearly singular J amplifies errors) [ok, linked]
+- newton-systems/exercise.qmd:1282 (Where this leads) -> structured-sparse (sparse Jacobians of gene networks) [fixed: structured-sparse has no Jacobians; reworded to "sparse storage and solvers; a gene network's Jacobian is sparse"]
+- newton-systems/exercise.qmd:1283 (Where this leads) -> finite-differences (central differences, Richardson extrapolation as in numDeriv) [ok, linked]
+- newton-systems/exercise.qmd:1284 (Where this leads) -> phase-plane (same toggle switch; eigenvalues of J decide stability) [ok, linked]
+- newton-systems/exercise.qmd:1285 (Where this leads) -> gradient-methods (Newton on the gradient, Hessian; quasi-Newton) [ok, linked]
+- newton-systems/quiz.qmd:106 (Q8 answer) -> phase-plane (stability via eigenvalues of J) [ok, linked]
 
 ## Running examples defined here
 

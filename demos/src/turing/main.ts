@@ -224,7 +224,7 @@ function buildGradient(box: HTMLElement, ds: DOMStringMap): TabCtl {
     if (st.warm !== "none") {
       const xa = st.warm === "post" ? L / 2 : 0, xb = st.warm === "ant" ? L / 2 : L;
       svgEl("rect", { x: sx(xa), y: top, width: sx(xb) - sx(xa), height: bot - top, fill: COL.orange, "fill-opacity": 0.13 }, svg);
-      const t = svgEl("text", { x: (sx(xa) + sx(xb)) / 2, y: bot - 10, "text-anchor": "middle", "font-weight": 600 }, svg);
+      const t = svgEl("text", { x: (sx(xa) + sx(xb)) / 2, y: top + 24, "text-anchor": "middle", "font-weight": 600 }, svg);
       t.style.fill = "#9a6a00"; t.textContent = "warm: k × 2";
     }
     // axes
@@ -270,9 +270,9 @@ function buildGradient(box: HTMLElement, ds: DOMStringMap): TabCtl {
       svgEl("line", { x1: x, x2: x + 34, y1: 16, y2: 16, stroke: c, "stroke-width": w, "stroke-dasharray": dash }, svg);
       svgEl("text", { x: x + 42, y: 22 }, svg).textContent = txt;
     };
-    lg("simulation c(x, t)", 380, COL.blue, "", 4);
-    lg("exact steady state", 600, COL.ink, "9 6", 2.5);
-    lg("reference (D 100, k 0.01, j 1)", 810, COL.grey, "", 2.5);
+    lg("simulation c(x, t)", 360, COL.blue, "", 4);
+    lg("exact steady state", 578, COL.ink, "9 6", 2.5);
+    lg("reference (D 100, k 0.01, j 1)", 795, COL.grey, "", 2.5);
     svgEl("text", { x: (left + right) / 2, y: bot + 44, "text-anchor": "middle" }, svg).textContent = "position x (µm)   anterior (source) → posterior (wall)";
 
     // French flag: now (from the simulation), and at steady state (ticks)

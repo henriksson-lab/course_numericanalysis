@@ -1,26 +1,26 @@
 # Cross-references from `newton` (Newton and secant methods)
 
-- newton/lec.qmd:33 (notes, About this lecture) -> bisection-fixedpoint (previous unit: bisection is safe but slow)
-- newton/lec.qmd:36-47 (slide "Recap: bracketing and fixed points") -> bisection-fixedpoint (bisection, 0.3 digits per step, fixed-point condition |g'(x*)| < 1, stopping rules)
-- newton/lec.qmd:47 (notes) -> convergence-cost (Newton for sqrt(2) vs halving, slide "Convergence of iterations: digits per step")
-- newton/lec.qmd:86 (notes) -> convergence-cost (checking a derivative with a forward difference)
-- newton/lec.qmd:135 (notes) -> convergence-cost (quadratic convergence promised there)
-- newton/lec.qmd:163 (slide "Why digits double", last bullet) -> bisection-fixedpoint (fixed-point iteration, |g'(x*)| < 1)
-- newton/lec.qmd:200 (notes) -> gradient-methods (maximisation view of the MLE, Newton for optimisation)
-- newton/lec.qmd:220 (slide "Newton on the score") -> floating-point (expm1 for 1 - exp(-lambda))
-- newton/lec.qmd:223 (notes) -> identifiability (standard errors / observed information)
-- newton/lec.qmd:312 (notes, Failure 1) -> intro ("confident wrong answer" of the introduction)
-- newton/lec.qmd:339 (notes, Failure 2) -> gradient-methods (line search, Part 9)
-- newton/lec.qmd:465 (Summary, "Next") -> newton-systems (Jacobian, linear solve per step)
-- newton/lec.qmd:468 (notes) -> newton-systems, gradient-methods (Broyden / quasi-Newton)
-- newton/exercise.qmd:177 (B1(d)) -> convergence-cost (square-root iteration x = (x + 2/x)/2)
-- newton/exercise.qmd:218 (C1(a)) -> convergence-cost (forward-difference error ~ |f''| h / 2)
-- newton/exercise.qmd:1222 (Where this leads) -> newton-systems (Jacobian, Broyden)
-- newton/exercise.qmd:1223 (Where this leads) -> finite-differences (finite-difference derivative, choice of h)
-- newton/exercise.qmd:1224 (Where this leads) -> gradient-methods (Newton for optimisation, line search, trust region)
-- newton/exercise.qmd:1224 (Where this leads) -> identifiability (standard error from -S'(lambda-hat))
-- newton/exercise.qmd:1225 (Where this leads) -> optimisation-1d (Brent's minimiser: optimize / minimize_scalar)
-- newton/quiz.qmd:195 (Q10) -> bisection-fixedpoint (fixed-point convergence rate |g'(x*)|)
+- newton/lec.qmd:33 (notes, About this lecture) -> bisection-fixedpoint (previous unit: bisection is safe but slow) [ok]
+- newton/lec.qmd:36-47 (slide "Recap: bracketing and fixed points") -> bisection-fixedpoint (bisection, 0.3 digits per step, fixed-point condition |g'(x*)| < 1, stopping rules) [ok, linked]
+- newton/lec.qmd:47 (notes) -> convergence-cost (Newton for sqrt(2) vs halving, slide "Convergence of iterations: digits per step") [ok]
+- newton/lec.qmd:86 (notes) -> convergence-cost (checking a derivative with a forward difference) [ok]
+- newton/lec.qmd:135 (notes) -> convergence-cost (quadratic convergence promised there) [ok]
+- newton/lec.qmd:163 (slide "Why digits double", last bullet) -> bisection-fixedpoint (fixed-point iteration, |g'(x*)| < 1) [ok, linked]
+- newton/lec.qmd:200 (notes) -> gradient-methods (maximisation view of the MLE, Newton for optimisation) [ok]
+- newton/lec.qmd:220 (slide "Newton on the score") -> floating-point (expm1 for 1 - exp(-lambda)) [ok, linked]
+- newton/lec.qmd:223 (notes) -> identifiability (standard errors / observed information) [ok]
+- newton/lec.qmd:312 (notes, Failure 1) -> intro ("confident wrong answer" of the introduction) [ok]
+- newton/lec.qmd:339 (notes, Failure 2) -> gradient-methods (line search, Part 9) [ok]
+- newton/lec.qmd:465 (Summary, "Next") -> newton-systems (Jacobian, linear solve per step) [ok, linked]
+- newton/lec.qmd:468 (notes) -> newton-systems, gradient-methods (Broyden / quasi-Newton) [ok]
+- newton/exercise.qmd:177 (B1(d)) -> convergence-cost (square-root iteration x = (x + 2/x)/2) [ok, linked; added "with 4 in place of 2"]
+- newton/exercise.qmd:218 (C1(a)) -> convergence-cost (forward-difference error ~ |f''| h / 2) [ok, linked]
+- newton/exercise.qmd:1222 (Where this leads) -> newton-systems (Jacobian, Broyden) [ok, linked]
+- newton/exercise.qmd:1223 (Where this leads) -> finite-differences (finite-difference derivative, choice of h) [ok, linked]
+- newton/exercise.qmd:1224 (Where this leads) -> gradient-methods (Newton for optimisation, line search, trust region) [ok, linked]
+- newton/exercise.qmd:1224 (Where this leads) -> identifiability (standard error from -S'(lambda-hat)) [ok, linked]
+- newton/exercise.qmd:1225 (Where this leads) -> optimisation-1d (Brent's minimiser: optimize / minimize_scalar) [ok, linked]
+- newton/quiz.qmd:195 (Q10) -> bisection-fixedpoint (fixed-point convergence rate |g'(x*)|) [ok, linked]
 
 ## Running examples defined here
 
