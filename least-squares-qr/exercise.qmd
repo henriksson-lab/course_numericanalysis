@@ -214,6 +214,57 @@ In R, [`lm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html) a
 
 **C7. Dependent columns.** Fit $a_{562}$ on an intercept, `conc` (µg/mL) and `mgml = conc / 1000`, as in B6. What do `lm`, [`qr()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/qr.html)`$rank` and `solve` on the normal equations report? Python: `np.linalg.lstsq` (look at the returned rank and coefficients) and [`np.linalg.matrix_rank`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_rank.html). Rust: the diagonal of $R$ and nalgebra's `rank`.
 
+## Explore {#explore}
+
+The demo below fits a polynomial of degree $d$ to the standards of the BCA assay or the qPCR curve, in your browser, by both routes: the **normal equations** (form $A^TA$ and $A^T\mathbf b$ in doubles, then Gaussian elimination with pivoting, as `solve` does) and **Householder QR** ($R\mathbf x = Q^T\mathbf b$). Panel (a) shows the standards, the QR fit (solid), the normal-equations fit (dashed) and the residuals as vertical segments, with a magnified residual strip below. You can drag any standard up or down. Panel (b) shows, for every degree, the relative error $\|\mathbf x - \mathbf x_\text{exact}\| / \|\mathbf x_\text{exact}\|$ of the coefficients from each route, with the lines $\kappa^2\varepsilon$ and $\kappa\varepsilon$ for $\kappa = \kappa(A)$ in the chosen units. The right-hand axis turns the error into correct digits. The exact least-squares solution is computed in exact fractions (big-integer arithmetic), so the error you see is the rounding error of the route itself. Degrees where $\kappa(A^TA) = \kappa(A)^2 > 1/\varepsilon$ are shaded: at those degrees R's `solve` stops with "computationally singular". Click a degree in panel (b) to select it.
+
+The browser computes in the same IEEE doubles as R and Python, so $\kappa$, the coefficients and the RSS agree with the lecture. The last digits of the *errors* depend on the order of the additions, so your own C5 errors will differ somewhat from the ones shown here, but their size will not.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="lsqfit" data-data="bca" data-units="scaled" data-degree="1"></div>
+<script src="../demos/dist/lsqfit.js"></script>
+```
+
+**E1. (choose the degree from the residuals)** The demo starts with the BCA standards, $x$ in mg/mL, and a straight line. Read the RSS and the residual signs. Then move the slider to $d = 2$ and $d = 3$. Which degree would you use for the calibration, and why?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+$d = 1$: RSS $= 0.0573$, signs `−−−−−−+++++++++−−−`: long runs, the line underestimates the middle and overestimates both ends (lack of fit). $d = 2$: RSS $= 5.54\times10^{-3}$, ten times smaller, and the signs alternate without long runs (`−−+−−++−+−++−−+−++`). $d = 3$: RSS $= 4.12\times10^{-3}$, only 25 % smaller than the quadratic, and still no pattern. The quadratic removes the systematic error; the cubic only fits noise a little better. Use $d = 2$, as in C6.
+:::
+
+**E2. (the normal equations square κ)** Stay in mg/mL. Click degrees 2, 4, 6 and 8 in panel (b). For each, write down $\kappa(A)$, $\kappa(A^TA)$ and the correct digits of both routes. How many digits does each route lose compared with 16, and how does that compare with $\log_{10}\kappa$?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+
+| $d$ | $\kappa(A)$ | $\kappa(A^TA)$ | digits, normal eqs | digits, QR |
+|---|---|---|---|---|
+| 2 | 11.6 | 134 | 15.3 | 15.0 |
+| 4 | 506 | $2.56\times10^5$ | 12.3 | 14.3 |
+| 6 | $5.45\times10^4$ | $2.98\times10^9$ | 7.6 | 11.4 |
+| 8 | $1.99\times10^7$ | $3.95\times10^{14}$ | 3.0 | 10.0 |
+
+$\kappa(A^TA)$ is exactly the square of $\kappa(A)$. At $d = 8$, $\log_{10}\kappa = 7.3$: QR loses 6 digits, close to $\log_{10}\kappa$, while the normal equations lose 13, close to $2\log_{10}\kappa = 14.6$. In panel (b) the squares follow the steep $\kappa^2\varepsilon$ line and the circles the $\kappa\varepsilon$ line, both a little below it (the lines are worst cases). This is the lecture's error-versus-$\kappa$ plot ("Genuine ill-conditioning: digits lost") with real calibration data. At low degree both routes are fine: the normal equations are only a problem when $\kappa$ is large.
+:::
+
+**E3. (units and centring)** Set $d = 3$ and switch to **µg/mL**. Compare $\kappa(A)$, the warning and the correct digits with the mg/mL values. Then click degree 8. Finally switch to **centred, [−1, 1]** and look at $d = 3$ and $d = 8$ again. Which change of $x$ only changes $\kappa$, and which one actually buys digits?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+$d = 3$ in µg/mL: $\kappa(A) = 5.78\times10^9$, $\kappa(A^TA) = 3.34\times10^{19} > 1/\varepsilon$; the readout warns that R's `solve` stops here, as on the lecture slide. Yet the computed errors barely move: 13.6 digits (normal equations) and 14.6 (QR), against 14.0 and 15.0 in mg/mL. In panel (b) the dashed lines jump up by many decades while the squares and circles stay put. Columns of very different size are a fake ill-conditioning: rescaling a column only rescales one coefficient, and both elimination with pivoting and Householder QR are hardly affected by it. `solve`'s check is fooled, though, and so is any $\kappa$ you compute. At $d = 8$ the two unit choices are again alike (normal equations 4.2 digits in µg/mL and 3.0 in mg/mL, QR 11.0 and 10.0).
+Centring is different: with $t = (x - 1000)/1000$ the columns $1, t, t^2, \dots$ no longer look alike, and $\kappa$ drops to 9.3 at $d = 3$ and to $4.1\times10^4$ at $d = 8$ (against $2.0\times10^7$ in mg/mL). At $d = 8$ the normal equations now give 8.0 digits instead of 3.0, QR 11.5 instead of 10.0. Rescaling removes the size problem, centring removes part of the look-alike problem; `poly()` removes all of it.
+:::
+
+**E4. (the qPCR line)** Switch to **qPCR** ($x = \log_{10} N$). Read $\kappa$ and the RSS at $d = 1$ and $d = 2$, then go to $d = 6$. Then switch to **centred** at $d = 6$. Is a curved standard curve justified here?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+$d = 1$: $\kappa(A) = 10.4$, $\kappa(A^TA) = 108$, RSS $= 0.627$ (the lecture's 10.40 and 0.6266); both routes give 15.7 digits. $d = 2$: RSS $= 0.626$, practically unchanged, and the residual signs are the same as for the line: the quadratic term adds nothing. $d = 6$: $\kappa = 2.45\times10^7$, normal equations 7.5 digits, QR 11.6, RSS $0.452$: the curve bends through the replicate means, which is fitting noise. Centred, $\kappa = 190$ and the routes give 12.1 and 15.4 digits. A straight line is the right model for a qPCR standard curve (it is what the efficiency formula assumes); higher degree buys nothing but conditioning trouble.
+:::
+
+**E5. (a bad standard)** Back to **BCA**, mg/mL, $d = 2$. Drag both standards at 1500 µg/mL up to about 1.60. What happens to the residual signs and the RSS? Raise the degree until the pattern disappears. Does panel (b) change? Press **reset points** when done.
+
+::: {.callout-note collapse="true" title="Answer E5"}
+With both readings near 1.60 the quadratic can no longer follow the data: the RSS jumps from 0.0055 to about 0.14 and the signs form long runs again (`+++++++−−−−−−−++−−` at exactly 1.600). The residual pattern is gone only at about $d = 5$ (RSS about 0.003), where the polynomial bends sharply to pass near the two high points. Panel (b) hardly changes: $\kappa$ depends only on $A$, that is on the concentrations and the units, not on the readings, and the digits lost by each route stay about the same. The residual plot tells you something is wrong with a standard; raising the degree hides the problem instead of fixing it (repeat the standard).
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — normal equations by hand (B1)"}

@@ -122,7 +122,7 @@ fig("fig03-semelparous.svg", w = 11, h = 4.8, expr = {
        ylim = c(0.2, 80), xlab = "iteration k", ylab = "estimate of growth rate")
   lines(1:K, est(Ls), type = "o", pch = 17, lwd = 2, col = oi["red"])
   abline(h = c(lam1, lam_s), lty = c(2, 3), col = oi[c("blue", "red")])
-  legend("top", c("spawns at ages 1-3", "spawns once, at age 3"), ncol = 2,
+  legend("top", c("spawns at ages 1-3", "only at age 3"), ncol = 2,
          pch = c(16, 17), lwd = 2, col = oi[c("blue", "red")], bty = "n", cex = 1.1)
   title("sum(Ax) / sum(x)", font.main = 1)
 })
@@ -130,7 +130,9 @@ fig("fig03-semelparous.svg", w = 11, h = 4.8, expr = {
 ## ---- fig04: cell states -----------------------------------------------------
 
 fig("fig04-cell-states.svg", w = 11, h = 4.2, expr = {
-  par(mfrow = c(1, 3), mar = c(4.8, 5, 2.6, 0.8))
+  par(mfrow = c(1, 3), mar = c(4.8, 5.4, 2.6, 0.8))
+  par(cex = 1)                              # mfrow with 3 panels shrinks text
+
   stcol <- oi[c("red", "blue", "green")]
   D <- 30
   for (s in 1:3) {
@@ -141,7 +143,7 @@ fig("fig04-cell-states.svg", w = 11, h = 4.2, expr = {
     abline(h = piP, col = stcol, lty = 2, lwd = 1.5)
     title(paste("sorted", c("stem-like", "basal", "luminal")[s], "cells"),
           font.main = 1)
-    if (s == 1) legend("right", c("S", "B", "L"), col = stcol, lwd = 3,
+    if (s == 1) legend("topright", c("S", "B", "L"), col = stcol, lwd = 3,
                        bty = "n", cex = 1.3)
   }
 })
@@ -165,11 +167,11 @@ fig("fig05-slow-chain.svg", w = 9, h = 5.2, expr = {
   logaxis(2, seq(-12, 0, by = 2))
   lines(1:K, ch, lwd = 3, col = oi["orange"])
   abline(h = 1e-8, lty = 2, col = "grey40")
-  text(1.5, 2.2e-8, "tolerance 1e-8", adj = 0, cex = 1.2, col = "grey30")
+  text(20, 2.5e-8, "tolerance 1e-8", adj = 0, cex = 1.2, col = "grey30")
   k_stop <- which(ch < 1e-8)[1]
   points(k_stop, err[k_stop], pch = 1, cex = 2, lwd = 2)
   points(1:3, ierr, type = "o", pch = 17, cex = 1.6, lwd = 2, col = oi["red"])
-  legend("bottomleft", c("power: true error", "power: change per step",
+  legend("bottomright", c("power: true error", "power: change per step",
                          "inverse iteration, shift 1 + 1e-6"),
          col = oi[c("blue", "orange", "red")], lwd = 3, pch = c(NA, NA, 17),
          bty = "n", cex = 1.2)

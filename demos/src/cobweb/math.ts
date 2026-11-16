@@ -88,6 +88,7 @@ export function orbit(p: Params, N0: number, n: number): Orbit {
 export type LongRun =
   | { kind: "collapse"; year: number }
   | { kind: "cycle"; values: number[] }      // period = values.length (1 = converges)
+  | { kind: "slow" }                         // steps still shrinking steadily: not settled yet
   | { kind: "none" };
 /** Iterate 3000 years, then look at the next 64: how many distinct values (6 decimals)? */
 export function longRun(p: Params, N0: number): LongRun {
@@ -96,7 +97,10 @@ export function longRun(p: Params, N0: number): LongRun {
   const tail = o.x.slice(3001);
   const seen = new Map<number, number>();
   for (const v of tail) { const k = Math.round(v * 1e6); if (!seen.has(k)) seen.set(k, v); }
-  if (seen.size > 32) return { kind: "none" };
+  if (seen.size > 32) {
+    const d = tail.slice(1).map((v, i) => Math.abs(v - tail[i]));
+    return d.every((v, i) => i === 0 || v <= d[i - 1]) ? { kind: "slow" } : { kind: "none" };
+  }
   // values in the order of the orbit, starting from the largest
   const per = seen.size, start = tail.indexOf(Math.max(...tail.slice(0, per)));
   return { kind: "cycle", values: tail.slice(start, start + per) };
