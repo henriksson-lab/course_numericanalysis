@@ -69,3 +69,8 @@ checks below). Part 1 has no xref files; checks listed here instead.
   `integrate(dnorm, 0, 20000)` is 0" could mention the 4300/4400 limit (it's
   only in the demo notes and exercise E5); `optimisation-1d` could reuse the
   bisection-fixedpoint MSY (14.26 at N = 46.75) if it wants a back-link.
+
+## Checks
+- All 21 pages (lec/exercise/quiz × 7) render (some after retry on
+  site_libs races). Decks have 24–27 slide headings (≤ 30). No Rust code
+  touched; `cargo build -q --examples` gives no warnings in these files.
