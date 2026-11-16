@@ -24,7 +24,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 19 | quadrature | running | | |
 | 20 | monte-carlo | done | done | done |
 | 21 | euler | done | done | done |
-| 22 | runge-kutta | running | | |
+| 22 | runge-kutta | done | running | |
 | 23 | stiffness | running | | |
 | 24 | phase-plane | done | running | |
 | 25 | gillespie | running | | |
@@ -34,7 +34,8 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 29 | identifiability | running | | |
 | 30 | constrained-lp | running | | |
 | 31 | diffusion-explicit | running | | |
-| 32–37 | | queued | | |
+| 32 | diffusion-implicit | running | | |
+| 33–37 | | queued | | |
 
 ## Audit notes (pass 3)
 
@@ -54,3 +55,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - euler: slides not screenshotted; densest 'Why global error is O(h)', 'Euler by hand'. SIR = N 10000, β .3, γ .1, (9990,10,0), 160 d; runge-kutta told to match.
 - eigen-algorithms: install irlba, RSpectra. Timings typed into fig script (single run, 1 thread). Matrix 20 000 cells (contentplan says 100 000) — align plan text.
 - phase-plane: oscillator = Sel'kov (no repressilator xref existed); runge-kutta may define repressilator — reconcile in pass 2 (fine to have both). Slides not screenshotted; densest separatrix slide, 'Failure: Re λ ≈ 0'. Install: rootSolve.
+- runge-kutta: Python C2/C3/C5/C6 tabs import C1/C4 functions from local files (not self-contained) — make self-contained in audit. Repressilator params α=216, α0=0.216, β=5, n=2 unverified vs Elowitz & Leibler. ode_solvers Dopri5 dense-output end-point bug noted.
