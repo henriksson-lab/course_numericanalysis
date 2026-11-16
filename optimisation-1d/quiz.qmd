@@ -1,0 +1,143 @@
+---
+title: "Quiz: optimisation in one dimension"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of one-dimensional minimisation: brackets, golden section, Brent, Newton, the flat bottom, and local versus global minima. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** You find the maximum-likelihood estimate by solving score $= 0$ with a root finder. Name one thing that can go wrong which cannot happen when you maximise the log-likelihood directly.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which kinds of points have a zero derivative?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A root of the score is any stationary point: a maximum of the likelihood, but also a **minimum** or a flat inflection point. A root finder cannot tell them apart. A maximiser compares likelihood values and only accepts better ones, so it cannot end at a minimum of the likelihood. (Both can still end at a **local** maximum.)
+:::
+
+---
+
+**Q2.** For root finding, two points with $f(a) < 0 < f(b)$ are a bracket. Why does a bracket for a minimum need **three** points?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Suppose $f(a) > f(b)$. Where could the minimum be?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Two values only tell you which one is lower, not whether the function turns upwards again between them: with $f(a) > f(b)$ the minimum may lie between $a$ and $b$, or beyond $b$. A third point $c$ between them with $f(c) < f(a)$ and $f(c) < f(b)$ proves that the function goes down and then up again, so a (local) minimum lies in $(a, b)$.
+:::
+
+---
+
+**Q3.** Golden-section search starts on an interval of width 2. What is the width after 10 function evaluations? How many evaluations does it take to reach $10^{-6}$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The first two evaluations give one comparison; every further evaluation multiplies the width by 0.618.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+After $m$ evaluations the width is $2 \cdot 0.618^{m-1}$: after 10 evaluations $2\cdot0.618^9 = 0.026$. For $10^{-6}$: $m - 1 \ge \ln(5\times10^{-7})/\ln 0.618 = 30.2$, so $m = 32$ evaluations. Linear convergence: about 0.21 decimal digits per evaluation.
+:::
+
+---
+
+**Q4.** Why is golden-section search slower than bisection (0.618 versus 0.5 per evaluation), when both just shrink an interval?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How much information is in one new evaluation for each method?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+In bisection one new value (its sign) decides which half to keep. In golden section a decision needs a **comparison of two** interior values; one of them is reused from the previous step, but the two points cannot both be at the midpoint, so the part thrown away is only 38% of the interval. That is the price for not needing the derivative: bisection on $f'$ is faster, but needs $f'$.
+:::
+
+---
+
+**Q5.** In one sentence each: what does Brent's method take from golden section, and what from parabolic interpolation?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Safety and speed.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+From golden section: the bracket and the guaranteed shrinking, used whenever a parabolic step is unsafe, so the method cannot run away. From parabolic interpolation: fast (superlinear, order about 1.32) steps to the vertex of the parabola through the three best points, used when they land inside the bracket and keep shrinking. R: `optimize`; Python: `minimize_scalar`; Rust: `BrentOpt`.
+:::
+
+---
+
+**Q6.** `optimize(f, c(0, 10))` returns 0.3754002 where the true minimum is 0.3753873. Is the method broken?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look up the default value of `tol`.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. The default `tol` is $\varepsilon^{1/4} \approx 1.2\times10^{-4}$, an absolute tolerance, and the error ($1.3\times10^{-5}$) is within it. Set `tol` yourself (e.g. `tol = 1e-10`); it costs only a few more evaluations. The same holds for `uniroot`.
+:::
+
+---
+
+**Q7.** Why can a minimiser that only compares values of $f$ locate a minimum only to about $\sqrt{\varepsilon} \approx 10^{-8}$ (relative), while a root of $f'$ can be found to about $10^{-16}$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Taylor-expand $f$ around $x^*$, where $f'(x^*) = 0$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$f(x^* + \delta) \approx f(x^*) + \tfrac12 f''\delta^2$: the change is **quadratic** in $\delta$. Once $\tfrac12 f''\delta^2$ is below the rounding level $\varepsilon|f(x^*)|$, all points within $\delta \sim \sqrt{\varepsilon}$ (times $\sqrt{2|f|/f''}$) have the same computed $f$. The derivative changes **linearly**, $f'(x^* + \delta) \approx f''\delta$, so its sign change is visible down to $\delta \sim \varepsilon$. If you need more than about 8 digits, find the root of $f'$.
+:::
+
+---
+
+**Q8.** Newton for minimisation from $x_0$ gives $x_1$ with $f(x_1) > f(x_0)$, and $f''(x_0) < 0$. What happened, and what should a careful implementation do?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Draw the local parabola $f(x_0) + f'(x_0)(x - x_0) + \tfrac12 f''(x_0)(x - x_0)^2$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+With $f''(x_0) < 0$ the local parabola opens downwards; its vertex is a **maximum**, and the Newton step $-f'/f''$ points **uphill**. Newton (a root finder for $f'$) heads for a stationary point, not necessarily a minimum. A careful implementation checks $f'' > 0$ before taking the step and $f(x_{k+1}) < f(x_k)$ after it; if a check fails it takes a different step (a bracketing step, or a shorter step downhill) instead.
+:::
+
+---
+
+**Q9.** $f$ is convex on $(0, \infty)$. Which of these are then guaranteed? (i) every local minimum is the global minimum; (ii) Newton for minimisation converges from every start; (iii) golden section on any bracket converges to the minimum.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Think of $f(x) = x - 2\ln x$ and Newton from $x_0 = 5$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(i) Yes. (iii) Yes: a convex function is unimodal on any bracket. (ii) **No**: convexity makes each Newton step point downhill, but the step can be far too long. For $x - 2\ln x$, Newton from $x_0 \ge 4$ jumps to $x \le 0$, outside the domain. A step-length check (does $f$ decrease?) is still needed.
+:::
+
+---
+
+**Q10.** You fit the period of a circadian rhythm by minimising $\text{RSS}(T)$ with `optimize` on $[10, 40]$ h and get $T = 32.4$ h. On $[15, 35]$ h you get $24.6$ h. Which do you report, and what would you do to be sure?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Both are local minima. Which has the smaller objective?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Compare the objective: RSS is 1.91 at 24.6 h and 10.23 at 32.4 h (about the RSS of no rhythm at all), so 24.6 h is the better fit and the one to report. To be sure: evaluate RSS on a **grid** finer than the narrowest dip (here 0.25 h), plot it, and refine the best grid point with `optimize` on a small interval around it. `optimize` is a local method: on $[10, 40]$ its first golden-section points both fell on the flat part, and it never saw the dip.
+:::
+
+---
+
+**Q11.** `optimize(f, c(0.5, 2))` returns 0.5000000. What does this tell you?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Where is the answer, relative to the interval?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The answer is (within `tol`) at the **end** of the interval. Almost always this means the minimum lies outside the interval and the method crept towards the nearest end; it gives no warning. Plot $f$, widen the interval and run again. (If the parameter really is bounded, e.g. a rate $\ge 0$, an optimum on the boundary is a constrained problem: *Constraints and linear programming*.)
+:::

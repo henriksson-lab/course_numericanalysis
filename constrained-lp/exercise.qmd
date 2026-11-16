@@ -1,0 +1,1385 @@
+---
+title: "Exercise: constraints and linear programming"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- write biological restrictions (positive rates, proportions, capacities, steady state) as **constraints**, and say which are **active** at a solution,
+- fit a model with **bounds** (L-BFGS-B) and with a **reparameterisation** ($e^\theta$, softmax), and recognise when each one fails,
+- solve a small constrained problem with a **Lagrange multiplier** and read the multiplier as a **shadow price**,
+- solve a 2-variable **linear program** by drawing it and by walking along edges (the **simplex** idea), and recognise ties, unbounded and infeasible LPs,
+- set up **flux balance analysis** for a small metabolic network, compute **flux variability** ranges, **knock-outs** and **shadow prices**, and check the solver's status.
+
+The by-hand part needs pen, paper and a calculator. The code part uses R's `optim` and `lpSolve::lp`, Python's `scipy.optimize`, and Rust's `minilp` and `argmin` crates.
+
+## Background
+
+**Facts used below:**
+
+1. A **constraint** restricts the allowed parameters: an equality ($\sum_i p_i = 1$, $S\mathbf v = \mathbf 0$) or an inequality ($c \ge 0$, $v_\text{glc} \le 10$). The allowed set is the **feasible set**. An inequality is **active** at a point if it holds with equality there.
+2. **Bounds** ($\ell \le \theta \le u$): L-BFGS-B projects every step back into the box. At a solution on a bound the gradient is **not zero** in that parameter; it points out of the box.
+3. **Reparameterisation**: optimise a free $\theta$ and set $c = e^\theta > 0$, or $p = \text{softmax}(\theta)$, $p_i = e^{\theta_i}/\sum_j e^{\theta_j}$, with $\theta_1 = 0$. It cannot reach the boundary: if the best $c$ is 0, $\theta$ runs off towards $-\infty$.
+4. **Lagrange**: to optimise $f$ subject to $g = b$, solve $\nabla f = \lambda \nabla g$ together with $g = b$. The multiplier $\lambda$ is the **shadow price**: the best $f$ changes by about $\lambda\,\Delta b$ when $b$ changes by $\Delta b$. For an inequality, the multiplier is $\ge 0$ when active and $0$ when inactive (**KKT** conditions).
+5. A **linear program** (LP) has a linear objective and linear constraints. Its feasible set is a convex **polytope**; if an optimum exists, it is at a **corner** (vertex). The **simplex** method walks from corner to corner along edges that improve the objective, and stops when no edge does. An LP can also have a whole optimal **edge** (a tie), be **unbounded**, or be **infeasible**.
+6. **Flux balance analysis** (FBA): fluxes $\mathbf v$ (reaction rates), stoichiometric matrix $S$ (rows = metabolites, columns = reactions). Maximise the biomass flux subject to $S\mathbf v = \mathbf 0$ (steady state), $\mathbf v \ge \mathbf 0$ and uptake bounds. **Flux variability analysis** (FVA) fixes the growth at its maximum and minimises and maximises every flux in turn.
+
+The toy network from the lecture: glucose uptake EX_glc $\le 10$, oxygen uptake EX_o2 $\le 15$, and
+
+| reaction | stoichiometry |
+|---|---|
+| GLY | G → 2 P + 2 ATP |
+| BYP1, BYP2 | G → X, X → 2 P + 2 ATP (a bypass with the same yield) |
+| RES | P + 2 O2 → 11 ATP |
+| FER | P → Ac + 1 ATP |
+| EX_ac | Ac → (secreted) |
+| BIO | P + 5 ATP → biomass |
+
+The ATP linear program from the lecture: maximise $6x_1 + 3x_2$ (respiration, fermentation) subject to $x_1 + x_2 \le 6$ (carbon), $4x_1 + x_2 \le 12$ (proteome), $x \ge 0$. In each language:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(lpSolve)
+res <- lp("max", objective.in = c(6, 3),
+          const.mat = rbind(c(1, 1), c(4, 1)),
+          const.dir = c("<=", "<="), const.rhs = c(6, 12),
+          compute.sens = TRUE)
+res$status                 # 0 = success
+# [1] 0
+res$solution
+# [1] 2 4
+res$objval
+# [1] 24
+res$duals[1:2]             # shadow prices of the two constraints
+# [1] 2 1
+```
+
+### Python
+
+```python
+from scipy.optimize import linprog
+
+# linprog minimises, so give it -ATP; the default bounds are x >= 0
+res = linprog(c=[-6, -3], A_ub=[[1, 1], [4, 1]], b_ub=[6, 12], method="highs")
+print(res.status)                    # 0 = success
+# 0
+print(res.x)
+# [2. 4.]
+print(-res.fun)
+# 24.0
+print(-res.ineqlin.marginals)        # shadow prices (sign flipped back)
+# [2. 1.]
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_background.rs  —  cargo run --example constrained_lp_background
+// Background: the ATP linear program with the minilp crate (Rust's lpSolve::lp / linprog).
+use minilp::{ComparisonOp, OptimizationDirection, Problem};
+
+fn main() {
+    let mut p = Problem::new(OptimizationDirection::Maximize);
+    // add_var(objective coefficient, (lower bound, upper bound))
+    let x1 = p.add_var(6.0, (0.0, f64::INFINITY)); // respiration flux
+    let x2 = p.add_var(3.0, (0.0, f64::INFINITY)); // fermentation flux
+    p.add_constraint(&[(x1, 1.0), (x2, 1.0)], ComparisonOp::Le, 6.0); // carbon
+    p.add_constraint(&[(x1, 4.0), (x2, 1.0)], ComparisonOp::Le, 12.0); // proteome
+    let sol = p.solve().unwrap(); // Err(Infeasible) or Err(Unbounded) if it fails
+    println!("{} {}", sol[x1], sol[x2]);
+    println!("{}", sol.objective());
+    // minilp reports no shadow prices; C3 gets them by re-solving
+}
+
+// Output:
+// 2 4
+// 24
+```
+
+:::
+
+`lp` maximises or minimises; [`linprog`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linprog.html) only minimises, so Python passes $-c$ and flips the signs of the objective and of the marginals. [`minilp`](https://docs.rs/minilp/) gives no shadow prices; we measure them by re-solving.
+
+## By hand
+
+**B1. Constraints in biology.** Write each restriction as one or more constraints, and say how many free parameters remain.
+(a) The proportions $p_1, \dots, p_5$ of five cell types in a bulk sample.
+(b) An irreversible reaction and a reversible one in a metabolic model (genome-scale models bound reversible fluxes by $\pm 1000$).
+(c) At the bounded decay fit from the lecture, $(A, k, c) = (1.0152, 0.5214, 0)$, the gradient of the SSE is $(0, 0, 0.105)$. Which constraint is active? Is this a constrained minimum? What would a gradient of $(0, 0, -0.105)$ at the same point mean?
+
+**B2. A Lagrange multiplier.** Counts of three cell types in an image are $n = (12, 6, 2)$. Maximise $f(p) = \sum_i n_i \log p_i$ subject to $p_1 + p_2 + p_3 = 1$.
+(a) Write $\nabla f = \lambda \nabla g$ component by component and solve for $p$ and $\lambda$.
+(b) Use $\lambda$ to predict how much the best $f$ would change if the constraint were $\sum p_i = 1.05$. Compare with the exact change $N \log 1.05$, $N = 20$.
+
+**B3. A diet on the edge of the triangle.** In *Gaussian elimination as LU*, a consumer with isotope values $(\delta^{13}\text{C}, \delta^{15}\text{N}) = (-24, 9)$ came out with diet fractions $(0.55, -0.20, 0.65)$ for C3 plants $(-26, 2)$, maize $(-10, 6)$ and fish $(-18, 14)$. Find the best diet with all fractions $\ge 0$, in the least-squares sense: minimise $\|A\mathbf p - \mathbf{obs}\|^2$ over $p_i \ge 0$, $\sum p_i = 1$, where the columns of $A$ are the sources.
+(a) Guess which constraint is active. Set maize $= 0$ and fish $= 1 - p_1$, and write the squared misfit as a function of $p_1$ alone.
+(b) Minimise it: find $p_1$, the diet and the misfit.
+(c) **KKT check.** The gradient of the misfit with respect to $\mathbf p$ is $2A^\top \mathbf r$, $\mathbf r = A\mathbf p - \mathbf{obs}$. Compute it. Show that the components for plants and fish are equal (why must they be?), and that moving a little weight from fish to maize makes the misfit worse.
+
+**B4. A diet formulation LP.** A fish farm mixes two feeds. Feed A has 2 units of protein and 1 of lipid per kg and costs 5; feed B has 1 of protein and 3 of lipid and costs 5. A batch needs at least 8 units of protein and 9 of lipid. Minimise the cost.
+(a) Draw the feasible region in the $(a, b)$ plane. Is it bounded?
+(b) List its corners, the cost at each, and the optimum.
+(c) Find the shadow prices of the protein and lipid requirements by re-solving with 9 protein, and with 10 lipid.
+(d) How expensive must feed B become before the optimal mix changes? What happens at exactly that price?
+
+**B5. The simplex by hand.** Add an oxygen limit $x_1 \le 1.5$ to the ATP LP.
+(a) Start at $(0, 0)$. Which variable should enter first? How far can it go, and which constraint stops it?
+(b) From that corner, which edge improves ATP, at what rate, and where does it end?
+(c) Show that the corner you reached is optimal. Which constraints are active, which is inactive?
+(d) Find the shadow prices of carbon, proteome and oxygen by writing $(6, 3)$ as a combination of the gradients of the active constraints.
+
+**B6. Four LPs that misbehave.** For each, sketch the feasible set and say whether the LP has a unique optimum, a tie, is unbounded or infeasible ($x_1, x_2 \ge 0$ always).
+(a) $\max\ x_1 + x_2$ subject to $x_1 + x_2 \le 4$.
+(b) $\max\ x_1 - x_2$ subject to $x_2 \ge 1$.
+(c) $\max\ x_1$ subject to $x_1 + x_2 \le 2$, $x_1 \ge 3$.
+(d) $\max\ 2x_1 + x_2$ subject to $x_1 + x_2 \le 4$, $x_1 \le 4$. What is special about the optimal corner?
+
+**B7. A five-reaction network.** R1: → A (uptake, $\le 10$); R2: A → B; R3: A → C; R4: A → C (an isozyme of R3); R5: B + 2 C → biomass.
+(a) Write the stoichiometric matrix $S$ (rows A, B, C).
+(b) Write $S\mathbf v = \mathbf 0$. What is the rank of $S$, and the dimension of its null space?
+(c) Maximise $v_5$. Give every flux, or its range.
+(d) Flux variability: with $v_5$ at its maximum, what are the ranges of $v_3$ and $v_4$?
+(e) Predict the maximal growth after knocking out R3; R2; R3 and R4 together.
+(f) What is the shadow price of the uptake bound?
+
+**B8. The toy FBA by hand.** Use the toy network from the Background, with glucose uptake $g = 10$.
+(a) Assume no fermentation (FER = 0) and that all glucose is used. Write the P and ATP balances and solve for RES and BIO. Is the oxygen bound active? What are the shadow prices of glucose and of oxygen?
+(b) Now limit oxygen uptake to 4 (so RES = 2). Solve the P and ATP balances for FER and BIO.
+(c) In general, show that $\text{BIO} = (2g + 5\,\text{RES})/3$ when oxygen limits. What are the shadow prices of glucose and oxygen?
+(d) In the oxygen-limited case, a lab can double either the glucose supply or the oxygen supply. Which gives more growth? Is that what the shadow prices suggest?
+
+## In code
+
+**C1. Bounds.** Fit $y = A e^{-kt} + c$ to the decay data from the lecture (`t = 0:8`, `y = c(1.020, 0.577, 0.378, 0.243, 0.125, 0.062, 0.020, 0.010, -0.012)`), from the start $(1, 0.3, 0.1)$.
+(a) Fit without constraints (`optim(method = "BFGS")`; Python `minimize(method="BFGS")`).
+(b) Fit with all parameters $\ge 0$ (`optim(method = "L-BFGS-B", lower = ...)`; Python `minimize(method="L-BFGS-B", bounds=...)`). Compare the SSE and the half-life $\ln 2/k$ of the two fits.
+(c) Compute the gradient of the SSE at the bounded fit and check B1(c).
+
+**C2. Reparameterisation and its failure.**
+(a) Refit the decay with $c = e^{\theta}$ and BFGS. What $\theta$ and $c$ do you get, and does the optimiser report convergence?
+(b) Fit the diet of B3 with $\mathbf p = \text{softmax}(0, \theta_2, \theta_3)$ by minimising the squared isotope misfit. Compare with your answer to B3. What happens to $\theta_2$?
+
+**C3. An LP solver and its shadow prices.** Solve the ATP LP with the oxygen limit of B5 with `lpSolve::lp` (Python: `linprog`). Get the shadow prices from the solver (`compute.sens = TRUE` and `$duals`; Python: `res.ineqlin.marginals`) and check one by re-solving with a slightly larger right-hand side. Compare with B5.
+
+**C4. Corners by brute force.** Write a function that solves a 2-variable LP $\max\ \mathbf c^\top \mathbf x$, $A\mathbf x \le \mathbf b$ (write $x_i \ge 0$ as $-x_i \le 0$) by intersecting every pair of constraint lines, keeping the feasible intersections, and returning the best. Test it on the ATP LP with and without the oxygen limit. Then compute how many pairs ($\binom{m}{2}$), or for $n$ variables $n$-subsets ($\binom{m}{n}$), a brute-force search must try for $(m, n) = (4, 2), (20, 10), (100, 50), (1000, 500)$.
+
+**C5. Flux balance analysis.** The stoichiometric matrix of the toy network:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+rxn <- c("EX_glc", "EX_o2", "GLY", "BYP1", "BYP2", "RES", "FER", "EX_ac", "BIO")
+S <- rbind(G   = c(1, 0, -1, -1,  0,  0,  0,  0,  0),
+           O2  = c(0, 1,  0,  0,  0, -2,  0,  0,  0),
+           X   = c(0, 0,  0,  1, -1,  0,  0,  0,  0),
+           P   = c(0, 0,  2,  0,  2, -1, -1,  0, -1),
+           ATP = c(0, 0,  2,  0,  2, 11,  1,  0, -5),
+           Ac  = c(0, 0,  0,  0,  0,  0,  1, -1,  0))
+colnames(S) <- rxn
+dim(S)
+# [1] 6 9
+```
+
+### Python
+
+```python
+import numpy as np
+
+rxn = ["EX_glc", "EX_o2", "GLY", "BYP1", "BYP2", "RES", "FER", "EX_ac", "BIO"]
+S = np.array([[1, 0, -1, -1,  0,  0,  0,  0,  0],    # G
+              [0, 1,  0,  0,  0, -2,  0,  0,  0],    # O2
+              [0, 0,  0,  1, -1,  0,  0,  0,  0],    # X
+              [0, 0,  2,  0,  2, -1, -1,  0, -1],    # P
+              [0, 0,  2,  0,  2, 11,  1,  0, -5],    # ATP
+              [0, 0,  0,  0,  0,  0,  1, -1,  0]],   # Ac
+             dtype=float)
+print(S.shape)
+# (6, 9)
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_c5_setup.rs  —  cargo run --example constrained_lp_c5_setup
+// C5 setup: the stoichiometric matrix of the toy network (rows = metabolites).
+const RXN: [&str; 9] = ["EX_glc", "EX_o2", "GLY", "BYP1", "BYP2", "RES", "FER", "EX_ac", "BIO"];
+const S: [[f64; 9]; 6] = [
+    [1., 0., -1., -1., 0., 0., 0., 0., 0.],   // G
+    [0., 1., 0., 0., 0., -2., 0., 0., 0.],    // O2
+    [0., 0., 0., 1., -1., 0., 0., 0., 0.],    // X
+    [0., 0., 2., 0., 2., -1., -1., 0., -1.],  // P
+    [0., 0., 2., 0., 2., 11., 1., 0., -5.],   // ATP
+    [0., 0., 0., 0., 0., 0., 1., -1., 0.],    // Ac
+];
+
+fn main() {
+    println!("{} x {}  ({} reactions)", S.len(), S[0].len(), RXN.len());
+}
+
+// Output:
+// 6 x 9  (9 reactions)
+```
+
+:::
+
+(a) Compute the rank of $S$ and the dimension of its null space.
+(b) Write a function `fba()` that maximises BIO subject to $S\mathbf v = \mathbf 0$, $\mathbf v \ge \mathbf 0$, EX_glc $\le 10$, EX_o2 $\le 15$. Make the uptake bounds arguments, and allow knock-outs (a flux forced to 0), a different objective, minimisation, and fixing BIO at a value; C6–C8 use these.
+(c) Print the optimal fluxes and check $S\mathbf v = \mathbf 0$. Compare with B8(a).
+
+**C6. Flux variability and knock-outs.**
+(a) Fix BIO at its maximum and compute the minimum and maximum of every flux.
+(b) Knock out each reaction in turn and record the maximal growth. Which reactions are essential? Then knock out GLY and BYP1 together.
+
+**C7. Shadow prices and an oxygen scan.**
+(a) Get the shadow prices of the glucose and oxygen bounds from the solver, at oxygen limit 15 and at 4. Check them by re-solving. Compare with B8.
+(b) Scan the oxygen limit from 0 to 14 in steps of 2: record growth, acetate secretion and the oxygen shadow price. At which oxygen limit does acetate secretion stop? What do the solvers report as the price exactly there?
+
+**C8. When FBA fails.**
+(a) Remove the glucose bound (keep oxygen $\le 15$) and solve. What does the solver report?
+(b) A measured growth rate of 20 is added as a constraint BIO $\ge 20$. What does the solver report?
+(c) Solve $\max\ 6x_1 + 3x_2$ subject to $4x_1 \le 12$ only (the middle panel of the lecture's failure figure). Do all three languages report "unbounded"?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — bounds and KKT (B1, C1)"}
+At a minimum on the bound $c \ge 0$, decreasing $c$ is not allowed and increasing it must not help, so $\partial\,\text{SSE}/\partial c \ge 0$. In code, the gradient at a point: R [`numDeriv::grad`](https://cran.r-project.org/package=numDeriv), Python [`scipy.optimize.approx_fprime`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.approx_fprime.html). Bounded fits: R [`optim(method = "L-BFGS-B", lower, upper)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/optim.html), Python [`scipy.optimize.minimize(method="L-BFGS-B", bounds=...)`](https://docs.scipy.org/doc/scipy/reference/optimize.minimize-lbfgsb.html). Our Rust crates have no L-BFGS-B: the solution uses that the model is linear in $(A, c)$ for fixed $k$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — Lagrange (B2, B3)"}
+$\partial f/\partial p_i = n_i/p_i$ and $\nabla g = (1, 1, 1)$, so every $n_i/p_i$ equals the same $\lambda$. Sum $p_i = n_i/\lambda$ over $i$. In B3 the constraint $\sum p_i = 1$ has its own multiplier, and that is why the gradient components of the free fractions must be equal.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — drawing an LP (B4, B5, B6)"}
+Draw each constraint as a line (find where it crosses the axes), shade the allowed side, and find corners by solving two line equations at a time. For a minimum, slide the cost line **down** until it last touches the region. A shadow price is the change in the optimal value when one right-hand side grows by 1, with the same constraints active. For the simplex, the rate of change along an edge is the change in the objective when the entering variable grows by 1 and the variables on the active constraint adjust.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — stoichiometry (B7, B8, C5)"}
+Column $j$ of $S$ lists what reaction $j$ makes (+) and uses (−). Row $i$ of $S\mathbf v = \mathbf 0$ says: production of metabolite $i$ = consumption. Rank in code: R [`qr(S)$rank`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/qr.html), Python [`np.linalg.matrix_rank`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_rank.html), Rust `DMatrix::rank` (nalgebra). In B8, subtract the P balance from the ATP balance to eliminate $2g$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — LP solvers (C3, C5–C8)"}
+R: [`lpSolve::lp(direction, objective.in, const.mat, const.dir, const.rhs, compute.sens = TRUE)`](https://cran.r-project.org/package=lpSolve); all variables are $\ge 0$, upper bounds and knock-outs are extra rows; `$duals` lists constraint shadow prices first, then reduced costs; `$status` is 0 (success), 2 (infeasible) or 3 (unbounded). Python: [`scipy.optimize.linprog(c, A_ub, b_ub, A_eq, b_eq, bounds, method="highs")`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linprog.html) minimises; shadow prices of inequality rows are in `res.ineqlin.marginals`, of variable bounds in `res.upper.marginals` (flip the signs when you minimised $-f$). Rust: [`minilp`](https://docs.rs/minilp/): `Problem::new`, `add_var(cost, (lo, hi))`, `add_constraint`, `solve()` returns `Err(Infeasible)` or `Err(Unbounded)` on failure.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — FVA and knock-outs (C6)"}
+FVA is $2n$ LPs with the same constraints plus BIO $=$ its optimum, and objective $\pm v_j$. Loop with `sapply` (R) or a list comprehension (Python). A knock-out sets the upper bound of that flux to 0.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $p_i \ge 0$ for $i = 1, \dots, 5$ and $p_1 + \dots + p_5 = 1$: 4 free parameters (the fifth follows from the sum).
+(b) Irreversible: $v \ge 0$. Reversible: $-1000 \le v \le 1000$; the $\pm 1000$ means "no real limit" (a direction-free reaction can also be split into two irreversible ones).
+(c) $c \ge 0$ is active ($c = 0$). In $A$ and $k$ the gradient is 0, as at any minimum. In $c$ it is $+0.105$: the SSE would **decrease** if $c$ decreased, but that is forbidden; increasing $c$ increases the SSE. So it is a constrained minimum, with multiplier 0.105. A gradient of $-0.105$ would mean that increasing $c$ (allowed) lowers the SSE, so the optimiser stopped too early.
+
+**B2.**
+(a) $n_i/p_i = \lambda$ for each $i$, so $p_i = n_i/\lambda$. The constraint gives $\sum n_i/\lambda = 1$, $\lambda = N = 20$, and $p = (12, 6, 2)/20 = (0.6, 0.3, 0.1)$.
+(b) $\Delta f \approx \lambda \cdot 0.05 = 1.0$. Exactly: the new optimum is $p = 1.05\,(0.6, 0.3, 0.1)$, and $f$ increases by $\sum n_i \log 1.05 = 20 \log 1.05 = 0.976$. The multiplier gives the first-order change.
+
+**B3.**
+(a) Maize is the fraction that came out negative, so try maize $= 0$, fish $= 1 - p_1$:
+$\delta^{13}$C misfit: $-26p_1 - 18(1 - p_1) + 24 = 6 - 8p_1$; $\delta^{15}$N misfit: $2p_1 + 14(1 - p_1) - 9 = 5 - 12p_1$. Squared misfit $h(p_1) = (6 - 8p_1)^2 + (5 - 12p_1)^2$.
+(b) $h'(p_1) = -16(6 - 8p_1) - 24(5 - 12p_1) = 416 p_1 - 216 = 0$, so $p_1 = 216/416 = 27/52 = 0.5192$. Diet: plants 0.519, maize 0, fish 0.481. Residuals $\mathbf r = (6 - 8\cdot 0.5192,\ 5 - 12\cdot 0.5192) = (1.846, -1.231)$, misfit $1.846^2 + 1.231^2 = 4.923$.
+(c) $2A^\top\mathbf r = 2\,(-26\cdot1.846 + 2\cdot(-1.231),\ -10\cdot1.846 + 6\cdot(-1.231),\ -18\cdot1.846 + 14\cdot(-1.231)) = (-100.9,\ -51.7,\ -100.9)$. Plants and fish are free (not at a bound), so by the Lagrange condition their gradient components both equal the multiplier of $\sum p_i = 1$: $-100.9$. Moving $\varepsilon$ from fish to maize changes the misfit by $\varepsilon(-51.7 - (-100.9)) = +49.2\,\varepsilon > 0$: worse. So maize $= 0$ is optimal; $49.2$ is the multiplier of the bound maize $\ge 0$. The isotope signature of the consumer lies outside the mixing triangle, and the best feasible diet is the nearest point on its plants–fish edge.
+
+**B4.**
+(a) Protein: $2a + b \ge 8$ (above the line through $(4, 0)$ and $(0, 8)$). Lipid: $a + 3b \ge 9$ (above the line through $(9, 0)$ and $(0, 3)$). The feasible region is unbounded (any large mix is allowed), but the cost has a minimum because it grows in every allowed direction.
+(b) Corners: $(0, 8)$, cost 40; the intersection $2a + b = 8$, $a + 3b = 9$: $a = 3$, $b = 2$, cost 25; $(9, 0)$, cost 45. Optimum: 3 kg of A and 2 kg of B, cost 25.
+(c) Protein 9: $2a + b = 9$, $a + 3b = 9$ gives $a = 3.6$, $b = 1.8$, cost 27: shadow price **2**. Lipid 10: $2a + b = 8$, $a + 3b = 10$ gives $a = 2.8$, $b = 2.4$, cost 26: shadow price **1**. Check: $(5, 5) = 2\,(2, 1) + 1\,(1, 3)$.
+(d) With B costing $q$: $(3, 2)$ costs $15 + 2q$, $(9, 0)$ costs 45. They tie at $q = 15$; then the whole edge from $(3, 2)$ to $(9, 0)$ is optimal (a tie), and above 15 the optimum jumps to pure feed A.
+
+**B5.**
+(a) $x_1$ has the larger objective coefficient (6). Increasing $x_1$ from 0 with $x_2 = 0$: oxygen stops it at 1.5, proteome at 3, carbon at 6. Oxygen wins: corner $(1.5, 0)$, ATP 9.
+(b) Along the oxygen edge $x_1 = 1.5$, $x_2$ increases with rate $+3$ per unit. Carbon stops it at $x_2 = 4.5$, proteome at $x_2 = 6$. Corner $(1.5, 4.5)$, ATP $9 + 13.5 = 22.5$.
+(c) Edges leaving $(1.5, 4.5)$: back down the oxygen edge (rate $-3$), or along the carbon edge with $x_1$ decreasing and $x_2$ increasing by the same amount: rate $-6 + 3 = -3$. No improving edge, so it is optimal. Active: oxygen and carbon. Inactive: proteome ($6 + 4.5 = 10.5 < 12$).
+(d) $(6, 3) = y_C\,(1, 1) + y_O\,(1, 0)$: $y_C = 3$, $y_O = 3$; proteome is inactive, so $y_P = 0$.
+
+**B6.**
+(a) Tie: every point on the edge from $(4, 0)$ to $(0, 4)$ gives 4.
+(b) Unbounded: $x_1$ can grow without limit (take $x_2 = 1$).
+(c) Infeasible: $x_1 \ge 3$ and $x_1 + x_2 \le 2$ with $x_2 \ge 0$ contradict each other.
+(d) Optimum $(4, 0)$, value 8. Three constraints are active there ($x_1 + x_2 = 4$, $x_1 = 4$, $x_2 = 0$), one more than the 2 needed to define a corner: a **degenerate** corner. Its shadow prices are not unique, and a simplex step there can have length 0.
+
+**B7.**
+(a) Columns R1…R5:
+$$S = \begin{pmatrix} 1 & -1 & -1 & -1 & 0\\ 0 & 1 & 0 & 0 & -1 \\ 0 & 0 & 1 & 1 & -2 \end{pmatrix}\begin{matrix}A\\B\\C\end{matrix}$$
+(b) $v_1 = v_2 + v_3 + v_4$, $v_2 = v_5$, $v_3 + v_4 = 2v_5$. The three rows are independent (each has a pivot in a different column), so rank 3 and null space dimension $5 - 3 = 2$.
+(c) From the balances $v_1 = 3v_5$, so $v_5 \le 10/3$. Optimum: $v_1 = 10$, $v_2 = v_5 = 10/3$, $v_3 + v_4 = 20/3$.
+(d) $v_3, v_4 \in [0, 20/3]$, with $v_3 + v_4 = 20/3$.
+(e) R3 out: still $10/3$ (R4 takes over). R2 out: 0 (no B). R3 and R4 out: 0 (no C): a synthetic lethal pair.
+(f) $v_5 = v_1/3$, so one more unit of uptake gives $1/3$ more growth: shadow price $1/3$.
+
+**B8.**
+(a) Glycolysis (either route) makes $2g = 20$ P and 20 ATP. P balance: $20 = \text{RES} + \text{BIO}$. ATP balance: $20 + 11\,\text{RES} = 5\,\text{BIO}$. Substituting $\text{RES} = 20 - \text{BIO}$: $20 + 220 - 11\,\text{BIO} = 5\,\text{BIO}$, so BIO $= 15$, RES $= 5$, O2 uptake $= 2 \cdot 5 = 10 < 15$: the oxygen bound is **inactive**, its shadow price 0. For general $g$ the same steps give BIO $= 1.5g$: glucose shadow price 1.5.
+(b) P: $20 = 2 + \text{FER} + \text{BIO}$; ATP: $20 + 22 + \text{FER} = 5\,\text{BIO}$. From the first, FER $= 18 - \text{BIO}$; then $60 - \text{BIO} = 5\,\text{BIO}$: BIO $= 10$, FER $= 8$ (8 acetate secreted).
+(c) ATP minus P: $11\,\text{RES} + \text{FER} - (\text{RES} + \text{FER} + \text{BIO}) = 5\,\text{BIO} - 2g$, i.e. FER $= 2\,\text{BIO} - 6\,\text{RES}$. Put into the P balance: $2g = \text{RES} + 2\,\text{BIO} - 6\,\text{RES} + \text{BIO}$, so $\text{BIO} = (2g + 5\,\text{RES})/3$. Glucose price $2/3 = 0.667$; oxygen: RES $= \text{O}_2/2$, so $5/6 = 0.833$ per unit oxygen. Valid while FER $\ge 0$, i.e. up to O2 $= 10$.
+(d) Double glucose ($g = 20$, O2 $= 4$): BIO $= (40 + 10)/3 = 16.7$. Double oxygen ($g = 10$, O2 $= 8$): BIO $= (20 + 20)/3 = 13.3$. Glucose wins, although oxygen has the higher shadow price: the price is **per unit**, and doubling glucose adds 10 units, doubling oxygen only 4. Both changes stay within the range where the prices hold (FER $\ge 0$).
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t <- 0:8
+y <- c(1.020, 0.577, 0.378, 0.243, 0.125, 0.062, 0.020, 0.010, -0.012)
+sse <- function(p) sum((y - (p[1] * exp(-p[2] * t) + p[3]))^2)   # p = (A, k, c)
+free <- optim(c(1, 0.3, 0.1), sse, method = "BFGS")
+bnd  <- optim(c(1, 0.3, 0.1), sse, method = "L-BFGS-B", lower = c(0, 0, 0))
+tab <- rbind(free = c(free$par, free$value), bound = c(bnd$par, bnd$value))
+colnames(tab) <- c("A", "k", "c", "SSE")
+round(tab, 4)
+#            A      k       c    SSE
+# free  1.0366 0.4788 -0.0294 0.0023
+# bound 1.0152 0.5214  0.0000 0.0038
+round(log(2) / tab[, "k"], 3)                    # half-lives (h)
+#  free bound 
+# 1.448 1.329 
+round(numDeriv::grad(sse, bnd$par), 4)           # gradient at the bounded fit
+# [1] 0.0000 0.0000 0.1054
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import minimize, approx_fprime
+
+t = np.arange(9.0)
+y = np.array([1.020, 0.577, 0.378, 0.243, 0.125, 0.062, 0.020, 0.010, -0.012])
+def sse(p):                                           # p = (A, k, c)
+    return np.sum((y - (p[0] * np.exp(-p[1] * t) + p[2]))**2)
+free = minimize(sse, [1, 0.3, 0.1], method="BFGS")
+bnd = minimize(sse, [1, 0.3, 0.1], method="L-BFGS-B", bounds=[(0, None)] * 3)
+for name, f in [("free", free), ("bound", bnd)]:
+    print(f"{name:5s} A {f.x[0]:.4f}  k {f.x[1]:.4f}  c {f.x[2]:.4f}  SSE {f.fun:.4f}"
+          f"  half-life {np.log(2) / f.x[1]:.3f} h")
+# free  A 1.0366  k 0.4787  c -0.0294  SSE 0.0023  half-life 1.448 h
+# bound A 1.0152  k 0.5214  c 0.0000  SSE 0.0038  half-life 1.329 h
+print(np.round(approx_fprime(bnd.x, sse, 1e-7), 4))  # gradient at the bounded fit
+# [0.     0.     0.1055]
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_c1.rs  —  cargo run --example constrained_lp_c1
+// C1: decay fit with background c, free and with c >= 0. Our crates have no
+// L-BFGS-B, so this is hand-written: for fixed k the model A e^{-kt} + c is
+// linear in (A, c), solved exactly; a golden-section search then finds k.
+fn inner(k: f64, t: &[f64], y: &[f64], bounded: bool) -> (f64, f64, f64) {
+    let e: Vec<f64> = t.iter().map(|&ti| (-k * ti).exp()).collect();
+    let n = t.len() as f64;
+    let (se, see) = (e.iter().sum::<f64>(), e.iter().map(|v| v * v).sum::<f64>());
+    let sy: f64 = y.iter().sum();
+    let sey: f64 = e.iter().zip(y).map(|(a, b)| a * b).sum();
+    // normal equations [see se; se n] (A, c) = (sey, sy)
+    let det = see * n - se * se;
+    let (mut a, mut c) = ((sey * n - se * sy) / det, (see * sy - se * sey) / det);
+    if bounded && c < 0.0 {
+        c = 0.0; // the bound is active: refit A alone with c fixed at 0
+        a = sey / see;
+    }
+    let sse = e.iter().zip(y).map(|(ei, yi)| (yi - a * ei - c).powi(2)).sum();
+    (a, c, sse)
+}
+
+fn golden(f: impl Fn(f64) -> f64, mut lo: f64, mut hi: f64) -> f64 {
+    let g = (5f64.sqrt() - 1.0) / 2.0;
+    while hi - lo > 1e-10 {
+        let (x1, x2) = (hi - g * (hi - lo), lo + g * (hi - lo));
+        if f(x1) < f(x2) { hi = x2 } else { lo = x1 }
+    }
+    (lo + hi) / 2.0
+}
+
+fn main() {
+    let t: Vec<f64> = (0..9).map(|i| i as f64).collect();
+    let y = [1.020, 0.577, 0.378, 0.243, 0.125, 0.062, 0.020, 0.010, -0.012];
+    for (name, bounded) in [("free", false), ("bound", true)] {
+        let k = golden(|k| inner(k, &t, &y, bounded).2, 0.05, 2.0);
+        let (a, c, sse) = inner(k, &t, &y, bounded);
+        println!("{:5} A {:.4}  k {:.4}  c {:.4}  SSE {:.4}  half-life {:.3} h",
+                 name, a, k, c, sse, 2f64.ln() / k);
+        if bounded {
+            // dSSE/dc = -2 * sum of residuals
+            let g: f64 = t.iter().zip(&y)
+                .map(|(&ti, &yi)| -2.0 * (yi - a * (-k * ti).exp() - c)).sum();
+            println!("dSSE/dc at the bounded fit: {:.4}", g);
+        }
+    }
+}
+
+// Output:
+// free  A 1.0366  k 0.4787  c -0.0294  SSE 0.0023  half-life 1.448 h
+// bound A 1.0152  k 0.5214  c 0.0000  SSE 0.0038  half-life 1.329 h
+// dSSE/dc at the bounded fit: 0.1055
+```
+
+:::
+
+The free fit has the lower SSE but a negative background. With $c \ge 0$ the background sits at the bound and the half-life shortens from 1.45 h to 1.33 h: the constraint changes the biological answer by 8%. The gradient is zero in $A$ and $k$ and positive in $c$, as in B1(c). (Python and Rust stop at $k = 0.4787$, R at $0.4788$: the minimum is flat, and the optimisers stop at slightly different points.)
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# (a) background c = exp(theta)
+t <- 0:8
+y <- c(1.020, 0.577, 0.378, 0.243, 0.125, 0.062, 0.020, 0.010, -0.012)
+sse <- function(p) sum((y - (p[1] * exp(-p[2] * t) + p[3]))^2)
+fitl <- optim(c(1, 0.3, log(0.1)), function(q) sse(c(q[1], q[2], exp(q[3]))),
+              method = "BFGS")
+round(fitl$par, 3); signif(exp(fitl$par[3]), 3); fitl$convergence
+# [1]  1.015  0.523 -7.116
+# [1] 0.000812
+# [1] 1
+# (b) diet fractions p = softmax(0, theta2, theta3)
+A <- rbind(c(-26, -10, -18),      # d13C of C3 plants, maize, fish
+           c(  2,   6,  14))      # d15N
+obs <- c(-24, 9)
+softmax <- function(th) { e <- exp(c(0, th)); e / sum(e) }
+loss <- function(th) sum((A %*% softmax(th) - obs)^2)
+fit <- optim(c(0, 0), loss, method = "BFGS")
+round(softmax(fit$par), 4); round(fit$value, 4); round(fit$par, 2); fit$convergence
+# [1] 0.5192 0.0000 0.4808
+# [1] 4.9232
+# [1] -12.50  -0.08
+# [1] 0
+p_edge <- c(27/52, 0, 25/52)         # exact answer (maize = 0), see B-solution
+round(sum((A %*% p_edge - obs)^2), 4)
+# [1] 4.9231
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import minimize
+
+# (a) background c = exp(theta)
+t = np.arange(9.0)
+y = np.array([1.020, 0.577, 0.378, 0.243, 0.125, 0.062, 0.020, 0.010, -0.012])
+def sse(p):
+    return np.sum((y - (p[0] * np.exp(-p[1] * t) + p[2]))**2)
+fitl = minimize(lambda q: sse([q[0], q[1], np.exp(q[2])]), [1, 0.3, np.log(0.1)],
+                method="BFGS")
+print(np.round(fitl.x, 3), f"{np.exp(fitl.x[2]):.3g}", fitl.success, fitl.nit)
+# [  1.015   0.521 -14.024] 8.12e-07 True 31
+
+# (b) diet fractions p = softmax(0, theta2, theta3)
+A = np.array([[-26, -10, -18],      # d13C of C3 plants, maize, fish
+              [  2,   6,  14]])     # d15N
+obs = np.array([-24, 9])
+def softmax(th):
+    e = np.exp(np.concatenate(([0.0], th)))
+    return e / e.sum()
+def loss(th):
+    return np.sum((A @ softmax(th) - obs)**2)
+fit = minimize(loss, [0, 0], method="BFGS")
+print(np.round(softmax(fit.x), 4), round(fit.fun, 4), np.round(fit.x, 2), fit.success)
+# [0.5192 0.     0.4808] 4.9231 [-15.36  -0.08] True
+p_edge = np.array([27/52, 0, 25/52])  # exact answer (maize = 0), see B-solution
+print(round(np.sum((A @ p_edge - obs)**2), 4))
+# 4.9231
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_c2.rs  —  cargo run --example constrained_lp_c2
+// C2: reparameterisation with exp and softmax, minimised with argmin's Nelder-Mead
+// (R and SciPy use BFGS, so the last digits of the parameters differ).
+use argmin::core::{CostFunction, Error, Executor, State};
+use argmin::solver::neldermead::NelderMead;
+
+struct Decay; // (a) SSE of A e^{-kt} + exp(theta)
+impl CostFunction for Decay {
+    type Param = Vec<f64>;
+    type Output = f64;
+    fn cost(&self, q: &Vec<f64>) -> Result<f64, Error> {
+        let y = [1.020, 0.577, 0.378, 0.243, 0.125, 0.062, 0.020, 0.010, -0.012];
+        Ok(y.iter().enumerate()
+            .map(|(i, yi)| (yi - q[0] * (-q[1] * i as f64).exp() - q[2].exp()).powi(2))
+            .sum())
+    }
+}
+
+fn softmax(th: &[f64]) -> [f64; 3] {
+    let e = [1.0, th[0].exp(), th[1].exp()]; // first theta fixed at 0
+    let s: f64 = e.iter().sum();
+    [e[0] / s, e[1] / s, e[2] / s]
+}
+
+struct Diet; // (b) isotope misfit of the diet fractions softmax(0, th2, th3)
+impl CostFunction for Diet {
+    type Param = Vec<f64>;
+    type Output = f64;
+    fn cost(&self, th: &Vec<f64>) -> Result<f64, Error> {
+        let a = [[-26.0, -10.0, -18.0], [2.0, 6.0, 14.0]]; // d13C, d15N
+        let obs = [-24.0, 9.0];
+        let p = softmax(th);
+        Ok((0..2).map(|i| ((0..3).map(|j| a[i][j] * p[j]).sum::<f64>() - obs[i]).powi(2)).sum())
+    }
+}
+
+fn simplex(start: &[f64]) -> Vec<Vec<f64>> {
+    let mut s = vec![start.to_vec()];
+    for i in 0..start.len() {
+        let mut v = start.to_vec();
+        v[i] += 0.5;
+        s.push(v);
+    }
+    s
+}
+
+fn main() -> Result<(), Error> {
+    let solver = NelderMead::new(simplex(&[1.0, 0.3, 0.1f64.ln()])).with_sd_tolerance(1e-14)?;
+    let res = Executor::new(Decay, solver).configure(|s| s.max_iters(2000)).run()?;
+    let q = res.state().get_best_param().unwrap().clone();
+    println!("theta: {:.3} {:.3} {:.3}  c = {:.3e}  iterations {}",
+             q[0], q[1], q[2], q[2].exp(), res.state().get_iter());
+
+    let solver = NelderMead::new(simplex(&[0.0, 0.0])).with_sd_tolerance(1e-14)?;
+    let res = Executor::new(Diet, solver).configure(|s| s.max_iters(2000)).run()?;
+    let th = res.state().get_best_param().unwrap().clone();
+    let p = softmax(&th);
+    println!("p = {:.4} {:.4} {:.4}  loss {:.4}  theta {:.2} {:.2}",
+             p[0], p[1], p[2], res.state().get_best_cost(), th[0], th[1]);
+    let pe = [27.0 / 52.0, 0.0, 25.0 / 52.0]; // exact answer (maize = 0)
+    let r = [-26.0 * pe[0] - 18.0 * pe[2] + 24.0, 2.0 * pe[0] + 14.0 * pe[2] - 9.0];
+    println!("exact loss {:.4}", r[0] * r[0] + r[1] * r[1]);
+    Ok(())
+}
+
+// Output:
+// theta: 1.015 0.521 -29.377  c = 1.745e-13  iterations 182
+// p = 0.5192 0.0000 0.4808  loss 4.9231  theta -37.78 -0.08
+// exact loss 4.9231
+```
+
+:::
+
+(a) The best $c$ is 0, so $\theta$ drifts towards $-\infty$ and stops wherever the optimiser gives up: $-7.1$ in R (with `convergence = 1`, the iteration limit), $-14.0$ in Python (reported as a success), $-29.4$ in Rust. The fitted curve is fine ($c \approx 0$), but $\theta$ and any standard error for it are meaningless. (b) Softmax finds the B3 diet to 4 digits, with $\theta_2$ again far out (−12.5, −15.4 or −37.8): softmax can only approach a zero fraction. The R misfit, 4.9232, is still slightly above the exact 4.9231. **Check:** if a log- or softmax-parameter runs off to large negative values, the constraint is active; use a bound, or set the parameter to the boundary and refit as in B3.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(lpSolve)
+A <- rbind(carbon   = c(1, 1),
+           proteome = c(4, 1),
+           oxygen   = c(1, 0))
+res <- lp("max", c(6, 3), A, rep("<=", 3), c(6, 12, 1.5), compute.sens = TRUE)
+res$solution; res$objval
+# [1] 1.5 4.5
+# [1] 22.5
+res$duals[1:3]                                    # shadow prices
+# [1] 3 0 3
+# check one shadow price by re-solving with 0.1 more oxygen
+(lp("max", c(6, 3), A, rep("<=", 3), c(6, 12, 1.6))$objval - res$objval) / 0.1
+# [1] 3
+```
+
+### Python
+
+```python
+from scipy.optimize import linprog
+
+A = [[1, 1],     # carbon
+     [4, 1],     # proteome
+     [1, 0]]     # oxygen
+res = linprog(c=[-6, -3], A_ub=A, b_ub=[6, 12, 1.5], method="highs")
+print(res.x, -res.fun)
+# [1.5 4.5] 22.5
+print(-res.ineqlin.marginals)                     # shadow prices
+# [3. 0. 3.]
+# check one shadow price by re-solving with 0.1 more oxygen
+res2 = linprog(c=[-6, -3], A_ub=A, b_ub=[6, 12, 1.6], method="highs")
+print((-res2.fun - (-res.fun)) / 0.1)
+# 3.0000000000000426
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_c3.rs  —  cargo run --example constrained_lp_c3
+// C3: the ATP LP with an oxygen limit (minilp). minilp has no shadow prices,
+// so each one is measured by re-solving with a slightly larger right-hand side.
+use minilp::{ComparisonOp, OptimizationDirection, Problem};
+
+fn solve(rhs: [f64; 3]) -> (f64, f64, f64) {
+    let mut p = Problem::new(OptimizationDirection::Maximize);
+    let x1 = p.add_var(6.0, (0.0, f64::INFINITY));
+    let x2 = p.add_var(3.0, (0.0, f64::INFINITY));
+    p.add_constraint(&[(x1, 1.0), (x2, 1.0)], ComparisonOp::Le, rhs[0]); // carbon
+    p.add_constraint(&[(x1, 4.0), (x2, 1.0)], ComparisonOp::Le, rhs[1]); // proteome
+    p.add_constraint(&[(x1, 1.0)], ComparisonOp::Le, rhs[2]); // oxygen
+    let sol = p.solve().unwrap();
+    (sol[x1], sol[x2], sol.objective())
+}
+
+fn main() {
+    let rhs = [6.0, 12.0, 1.5];
+    let (x1, x2, z) = solve(rhs);
+    println!("{} {}  ATP {}", x1, x2, z);
+    let h = 0.01;
+    let prices: Vec<String> = (0..3).map(|i| {
+        let mut r = rhs;
+        r[i] += h;
+        format!("{:.3}", (solve(r).2 - z) / h)
+    }).collect();
+    println!("shadow prices (carbon, proteome, oxygen): {}", prices.join(" "));
+}
+
+// Output:
+// 1.5 4.5  ATP 22.5
+// shadow prices (carbon, proteome, oxygen): 3.000 0.000 3.000
+```
+
+:::
+
+The optimum is the corner of B5. The shadow prices agree with B5(d): carbon 3, proteome 0 (inactive), oxygen 3.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# all constraints as A x <= b, including x1 >= 0 and x2 >= 0 as -x <= 0
+vertex_lp <- function(obj, A, b) {
+  best <- NULL; best_val <- -Inf; nv <- 0
+  for (pr in combn(nrow(A), 2, simplify = FALSE)) {
+    M <- A[pr, ]
+    if (abs(det(M)) < 1e-12) next                 # parallel lines: no corner
+    v <- solve(M, b[pr])
+    if (all(A %*% v <= b + 1e-9)) {               # feasible corner
+      nv <- nv + 1
+      if (sum(obj * v) > best_val) { best <- v; best_val <- sum(obj * v) }
+    }
+  }
+  list(x = best, value = best_val, n_vertices = nv)
+}
+A <- rbind(c(1, 1), c(4, 1), c(-1, 0), c(0, -1))
+r <- vertex_lp(c(6, 3), A, c(6, 12, 0, 0))
+cat("x =", r$x, " ATP =", r$value, " corners:", r$n_vertices, "\n")
+# x = 2 4  ATP = 24  corners: 4 
+r <- vertex_lp(c(6, 3), rbind(A, c(1, 0)), c(6, 12, 0, 0, 1.5))     # + oxygen
+cat("x =", r$x, " ATP =", r$value, " corners:", r$n_vertices, "\n")
+# x = 1.5 4.5  ATP = 22.5  corners: 4 
+choose(c(4, 20, 100, 1000), c(2, 10, 50, 500))   # candidate corners: choose(m, n)
+# [1]  6.000000e+00  1.847560e+05  1.008913e+29 2.702882e+299
+```
+
+### Python
+
+```python
+import itertools
+import math
+import numpy as np
+
+# all constraints as A x <= b, including x1 >= 0 and x2 >= 0 as -x <= 0
+def vertex_lp(obj, A, b):
+    best, best_val, nv = None, -np.inf, 0
+    for pr in itertools.combinations(range(len(b)), 2):
+        M = A[list(pr)]
+        if abs(np.linalg.det(M)) < 1e-12:            # parallel lines: no corner
+            continue
+        v = np.linalg.solve(M, b[list(pr)])
+        if np.all(A @ v <= b + 1e-9):                 # feasible corner
+            nv += 1
+            if obj @ v > best_val:
+                best, best_val = v, obj @ v
+    return best, best_val, nv
+
+A = np.array([[1, 1], [4, 1], [-1, 0], [0, -1]], dtype=float)
+x, val, nv = vertex_lp(np.array([6, 3]), A, np.array([6, 12, 0, 0.0]))
+print("x =", x, " ATP =", val, " corners:", nv)
+# x = [2. 4.]  ATP = 24.0  corners: 4
+A2 = np.vstack([A, [1, 0]])                           # + oxygen
+x, val, nv = vertex_lp(np.array([6, 3]), A2, np.array([6, 12, 0, 0, 1.5]))
+print("x =", x, " ATP =", val, " corners:", nv)
+# x = [1.5 4.5]  ATP = 22.5  corners: 4
+print(" ".join(f"{float(math.comb(m, n)):.6e}" for m, n in [(4, 2), (20, 10), (100, 50), (1000, 500)]))  # candidate corners
+# 6.000000e+00 1.847560e+05 1.008913e+29 2.702882e+299
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_c4.rs  —  cargo run --example constrained_lp_c4
+// C4: a 2-variable LP by checking every corner (vertex enumeration), std only.
+// All constraints are rows of A x <= b, including -x1 <= 0 and -x2 <= 0.
+fn vertex_lp(obj: [f64; 2], a: &[[f64; 2]], b: &[f64]) -> ([f64; 2], f64, usize) {
+    let (mut best, mut best_val, mut nv) = ([f64::NAN; 2], f64::NEG_INFINITY, 0);
+    for i in 0..b.len() {
+        for j in (i + 1)..b.len() {
+            let det = a[i][0] * a[j][1] - a[i][1] * a[j][0];
+            if det.abs() < 1e-12 { continue; } // parallel lines: no corner
+            // Cramer's rule for the 2x2 system of rows i and j
+            let v = [(b[i] * a[j][1] - a[i][1] * b[j]) / det,
+                     (a[i][0] * b[j] - b[i] * a[j][0]) / det];
+            let feasible = a.iter().zip(b).all(|(r, &bi)| r[0] * v[0] + r[1] * v[1] <= bi + 1e-9);
+            if feasible {
+                nv += 1;
+                let val = obj[0] * v[0] + obj[1] * v[1];
+                if val > best_val { best = v; best_val = val; }
+            }
+        }
+    }
+    (best, best_val, nv)
+}
+
+fn choose(n: u32, k: u32) -> f64 {
+    (1..=k).fold(1.0, |acc, i| acc * (n - k + i) as f64 / i as f64)
+}
+
+fn main() {
+    let mut a = vec![[1.0, 1.0], [4.0, 1.0], [-1.0, 0.0], [0.0, -1.0]];
+    let mut b = vec![6.0, 12.0, 0.0, 0.0];
+    let (x, v, nv) = vertex_lp([6.0, 3.0], &a, &b);
+    println!("x = {} {}  ATP = {}  corners: {}", x[0], x[1], v, nv);
+    a.push([1.0, 0.0]); // + oxygen
+    b.push(1.5);
+    let (x, v, nv) = vertex_lp([6.0, 3.0], &a, &b);
+    println!("x = {} {}  ATP = {}  corners: {}", x[0], x[1], v, nv);
+    for (n, k) in [(4, 2), (20, 10), (100, 50), (1000, 500)] {
+        print!("{:.6e}  ", choose(n, k));
+    }
+    println!();
+}
+
+// Output:
+// x = 2 4  ATP = 24  corners: 4
+// x = 1.5 4.5  ATP = 22.5  corners: 4
+// 6.000000e0  1.847560e5  1.008913e29  2.702882e299  
+```
+
+:::
+
+Both answers agree with the lecture and B5. A 2-variable LP has few corners, but the number of candidate corners, $\binom{m}{n}$, explodes: $10^{29}$ for 100 constraints in 50 variables. The simplex method visits only a short path of them, which is why LP solvers handle genome-scale models with thousands of reactions.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(lpSolve)
+rxn <- c("EX_glc", "EX_o2", "GLY", "BYP1", "BYP2", "RES", "FER", "EX_ac", "BIO")
+S <- rbind(G   = c(1, 0, -1, -1,  0,  0,  0,  0,  0),
+           O2  = c(0, 1,  0,  0,  0, -2,  0,  0,  0),
+           X   = c(0, 0,  0,  1, -1,  0,  0,  0,  0),
+           P   = c(0, 0,  2,  0,  2, -1, -1,  0, -1),
+           ATP = c(0, 0,  2,  0,  2, 11,  1,  0, -5),
+           Ac  = c(0, 0,  0,  0,  0,  0,  1, -1,  0))
+colnames(S) <- rxn
+# FBA as an LP: maximise obj . v subject to S v = 0, v >= 0, v_glc <= ub[1],
+# v_o2 <= ub[2], knocked-out fluxes = 0, and (optionally) v_BIO = fix_bio
+fba <- function(ub = c(10, 15), ko = integer(0), obj = c(rep(0, 8), 1),
+                dir = "max", fix_bio = NULL) {
+  B <- diag(9)[c(1, 2, ko), , drop = FALSE]
+  A <- rbind(S, B)
+  d <- c(rep("=", 6), rep("<=", nrow(B)))
+  rhs <- c(rep(0, 6), ub, rep(0, length(ko)))
+  if (!is.null(fix_bio)) { A <- rbind(A, diag(9)[9, ]); d <- c(d, "=")
+                           rhs <- c(rhs, fix_bio) }
+  lp(dir, obj, A, d, rhs, compute.sens = TRUE)
+}
+
+qr(S)$rank                          # independent mass balances
+# [1] 6
+ncol(S) - qr(S)$rank                # dimension of the null space of S
+# [1] 3
+sol <- fba()
+sol$status; sol$objval
+# [1] 0
+# [1] 15
+setNames(sol$solution, rxn)
+# EX_glc  EX_o2    GLY   BYP1   BYP2    RES    FER  EX_ac    BIO 
+#     10     10     10      0      0      5      0      0     15 
+max(abs(S %*% sol$solution))        # steady state check
+# [1] 3.552714e-15
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import linprog
+
+rxn = ["EX_glc", "EX_o2", "GLY", "BYP1", "BYP2", "RES", "FER", "EX_ac", "BIO"]
+S = np.array([[1, 0, -1, -1,  0,  0,  0,  0,  0],    # G
+              [0, 1,  0,  0,  0, -2,  0,  0,  0],    # O2
+              [0, 0,  0,  1, -1,  0,  0,  0,  0],    # X
+              [0, 0,  2,  0,  2, -1, -1,  0, -1],    # P
+              [0, 0,  2,  0,  2, 11,  1,  0, -5],    # ATP
+              [0, 0,  0,  0,  0,  0,  1, -1,  0]],   # Ac
+             dtype=float)
+
+# FBA as an LP: maximise obj . v subject to S v = 0, v >= 0, v_glc <= ub[0],
+# v_o2 <= ub[1], knocked-out fluxes = 0, and (optionally) v_BIO = fix_bio
+def fba(ub=(10, 15), ko=(), obj=None, maximise=True, fix_bio=None):
+    obj = np.eye(9)[8] if obj is None else np.asarray(obj, dtype=float)
+    bounds = [(0, ub[0]), (0, ub[1])] + [(0, None)] * 7
+    for j in ko:
+        bounds[j] = (0, 0)
+    if fix_bio is not None:
+        bounds[8] = (fix_bio, fix_bio)
+    c = -obj if maximise else obj
+    res = linprog(c, A_eq=S, b_eq=np.zeros(6), bounds=bounds, method="highs")
+    res.value = -res.fun if (maximise and res.status == 0) else res.fun
+    return res
+
+def show(v, names=rxn):                     # print a flux vector like R does
+    print(" ".join(f"{n:>7s}" for n in names))
+    print(" ".join(f"{x + 0.0:7.3f}" for x in v))   # + 0.0 turns -0.0 into 0.0
+
+
+r = np.linalg.matrix_rank(S)
+print(r)                               # independent mass balances
+# 6
+print(S.shape[1] - r)                  # dimension of the null space of S
+# 3
+sol = fba()
+print(sol.status, sol.value)
+# 0 15.0
+show(sol.x)
+#  EX_glc   EX_o2     GLY    BYP1    BYP2     RES     FER   EX_ac     BIO
+#  10.000  10.000  10.000   0.000   0.000   5.000   0.000   0.000  15.000
+print(np.max(np.abs(S @ sol.x)))       # steady state check
+# 0.0
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_c5.rs  —  cargo run --example constrained_lp_c5
+// C5: flux balance analysis of the toy network with minilp; rank of S with nalgebra.
+#![allow(dead_code, unused_imports)] // the FBA setup below is repeated in every C5-C8 file
+use nalgebra::DMatrix;
+use minilp::{ComparisonOp, Error, OptimizationDirection, Problem};
+
+const RXN: [&str; 9] = ["EX_glc", "EX_o2", "GLY", "BYP1", "BYP2", "RES", "FER", "EX_ac", "BIO"];
+const S: [[f64; 9]; 6] = [
+    [1., 0., -1., -1., 0., 0., 0., 0., 0.],   // G
+    [0., 1., 0., 0., 0., -2., 0., 0., 0.],    // O2
+    [0., 0., 0., 1., -1., 0., 0., 0., 0.],    // X
+    [0., 0., 2., 0., 2., -1., -1., 0., -1.],  // P
+    [0., 0., 2., 0., 2., 11., 1., 0., -5.],   // ATP
+    [0., 0., 0., 0., 0., 0., 1., -1., 0.],    // Ac
+];
+
+// Optimise obj . v subject to S v = 0 and lo <= v <= hi (knock-out: hi = 0).
+fn fba(lo: [f64; 9], hi: [f64; 9], obj: [f64; 9], dir: OptimizationDirection)
+       -> Result<(f64, Vec<f64>), Error> {
+    let mut p = Problem::new(dir);
+    let v: Vec<_> = (0..9).map(|j| p.add_var(obj[j], (lo[j], hi[j]))).collect();
+    for row in S.iter() {
+        let terms: Vec<_> = (0..9).filter(|&j| row[j] != 0.0).map(|j| (v[j], row[j])).collect();
+        p.add_constraint(terms, ComparisonOp::Eq, 0.0);
+    }
+    let sol = p.solve()?;
+    Ok((sol.objective(), v.iter().map(|&x| sol[x]).collect()))
+}
+
+// default bounds: 0 <= v, glucose <= glc, oxygen <= o2, the rest unbounded above
+fn bounds(glc: f64, o2: f64) -> ([f64; 9], [f64; 9]) {
+    let mut hi = [f64::INFINITY; 9];
+    hi[0] = glc;
+    hi[1] = o2;
+    ([0.0; 9], hi)
+}
+
+const BIO: [f64; 9] = [0., 0., 0., 0., 0., 0., 0., 0., 1.]; // objective: growth
+use OptimizationDirection::{Maximize, Minimize};
+
+fn show(v: &[f64]) {
+    println!("{}", RXN.iter().map(|n| format!("{:>7}", n)).collect::<Vec<_>>().join(" "));
+    println!("{}", v.iter().map(|x| format!("{:7.3}", x + 0.0)).collect::<Vec<_>>().join(" "));
+}
+
+fn main() {
+    let sm = DMatrix::from_fn(6, 9, |i, j| S[i][j]);
+    let r = sm.rank(1e-10);
+    println!("{}", r); // independent mass balances
+    println!("{}", 9 - r); // dimension of the null space of S
+    let (lo, hi) = bounds(10.0, 15.0);
+    let (growth, v) = fba(lo, hi, BIO, Maximize).unwrap();
+    println!("{}", growth);
+    show(&v);
+    let resid = (0..6).map(|i| (0..9).map(|j| S[i][j] * v[j]).sum::<f64>().abs())
+        .fold(0.0, f64::max);
+    println!("{:e}", resid); // steady state check
+}
+
+// Output:
+// 6
+// 3
+// 15
+//  EX_glc   EX_o2     GLY    BYP1    BYP2     RES     FER   EX_ac     BIO
+//  10.000  10.000  10.000   0.000   0.000   5.000   0.000   0.000  15.000
+// 0e0
+```
+
+:::
+
+Six independent balances in nine fluxes leave a 3-dimensional null space, the same null space you would find by Gaussian elimination of $S$ (*Gaussian elimination as LU*). The optimum is the one of B8(a): pure respiration, BIO = 15, oxygen uptake 10 of 15. $S\mathbf v$ is zero up to rounding. (The R and Python versions of `fba()` differ in one detail: lpSolve has no upper bounds on variables, so the uptake limits and knock-outs are extra rows; `linprog` and `minilp` take them as bounds.)
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# S, rxn and fba() as in the C5 solution
+opt <- fba()$objval
+fva <- sapply(1:9, function(j) {
+  o <- numeric(9); o[j] <- 1
+  c(min = fba(obj = o, dir = "min", fix_bio = opt)$objval,
+    max = fba(obj = o, dir = "max", fix_bio = opt)$objval)
+})
+colnames(fva) <- rxn
+fva
+#     EX_glc EX_o2 GLY BYP1 BYP2 RES FER EX_ac BIO
+# min     10    10   0    0    0   5   0     0  15
+# max     10    10  10   10   10   5   0     0  15
+ko1 <- sapply(1:9, function(j) fba(ko = j)$objval)
+round(setNames(ko1, rxn), 3)
+# EX_glc  EX_o2    GLY   BYP1   BYP2    RES    FER  EX_ac    BIO 
+#  0.000  6.667 15.000 15.000 15.000  6.667 15.000 15.000  0.000 
+fba(ko = c(3, 4))$objval            # GLY and BYP1 together
+# [1] 0
+```
+
+### Python
+
+```python
+# S, rxn, fba() and show() as in the C5 solution
+opt = fba().value
+fva = np.array([[fba(obj=np.eye(9)[j], maximise=False, fix_bio=opt).value,
+                 fba(obj=np.eye(9)[j], maximise=True, fix_bio=opt).value]
+                for j in range(9)])
+for name, (lo, hi) in zip(rxn, fva):
+    print(f"{name:7s} {lo + 0.0:5.1f} {hi + 0.0:5.1f}")
+# EX_glc   10.0  10.0
+# EX_o2    10.0  10.0
+# GLY       0.0  10.0
+# BYP1      0.0  10.0
+# BYP2      0.0  10.0
+# RES       5.0   5.0
+# FER       0.0   0.0
+# EX_ac     0.0   0.0
+# BIO      15.0  15.0
+ko1 = [fba(ko=[j]).value for j in range(9)]
+show(ko1)
+#  EX_glc   EX_o2     GLY    BYP1    BYP2     RES     FER   EX_ac     BIO
+#   0.000   6.667  15.000  15.000  15.000   6.667  15.000  15.000   0.000
+print(fba(ko=[2, 3]).value + 0.0)            # GLY and BYP1 together (0-based)
+# 0.0
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_c6.rs  —  cargo run --example constrained_lp_c6
+// C6: flux variability analysis and knock-outs (minilp).
+#![allow(dead_code, unused_imports)] // the FBA setup below is repeated in every C5-C8 file
+use minilp::{ComparisonOp, Error, OptimizationDirection, Problem};
+
+const RXN: [&str; 9] = ["EX_glc", "EX_o2", "GLY", "BYP1", "BYP2", "RES", "FER", "EX_ac", "BIO"];
+const S: [[f64; 9]; 6] = [
+    [1., 0., -1., -1., 0., 0., 0., 0., 0.],   // G
+    [0., 1., 0., 0., 0., -2., 0., 0., 0.],    // O2
+    [0., 0., 0., 1., -1., 0., 0., 0., 0.],    // X
+    [0., 0., 2., 0., 2., -1., -1., 0., -1.],  // P
+    [0., 0., 2., 0., 2., 11., 1., 0., -5.],   // ATP
+    [0., 0., 0., 0., 0., 0., 1., -1., 0.],    // Ac
+];
+
+// Optimise obj . v subject to S v = 0 and lo <= v <= hi (knock-out: hi = 0).
+fn fba(lo: [f64; 9], hi: [f64; 9], obj: [f64; 9], dir: OptimizationDirection)
+       -> Result<(f64, Vec<f64>), Error> {
+    let mut p = Problem::new(dir);
+    let v: Vec<_> = (0..9).map(|j| p.add_var(obj[j], (lo[j], hi[j]))).collect();
+    for row in S.iter() {
+        let terms: Vec<_> = (0..9).filter(|&j| row[j] != 0.0).map(|j| (v[j], row[j])).collect();
+        p.add_constraint(terms, ComparisonOp::Eq, 0.0);
+    }
+    let sol = p.solve()?;
+    Ok((sol.objective(), v.iter().map(|&x| sol[x]).collect()))
+}
+
+// default bounds: 0 <= v, glucose <= glc, oxygen <= o2, the rest unbounded above
+fn bounds(glc: f64, o2: f64) -> ([f64; 9], [f64; 9]) {
+    let mut hi = [f64::INFINITY; 9];
+    hi[0] = glc;
+    hi[1] = o2;
+    ([0.0; 9], hi)
+}
+
+const BIO: [f64; 9] = [0., 0., 0., 0., 0., 0., 0., 0., 1.]; // objective: growth
+use OptimizationDirection::{Maximize, Minimize};
+
+fn show(v: &[f64]) {
+    println!("{}", RXN.iter().map(|n| format!("{:>7}", n)).collect::<Vec<_>>().join(" "));
+    println!("{}", v.iter().map(|x| format!("{:7.3}", x + 0.0)).collect::<Vec<_>>().join(" "));
+}
+
+// solver round-off: print values within 1e-9 of zero as 0
+fn z(x: f64) -> f64 { if x.abs() < 1e-9 { 0.0 } else { x } }
+
+fn main() {
+    let (lo, hi) = bounds(10.0, 15.0);
+    let opt = fba(lo, hi, BIO, Maximize).unwrap().0;
+    let (mut lo_f, mut hi_f) = (lo, hi);
+    lo_f[8] = opt; // fix growth at its maximum
+    hi_f[8] = opt;
+    for j in 0..9 {
+        let mut o = [0.0; 9];
+        o[j] = 1.0;
+        let mn = fba(lo_f, hi_f, o, Minimize).unwrap().0;
+        let mx = fba(lo_f, hi_f, o, Maximize).unwrap().0;
+        println!("{:7} {:5.1} {:5.1}", RXN[j], z(mn), z(mx));
+    }
+    let ko: Vec<f64> = (0..9).map(|j| {
+        let mut h = hi;
+        h[j] = 0.0; // knock out reaction j
+        fba(lo, h, BIO, Maximize).unwrap().0
+    }).collect();
+    show(&ko);
+    let mut h = hi;
+    h[2] = 0.0; // GLY and BYP1 together
+    h[3] = 0.0;
+    println!("{}", z(fba(lo, h, BIO, Maximize).unwrap().0));
+}
+
+// Output:
+// EX_glc   10.0  10.0
+// EX_o2    10.0  10.0
+// GLY       0.0  10.0
+// BYP1      0.0  10.0
+// BYP2      0.0  10.0
+// RES       5.0   5.0
+// FER       0.0   0.0
+// EX_ac     0.0   0.0
+// BIO      15.0  15.0
+//  EX_glc   EX_o2     GLY    BYP1    BYP2     RES     FER   EX_ac     BIO
+//   0.000   6.667  15.000  15.000  15.000   6.667  15.000  15.000   0.000
+// 0
+```
+
+:::
+
+Only GLY, BYP1 and BYP2 have ranges at maximal growth: the glucose can go either way, and the solver's GLY = 10 is one arbitrary corner. Essential: EX_glc and BIO. RES knock-out gives anaerobic growth 6.67 (fermentation). GLY and BYP1 are individually dispensable, but together lethal.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# S, rxn and fba() as in the C5 solution
+fba()$duals[7:8]                          # shadow prices: glucose, oxygen
+# [1] 1.5 0.0
+low <- fba(ub = c(10, 4))
+round(low$duals[7:8], 3)
+# [1] 0.667 0.833
+round(setNames(low$solution, rxn), 3)
+# EX_glc  EX_o2    GLY   BYP1   BYP2    RES    FER  EX_ac    BIO 
+#     10      4     10      0      0      2      8      8     10 
+h <- 0.01                                 # check by re-solving
+round(c((fba(ub = c(10 + h, 4))$objval - low$objval) / h,
+        (fba(ub = c(10, 4 + h))$objval - low$objval) / h), 3)
+# [1] 0.667 0.833
+o2 <- seq(0, 14, by = 2)
+scan <- sapply(o2, function(u) { r <- fba(ub = c(10, u))
+  c(o2 = u, growth = r$objval, acetate = r$solution[8], price_o2 = r$duals[8]) })
+round(t(scan), 3)
+#      o2 growth acetate price_o2
+# [1,]  0  6.667  13.333    0.833
+# [2,]  2  8.333  10.667    0.833
+# [3,]  4 10.000   8.000    0.833
+# [4,]  6 11.667   5.333    0.833
+# [5,]  8 13.333   2.667    0.833
+# [6,] 10 15.000   0.000    0.000
+# [7,] 12 15.000   0.000    0.000
+# [8,] 14 15.000   0.000    0.000
+```
+
+### Python
+
+```python
+# S, rxn, fba() and show() as in the C5 solution
+# the bounds' shadow prices are in res.upper.marginals (sign flipped: we minimised -BIO)
+print(-fba().upper.marginals[:2] + 0.0)               # glucose, oxygen
+# [1.5 0. ]
+low = fba(ub=(10, 4))
+print(np.round(-low.upper.marginals[:2], 3))
+# [0.667 0.833]
+show(low.x)
+#  EX_glc   EX_o2     GLY    BYP1    BYP2     RES     FER   EX_ac     BIO
+#  10.000   4.000  10.000   0.000   0.000   2.000   8.000   8.000  10.000
+h = 0.01                                        # check by re-solving
+print(np.round([(fba(ub=(10 + h, 4)).value - low.value) / h,
+                (fba(ub=(10, 4 + h)).value - low.value) / h], 3))
+# [0.667 0.833]
+print(" o2  growth  acetate  price_o2")
+#  o2  growth  acetate  price_o2
+for u in range(0, 15, 2):
+    r = fba(ub=(10, u))
+    print(f"{u:3d} {r.value:7.3f} {r.x[7] + 0.0:8.3f} {-r.upper.marginals[1] + 0.0:9.3f}")
+#   0   6.667   13.333     0.833
+#   2   8.333   10.667     0.833
+#   4  10.000    8.000     0.833
+#   6  11.667    5.333     0.833
+#   8  13.333    2.667     0.833
+#  10  15.000    0.000     0.833
+#  12  15.000    0.000     0.000
+#  14  15.000    0.000     0.000
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_c7.rs  —  cargo run --example constrained_lp_c7
+// C7: shadow prices by re-solving, and a scan of the oxygen limit (minilp).
+#![allow(dead_code, unused_imports)] // the FBA setup below is repeated in every C5-C8 file
+use minilp::{ComparisonOp, Error, OptimizationDirection, Problem};
+
+const RXN: [&str; 9] = ["EX_glc", "EX_o2", "GLY", "BYP1", "BYP2", "RES", "FER", "EX_ac", "BIO"];
+const S: [[f64; 9]; 6] = [
+    [1., 0., -1., -1., 0., 0., 0., 0., 0.],   // G
+    [0., 1., 0., 0., 0., -2., 0., 0., 0.],    // O2
+    [0., 0., 0., 1., -1., 0., 0., 0., 0.],    // X
+    [0., 0., 2., 0., 2., -1., -1., 0., -1.],  // P
+    [0., 0., 2., 0., 2., 11., 1., 0., -5.],   // ATP
+    [0., 0., 0., 0., 0., 0., 1., -1., 0.],    // Ac
+];
+
+// Optimise obj . v subject to S v = 0 and lo <= v <= hi (knock-out: hi = 0).
+fn fba(lo: [f64; 9], hi: [f64; 9], obj: [f64; 9], dir: OptimizationDirection)
+       -> Result<(f64, Vec<f64>), Error> {
+    let mut p = Problem::new(dir);
+    let v: Vec<_> = (0..9).map(|j| p.add_var(obj[j], (lo[j], hi[j]))).collect();
+    for row in S.iter() {
+        let terms: Vec<_> = (0..9).filter(|&j| row[j] != 0.0).map(|j| (v[j], row[j])).collect();
+        p.add_constraint(terms, ComparisonOp::Eq, 0.0);
+    }
+    let sol = p.solve()?;
+    Ok((sol.objective(), v.iter().map(|&x| sol[x]).collect()))
+}
+
+// default bounds: 0 <= v, glucose <= glc, oxygen <= o2, the rest unbounded above
+fn bounds(glc: f64, o2: f64) -> ([f64; 9], [f64; 9]) {
+    let mut hi = [f64::INFINITY; 9];
+    hi[0] = glc;
+    hi[1] = o2;
+    ([0.0; 9], hi)
+}
+
+const BIO: [f64; 9] = [0., 0., 0., 0., 0., 0., 0., 0., 1.]; // objective: growth
+use OptimizationDirection::{Maximize, Minimize};
+
+fn show(v: &[f64]) {
+    println!("{}", RXN.iter().map(|n| format!("{:>7}", n)).collect::<Vec<_>>().join(" "));
+    println!("{}", v.iter().map(|x| format!("{:7.3}", x + 0.0)).collect::<Vec<_>>().join(" "));
+}
+
+fn growth(glc: f64, o2: f64) -> f64 {
+    let (lo, hi) = bounds(glc, o2);
+    fba(lo, hi, BIO, Maximize).unwrap().0
+}
+
+fn main() {
+    let h = 0.01;
+    let price = |glc: f64, o2: f64| {
+        let g0 = growth(glc, o2);
+        ((growth(glc + h, o2) - g0) / h, (growth(glc, o2 + h) - g0) / h)
+    };
+    let (pg, po) = price(10.0, 15.0);
+    println!("{:.3} {:.3}", pg, po + 0.0); // glucose, oxygen
+    let (pg, po) = price(10.0, 4.0);
+    println!("{:.3} {:.3}", pg, po);
+    let (lo, hi) = bounds(10.0, 4.0);
+    show(&fba(lo, hi, BIO, Maximize).unwrap().1);
+    println!(" o2  growth  acetate  price_o2");
+    for u in (0..15).step_by(2) {
+        let (lo, hi) = bounds(10.0, u as f64);
+        let (g, v) = fba(lo, hi, BIO, Maximize).unwrap();
+        println!("{:3} {:7.3} {:8.3} {:9.3}", u, g, v[7] + 0.0, price(10.0, u as f64).1 + 0.0);
+    }
+}
+
+// Output:
+// 1.500 0.000
+// 0.667 0.833
+//  EX_glc   EX_o2     GLY    BYP1    BYP2     RES     FER   EX_ac     BIO
+//  10.000   4.000  10.000   0.000   0.000   2.000   8.000   8.000  10.000
+//  o2  growth  acetate  price_o2
+//   0   6.667   13.333     0.833
+//   2   8.333   10.667     0.833
+//   4  10.000    8.000     0.833
+//   6  11.667    5.333     0.833
+//   8  13.333    2.667     0.833
+//  10  15.000    0.000     0.000
+//  12  15.000    0.000     0.000
+//  14  15.000    0.000     0.000
+```
+
+:::
+
+(a) With plenty of oxygen, glucose has shadow price 1.5 and oxygen 0 (B8(a)); with oxygen 4, both limit: 0.667 and 0.833 (B8(c)). The re-solved differences agree. (b) Growth rises linearly with oxygen and acetate secretion falls to 0 at oxygen 10, where respiration takes all the pyruvate. Exactly at 10 the optimum is at a kink: the price is 0.833 from the left and 0 from the right. lpSolve and the forward difference in Rust report 0, HiGHS reports 0.833. Neither is wrong; a shadow price at a kink is not unique (a degenerate corner, as in B6(d)).
+
+**C8.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# S, rxn and fba() as in the C5 solution
+# (a) forget the glucose bound: only oxygen is bounded
+u <- lp("max", c(rep(0, 8), 1), rbind(S, diag(9)[2, ]),
+        c(rep("=", 6), "<="), c(rep(0, 6), 15))
+u$status                                   # 3 = unbounded
+# [1] 3
+# (b) demand the measured growth rate 20
+r <- lp("max", c(rep(0, 8), 1), rbind(S, diag(9)[c(1, 2, 9), ]),
+        c(rep("=", 6), "<=", "<=", ">="), c(rep(0, 6), 10, 15, 20))
+r$status                                   # 2 = infeasible
+# [1] 2
+# (c) lpSolve does not always say "unbounded": a bare 2-variable LP
+w <- lp("max", c(6, 3), rbind(c(4, 0)), "<=", 12)
+w$status; w$solution
+# [1] 0
+# [1] 3e+00 1e+30
+```
+
+### Python
+
+```python
+# S, rxn, fba() and show() as in the C5 solution
+# (a) forget the glucose bound: only oxygen is bounded
+bounds = [(0, None), (0, 15)] + [(0, None)] * 7
+u = linprog(-np.eye(9)[8], A_eq=S, b_eq=np.zeros(6), bounds=bounds, method="highs")
+print(u.status, u.message)                 # 3 = unbounded
+# 3 The problem is unbounded. (HiGHS Status 10: model_status is Unbounded; primal_status is Feasible)
+# (b) demand the measured growth rate 20
+bounds = [(0, 10), (0, 15)] + [(0, None)] * 6 + [(20, None)]
+r = linprog(-np.eye(9)[8], A_eq=S, b_eq=np.zeros(6), bounds=bounds, method="highs")
+print(r.status, r.message)                 # 2 = infeasible
+# 2 The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)
+# (c) the bare 2-variable LP that lpSolve gets wrong
+w = linprog([-6, -3], A_ub=[[4, 0]], b_ub=[12], method="highs")
+print(w.status, w.message)
+# 3 The problem is unbounded. (HiGHS Status 10: model_status is Unbounded; primal_status is Feasible)
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_c8.rs  —  cargo run --example constrained_lp_c8
+// C8: what minilp says when the model is unbounded or infeasible.
+#![allow(dead_code, unused_imports)] // the FBA setup below is repeated in every C5-C8 file
+use minilp::{ComparisonOp, Error, OptimizationDirection, Problem};
+
+const RXN: [&str; 9] = ["EX_glc", "EX_o2", "GLY", "BYP1", "BYP2", "RES", "FER", "EX_ac", "BIO"];
+const S: [[f64; 9]; 6] = [
+    [1., 0., -1., -1., 0., 0., 0., 0., 0.],   // G
+    [0., 1., 0., 0., 0., -2., 0., 0., 0.],    // O2
+    [0., 0., 0., 1., -1., 0., 0., 0., 0.],    // X
+    [0., 0., 2., 0., 2., -1., -1., 0., -1.],  // P
+    [0., 0., 2., 0., 2., 11., 1., 0., -5.],   // ATP
+    [0., 0., 0., 0., 0., 0., 1., -1., 0.],    // Ac
+];
+
+// Optimise obj . v subject to S v = 0 and lo <= v <= hi (knock-out: hi = 0).
+fn fba(lo: [f64; 9], hi: [f64; 9], obj: [f64; 9], dir: OptimizationDirection)
+       -> Result<(f64, Vec<f64>), Error> {
+    let mut p = Problem::new(dir);
+    let v: Vec<_> = (0..9).map(|j| p.add_var(obj[j], (lo[j], hi[j]))).collect();
+    for row in S.iter() {
+        let terms: Vec<_> = (0..9).filter(|&j| row[j] != 0.0).map(|j| (v[j], row[j])).collect();
+        p.add_constraint(terms, ComparisonOp::Eq, 0.0);
+    }
+    let sol = p.solve()?;
+    Ok((sol.objective(), v.iter().map(|&x| sol[x]).collect()))
+}
+
+// default bounds: 0 <= v, glucose <= glc, oxygen <= o2, the rest unbounded above
+fn bounds(glc: f64, o2: f64) -> ([f64; 9], [f64; 9]) {
+    let mut hi = [f64::INFINITY; 9];
+    hi[0] = glc;
+    hi[1] = o2;
+    ([0.0; 9], hi)
+}
+
+const BIO: [f64; 9] = [0., 0., 0., 0., 0., 0., 0., 0., 1.]; // objective: growth
+use OptimizationDirection::{Maximize, Minimize};
+
+fn show(v: &[f64]) {
+    println!("{}", RXN.iter().map(|n| format!("{:>7}", n)).collect::<Vec<_>>().join(" "));
+    println!("{}", v.iter().map(|x| format!("{:7.3}", x + 0.0)).collect::<Vec<_>>().join(" "));
+}
+
+fn main() {
+    // (a) forget the glucose bound: minilp returns Ok(inf), not Err(Unbounded)
+    let (lo, hi) = bounds(f64::INFINITY, 15.0);
+    println!("{:?}", fba(lo, hi, BIO, Maximize).map(|r| r.0));
+    // (b) demand the measured growth rate 20
+    let (mut lo, hi) = bounds(10.0, 15.0);
+    lo[8] = 20.0;
+    println!("{:?}", fba(lo, hi, BIO, Maximize).map(|r| r.0));
+    // (c) the bare 2-variable LP that lpSolve gets wrong
+    let mut p = Problem::new(Maximize);
+    let x1 = p.add_var(6.0, (0.0, f64::INFINITY));
+    let x2 = p.add_var(3.0, (0.0, f64::INFINITY));
+    p.add_constraint(&[(x1, 4.0), (x2, 0.0)], ComparisonOp::Le, 12.0);
+    println!("{:?}", p.solve().map(|s| s.objective()));
+}
+
+// Output:
+// Ok(inf)
+// Err(Infeasible)
+// Err(Unbounded)
+```
+
+:::
+
+All three detect the infeasible case. Without the glucose bound the network can ferment unlimited glucose, so growth is unbounded: lpSolve (status 3) and HiGHS say so, but `minilp` returns `Ok(inf)`, a "solution" with infinite growth. On the bare 2-variable LP, `lpSolve` reports status 0 and $x_2 = 10^{30}$, its internal infinity, while HiGHS and `minilp` say "unbounded". **Check:** read the status, and also look for infinite or absurdly large values in the solution.
+
+:::
+
+## Where this leads
+
+- **The SVD, rank deficiency and regularisation** (Part 4) used NNLS, a constrained least-squares problem; its optimality check is the KKT condition of this unit. B3 and C2 do the same for proportions that must also sum to 1.
+- **Identifiability and uncertainty of fitted parameters** (Part 9): a parameter at a bound, and a flux with an FVA range, are both answers the data or the objective cannot pin down.
+- **Part 10** (*The diffusion (heat) equation by finite differences* onwards) returns to differential equations, now in space and time. Large sparse linear systems, as in genome-scale LPs, are the computational core there.
+- Not covered: nonlinear constrained optimisation in general (sequential quadratic programming, interior-point methods for nonlinear problems), integer programming (on/off decisions, e.g. gene knock-out design with OptKnock), and dynamic FBA, which couples FBA to an ODE for the medium (Part 8).

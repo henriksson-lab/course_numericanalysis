@@ -1,0 +1,214 @@
+---
+title: "Quiz: constraints and linear programming"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of constrained optimisation, linear programming and flux balance analysis. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** A fitted degradation rate comes out negative. Name two ways to force it to be positive, and one disadvantage of each.
+
+::: {.callout-tip collapse="true" title="Hint"}
+One changes the optimiser, the other changes the parameter.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+**Bounds**, e.g. `optim(method = "L-BFGS-B", lower = 0)`: the answer may sit exactly on the bound, where the gradient is not zero and the usual standard errors do not apply. **Reparameterisation** $k = e^\theta$: if the best $k$ is 0, $\theta$ runs off towards $-\infty$, the optimiser may not report convergence, and $\theta$ is meaningless. (Reparameterisation works well when the true value is well inside the allowed range.)
+:::
+
+---
+
+**Q2.** After a bounded fit, one parameter equals its lower bound and the gradient of the loss in that parameter is $-0.3$ (we minimise). Is this a constrained minimum?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which way may the parameter move, and what would that do to the loss?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. At a lower bound the parameter may only increase. A gradient of $-0.3$ means the loss **decreases** when the parameter increases, so the optimiser stopped too early. At a true minimum on a lower bound the gradient is $\ge 0$ (pointing out of the allowed region).
+:::
+
+---
+
+**Q3.** Draw the Lagrange picture: what is the geometric condition at the optimum of $f$ on the curve $g = b$, and why?
+
+::: {.callout-tip collapse="true" title="Hint"}
+On the curve you can only move along it. What if $\nabla f$ had a component along the curve?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+At the optimum a contour of $f$ touches the curve $g = b$, so $\nabla f$ is perpendicular to the curve, which is the direction of $\nabla g$: $\nabla f = \lambda\nabla g$. If $\nabla f$ had a component along the curve, moving in that direction would improve $f$ while staying on the constraint.
+:::
+
+---
+
+**Q4.** In the lecture, the multiplier of the constraint $p_1 + p_2 = 1$ was $\lambda = 40$. What does that number mean?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Shadow price.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+It is the rate at which the best log-likelihood changes per unit change of the constraint level: with $p_1 + p_2 = 1.01$ the best $f$ would be about $40 \times 0.01 = 0.4$ higher (exactly 0.398). In general a multiplier is the price of a constraint; an inactive inequality has price 0.
+:::
+
+---
+
+**Q5.** Why is the optimum of a linear program at a corner of the feasible region, and when is it not unique?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Slide a line of equal objective value across the polygon.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The level sets of a linear objective are parallel lines (hyperplanes). Sliding them in the improving direction, the last contact with a convex polygon is a corner, or a whole edge (face) when the objective is parallel to it. In the second case every point of that edge is optimal and the solver returns just one corner. (An LP can also have no optimum at all: unbounded or infeasible.)
+:::
+
+---
+
+**Q6.** Describe one step of the simplex method in words.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Start at a corner, look at the edges.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+At the current corner, compute the rate of change of the objective along each edge that leaves it. If none improves, stop: the corner is optimal (an LP has no other local optima). Otherwise pick an improving edge and follow it until the first constraint becomes active (the ratio test); that point is the next corner.
+:::
+
+---
+
+**Q7.** An LP solver returns status "success" and a flux of $10^{30}$. What happened, and what should you check?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$10^{30}$ is lpSolve's internal infinity.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The LP is unbounded (usually a missing bound, e.g. a forgotten uptake limit, or a cycle that makes ATP from nothing), but this solver did not say so. Always check the status **and** look for infinite or absurdly large values; `minilp` can return an infinite objective as `Ok(inf)` in the same situation.
+:::
+
+---
+
+**Q8.** In FBA, what does $S\mathbf v = \mathbf 0$ mean biologically, and why does it leave many possible flux vectors?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Count equations and unknowns.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Each row says that a metabolite is produced as fast as it is consumed (steady state: internal pools are constant on the time scale of growth). There are fewer independent metabolites than reactions (6 vs 9 in the toy network), so the solutions form a null space of dimension (reactions − rank), 3 in the toy model. Bounds and the objective pick fluxes out of it, and often still not a unique one.
+:::
+
+---
+
+**Q9.** Solve $\max\ 3x_1 + 2x_2$ subject to $x_1 + x_2 \le 4$, $x_1 + 3x_2 \le 6$, $x \ge 0$ by hand. Which constraint is inactive, and what are the shadow prices? Then check in code.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Corners: $(0, 0)$, $(4, 0)$, $(0, 2)$, and the intersection of the two lines.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Corners and values: $(0,0)$: 0; $(4,0)$: 12; $(0,2)$: 4; intersection $(3, 1)$: 11. Optimum $(4, 0)$, value 12. The second constraint is inactive ($4 \le 6$), so its shadow price is 0; the first has price 3 (one more unit allows $x_1 = 5$, value 15).
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(lpSolve)
+res <- lp("max", c(3, 2), rbind(c(1, 1), c(1, 3)), c("<=", "<="), c(4, 6),
+          compute.sens = TRUE)
+res$status; res$solution; res$objval
+# [1] 0
+# [1] 4 0
+# [1] 12
+res$duals[1:2]
+# [1] 3 0
+```
+
+### Python
+
+```python
+from scipy.optimize import linprog
+
+res = linprog([-3, -2], A_ub=[[1, 1], [1, 3]], b_ub=[4, 6], method="highs")
+print(res.status, res.x, -res.fun)
+# 0 [4. 0.] 12.0
+print(-res.ineqlin.marginals + 0.0)
+# [3. 0.]
+```
+
+### Rust
+
+```rust
+// rust/examples/constrained_lp_q9.rs  —  cargo run --example constrained_lp_q9
+// Quiz Q9: a 2-variable LP with minilp; shadow prices by re-solving.
+use minilp::{ComparisonOp, OptimizationDirection, Problem};
+
+fn solve(b: [f64; 2]) -> (f64, f64, f64) {
+    let mut p = Problem::new(OptimizationDirection::Maximize);
+    let x1 = p.add_var(3.0, (0.0, f64::INFINITY));
+    let x2 = p.add_var(2.0, (0.0, f64::INFINITY));
+    p.add_constraint(&[(x1, 1.0), (x2, 1.0)], ComparisonOp::Le, b[0]);
+    p.add_constraint(&[(x1, 1.0), (x2, 3.0)], ComparisonOp::Le, b[1]);
+    let s = p.solve().unwrap();
+    (s[x1], s[x2], s.objective())
+}
+
+fn main() {
+    let (x1, x2, z) = solve([4.0, 6.0]);
+    println!("{} {} {}", x1, x2, z);
+    let h = 0.01;
+    println!("{:.3} {:.3}", (solve([4.0 + h, 6.0]).2 - z) / h, (solve([4.0, 6.0 + h]).2 - z) / h);
+}
+
+// Output:
+// 4 0 12
+// 3.000 0.000
+```
+
+:::
+:::
+
+---
+
+**Q10.** Flux variability analysis gives GLY $\in [0, 10]$ at maximal growth. A colleague reports "FBA predicts GLY = 10". What is wrong with that statement?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Think of a tie between corners.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+GLY = 10 is one arbitrary optimal corner. Every split between GLY and the bypass gives the same growth, so FBA does not predict GLY at all: the honest statement is the range $[0, 10]$. This is the LP version of a non-identifiable parameter.
+:::
+
+---
+
+**Q11.** In the oxygen-limited toy model the shadow prices are 0.667 for glucose and 0.833 for oxygen; in the aerobic one, 1.5 and 0. What do these say about which nutrient limits growth, and why can a shadow price not be used to predict the effect of a large change?
+
+::: {.callout-tip collapse="true" title="Hint"}
+A price of 0 means the bound is not active. Prices hold until a new constraint becomes active.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Aerobic: only glucose limits growth (oxygen has price 0: 10 of 15 used). Oxygen-limited: both limit; one more unit of oxygen gives 0.833 more growth, one more unit of glucose 0.667. Shadow prices are slopes of a piecewise-linear function of the bound; at a kink (here oxygen 10, where fermentation stops) the slope changes, so beyond it the old price is wrong. Re-solve for large changes.
+:::
+
+---
+
+**Q12.** Which tools do people use for FBA on genome-scale models, and what is the numerical problem underneath?
+
+::: {.callout-tip collapse="true" title="Hint"}
+COBRA.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The COBRA Toolbox (MATLAB) and cobrapy (Python), which read SBML models and call an LP solver (GLPK, HiGHS, Gurobi, CPLEX). Underneath is a large **sparse** linear program: thousands of reactions, a stoichiometric matrix in which each column has only a few nonzeros, solved by simplex or interior-point methods.
+:::

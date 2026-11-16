@@ -1,0 +1,1069 @@
+---
+title: "Exercise: the diffusion (heat) equation by finite differences"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- read a concentration $c(x, t)$ as a function of **space and time**, and its two partial derivatives as slopes of slices,
+- derive the **diffusion equation** from **Fick's law** and a mass balance, and estimate a **diffusion time** $L^2/D$ with the right units,
+- set up a **grid** in $x$ and $t$ and carry out **FTCS** steps by hand,
+- write FTCS in code (vectorised over space) with **fixed-value** (Dirichlet) and **no-flux** boundaries,
+- check a simulation against an **exact solution**, by **grid refinement**, by the **maximum principle** and by **conservation**,
+- explain the **stability limit** $D\,\Delta t/\Delta x^2 \le 1/2$ from the zigzag mode and from the **eigenvalues** of the second-difference matrix, and recognise what breaking it looks like.
+
+The by-hand part uses pen, paper and a pocket calculator. The code part works with 51 grid points and thousands of time steps, where only code works.
+
+## Background
+
+1. **Fick's law and the diffusion equation.** The flux (amount per unit area per second) is $J = -D\,\partial c/\partial x$. A mass balance on a thin slice (rate in − rate out) gives
+   $$\frac{\partial c}{\partial t} = D\,\frac{\partial^2 c}{\partial x^2}.$$
+   Heat conduction is the same equation with temperature $T$ and thermal diffusivity $\alpha$ (water: $\alpha \approx 1.4\cdot10^{-7}$ m²/s).
+2. **Initial and boundary conditions.** A start profile $c(x, 0)$, and at each end either a **fixed value** (a large reservoir, Dirichlet) or **no flux**, $\partial c/\partial x = 0$ (a wall).
+3. **Time scale.** Any diffusion time is a multiple of $L^2/D$. Work in µm and s: $10^{-9}$ m²/s $= 1000$ µm²/s.
+4. **Grid.** $x_i = i\,\Delta x$, $i = 0, \dots, N$, $t_n = n\,\Delta t$, $c_i^n \approx c(x_i, t_n)$. The second difference $(c_{i-1} - 2c_i + c_{i+1})/\Delta x^2$ from *Numerical differentiation* replaces $\partial^2 c/\partial x^2$, with error $\tfrac{\Delta x^2}{12}\,\partial^4 c/\partial x^4$.
+5. **FTCS** (forward in time, centred in space) is Euler's method on the grid ODEs:
+   $$c_i^{n+1} = c_i^n + r\,\bigl(c_{i-1}^n - 2c_i^n + c_{i+1}^n\bigr), \qquad r = \frac{D\,\Delta t}{\Delta x^2}.$$
+   Stable only for $r \le 1/2$. For $r \le 1/2$ the new value is a weighted average of three old ones with non-negative weights, so no value can leave the range of the start and boundary values (**maximum principle**).
+6. **No-flux wall** at $x_N$: a ghost point $c_{N+1} = c_{N-1}$ gives $c_N^{n+1} = c_N^n + 2r\,(c_{N-1}^n - c_N^n)$.
+7. **Exact solution** for the chamber below (empty at $t = 0$, $c = 1$ at $x = 0$, $c = 0$ at $x = L$):
+   $$c(x, t) = 1 - \frac{x}{L} - \sum_{n=1}^{\infty} \frac{2}{n\pi}\,\sin\frac{n\pi x}{L}\;e^{-n^2\pi^2 D t/L^2}.$$
+
+**The running example: a flow-free chemotaxis chamber.** A straight channel of length $L = 500$ µm joins a source reservoir ($c = 1$, concentrations scaled by the source) to a sink reservoir ($c = 0$); there is no flow, so the attractant moves only by diffusion. Diffusion-based gradient devices of this kind are described in the reviews by Kim, Kim & Jeon (2010) and in *Frontiers in Bioengineering and Biotechnology* (2015); our channel is a simplified version with typical, not device-specific, numbers. Small molecule: $D = 1000$ µm²/s ($10^{-9}$ m²/s); protein chemokine: $D = 100$ µm²/s ($10^{-10}$ m²/s). Grid: $N = 50$ intervals of $\Delta x = 10$ µm, $r = 0.4$, so $\Delta t = 0.04$ s.
+
+FTCS is hand-written in all three languages: vectorised over space in R and numpy, a plain loop in Rust. The one trap: every point must be updated from the **old** time level. R and numpy evaluate the whole right-hand side before assigning, so this happens automatically; in Rust we copy the old level first.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+D  <- 1000                         # µm^2/s: small molecule, 1e-9 m^2/s
+L  <- 500                          # µm: source at x = 0, sink at x = L
+N  <- 50; dx <- L / N              # 50 intervals of 10 µm, 51 grid points
+x  <- seq(0, L, by = dx)
+r  <- 0.4; dt <- r * dx^2 / D      # 0.04 s; FTCS needs r <= 1/2
+
+ftcs <- function(c, r, nsteps) {   # Dirichlet: c[1] and c[n] never change
+  i <- 2:(length(c) - 1)           # interior points
+  for (k in seq_len(nsteps))
+    c[i] <- c[i] + r * (c[i - 1] - 2 * c[i] + c[i + 1])
+  c
+}
+exact <- function(x, t, L, D, nterm = 200) {   # chamber empty at t = 0
+  s <- 1 - x / L
+  for (n in 1:nterm)
+    s <- s - 2 / (n * pi) * sin(n * pi * x / L) * exp(-(n * pi / L)^2 * D * t)
+  s
+}
+c0  <- c(1, rep(0, N))             # source 1, channel empty, sink 0
+c60 <- ftcs(c0, r, round(60 / dt)) # 1500 steps to t = 60 s
+for (j in seq(6, N, by = 10))     # x = 50, 150, ..., 450 µm
+  cat(sprintf("x = %3.0f um   FTCS %.4f   exact %.4f\n", x[j], c60[j], exact(x[j], 60, L, D)))
+
+# Output:
+# x =  50 um   FTCS 0.8816   exact 0.8816
+# x = 150 um   FTCS 0.6518   exact 0.6518
+# x = 250 um   FTCS 0.4405   exact 0.4404
+# x = 350 um   FTCS 0.2519   exact 0.2518
+# x = 450 um   FTCS 0.0816   exact 0.0816
+```
+
+### Python
+
+```python
+import numpy as np
+
+D = 1000.0                          # µm^2/s: small molecule, 1e-9 m^2/s
+L = 500.0                           # µm: source at x = 0, sink at x = L
+N = 50; dx = L / N                  # 50 intervals of 10 µm, 51 grid points
+x = np.linspace(0, L, N + 1)
+r = 0.4; dt = r * dx**2 / D         # 0.04 s; FTCS needs r <= 1/2
+
+def ftcs(c, r, nsteps):             # Dirichlet: c[0] and c[-1] never change
+    c = c.copy()
+    for k in range(nsteps):         # right-hand side uses the old values only
+        c[1:-1] = c[1:-1] + r * (c[:-2] - 2 * c[1:-1] + c[2:])
+    return c
+
+def exact(x, t, L, D, nterm=200):   # chamber empty at t = 0
+    s = 1 - x / L
+    for n in range(1, nterm + 1):
+        s = s - 2 / (n * np.pi) * np.sin(n * np.pi * x / L) * np.exp(-(n * np.pi / L)**2 * D * t)
+    return s
+
+c0 = np.zeros(N + 1); c0[0] = 1.0   # source 1, channel empty, sink 0
+c60 = ftcs(c0, r, round(60 / dt))   # 1500 steps to t = 60 s
+for j in range(5, N, 10):           # x = 50, 150, ..., 450 µm
+    print(f"x = {x[j]:3.0f} um   FTCS {c60[j]:.4f}   exact {exact(x[j], 60, L, D):.4f}")
+
+# Output:
+# x =  50 um   FTCS 0.8816   exact 0.8816
+# x = 150 um   FTCS 0.6518   exact 0.6518
+# x = 250 um   FTCS 0.4405   exact 0.4404
+# x = 350 um   FTCS 0.2519   exact 0.2518
+# x = 450 um   FTCS 0.0816   exact 0.0816
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_explicit_background.rs  —  cargo run --example diffusion_explicit_background
+// Background: FTCS for the chemotaxis chamber (source at x = 0, sink at x = L).
+use std::f64::consts::PI;
+
+const D: f64 = 1000.0; // µm^2/s: small molecule, 1e-9 m^2/s
+const L: f64 = 500.0; // µm
+
+// FTCS with fixed (Dirichlet) ends: c[0] and c[n-1] never change.
+// `old` keeps the previous time level, so every update uses old values only.
+fn ftcs(c: &[f64], r: f64, nsteps: usize) -> Vec<f64> {
+    let n = c.len();
+    let mut c = c.to_vec();
+    let mut old = c.clone();
+    for _ in 0..nsteps {
+        old.copy_from_slice(&c);
+        for i in 1..n - 1 {
+            c[i] = old[i] + r * (old[i - 1] - 2.0 * old[i] + old[i + 1]);
+        }
+    }
+    c
+}
+
+// exact solution (Fourier series), chamber empty at t = 0
+fn exact(x: f64, t: f64, l: f64, d: f64, nterm: usize) -> f64 {
+    let mut s = 1.0 - x / l;
+    for n in 1..=nterm {
+        let k = n as f64 * PI / l;
+        s -= 2.0 / (n as f64 * PI) * (k * x).sin() * (-k * k * d * t).exp();
+    }
+    s
+}
+
+fn main() {
+    let n = 50; // 50 intervals of 10 µm, 51 grid points
+    let dx = L / n as f64;
+    let x: Vec<f64> = (0..=n).map(|i| i as f64 * dx).collect();
+    let r = 0.4;
+    let dt = r * dx * dx / D; // 0.04 s; FTCS needs r <= 1/2
+    let mut c0 = vec![0.0; n + 1];
+    c0[0] = 1.0; // source 1, channel empty, sink 0
+    let c60 = ftcs(&c0, r, (60.0 / dt).round() as usize); // 1500 steps to t = 60 s
+    for j in (5..n).step_by(10) {
+        // x = 50, 150, ..., 450 µm
+        println!("x = {:3.0} um   FTCS {:.4}   exact {:.4}", x[j], c60[j], exact(x[j], 60.0, L, D, 200));
+    }
+}
+
+// Output:
+// x =  50 um   FTCS 0.8816   exact 0.8816
+// x = 150 um   FTCS 0.6518   exact 0.6518
+// x = 250 um   FTCS 0.4405   exact 0.4404
+// x = 350 um   FTCS 0.2519   exact 0.2518
+// x = 450 um   FTCS 0.0816   exact 0.0816
+```
+
+:::
+
+Rust prints numbers in its own format (e.g. `5.11e-4`); where R and Python print `5.11e-04`, the Rust files use a small helper `sci()` so that the output is the same.
+
+## By hand
+
+**B1. Units and gradients.**
+(a) Convert $D = 10^{-9}$, $10^{-10}$ and $2\cdot10^{-9}$ m²/s to µm²/s.
+(b) A chemokine reservoir holds 10 nM, the sink 0, and the channel is $L = 500$ µm long. At steady state, what is the gradient in nM/µm? What concentration difference does a cell 10 µm long see across its body in the middle of the channel, as a fraction of the local concentration?
+(c) Where in the channel is the **relative** difference across a cell largest? (Cells are thought to sense relative differences of a few per cent.)
+
+**B2. Diffusion times.**
+(a) Fill in $L^2/D$ for $L = 100$ µm, $500$ µm, $1$ mm and $1$ cm, for a small molecule ($D = 1000$ µm²/s) and a protein ($D = 100$ µm²/s). Give the answers in convenient units.
+(b) The lecture found that the gradient is within 5 % of the straight line at $t \approx 0.26\,L^2/D$. How long is that for the protein in a 1 mm channel?
+(c) An experimenter wants the protein gradient established within 10 minutes. What is the longest channel she can use?
+(d) Heat in a 1 mm layer of water ($\alpha = 1.4\cdot10^{-7}$ m²/s): compute $L^2/\alpha$. Why can a microfluidic chip change the temperature of a sample much faster than it can change a protein concentration?
+
+**B3. The second difference tells the direction of change.** On a grid with $\Delta x = 10$ µm and $D = 1000$ µm²/s, compute $\partial c/\partial t \approx D\,(c_{i-1} - 2c_i + c_{i+1})/\Delta x^2$ at the middle point for:
+(a) $c = (0.80, 0.78, 0.76)$; (b) $c = (0.50, 0.40, 0.35)$; (c) $c = (0, 1, 0)$.
+Which values rise, which fall, which stay? Relate this to the shape of the profile.
+
+**B4. FTCS by hand.** Take $L = 500$ µm, $N = 4$ ($\Delta x = 125$ µm), $D = 1000$ µm²/s, start $(c_0, \dots, c_4) = (1, 0, 0, 0, 0)$ with $c_0 = 1$ and $c_4 = 0$ fixed.
+(a) Take three FTCS steps with $r = 0.25$. What is $\Delta t$? What is the steady state on this grid, and does FTCS leave it unchanged?
+(b) Take three steps with $r = 0.5$. Show that the update is then simply the average of the two neighbours.
+(c) Take three steps with $r = 1$. What is wrong with the result?
+
+**B5. The zigzag.**
+(a) For $c_i = \varepsilon(-1)^i$ show that $c_{i-1} - 2c_i + c_{i+1} = -4c_i$, so one FTCS step multiplies the zigzag by $1 - 4r$.
+(b) Compute $1 - 4r$ for $r = 0.1$, $0.25$, $0.4$, $0.5$, $0.52$, $0.6$ and $1$. For which $r$ does the zigzag decay? Flip sign? Grow?
+(c) With $r = 0.52$, a zigzag of rounding size $10^{-16}$ grows by about $1.08$ per step. After how many steps is it of size 1?
+(d) What is the largest stable $\Delta t$ with $\Delta x = 10$ µm for the small molecule? For the protein? For a simulation of both together?
+
+**B6. Eigenvalues on a tiny grid.** With $N = 4$ there are three interior points and
+$$A = \begin{pmatrix} -2 & 1 & 0 \\ 1 & -2 & 1 \\ 0 & 1 & -2 \end{pmatrix}.$$
+(a) Find the eigenvalues of $A$ (expand $\det(A - \lambda I)$ along the first row) and check them against $-4\sin^2\bigl(k\pi/(2N)\bigr)$, $k = 1, 2, 3$. Check that $(1, \sqrt2, 1)$, $(1, 0, -1)$ and $(1, -\sqrt2, 1)$ are eigenvectors. Which one is the zigzag?
+(b) With $\Delta x = 125$ µm and $D = 1000$ µm²/s the grid ODEs are $\mathbf c' = \tfrac{D}{\Delta x^2}A\mathbf c + \mathbf b$. Give the three decay rates. What is the largest stable Euler step, and the matching $r$?
+(c) Compare the slowest rate with the exact $\pi^2 D/L^2$.
+
+**B7. A wall and the ghost point.**
+(a) Derive the wall update $c_N^{n+1} = c_N^n + 2r(c_{N-1}^n - c_N^n)$ from FTCS with the ghost point $c_{N+1} = c_{N-1}$.
+(b) Close both ends of a three-point grid $(c_0, c_1, c_2)$. Write the three updates and show that the **trapezoid** total $\tfrac12 c_0 + c_1 + \tfrac12 c_2$ does not change in a step, but the plain sum $c_0 + c_1 + c_2$ does.
+(c) With a source at $x = 0$ and a wall at $x = L$, what is the steady state? What does this mean for a dead-end side channel on a chip?
+
+**B8. The cost of a fine grid.** The protein ($D = 100$ µm²/s) in a 1 mm channel, simulated to $t = 0.26\,L^2/D$.
+(a) With $\Delta x = 10$ µm and $r = 1/2$: how many time steps, and roughly how many point updates?
+(b) The same with $\Delta x = 1$ µm.
+(c) The slowest decay time in the problem is $L^2/(\pi^2 D)$. How many times longer is it than the largest stable step in (b)? Why is this wasteful?
+
+## In code
+
+**C1. The gradient forms.** Use the Background code.
+(a) Run FTCS to $t = 10$, $30$, $60$, $120$ and $300$ s. Print the largest difference from the exact solution and from the straight line $1 - x/L$.
+(b) Plot FTCS (points) on the exact solution (lines) at $t = 5$, $15$, $30$, $64.4$ and $120$ s.
+(c) Start FTCS **on** the straight line and take one step. How much does it move? Why?
+
+**C2. How long until the gradient is there?** Write `t_grad(D, L, tol)` that steps FTCS from the empty channel until $\max_i |c_i - (1 - x_i/L)| \le$ `tol`, with $N = 50$ and $r = 0.4$, and returns the time. Run it for the small molecule and the protein, $L = 500$ µm and $1000$ µm, with `tol` $= 0.05$ and $0.01$. Print the time in s and min, and $tD/L^2$. What happens when $L$ doubles? Why is the number of steps the same in every case?
+
+**C3. Grid refinement.** With $r = 0.4$ fixed, run to $t = 30$ s with $N = 20, 40, 80, 160, 320$. Print $\Delta x$, $\Delta t$, the number of steps, the work (steps × interior points) and the largest error against the exact solution (use 2000 terms of the series). Print the ratios of successive errors and the slope of $\log_{10}(\text{error})$ against $\log_{10}\Delta x$. Plot the error against $\Delta x$ on log–log axes. What does one more halving cost?
+
+**C4. Breaking the limit.**
+(a) Run to $t = 30$ s with $r = 0.45$, $0.5$, $0.52$ and $0.6$ (on the $N = 50$ grid). Print $\Delta t$, the number of steps, and the smallest and largest $c$. Which runs pass the maximum-principle check $0 \le c \le 1$?
+(b) Build the $49 \times 49$ second-difference matrix $A$, compute its eigenvalues and compare their range with $-4\sin^2(k\pi/(2N))$. Multiply by $D/\Delta x^2$ to get rates per second. What is the largest stable Euler step, and the matching $r$? What is the slowest time constant, and the ratio of fastest to slowest rate?
+
+**C5. Walls.**
+(a) Write `ftcs_closed` with a no-flux wall at $x = L$ (ghost point), with an option to close $x = 0$ too. Compare the open chamber and the dead-end chamber at $t = 64.4$ s (when the open one has its gradient).
+(b) How long until the closed end of the dead-end chamber reaches $c = 0.95$? Express it as a multiple of $L^2/D$.
+(c) Close both ends and start with a bolus: $c = 1$ for $230 \le x \le 270$ µm, 0 elsewhere. At $t = 0$, $5$ and $60$ s print the trapezoid total $\Delta x\,(\tfrac12 c_0 + c_1 + \dots + c_{N-1} + \tfrac12 c_N)$, the plain $\Delta x \sum_i c_i$, and the largest $c$. Which total is conserved? What does the profile approach?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — units (B1, B2)"}
+$1$ m $= 10^6$ µm, so $1$ m² $= 10^{12}$ µm². $L^2/D$ with $L$ in µm and $D$ in µm²/s is in seconds. For B1(c), divide the gradient by the local concentration $1 - x/L$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — FTCS by hand (B4)"}
+Write one row per time level. Compute every new value from the **old** row, and only then write the new row. The end values never change. The steady state is the profile that the update leaves unchanged: second difference 0 at every interior point.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — stability (B5, B6, C4)"}
+Euler on $y' = -ky$ multiplies by $1 - kh$ and needs $|1 - kh| \le 1$. For the grid, $k$ runs over the decay rates $-\tfrac{D}{\Delta x^2}\lambda_k$; the largest one decides. For the $3 \times 3$ determinant, set $\mu = -2 - \lambda$: then $\det = \mu^3 - 2\mu$. In code use [`eigen(A, symmetric = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html) (Python: [`np.linalg.eigvalsh`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvalsh.html); Rust: `symmetric_eigenvalues()` in [nalgebra](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.SymmetricEigen.html)). Build $A$ with [`diag`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/diag.html) and index pairs `cbind(i, j)` (Python: [`np.diag`](https://numpy.org/doc/stable/reference/generated/numpy.diag.html) with an offset).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — vectorised FTCS (C1–C5)"}
+With `i <- 2:(length(c) - 1)`, the vectors `c[i - 1]`, `c[i]`, `c[i + 1]` are the left neighbours, the points and the right neighbours (Python: `c[:-2]`, `c[1:-1]`, `c[2:]`). Use [`seq_len(nsteps)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/seq.html) so that `nsteps = 0` runs no steps. Python's `ftcs` must work on a copy (`c = c.copy()`), or it changes the caller's array. Make step counts whole numbers with `round(t / dt)`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — order and slopes (C3)"}
+If error $\approx C\,\Delta x^p$, halving $\Delta x$ divides the error by $2^p$. Fit the slope with [`lm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html) on the logs (Python: [`np.polyfit`](https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html), degree 1). With $r$ fixed, $\Delta t = r\,\Delta x^2/D$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — walls and totals (B7, C5)"}
+Compute the new wall value from old values **before** the interior update overwrites its neighbour. The total amount is the integral $\int_0^L c\,dx$; on the grid the trapezoid rule from *Numerical integration* gives the end points half weight.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution — by hand"}
+
+**B1.**
+(a) $1000$, $100$ and $2000$ µm²/s.
+(b) Gradient $10/500 = 0.02$ nM/µm. Across 10 µm: $0.2$ nM. In the middle the concentration is 5 nM, so the difference is $0.2/5 = 4\,\%$ of the local value.
+(c) The relative gradient is $\dfrac{1/L}{1 - x/L} = \dfrac{1}{L - x}$: it grows towards the sink. Near the sink end the absolute concentration is low, though, and at some point too low to bind receptors. A linear gradient is not "the same signal everywhere" for a cell that senses relative differences.
+
+**B2.**
+(a)
+
+| $L$ | 100 µm | 500 µm | 1 mm | 1 cm |
+|---|---|---|---|---|
+| small molecule | 10 s | 250 s | 1000 s (17 min) | $10^5$ s (28 h) |
+| protein | 100 s | 2500 s (42 min) | $10^4$ s (2.8 h) | $10^6$ s (11.6 days) |
+
+(b) $0.26 \cdot 10^4 = 2600$ s, about 43 minutes.
+(c) $0.258\,L^2/100 \le 600$ gives $L^2 \le 2.3\cdot10^5$ µm², so $L$ of about 480 µm at most.
+(d) $\alpha = 1.4\cdot10^{-7}$ m²/s $= 1.4\cdot10^5$ µm²/s, so $L^2/\alpha = 10^6/(1.4\cdot10^5) = 7$ s. Heat diffuses about a thousand times faster than a protein; over chip dimensions temperature equalises in seconds.
+
+**B3.**
+(a) $0.80 - 1.56 + 0.76 = 0$: a straight line, no change.
+(b) $(0.50 - 0.80 + 0.35)/100 = 5\cdot10^{-4}$ per µm², times $D$: $+0.5$ per s. The profile curves upwards (convex) there: the middle value rises.
+(c) $(0 - 2 + 0)/100 = -0.02$, times $D$: $-20$ per s. A peak falls fast. (FTCS with $\Delta t = 0.04$ s would move it by $-0.8$ in one step.)
+
+**B4.**
+(a) $\Delta t = 0.25 \cdot 125^2/1000 = 3.9$ s.
+
+| $n$ | $c_1$ | $c_2$ | $c_3$ |
+|---|---|---|---|
+| 1 | 0.25 | 0 | 0 |
+| 2 | 0.375 | 0.0625 | 0 |
+| 3 | $0.375 + 0.25(1 - 0.75 + 0.0625) = 0.453125$ | $0.0625 + 0.25(0.375 - 0.125) = 0.125$ | $0.25 \cdot 0.0625 = 0.015625$ |
+
+Steady state $(0.75, 0.5, 0.25)$: its second differences are all 0 (e.g. $1 - 1.5 + 0.5 = 0$), so FTCS leaves it unchanged.
+(b) With $r = 1/2$: $c_i + \tfrac12(c_{i-1} - 2c_i + c_{i+1}) = \tfrac12(c_{i-1} + c_{i+1})$. Steps: $(0.5, 0, 0)$, $(0.5, 0.25, 0)$, $(0.625, 0.25, 0.125)$.
+(c) With $r = 1$: $(1, 0, 0)$, $(0, 1, 0)$, $(2, -1, 1)$. A concentration of 2, above the source, and a negative concentration: impossible for diffusion. The weight $1 - 2r = -1$ is negative, so the update is no longer an average.
+
+**B5.**
+(a) $c_{i\pm1} = \varepsilon(-1)^{i\pm1} = -c_i$, so $c_{i-1} - 2c_i + c_{i+1} = -c_i - 2c_i - c_i = -4c_i$ and $c_i^{n+1} = c_i^n - 4r\,c_i^n$.
+(b) $0.6$, $0$, $-0.6$, $-1$, $-1.08$, $-1.4$, $-3$. Decays for $r < 1/2$ (sign flips for $r > 1/4$, like Euler with $h > 1/k$); stays the same size at $r = 1/2$; grows for $r > 1/2$.
+(c) $1.08^n = 10^{16}$: $n = 16 \ln 10/\ln 1.08 \approx 36.8/0.077 \approx 480$ steps, about 25 s at $\Delta t = 0.052$ s. In the lecture the zigzag did not need rounding to start it: the sharp front of the empty channel contains it from the start, which is why it shows after 60 steps.
+(d) $\Delta t \le \Delta x^2/(2D)$: $100/2000 = 0.05$ s for the small molecule, $0.5$ s for the protein. Together: $0.05$ s; the fastest-diffusing species sets the step for all.
+
+**B6.**
+(a) With $\mu = -2 - \lambda$: $\det = \mu(\mu^2 - 1) - 1\cdot\mu = \mu^3 - 2\mu = 0$, so $\mu = 0, \pm\sqrt2$ and $\lambda = -2$, $-2 \pm \sqrt2$, i.e. $-0.586$, $-2$, $-3.414$. Formula: $-4\sin^2(22.5°) = -0.586$, $-4\sin^2(45°) = -2$, $-4\sin^2(67.5°) = -3.414$. Check e.g. $A(1, 0, -1)^T = (-2, 0, 2)^T = -2\,(1, 0, -1)^T$. The zigzag is $(1, -\sqrt2, 1)$ (eigenvalue $-3.414$): it alternates in sign.
+(b) $D/\Delta x^2 = 1000/15625 = 0.064$ per s. Rates $0.0375$, $0.128$, $0.2185$ per s. Euler needs $\Delta t \le 2/0.2185 = 9.15$ s, i.e. $r \le 9.15 \cdot 0.064 = 0.586$. On a coarse grid the limit is a little above $1/2$; it tends to $1/2$ as $N$ grows.
+(c) $\pi^2 \cdot 1000/500^2 = 0.0395$ per s against $0.0375$: the coarse grid is 5 % too slow. The slowest rate is the physics; it converges as the grid is refined.
+
+**B7.**
+(a) $c_N + r(c_{N-1} - 2c_N + c_{N+1})$ with $c_{N+1} = c_{N-1}$ gives $c_N + r(2c_{N-1} - 2c_N)$.
+(b) $c_0' = c_0 + 2r(c_1 - c_0)$, $c_1' = c_1 + r(c_0 - 2c_1 + c_2)$, $c_2' = c_2 + 2r(c_1 - c_2)$. Trapezoid: $\tfrac12 c_0' + c_1' + \tfrac12 c_2' = \tfrac12c_0 + c_1 + \tfrac12c_2 + r\bigl[(c_1 - c_0) + (c_0 - 2c_1 + c_2) + (c_1 - c_2)\bigr]$, and the bracket is 0. Plain sum: changes by $r(2c_1 - c_0 - c_2)$, not zero in general.
+(c) $c = 1$ everywhere: the wall lets nothing out, so the channel fills to the source concentration. A dead-end side channel has a gradient only while it fills; for a lasting gradient you need a sink.
+
+**B8.**
+(a) $t = 0.26 \cdot 10^6/100 = 2600$ s. $\Delta t = 100/200 = 0.5$ s: 5200 steps × 99 points ≈ $5\cdot10^5$ updates. Instant.
+(b) $\Delta t = 1/200 = 0.005$ s: 520 000 steps × 999 points ≈ $5\cdot10^8$ updates. Ten times finer in space, a thousand times more work.
+(c) $L^2/(\pi^2 D) = 10^6/987 = 1013$ s, about 200 000 times the step. The step is set by the zigzag mode, which has no biological meaning and decays in milliseconds; the solution itself changes on a scale of minutes. This is stiffness, and it is what *Implicit schemes and the method of lines* removes.
+:::
+
+::: {.callout-note collapse="true" title="Solution — in code"}
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses D, L, N, dx, x, r, dt, c0, ftcs() and exact() from the Background
+# (a) FTCS against the exact solution, and distance from the straight line
+lin <- 1 - x / L
+for (t in c(10, 30, 60, 120, 300)) {
+  ct <- ftcs(c0, r, round(t / dt))
+  cat(sprintf("t = %3.0f s   max|FTCS - exact| = %.2e   max|c - line| = %.2e\n",
+              t, max(abs(ct - exact(x, t, L, D))), max(abs(ct - lin))))
+}
+# (b) FTCS (dots) on the exact solution (lines)
+plot(NA, xlim = c(0, L), ylim = c(0, 1), xlab = "x (µm)", ylab = "c")
+for (t in c(5, 15, 30, 64.4, 120)) {
+  lines(x, exact(x, t, L, D))
+  points(x, ftcs(c0, r, round(t / dt)), pch = 19, cex = 0.6)
+}
+# (c) the straight line is a fixed point of FTCS
+cat(sprintf("one step from the line moves it by %.1e\n", max(abs(ftcs(lin, r, 1) - lin))))
+
+# Output:
+# t =  10 s   max|FTCS - exact| = 5.11e-04   max|c - line| = 4.42e-01
+# t =  30 s   max|FTCS - exact| = 1.78e-04   max|c - line| = 1.95e-01
+# t =  60 s   max|FTCS - exact| = 8.46e-05   max|c - line| = 5.95e-02
+# t = 120 s   max|FTCS - exact| = 1.40e-05   max|c - line| = 5.56e-03
+# t = 300 s   max|FTCS - exact| = 2.64e-08   max|c - line| = 4.55e-06
+# one step from the line moves it by 5.6e-17
+```
+
+### Python
+
+```python
+# uses np, D, L, N, dx, x, r, dt, c0, ftcs() and exact() from the Background
+# (a) FTCS against the exact solution, and distance from the straight line
+lin = 1 - x / L
+for t in [10, 30, 60, 120, 300]:
+    ct = ftcs(c0, r, round(t / dt))
+    print(f"t = {t:3.0f} s   max|FTCS - exact| = {np.max(np.abs(ct - exact(x, t, L, D))):.2e}"
+          f"   max|c - line| = {np.max(np.abs(ct - lin)):.2e}")
+# (b) FTCS (dots) on the exact solution (lines)
+import matplotlib.pyplot as plt
+for t in [5, 15, 30, 64.4, 120]:
+    plt.plot(x, exact(x, t, L, D), color="grey")
+    plt.plot(x, ftcs(c0, r, round(t / dt)), "o", markersize=3)
+plt.xlabel("x (µm)"); plt.ylabel("c")
+plt.show()
+# (c) the straight line is a fixed point of FTCS
+print(f"one step from the line moves it by {np.max(np.abs(ftcs(lin, r, 1) - lin)):.1e}")
+
+# Output:
+# t =  10 s   max|FTCS - exact| = 5.11e-04   max|c - line| = 4.42e-01
+# t =  30 s   max|FTCS - exact| = 1.78e-04   max|c - line| = 1.95e-01
+# t =  60 s   max|FTCS - exact| = 8.46e-05   max|c - line| = 5.95e-02
+# t = 120 s   max|FTCS - exact| = 1.40e-05   max|c - line| = 5.56e-03
+# t = 300 s   max|FTCS - exact| = 2.64e-08   max|c - line| = 4.55e-06
+# one step from the line moves it by 5.6e-17
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_explicit_c1.rs  —  cargo run --example diffusion_explicit_c1
+// C1: FTCS against the exact solution; the straight line is a fixed point.
+use std::f64::consts::PI;
+
+const D: f64 = 1000.0; // µm^2/s
+const L: f64 = 500.0; // µm
+
+fn ftcs(c: &[f64], r: f64, nsteps: usize) -> Vec<f64> {
+    let n = c.len();
+    let mut c = c.to_vec();
+    let mut old = c.clone();
+    for _ in 0..nsteps {
+        old.copy_from_slice(&c); // previous time level
+        for i in 1..n - 1 {
+            c[i] = old[i] + r * (old[i - 1] - 2.0 * old[i] + old[i + 1]);
+        }
+    }
+    c
+}
+
+fn exact(x: f64, t: f64, l: f64, d: f64, nterm: usize) -> f64 {
+    let mut s = 1.0 - x / l;
+    for n in 1..=nterm {
+        let k = n as f64 * PI / l;
+        s -= 2.0 / (n as f64 * PI) * (k * x).sin() * (-k * k * d * t).exp();
+    }
+    s
+}
+
+// scientific notation as R and Python print it: 5.11e-04 rather than Rust's 5.11e-4
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn maxabs(a: &[f64], b: &[f64]) -> f64 {
+    a.iter().zip(b).map(|(u, v)| (u - v).abs()).fold(0.0, f64::max)
+}
+
+fn main() {
+    let n = 50;
+    let dx = L / n as f64;
+    let x: Vec<f64> = (0..=n).map(|i| i as f64 * dx).collect();
+    let (r, dt) = (0.4, 0.4 * dx * dx / D);
+    let mut c0 = vec![0.0; n + 1];
+    c0[0] = 1.0;
+    let lin: Vec<f64> = x.iter().map(|&xi| 1.0 - xi / L).collect();
+    // (a) FTCS against the exact solution, and distance from the straight line
+    for t in [10.0, 30.0, 60.0, 120.0, 300.0] {
+        let ct = ftcs(&c0, r, (t / dt).round() as usize);
+        let ex: Vec<f64> = x.iter().map(|&xi| exact(xi, t, L, D, 200)).collect();
+        println!("t = {:3.0} s   max|FTCS - exact| = {}   max|c - line| = {}",
+                 t, sci(maxabs(&ct, &ex), 2), sci(maxabs(&ct, &lin), 2));
+    }
+    // (c) the straight line is a fixed point of FTCS
+    println!("one step from the line moves it by {}", sci(maxabs(&ftcs(&lin, r, 1), &lin), 1));
+}
+
+// Output:
+// t =  10 s   max|FTCS - exact| = 5.11e-04   max|c - line| = 4.42e-01
+// t =  30 s   max|FTCS - exact| = 1.78e-04   max|c - line| = 1.95e-01
+// t =  60 s   max|FTCS - exact| = 8.46e-05   max|c - line| = 5.95e-02
+// t = 120 s   max|FTCS - exact| = 1.40e-05   max|c - line| = 5.56e-03
+// t = 300 s   max|FTCS - exact| = 2.64e-08   max|c - line| = 4.55e-06
+// one step from the line moves it by 5.6e-17
+```
+
+:::
+
+(a) FTCS agrees with the exact solution to $5\cdot10^{-4}$ at 10 s and better later; the largest errors are early, near the sharp front at the source. The distance from the straight line falls from 0.44 to $6\cdot10^{-2}$ at 60 s and $6\cdot10^{-3}$ at 120 s. (b) The plot is the lecture figure "The gradient forms". (c) The line moves by $6\cdot10^{-17}$, rounding only: its second difference is zero, so the straight line is a fixed point of FTCS, as it is a steady state of the diffusion equation.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses D, L, N, dx, x, r, dt, c0, ftcs() and exact() from the Background
+t_grad <- function(D, L, tol = 0.05, N = 50, r = 0.4) {
+  dx <- L / N; dt <- r * dx^2 / D; x <- seq(0, L, by = dx)
+  c <- c(1, rep(0, N)); n <- 0
+  while (max(abs(c - (1 - x / L))) > tol) { c <- ftcs(c, r, 1); n <- n + 1 }
+  n * dt
+}
+for (tol in c(0.05, 0.01))
+  for (D in c(1000, 100)) for (L in c(500, 1000)) {
+    tg <- t_grad(D, L, tol)
+    cat(sprintf("tol %.2f  D = %4.0f  L = %4.0f   t = %7.1f s = %5.1f min   t D / L^2 = %.4f\n",
+                tol, D, L, tg, tg / 60, tg * D / L^2))
+  }
+
+# Output:
+# tol 0.05  D = 1000  L =  500   t =    64.4 s =   1.1 min   t D / L^2 = 0.2578
+# tol 0.05  D = 1000  L = 1000   t =   257.8 s =   4.3 min   t D / L^2 = 0.2578
+# tol 0.05  D =  100  L =  500   t =   644.4 s =  10.7 min   t D / L^2 = 0.2578
+# tol 0.05  D =  100  L = 1000   t =  2577.6 s =  43.0 min   t D / L^2 = 0.2578
+# tol 0.01  D = 1000  L =  500   t =   105.2 s =   1.8 min   t D / L^2 = 0.4206
+# tol 0.01  D = 1000  L = 1000   t =   420.6 s =   7.0 min   t D / L^2 = 0.4206
+# tol 0.01  D =  100  L =  500   t =  1051.6 s =  17.5 min   t D / L^2 = 0.4206
+# tol 0.01  D =  100  L = 1000   t =  4206.4 s =  70.1 min   t D / L^2 = 0.4206
+```
+
+### Python
+
+```python
+# uses np, D, L, N, dx, x, r, dt, c0, ftcs() and exact() from the Background
+def t_grad(D, L, tol=0.05, N=50, r=0.4):
+    dx = L / N; dt = r * dx**2 / D; x = np.linspace(0, L, N + 1)
+    c = np.zeros(N + 1); c[0] = 1.0; n = 0
+    while np.max(np.abs(c - (1 - x / L))) > tol:
+        c = ftcs(c, r, 1); n += 1
+    return n * dt
+
+for tol in [0.05, 0.01]:
+    for D in [1000, 100]:
+        for L in [500, 1000]:
+            tg = t_grad(D, L, tol)
+            print(f"tol {tol:.2f}  D = {D:4.0f}  L = {L:4.0f}   t = {tg:7.1f} s = {tg / 60:5.1f} min"
+                  f"   t D / L^2 = {tg * D / L**2:.4f}")
+
+# Output:
+# tol 0.05  D = 1000  L =  500   t =    64.4 s =   1.1 min   t D / L^2 = 0.2578
+# tol 0.05  D = 1000  L = 1000   t =   257.8 s =   4.3 min   t D / L^2 = 0.2578
+# tol 0.05  D =  100  L =  500   t =   644.4 s =  10.7 min   t D / L^2 = 0.2578
+# tol 0.05  D =  100  L = 1000   t =  2577.6 s =  43.0 min   t D / L^2 = 0.2578
+# tol 0.01  D = 1000  L =  500   t =   105.2 s =   1.8 min   t D / L^2 = 0.4206
+# tol 0.01  D = 1000  L = 1000   t =   420.6 s =   7.0 min   t D / L^2 = 0.4206
+# tol 0.01  D =  100  L =  500   t =  1051.6 s =  17.5 min   t D / L^2 = 0.4206
+# tol 0.01  D =  100  L = 1000   t =  4206.4 s =  70.1 min   t D / L^2 = 0.4206
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_explicit_c2.rs  —  cargo run --example diffusion_explicit_c2
+// C2: time until the linear gradient is established, for two molecules and two lengths.
+fn ftcs(c: &[f64], r: f64, nsteps: usize) -> Vec<f64> {
+    let n = c.len();
+    let mut c = c.to_vec();
+    let mut old = c.clone();
+    for _ in 0..nsteps {
+        old.copy_from_slice(&c); // previous time level
+        for i in 1..n - 1 {
+            c[i] = old[i] + r * (old[i - 1] - 2.0 * old[i] + old[i + 1]);
+        }
+    }
+    c
+}
+
+fn t_grad(d: f64, l: f64, tol: f64, n: usize, r: f64) -> f64 {
+    let dx = l / n as f64;
+    let dt = r * dx * dx / d;
+    let lin: Vec<f64> = (0..=n).map(|i| 1.0 - i as f64 * dx / l).collect();
+    let mut c = vec![0.0; n + 1];
+    c[0] = 1.0;
+    let mut steps = 0;
+    while c.iter().zip(&lin).map(|(u, v)| (u - v).abs()).fold(0.0, f64::max) > tol {
+        c = ftcs(&c, r, 1);
+        steps += 1;
+    }
+    steps as f64 * dt
+}
+
+fn main() {
+    for tol in [0.05, 0.01] {
+        for d in [1000.0, 100.0] {
+            for l in [500.0, 1000.0] {
+                let tg = t_grad(d, l, tol, 50, 0.4);
+                println!("tol {:.2}  D = {:4.0}  L = {:4.0}   t = {:7.1} s = {:5.1} min   t D / L^2 = {:.4}",
+                         tol, d, l, tg, tg / 60.0, tg * d / (l * l));
+            }
+        }
+    }
+}
+
+// Output:
+// tol 0.05  D = 1000  L =  500   t =    64.4 s =   1.1 min   t D / L^2 = 0.2578
+// tol 0.05  D = 1000  L = 1000   t =   257.8 s =   4.3 min   t D / L^2 = 0.2578
+// tol 0.05  D =  100  L =  500   t =   644.4 s =  10.7 min   t D / L^2 = 0.2578
+// tol 0.05  D =  100  L = 1000   t =  2577.6 s =  43.0 min   t D / L^2 = 0.2578
+// tol 0.01  D = 1000  L =  500   t =   105.2 s =   1.8 min   t D / L^2 = 0.4206
+// tol 0.01  D = 1000  L = 1000   t =   420.6 s =   7.0 min   t D / L^2 = 0.4206
+// tol 0.01  D =  100  L =  500   t =  1051.6 s =  17.5 min   t D / L^2 = 0.4206
+// tol 0.01  D =  100  L = 1000   t =  4206.4 s =  70.1 min   t D / L^2 = 0.4206
+```
+
+:::
+
+Doubling $L$ multiplies the time by exactly 4; going from small molecule to protein multiplies it by exactly 10. In units of $L^2/D$ the answer is always the same, 0.258 for 5 % and 0.421 for 1 %. The step count (1611 for 5 %) is the same in every run because with $N$ and $r$ fixed the four runs do identical arithmetic: only $\Delta t = r\,\Delta x^2/D$, the meaning of one step, changes. That is the dimensionless form of the problem: $x/L$ and $tD/L^2$ are the only variables. For the experiment: a small-molecule gradient over 500 µm is ready in about a minute, a chemokine gradient over 1 mm needs 43 minutes (70 minutes for 1 %).
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses D, L, N, dx, x, r, dt, c0, ftcs() and exact() from the Background
+Ns <- c(20, 40, 80, 160, 320); err <- numeric(length(Ns))
+for (j in seq_along(Ns)) {
+  dxj <- L / Ns[j]; dtj <- 0.4 * dxj^2 / D; xj <- seq(0, L, by = dxj)
+  nst <- round(30 / dtj)                         # steps to t = 30 s
+  cj  <- ftcs(c(1, rep(0, Ns[j])), 0.4, nst)
+  err[j] <- max(abs(cj - exact(xj, 30, L, D, 2000)))
+  cat(sprintf("N = %3d  dx = %6.3f um  dt = %8.5f s  steps = %5d  work = %8d  error = %.3e\n",
+              Ns[j], dxj, dtj, nst, nst * (Ns[j] - 1), err[j]))
+}
+cat("ratios:", sprintf("%.2f", err[-length(err)] / err[-1]), "\n")
+cat(sprintf("slope: %.3f\n", coef(lm(log10(err) ~ log10(L / Ns)))[2]))
+
+# Output:
+# N =  20  dx = 25.000 um  dt =  0.25000 s  steps =   120  work =     2280  error = 1.114e-03
+# N =  40  dx = 12.500 um  dt =  0.06250 s  steps =   480  work =    18720  error = 2.786e-04
+# N =  80  dx =  6.250 um  dt =  0.01562 s  steps =  1920  work =   151680  error = 6.969e-05
+# N = 160  dx =  3.125 um  dt =  0.00391 s  steps =  7680  work =  1221120  error = 1.742e-05
+# N = 320  dx =  1.562 um  dt =  0.00098 s  steps = 30720  work =  9799680  error = 4.356e-06
+# ratios: 4.00 4.00 4.00 4.00
+# slope: 2.000
+```
+
+### Python
+
+```python
+# uses np, D, L, N, dx, x, r, dt, c0, ftcs() and exact() from the Background
+Ns = [20, 40, 80, 160, 320]; err = []
+for Nj in Ns:
+    dxj = L / Nj; dtj = 0.4 * dxj**2 / D; xj = np.linspace(0, L, Nj + 1)
+    nst = round(30 / dtj)                          # steps to t = 30 s
+    cj = np.zeros(Nj + 1); cj[0] = 1.0
+    cj = ftcs(cj, 0.4, nst)
+    err.append(np.max(np.abs(cj - exact(xj, 30, L, D, 2000))))
+    print(f"N = {Nj:3d}  dx = {dxj:6.3f} um  dt = {dtj:8.5f} s  steps = {nst:5d}"
+          f"  work = {nst * (Nj - 1):8d}  error = {err[-1]:.3e}")
+err = np.array(err)
+print("ratios:", " ".join(f"{v:.2f}" for v in err[:-1] / err[1:]))
+print(f"slope: {np.polyfit(np.log10(L / np.array(Ns)), np.log10(err), 1)[0]:.3f}")
+
+# Output:
+# N =  20  dx = 25.000 um  dt =  0.25000 s  steps =   120  work =     2280  error = 1.114e-03
+# N =  40  dx = 12.500 um  dt =  0.06250 s  steps =   480  work =    18720  error = 2.786e-04
+# N =  80  dx =  6.250 um  dt =  0.01562 s  steps =  1920  work =   151680  error = 6.969e-05
+# N = 160  dx =  3.125 um  dt =  0.00391 s  steps =  7680  work =  1221120  error = 1.742e-05
+# N = 320  dx =  1.562 um  dt =  0.00098 s  steps = 30720  work =  9799680  error = 4.356e-06
+# ratios: 4.00 4.00 4.00 4.00
+# slope: 2.000
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_explicit_c3.rs  —  cargo run --example diffusion_explicit_c3
+// C3: grid refinement with r = 0.4 fixed: error at t = 30 s against the exact solution.
+use std::f64::consts::PI;
+
+const D: f64 = 1000.0; // µm^2/s
+const L: f64 = 500.0; // µm
+
+fn ftcs(c: &[f64], r: f64, nsteps: usize) -> Vec<f64> {
+    let n = c.len();
+    let mut c = c.to_vec();
+    let mut old = c.clone();
+    for _ in 0..nsteps {
+        old.copy_from_slice(&c); // previous time level
+        for i in 1..n - 1 {
+            c[i] = old[i] + r * (old[i - 1] - 2.0 * old[i] + old[i + 1]);
+        }
+    }
+    c
+}
+
+fn exact(x: f64, t: f64, l: f64, d: f64, nterm: usize) -> f64 {
+    let mut s = 1.0 - x / l;
+    for n in 1..=nterm {
+        let k = n as f64 * PI / l;
+        s -= 2.0 / (n as f64 * PI) * (k * x).sin() * (-k * k * d * t).exp();
+    }
+    s
+}
+
+// scientific notation as R and Python print it: 1.11e-03 rather than Rust's 1.11e-3
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn main() {
+    let ns = [20usize, 40, 80, 160, 320];
+    let mut err = Vec::new();
+    for &n in &ns {
+        let dx = L / n as f64;
+        let dt = 0.4 * dx * dx / D;
+        let nst = (30.0 / dt).round() as usize; // steps to t = 30 s
+        let mut c = vec![0.0; n + 1];
+        c[0] = 1.0;
+        let c = ftcs(&c, 0.4, nst);
+        let e = (0..=n)
+            .map(|i| (c[i] - exact(i as f64 * dx, 30.0, L, D, 2000)).abs())
+            .fold(0.0, f64::max);
+        err.push(e);
+        println!("N = {:3}  dx = {:6.3} um  dt = {:8.5} s  steps = {:5}  work = {:8}  error = {}",
+                 n, dx, dt, nst, nst * (n - 1), sci(e, 3));
+    }
+    let ratios: Vec<String> = err.windows(2).map(|w| format!("{:.2}", w[0] / w[1])).collect();
+    println!("ratios: {}", ratios.join(" "));
+    // least-squares slope of log10(error) against log10(dx)
+    let lx: Vec<f64> = ns.iter().map(|&n| (L / n as f64).log10()).collect();
+    let ly: Vec<f64> = err.iter().map(|e| e.log10()).collect();
+    let (mx, my) = (lx.iter().sum::<f64>() / 5.0, ly.iter().sum::<f64>() / 5.0);
+    let sxy: f64 = lx.iter().zip(&ly).map(|(a, b)| (a - mx) * (b - my)).sum();
+    let sxx: f64 = lx.iter().map(|a| (a - mx) * (a - mx)).sum();
+    println!("slope: {:.3}", sxy / sxx);
+}
+
+// Output:
+// N =  20  dx = 25.000 um  dt =  0.25000 s  steps =   120  work =     2280  error = 1.114e-03
+// N =  40  dx = 12.500 um  dt =  0.06250 s  steps =   480  work =    18720  error = 2.786e-04
+// N =  80  dx =  6.250 um  dt =  0.01562 s  steps =  1920  work =   151680  error = 6.969e-05
+// N = 160  dx =  3.125 um  dt =  0.00391 s  steps =  7680  work =  1221120  error = 1.742e-05
+// N = 320  dx =  1.562 um  dt =  0.00098 s  steps = 30720  work =  9799680  error = 4.356e-06
+// ratios: 4.00 4.00 4.00 4.00
+// slope: 2.000
+```
+
+:::
+
+Each halving of $\Delta x$ divides the error by 4.00: second order, slope 2. With $r$ fixed, $\Delta t$ falls by 4 too, so Euler's $O(\Delta t)$ error is also $O(\Delta x^2)$, and both shrink together. The work grows by 8 per halving (2× the points, 4× the steps): $10^7$ updates for $N = 320$, and one more halving would cost $8\cdot10^7$ to gain a factor 4 in accuracy. Plot in R with `plot(L / Ns, err, log = "xy")`, in Python with `plt.loglog(L / np.array(Ns), err, "o-")`.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses D, L, N, dx, x, r, dt, c0, ftcs() and exact() from the Background
+# (a) run to t = 30 s with four values of r
+for (rr in c(0.45, 0.5, 0.52, 0.6)) {
+  nst <- round(30 / (rr * dx^2 / D))
+  cr  <- ftcs(c0, rr, nst)
+  cat(sprintf("r = %.2f  dt = %.4f s  steps = %4d  min c = %10.3e  max c = %10.3e\n",
+              rr, rr * dx^2 / D, nst, min(cr), max(cr)))
+}
+# (b) eigenvalues of the second-difference matrix (49 interior points)
+n <- N - 1
+A <- diag(-2, n); A[cbind(1:(n - 1), 2:n)] <- 1; A[cbind(2:n, 1:(n - 1))] <- 1
+lam <- eigen(A, symmetric = TRUE, only.values = TRUE)$values
+k <- 1:n; formula <- -4 * sin(k * pi / (2 * N))^2
+cat(sprintf("eigen(): %.6f to %.6f   formula: %.6f to %.6f\n",
+            min(lam), max(lam), min(formula), max(formula)))
+rates <- D / dx^2 * range(lam)                    # per second
+cat(sprintf("rates %.4f and %.4f per s; Euler needs dt < %.5f s (r < %.4f)\n",
+            rates[1], rates[2], 2 / abs(rates[1]), 2 / abs(rates[1]) * D / dx^2))
+cat(sprintf("slowest time constant %.2f s = L^2/(pi^2 D) = %.2f s; stiffness ratio %.0f\n",
+            1 / abs(rates[2]), L^2 / (pi^2 * D), rates[1] / rates[2]))
+
+# Output:
+# r = 0.45  dt = 0.0450 s  steps =  667  min c =  0.000e+00  max c =  1.000e+00
+# r = 0.50  dt = 0.0500 s  steps =  600  min c =  0.000e+00  max c =  1.000e+00
+# r = 0.52  dt = 0.0520 s  steps =  577  min c = -4.085e+15  max c =  4.088e+15
+# r = 0.60  dt = 0.0600 s  steps =  500  min c = -3.255e+69  max c =  3.254e+69
+# eigen(): -3.996053 to -0.003947   formula: -3.996053 to -0.003947
+# rates -39.9605 and -0.0395 per s; Euler needs dt < 0.05005 s (r < 0.5005)
+# slowest time constant 25.34 s = L^2/(pi^2 D) = 25.33 s; stiffness ratio 1013
+```
+
+### Python
+
+```python
+# uses np, D, L, N, dx, x, r, dt, c0, ftcs() and exact() from the Background
+# (a) run to t = 30 s with four values of r
+for rr in [0.45, 0.5, 0.52, 0.6]:
+    nst = round(30 / (rr * dx**2 / D))
+    cr = ftcs(c0, rr, nst)
+    print(f"r = {rr:.2f}  dt = {rr * dx**2 / D:.4f} s  steps = {nst:4d}"
+          f"  min c = {cr.min():10.3e}  max c = {cr.max():10.3e}")
+# (b) eigenvalues of the second-difference matrix (49 interior points)
+n = N - 1
+A = np.diag(np.full(n, -2.0)) + np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
+lam = np.linalg.eigvalsh(A)
+k = np.arange(1, n + 1); formula = -4 * np.sin(k * np.pi / (2 * N))**2
+print(f"eigen(): {lam.min():.6f} to {lam.max():.6f}   formula: {formula.min():.6f} to {formula.max():.6f}")
+rates = D / dx**2 * np.array([lam.min(), lam.max()])   # per second
+print(f"rates {rates[0]:.4f} and {rates[1]:.4f} per s; Euler needs dt < {2 / abs(rates[0]):.5f} s"
+      f" (r < {2 / abs(rates[0]) * D / dx**2:.4f})")
+print(f"slowest time constant {1 / abs(rates[1]):.2f} s = L^2/(pi^2 D) = {L**2 / (np.pi**2 * D):.2f} s;"
+      f" stiffness ratio {rates[0] / rates[1]:.0f}")
+
+# Output:
+# r = 0.45  dt = 0.0450 s  steps =  667  min c =  0.000e+00  max c =  1.000e+00
+# r = 0.50  dt = 0.0500 s  steps =  600  min c =  0.000e+00  max c =  1.000e+00
+# r = 0.52  dt = 0.0520 s  steps =  577  min c = -4.085e+15  max c =  4.088e+15
+# r = 0.60  dt = 0.0600 s  steps =  500  min c = -3.255e+69  max c =  3.254e+69
+# eigen(): -3.996053 to -0.003947   formula: -3.996053 to -0.003947
+# rates -39.9605 and -0.0395 per s; Euler needs dt < 0.05005 s (r < 0.5005)
+# slowest time constant 25.34 s = L^2/(pi^2 D) = 25.33 s; stiffness ratio 1013
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_explicit_c4.rs  —  cargo run --example diffusion_explicit_c4
+// C4: FTCS above and below r = 1/2, and the eigenvalues of the second-difference matrix.
+use nalgebra::DMatrix;
+use std::f64::consts::PI;
+
+const D: f64 = 1000.0; // µm^2/s
+const L: f64 = 500.0; // µm
+
+fn ftcs(c: &[f64], r: f64, nsteps: usize) -> Vec<f64> {
+    let n = c.len();
+    let mut c = c.to_vec();
+    let mut old = c.clone();
+    for _ in 0..nsteps {
+        old.copy_from_slice(&c); // previous time level
+        for i in 1..n - 1 {
+            c[i] = old[i] + r * (old[i - 1] - 2.0 * old[i] + old[i + 1]);
+        }
+    }
+    c
+}
+
+// scientific notation as R and Python print it: 4.09e+15 rather than Rust's 4.09e15
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn main() {
+    let n_int = 50; // intervals
+    let dx = L / n_int as f64;
+    let mut c0 = vec![0.0; n_int + 1];
+    c0[0] = 1.0;
+    // (a) run to t = 30 s with four values of r
+    for rr in [0.45, 0.5, 0.52, 0.6] {
+        let dt = rr * dx * dx / D;
+        let nst = (30.0 / dt).round() as usize;
+        let cr = ftcs(&c0, rr, nst);
+        let mn = cr.iter().cloned().fold(f64::INFINITY, f64::min);
+        let mx = cr.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        println!("r = {:.2}  dt = {:.4} s  steps = {:4}  min c = {:>10}  max c = {:>10}",
+                 rr, dt, nst, sci(mn, 3), sci(mx, 3));
+    }
+    // (b) eigenvalues of the second-difference matrix (49 interior points)
+    let n = n_int - 1;
+    let a = DMatrix::from_fn(n, n, |i, j| {
+        if i == j { -2.0 } else if i.abs_diff(j) == 1 { 1.0 } else { 0.0 }
+    });
+    let lam = a.symmetric_eigenvalues();
+    let (lmin, lmax): (f64, f64) = (lam.min(), lam.max());
+    let formula: Vec<f64> = (1..=n).map(|k| -4.0 * (k as f64 * PI / (2.0 * n_int as f64)).sin().powi(2)).collect();
+    let fmin = formula.iter().cloned().fold(f64::INFINITY, f64::min);
+    let fmax = formula.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    println!("eigen(): {:.6} to {:.6}   formula: {:.6} to {:.6}", lmin, lmax, fmin, fmax);
+    let rates = [D / (dx * dx) * lmin, D / (dx * dx) * lmax]; // per second
+    println!("rates {:.4} and {:.4} per s; Euler needs dt < {:.5} s (r < {:.4})",
+             rates[0], rates[1], 2.0 / rates[0].abs(), 2.0 / rates[0].abs() * D / (dx * dx));
+    println!("slowest time constant {:.2} s = L^2/(pi^2 D) = {:.2} s; stiffness ratio {:.0}",
+             1.0 / rates[1].abs(), L * L / (PI * PI * D), rates[0] / rates[1]);
+}
+
+// Output:
+// r = 0.45  dt = 0.0450 s  steps =  667  min c =  0.000e+00  max c =  1.000e+00
+// r = 0.50  dt = 0.0500 s  steps =  600  min c =  0.000e+00  max c =  1.000e+00
+// r = 0.52  dt = 0.0520 s  steps =  577  min c = -4.085e+15  max c =  4.088e+15
+// r = 0.60  dt = 0.0600 s  steps =  500  min c = -3.255e+69  max c =  3.254e+69
+// eigen(): -3.996053 to -0.003947   formula: -3.996053 to -0.003947
+// rates -39.9605 and -0.0395 per s; Euler needs dt < 0.05005 s (r < 0.5005)
+// slowest time constant 25.34 s = L^2/(pi^2 D) = 25.33 s; stiffness ratio 1013
+```
+
+:::
+
+(a) $r = 0.45$ and $0.5$ stay within $[0, 1]$. At $r = 0.52$, only 4 % above the limit, the values reach $\pm 4\cdot10^{15}$ after 577 steps; at $r = 0.6$, $\pm 3\cdot10^{69}$. The check $\min c \ge 0$, $\max c \le 1$ catches both at once; it needs no exact solution. (b) The eigenvalues agree with the formula to all printed digits. The fastest rate is $39.96$ per s, so Euler needs $\Delta t \le 2/39.96 = 0.05005$ s, i.e. $r \le 0.5005$: the zigzag rule $r \le 1/2$, slightly relaxed because $\sin^2(49\pi/100)$ is just below 1. The slowest time constant is 25.3 s, which is $L^2/(\pi^2D)$: the biology. The ratio of 1013 is the stiffness of the grid ODEs, and it grows like $N^2$.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses D, L, N, dx, x, r, dt, c0, ftcs() and exact() from the Background
+ftcs_closed <- function(c, r, nsteps, left_closed = FALSE) {  # wall (no flux) at x = L
+  n <- length(c); i <- 2:(n - 1)
+  for (k in seq_len(nsteps)) {
+    cn <- c[n] + 2 * r * (c[n - 1] - c[n])          # ghost point c[n+1] = c[n-1]
+    c1 <- c[1] + 2 * r * (c[2] - c[1])              # used only if left_closed
+    c[i] <- c[i] + r * (c[i - 1] - 2 * c[i] + c[i + 1])
+    c[n] <- cn
+    if (left_closed) c[1] <- c1
+  }
+  c
+}
+# (a) open vs dead-end chamber at t = 64.4 s (gradient time of the open chamber)
+nst <- round(64.4 / dt)
+open <- ftcs(c0, r, nst); dead <- ftcs_closed(c0, r, nst)
+for (j in seq(1, N + 1, by = 10))
+  cat(sprintf("x = %3.0f um   open %.3f   dead end %.3f\n", x[j], open[j], dead[j]))
+# (b) time until the closed end reaches 0.95
+c <- c0; n <- 0
+while (c[N + 1] < 0.95) { c <- ftcs_closed(c, r, 1); n <- n + 1 }
+cat(sprintf("closed end reaches 0.95 after %.1f s; t D / L^2 = %.3f\n", n * dt, n * dt * D / L^2))
+# (c) both ends closed: a bolus of chemokine in the middle
+b <- as.numeric(abs(x - 250) <= 20)                 # 1 on 230..270 µm, 0 elsewhere
+w <- c(0.5, rep(1, N - 1), 0.5) * dx                # trapezoid weights
+for (t in c(0, 5, 60)) {
+  bt <- ftcs_closed(b, r, round(t / dt), left_closed = TRUE)
+  cat(sprintf("t = %3.0f s   trapezoid amount %.10f   plain sum*dx %.6f   max %.4f\n",
+              t, sum(w * bt), sum(bt) * dx, max(bt)))
+}
+
+# Output:
+# x =   0 um   open 1.000   dead end 1.000
+# x = 100 um   open 0.771   dead end 0.791
+# x = 200 um   open 0.552   dead end 0.602
+# x = 300 um   open 0.352   dead end 0.454
+# x = 400 um   open 0.171   dead end 0.360
+# x = 500 um   open 0.000   dead end 0.327
+# closed end reaches 0.95 after 328.0 s; t D / L^2 = 1.312
+# t =   0 s   trapezoid amount 50.0000000000   plain sum*dx 50.000000   max 1.0000
+# t =   5 s   trapezoid amount 50.0000000000   plain sum*dx 50.184114   max 0.1972
+# t =  60 s   trapezoid amount 50.0000000000   plain sum*dx 50.999852   max 0.1000
+```
+
+### Python
+
+```python
+# uses np, D, L, N, dx, x, r, dt, c0, ftcs() and exact() from the Background
+def ftcs_closed(c, r, nsteps, left_closed=False):   # wall (no flux) at x = L
+    c = c.copy()
+    for k in range(nsteps):
+        cn = c[-1] + 2 * r * (c[-2] - c[-1])        # ghost point c[N+1] = c[N-1]
+        c1 = c[0] + 2 * r * (c[1] - c[0])           # used only if left_closed
+        c[1:-1] = c[1:-1] + r * (c[:-2] - 2 * c[1:-1] + c[2:])
+        c[-1] = cn
+        if left_closed:
+            c[0] = c1
+    return c
+
+# (a) open vs dead-end chamber at t = 64.4 s (gradient time of the open chamber)
+nst = round(64.4 / dt)
+open_ = ftcs(c0, r, nst); dead = ftcs_closed(c0, r, nst)
+for j in range(0, N + 1, 10):
+    print(f"x = {x[j]:3.0f} um   open {open_[j]:.3f}   dead end {dead[j]:.3f}")
+# (b) time until the closed end reaches 0.95
+c = c0.copy(); n = 0
+while c[-1] < 0.95:
+    c = ftcs_closed(c, r, 1); n += 1
+print(f"closed end reaches 0.95 after {n * dt:.1f} s; t D / L^2 = {n * dt * D / L**2:.3f}")
+# (c) both ends closed: a bolus of chemokine in the middle
+b = (np.abs(x - 250) <= 20).astype(float)           # 1 on 230..270 µm, 0 elsewhere
+w = np.r_[0.5, np.ones(N - 1), 0.5] * dx            # trapezoid weights
+for t in [0, 5, 60]:
+    bt = ftcs_closed(b, r, round(t / dt), left_closed=True)
+    print(f"t = {t:3.0f} s   trapezoid amount {np.sum(w * bt):.10f}   plain sum*dx {np.sum(bt) * dx:.6f}"
+          f"   max {bt.max():.4f}")
+
+# Output:
+# x =   0 um   open 1.000   dead end 1.000
+# x = 100 um   open 0.771   dead end 0.791
+# x = 200 um   open 0.552   dead end 0.602
+# x = 300 um   open 0.352   dead end 0.454
+# x = 400 um   open 0.171   dead end 0.360
+# x = 500 um   open 0.000   dead end 0.327
+# closed end reaches 0.95 after 328.0 s; t D / L^2 = 1.312
+# t =   0 s   trapezoid amount 50.0000000000   plain sum*dx 50.000000   max 1.0000
+# t =   5 s   trapezoid amount 50.0000000000   plain sum*dx 50.184114   max 0.1972
+# t =  60 s   trapezoid amount 50.0000000000   plain sum*dx 50.999852   max 0.1000
+```
+
+### Rust
+
+```rust
+// rust/examples/diffusion_explicit_c5.rs  —  cargo run --example diffusion_explicit_c5
+// C5: no-flux walls: a dead-end chamber, and mass conservation with both ends closed.
+const D: f64 = 1000.0; // µm^2/s
+const L: f64 = 500.0; // µm
+
+fn ftcs(c: &[f64], r: f64, nsteps: usize) -> Vec<f64> {
+    let n = c.len();
+    let mut c = c.to_vec();
+    let mut old = c.clone();
+    for _ in 0..nsteps {
+        old.copy_from_slice(&c); // previous time level
+        for i in 1..n - 1 {
+            c[i] = old[i] + r * (old[i - 1] - 2.0 * old[i] + old[i + 1]);
+        }
+    }
+    c
+}
+
+// wall (no flux) at x = L via the ghost point c[N+1] = c[N-1]; optionally also at x = 0
+fn ftcs_closed(c: &[f64], r: f64, nsteps: usize, left_closed: bool) -> Vec<f64> {
+    let n = c.len();
+    let mut c = c.to_vec();
+    let mut old = c.clone();
+    for _ in 0..nsteps {
+        old.copy_from_slice(&c);
+        for i in 1..n - 1 {
+            c[i] = old[i] + r * (old[i - 1] - 2.0 * old[i] + old[i + 1]);
+        }
+        c[n - 1] = old[n - 1] + 2.0 * r * (old[n - 2] - old[n - 1]);
+        if left_closed {
+            c[0] = old[0] + 2.0 * r * (old[1] - old[0]);
+        }
+    }
+    c
+}
+
+fn main() {
+    let n = 50;
+    let dx = L / n as f64;
+    let x: Vec<f64> = (0..=n).map(|i| i as f64 * dx).collect();
+    let (r, dt) = (0.4, 0.4 * dx * dx / D);
+    let mut c0 = vec![0.0; n + 1];
+    c0[0] = 1.0;
+    // (a) open vs dead-end chamber at t = 64.4 s (gradient time of the open chamber)
+    let nst = (64.4 / dt).round() as usize;
+    let open = ftcs(&c0, r, nst);
+    let dead = ftcs_closed(&c0, r, nst, false);
+    for j in (0..=n).step_by(10) {
+        println!("x = {:3.0} um   open {:.3}   dead end {:.3}", x[j], open[j], dead[j]);
+    }
+    // (b) time until the closed end reaches 0.95
+    let mut c = c0.clone();
+    let mut steps = 0;
+    while c[n] < 0.95 {
+        c = ftcs_closed(&c, r, 1, false);
+        steps += 1;
+    }
+    let t = steps as f64 * dt;
+    println!("closed end reaches 0.95 after {:.1} s; t D / L^2 = {:.3}", t, t * D / (L * L));
+    // (c) both ends closed: a bolus of chemokine in the middle
+    let b: Vec<f64> = x.iter().map(|&xi| if (xi - 250.0).abs() <= 20.0 { 1.0 } else { 0.0 }).collect();
+    let w: Vec<f64> = (0..=n).map(|i| if i == 0 || i == n { 0.5 * dx } else { dx }).collect(); // trapezoid
+    for t in [0.0, 5.0, 60.0] {
+        let bt = ftcs_closed(&b, r, (t / dt).round() as usize, true);
+        let trap: f64 = w.iter().zip(&bt).map(|(a, b)| a * b).sum();
+        let plain: f64 = bt.iter().sum::<f64>() * dx;
+        let mx = bt.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        println!("t = {:3.0} s   trapezoid amount {:.10}   plain sum*dx {:.6}   max {:.4}", t, trap, plain, mx);
+    }
+}
+
+// Output:
+// x =   0 um   open 1.000   dead end 1.000
+// x = 100 um   open 0.771   dead end 0.791
+// x = 200 um   open 0.552   dead end 0.602
+// x = 300 um   open 0.352   dead end 0.454
+// x = 400 um   open 0.171   dead end 0.360
+// x = 500 um   open 0.000   dead end 0.327
+// closed end reaches 0.95 after 328.0 s; t D / L^2 = 1.312
+// t =   0 s   trapezoid amount 50.0000000000   plain sum*dx 50.000000   max 1.0000
+// t =   5 s   trapezoid amount 50.0000000000   plain sum*dx 50.184114   max 0.1972
+// t =  60 s   trapezoid amount 50.0000000000   plain sum*dx 50.999852   max 0.1000
+```
+
+:::
+
+(a) At 64.4 s the open chamber is close to the line; the dead-end chamber is already at 0.33 at the wall and rising, with a flatter, curved profile. (b) The wall reaches 0.95 after 328 s $= 1.31\,L^2/D$, five times longer than the open chamber's gradient time, and what is reached is a uniform $c = 1$: no gradient. The slowest mode with a wall is a quarter sine with rate $\pi^2D/(4L^2)$, as if the channel were twice as long. (c) The trapezoid total stays $50.0000000000$ (the bolus of height 1 over 40 µm plus half-weighted ends) to rounding, while the plain sum drifts to 51: the ghost-point scheme conserves the trapezoid integral exactly, so that is the total to check. The bolus spreads ($\max c = 0.197$ after 5 s) and approaches the uniform value $50/500 = 0.1$. A conservation check with both ends closed is a cheap test for a sign error or an off-by-one at the boundary.
+:::
+
+## Where this leads
+
+- *Implicit schemes and the method of lines* (next unit): backward Euler and Crank–Nicolson for the same chamber, with no step limit, one tridiagonal (Thomas) solve per step from *Structure: symmetric, banded, sparse*; the grid ODEs handed to a stiff solver from *Stiffness and implicit methods*.
+- *Steady state in two dimensions*: the chamber in 2D, where the steady state is a sparse linear system rather than a straight line.
+- *Flow plus diffusion*: gradient generators with flow, where the Péclet number decides whether flow or diffusion wins.
+- *Reaction–diffusion and pattern formation*: adding production and degradation, and the length scale $\sqrt{D/k}$ of a morphogen gradient.

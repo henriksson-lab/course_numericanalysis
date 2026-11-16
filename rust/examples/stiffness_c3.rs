@@ -1,8 +1,8 @@
 // C3: step counts and time on the enzyme model. Rust's ode_solvers has only explicit
-// solvers (Dopri5, Dop853, Rk4); the stiff side is our hand-written backward Euler.
+// solvers (Dopri5, Dop853, Rk4); the stiff side is our hand-written backward Euler from C2.
 // Run with --release for meaningful timings.
 use nalgebra::{DMatrix, DVector};
-use ode_solvers::{Dop853, Dopri5, OutputType, System, Vector4};
+use ode_solvers::{Dopri5, OutputType, System, Vector4};
 use std::time::Instant;
 
 const KF: f64 = 100.0; const KR: f64 = 100.0; const KCAT: f64 = 1.0;
@@ -43,18 +43,12 @@ fn beuler(y0: &DVector<f64>, h: f64, n: usize) -> (DVector<f64>, usize) {  // (y
 
 fn main() {
     let y0 = Vector4::new(10.0, 1.0, 0.0, 0.0);
-    // Dopri5 / Dop853 with the stiffness test switched off (n_stiff = u32::MAX)
+    // Dopri5 with the stiffness test switched off (n_stiff = u32::MAX)
     let t = Instant::now();
     let mut s = Dopri5::from_param(Enzyme, 0.0, 30.0, 0.0, y0, 1e-6, 1e-9, 0.9, 0.04,
                                    0.2, 10.0, 30.0, 0.0, 1_000_000, u32::MAX, OutputType::Sparse);
     let st = s.integrate().unwrap();
     println!("Dopri5  steps {:5}  f-evals {:6}  time {:.4} s  P(30) = {:.6}", st.accepted_steps,
-             st.num_eval, t.elapsed().as_secs_f64(), s.y_out().last().unwrap()[3]);
-    let t = Instant::now();
-    let mut s = Dop853::from_param(Enzyme, 0.0, 30.0, 0.0, y0, 1e-6, 1e-9, 0.9, 0.0,
-                                   0.333, 6.0, 30.0, 0.0, 1_000_000, u32::MAX, OutputType::Sparse);
-    let st = s.integrate().unwrap();
-    println!("Dop853  steps {:5}  f-evals {:6}  time {:.4} s  P(30) = {:.6}", st.accepted_steps,
              st.num_eval, t.elapsed().as_secs_f64(), s.y_out().last().unwrap()[3]);
     // hand-written backward Euler, fixed h = 0.01 s (no error control: order 1)
     let t = Instant::now();

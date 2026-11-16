@@ -1,0 +1,143 @@
+---
+title: "Quiz: the diffusion (heat) equation by finite differences"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of the diffusion equation, the FTCS scheme, its stability and its boundary conditions. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** For a concentration $c(x, t)$ in a channel, what do $\partial c/\partial x$ and $\partial c/\partial t$ mean, in words a cell biologist would use?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Hold one variable fixed and look at the slope along the other.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\partial c/\partial x$: at a fixed moment, how steeply the concentration changes with position, the **gradient** a cell feels across its body. $\partial c/\partial t$: at a fixed place, how fast the concentration there rises or falls over time, what one stationary cell sees changing.
+:::
+
+---
+
+**Q2.** Fick's law says $J = -D\,\partial c/\partial x$. Why the minus sign, and how does a mass balance turn it into $\partial c/\partial t = D\,\partial^2 c/\partial x^2$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which way do molecules move on a profile that falls to the right? For the balance: rate in − rate out of a thin slice.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Molecules move from high to low concentration: where $\partial c/\partial x < 0$ the flux is to the right ($J > 0$). In a slice $[x, x + \Delta x]$ the amount changes by what flows in minus what flows out, $\partial c/\partial t\,\Delta x = J(x) - J(x + \Delta x)$. Dividing by $\Delta x$ gives $\partial c/\partial t = -\partial J/\partial x = D\,\partial^2 c/\partial x^2$.
+:::
+
+---
+
+**Q3.** A chemokine with $D = 10^{-10}$ m²/s diffuses across a 2 mm chamber. Estimate the diffusion time scale. How does it change if the chamber is made 1 mm long?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Convert $D$ to µm²/s and compute $L^2/D$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$D = 100$ µm²/s, $L^2/D = (2000)^2/100 = 40\,000$ s, about 11 hours (the linear gradient within 5 % after about $0.26\,L^2/D \approx 2.9$ h). Halving $L$ divides the time by 4: $10\,000$ s, about 2.8 hours ($\approx 43$ min to the gradient).
+:::
+
+---
+
+**Q4.** Write the FTCS update and say which ideas from earlier units it combines.
+
+::: {.callout-tip collapse="true" title="Hint"}
+One stencil in space, one ODE method in time.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$c_i^{n+1} = c_i^n + r\,(c_{i-1}^n - 2c_i^n + c_{i+1}^n)$ with $r = D\Delta t/\Delta x^2$. The bracket divided by $\Delta x^2$ is the second-difference stencil $(1, -2, 1)/\Delta x^2$ from *Numerical differentiation*; stepping forward with the slope at the start of the step is Euler's method from *Initial value problems and Euler's method*.
+:::
+
+---
+
+**Q5.** One FTCS step with $r = 0.25$ on the values $(c_{i-1}, c_i, c_{i+1}) = (0.6, 0.2, 0.4)$: what is the new $c_i$? Is it inside the range of the old values?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Rewrite the update as $(1 - 2r)c_i + r\,c_{i-1} + r\,c_{i+1}$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$0.2 + 0.25(0.6 - 0.4 + 0.4) = 0.2 + 0.15 = 0.35$. As weights: $0.5 \cdot 0.2 + 0.25 \cdot 0.6 + 0.25 \cdot 0.4 = 0.35$. A weighted average with non-negative weights, so it lies between 0.2 and 0.6. This holds whenever $r \le 1/2$.
+:::
+
+---
+
+**Q6.** Where does the limit $r \le 1/2$ come from? Give the short argument with the zigzag $c_i = (-1)^i$.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compute the second difference of the zigzag, then the factor by which one step multiplies it.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+For the zigzag $c_{i-1} - 2c_i + c_{i+1} = -4c_i$, so one step multiplies it by $1 - 4r$. It does not grow only if $|1 - 4r| \le 1$, i.e. $r \le 1/2$. This is Euler's condition $|1 - kh| \le 1$ with the decay rate $k = 4D/\Delta x^2$ of the zigzag, the fastest mode on the grid (the most negative eigenvalue of the second-difference matrix times $D/\Delta x^2$).
+:::
+
+---
+
+**Q7.** A student simulates a small molecule ($D = 1000$ µm²/s) on a grid with $\Delta x = 10$ µm and $\Delta t = 0.1$ s. What will she see, and how could she tell without an exact solution?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compute $r$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$r = 1000 \cdot 0.1/100 = 1$, twice the limit. A point-to-point zigzag appears where the profile is steepest and grows by a factor up to 3 per step, so the values soon reach absurd sizes. The check: concentrations must stay between the smallest and largest initial/boundary values (here 0 and 1). Values outside that range, or negative values, mean the step is too large (or there is a bug). The fix with FTCS is $\Delta t \le 0.05$ s.
+:::
+
+---
+
+**Q8.** Halving $\Delta x$ in an FTCS simulation with $r$ kept fixed: by what factor does the error change, and by what factor the work? Why?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\Delta t = r\,\Delta x^2/D$. Count points and steps.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The error falls by about 4: the stencil is $O(\Delta x^2)$, and Euler's $O(\Delta t)$ is also $O(\Delta x^2)$ when $\Delta t \propto \Delta x^2$. The work grows by 8: twice as many points and four times as many steps. Accuracy is cheap in space but the stability limit makes it expensive in time; implicit schemes (next unit) remove the limit.
+:::
+
+---
+
+**Q9.** The far end of a channel is a closed wall instead of a sink reservoir. Which boundary condition replaces $c(L, t) = 0$, how is it put into FTCS, and what is the steady state?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Nothing crosses a wall. Invent a point just outside it.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No flux: $J = 0$, so $\partial c/\partial x = 0$ at $x = L$. With a ghost point $c_{N+1} = c_{N-1}$ the wall update is $c_N^{n+1} = c_N^n + 2r\,(c_{N-1}^n - c_N^n)$. The steady state is $c = 1$ everywhere (the source value): the channel fills up and there is no lasting gradient. A chemotaxis chamber needs a sink.
+:::
+
+---
+
+**Q10.** In the lecture, four runs (two molecules, two channel lengths) all needed exactly 1611 FTCS steps to reach the 5 % criterion. Why is that not a coincidence, and what does it tell you about the biology?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What do the runs have in common, and what is the only thing that differs?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+All runs used $N = 50$ and $r = 0.4$, so they did exactly the same arithmetic on the same numbers; only the physical length of one step, $\Delta t = r\,\Delta x^2/D = r L^2/(N^2 D)$, differed. In the variables $x/L$ and $tD/L^2$ the diffusion equation has no parameters left, so every chamber is a rescaled copy of one problem: the gradient is ready at $t \approx 0.26\,L^2/D$, whatever the molecule or the length. Doubling $L$ quadruples the wait; a ten times slower molecule waits ten times longer.
+:::
+
+---
+
+**Q11.** The grid ODEs $\mathbf c' = \tfrac{D}{\Delta x^2}A\mathbf c + \mathbf b$ have decay rates from about $0.04$ per s to $40$ per s ($N = 50$). Which rate matters for the biology, which one limits FTCS, and what is this situation called?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at the shapes of the slowest and fastest eigenvectors.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The slowest rate ($\approx \pi^2 D/L^2$, a half-sine mode, time constant 25 s) sets how fast the gradient settles: that is the biology. The fastest (the zigzag, $\approx 4D/\Delta x^2$) decays in hundredths of a second and has no biological meaning, yet it limits Euler's step to $\Delta t \le 2/40 = 0.05$ s. A step set by stability rather than accuracy, with rates a thousand times apart, is **stiffness** (*Stiffness and implicit methods*), and it gets worse like $N^2$ as the grid is refined.
+:::

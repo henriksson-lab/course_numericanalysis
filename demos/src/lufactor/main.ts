@@ -75,7 +75,9 @@ const STYLE = `
 [data-demo="${NAME}"] svg .sm { font-size: 18px; fill: #555; }
 .reveal [data-demo="${NAME}"].qb-demo { font-size: 19px; gap: .3em; }
 .reveal [data-demo="${NAME}"] table.lu-m td { height: 1.55em; padding: .04em .35em; }
-.reveal [data-demo="${NAME}"] .lu-eq { line-height: 1.55; }
+.reveal [data-demo="${NAME}"] .lu-eq { line-height: 1.5; }
+.reveal [data-demo="${NAME}"] .lu-hint { display: none; }
+.reveal [data-demo="${NAME}"] .lu-solve { gap: 10px; }
 `;
 
 function injectStyle(): void {
@@ -253,7 +255,7 @@ function mount(host: HTMLElement): void {
   const solveArea = htmlEl("div", "lu-solve", "", solBox);
   const left = htmlEl("div", "lu-left", "", solveArea);
   const right = htmlEl("div", "lu-right", "", solveArea);
-  const W = 540, HT = 215, HC = 235;
+  const W = 540, HT = 200, HC = 215;
   const svgT = svgEl("svg", { viewBox: `0 0 ${W} ${HT}`, role: "img", "aria-label": "Sources and samples in isotope space" }, right);
   const nRow = htmlEl("div", "lu-group", "", right);
   htmlEl("span", "lu-count", "count operations for a matrix of size", nRow);
@@ -474,10 +476,10 @@ function mount(host: HTMLElement): void {
     const isMix = st.A0[0].every(v => v.isOne());
     if (isMix) {
       h += `<div>Diet: ${x.map((v, j) => `${st.names[j]} <b>${pctTxt(v)}</b>`).join(", ")}.`
-        + (outside ? ` <span class="lu-no">A negative fraction: this consumer lies outside the source triangle (a model problem, not a numerical one).</span>` : "")
+        + (outside ? ` <span class="lu-no">Negative: outside the source triangle (a model problem, not a numerical one).</span>` : "")
         + `</div>`;
     }
-    h += `<div class="lu-count">This sample: ${substOps(N)} operations (forward + back). Re-eliminating A would have cost ${factorOps(N)} more.</div>`;
+    h += `<div class="lu-count lu-hint">This sample: ${substOps(N)} operations (forward + back). Re-eliminating A would have cost ${factorOps(N)} more.</div>`;
     left.innerHTML = h;
     drawTriangle(); drawChart();
   }
@@ -536,7 +538,7 @@ function mount(host: HTMLElement): void {
     const nn = st.nShow, Fo = factorOps(nn), So = substOps(nn), m = st.solved.length;
     const M = Math.max(10, m);
     const once = (k: number) => (k === 0 ? 0 : Fo + k * So), again = (k: number) => k * (Fo + So);
-    const L = 84, R = W - 16, T = 92, B = HC - 34;
+    const L = 84, R = W - 16, T = 84, B = HC - 32;
     const raw = again(M) / 4, mag = 10 ** Math.floor(Math.log10(raw));
     const unit = [1, 2, 2.5, 5, 10].map(d => d * mag).find(d => d >= raw)!;
     const ymax = 4 * unit;
@@ -556,7 +558,7 @@ function mount(host: HTMLElement): void {
     const step = M <= 10 ? 1 : M <= 20 ? 2 : M <= 50 ? 5 : 10;
     for (let k = 0; k <= M; k += step) svgEl("text", { x: sx(k), y: B + 20, "text-anchor": "middle", class: "sm" }, svgC).textContent = String(k);
     svgEl("line", { x1: L, x2: R, y1: B, y2: B, class: "axis" }, svgC);
-    svgEl("text", { x: R, y: HC - 0, "text-anchor": "end", class: "sm" }, svgC).textContent = "samples m";
+    svgEl("text", { x: L - 16, y: B + 20, "text-anchor": "end", class: "sm" }, svgC).textContent = "m:";
     const path = (f: (k: number) => number) => [...Array(M + 1).keys()].map(k => `${k ? "L" : "M"}${sx(k).toFixed(1)},${sy(f(k)).toFixed(1)}`).join("");
     svgEl("path", { d: path(again), fill: "none", stroke: COL.red, "stroke-width": 3 }, svgC);
     svgEl("path", { d: path(once), fill: "none", stroke: COL.blue, "stroke-width": 3 }, svgC);

@@ -1,0 +1,197 @@
+---
+title: "Quiz: stochastic simulation"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of stochastic simulation. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** Two genes follow the same birth–death model, one with a steady state of 10 mRNA per cell, the other with 1000. By about what percentage do single cells fluctuate around the mean in each case? For which one is the ODE a good description of a single cell?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The steady state is Poisson: variance = mean.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The relative fluctuation is sd/mean $= \sqrt{\text{mean}}/\text{mean} = 1/\sqrt{\text{mean}}$: $1/\sqrt{10} = 32\%$ and $1/\sqrt{1000} = 3.2\%$. The ODE describes a single cell well only for the abundant gene. For the gene with 10 copies, the ODE gives the **mean** over cells, but no single cell sits at it.
+:::
+
+---
+
+**Q2.** A cell has $m = 5$ mRNA and $p = 40$ proteins. Transcription has rate 10, mRNA decay 1 per molecule, translation 2 per mRNA, protein decay 0.2 per protein (all per hour). What is the probability that the next reaction is a translation, and what is the mean waiting time until the next reaction?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compute all four propensities and their sum $a_0$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$a = (10, 5, 10, 8)$, $a_0 = 33$ per hour. Translation: $10/33 = 0.30$. Mean waiting time $1/a_0 = 0.030$ h $= 1.8$ min.
+:::
+
+---
+
+**Q3.** In an SSA step the total propensity is $a_0 = 4$ per hour and the uniform number for the waiting time is $u_1 = 0.5$. How long until the next reaction? Why is the waiting time exponential?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Inverse transform: $\tau = -\log(u_1)/a_0$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\tau = -\ln(0.5)/4 = 0.693/4 = 0.173$ h (10.4 min); $u_1 = 0.5$ gives the **median** waiting time. Each reaction happens with a constant probability per unit time ($a_j\,dt$) as long as the state does not change; a constant hazard means an exponential waiting time, and the first of several independent exponential events is exponential with the summed rate $a_0$.
+:::
+
+---
+
+**Q4.** You simulate 2000 cells with the SSA and compare the mean with the ODE. For which of these models should the two agree exactly (up to the Monte Carlo error): (a) birth–death mRNA, (b) the telegraph gene with protein, (c) an SIR epidemic, (d) dimerisation $2P \to D$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at the propensities: are they linear in the counts?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(a) and (b): all propensities are linear in the counts ($k$, $\delta m$, $k_\text{on}(1 - g)$, $k_m g$, ...), so the mean obeys the ODE exactly. (c) and (d) have propensities with products of counts ($\beta S I/N$, $c\,p(p - 1)/2$); the mean of a product is not the product of the means, so the ODE is only an approximation, good when all counts are large. In (c), outbreaks that die out early make the mean very different from the ODE.
+:::
+
+---
+
+**Q5.** What does this code print? It chooses the reaction in an SSA step.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+a <- c(2, 0, 3)                         # propensities of reactions 1, 2, 3
+a0 <- sum(a)
+for (u in c(0.3, 0.4, 0.5, 0.9))
+  cat(u, "->", findInterval(u * a0, cumsum(a)) + 1, "\n")
+# 0.3 -> 1
+# 0.4 -> 3
+# 0.5 -> 3
+# 0.9 -> 3
+```
+
+### Python
+
+```python
+import numpy as np
+
+a = np.array([2.0, 0.0, 3.0])           # propensities of reactions 1, 2, 3
+a0 = a.sum()
+for u in [0.3, 0.4, 0.5, 0.9]:
+    print(u, "->", np.searchsorted(np.cumsum(a), u * a0, side="right") + 1)
+# 0.3 -> 1
+# 0.4 -> 3
+# 0.5 -> 3
+# 0.9 -> 3
+```
+
+### Rust
+
+```rust
+// rust/examples/gillespie_q5.rs  —  cargo run --release --example gillespie_q5
+// Q5: which reaction does the discrete inverse transform pick?
+fn main() {
+    let a = [2.0, 0.0, 3.0]; // propensities of reactions 1, 2, 3
+    let a0: f64 = a.iter().sum();
+    let cum: Vec<f64> = a.iter().scan(0.0, |s, &x| { *s += x; Some(*s) }).collect();
+    for u in [0.3, 0.4, 0.5, 0.9] {
+        let j = cum.partition_point(|&c| c <= u * a0) + 1; // like findInterval + 1
+        println!("{} -> {}", u, j);
+    }
+}
+
+// Output:
+// 0.3 -> 1
+// 0.4 -> 3
+// 0.5 -> 3
+// 0.9 -> 3
+```
+
+:::
+
+::: {.callout-tip collapse="true" title="Hint"}
+The cumulative sums are $(2, 2, 5)$, and $u a_0 = 5u$. A value exactly on a boundary goes to the next piece.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+`0.3 -> 1`, `0.4 -> 3`, `0.5 -> 3`, `0.9 -> 3`. Reaction 1 owns $[0, 2)$, reaction 2 the empty piece $[2, 2)$, reaction 3 $[2, 5)$. $u a_0 = 2$ (for $u = 0.4$) is on the boundary and goes to reaction 3. A reaction with propensity 0 is never chosen, as it must be.
+:::
+
+---
+
+**Q6.** Gene A has mRNA mean 12 and variance 13; gene B has mean 12 and variance 250 (smFISH counts). What are the Fano factors, and what do they suggest about how each gene is transcribed? Would the conclusion change if the data were fluorescence intensities in arbitrary units?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Poisson: Fano factor 1. What happens to var/mean if every value is multiplied by $c$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$F_A = 13/12 = 1.08$, $F_B = 250/12 = 20.8$. Gene A is consistent with constitutive (Poisson) transcription: molecules made one at a time, independently. Gene B is much wider than Poisson, suggesting **bursts** of transcription (in the telegraph model, roughly bursts of about 20 mRNA). With intensities $c$ times the counts, the Fano factor is multiplied by $c$, so the comparison with 1 means nothing until the intensities are converted to molecule numbers.
+:::
+
+---
+
+**Q7.** You run the same SSA with seed 1 in R and in Python and get different trajectories and a slightly different mean (10.12 vs 9.99, each with SE 0.07). Is one of the programs wrong?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which generator does each language use? How far apart are the means in SEs?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Not on this evidence. R (Mersenne Twister), numpy (PCG64) and Rust (ChaCha12) produce different random streams from the same seed, so single trajectories always differ. Compare **statistics** with their standard errors: the difference 0.13 has SE $\sqrt{0.07^2 + 0.07^2} = 0.10$, so 1.3 SE: consistent. A bug would show as differences of many SEs, or as a disagreement with a known answer (Poisson, the ODE mean for linear propensities).
+:::
+
+---
+
+**Q8.** A student stores every event of a long SSA run of the birth–death model ($k = 10$, $\delta = 1$) in a table and reports the mean of the `m` column: 10.5. The correct mean is 10. What went wrong, and how should the mean be computed?
+
+::: {.callout-tip collapse="true" title="Hint"}
+In which states do events happen more often?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Events happen at rate $a_0 = 10 + m$, so states with many molecules produce more rows in the table: averaging over rows weights each state by how often it changes, not by how long it lasts. Fix: weight each state by its duration (the waiting time until the next event), or record the state at fixed, equally spaced times, as `ssa()` does with its `times` argument.
+:::
+
+---
+
+**Q9.** Tau-leaping with step $\tau = 2$ h gives some cells a **negative** number of mRNA molecules ($\delta = 1$ per hour). Why, and what are two ways to avoid it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How many degradations does one leap expect when $m = 2$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+In one leap the number of degradations is Poisson$(\delta m \tau) = $ Poisson$(2m)$, which does not know how many molecules exist: with $m = 2$ it expects 4 degradations. Fixes: a smaller $\tau$ (so that $\delta\tau \ll 1$: each propensity changes little within a leap), or exact SSA steps for species with few molecules (what adaptive tau-leaping codes do). Clipping at zero hides the problem and biases the distribution. Even without negatives, a large $\tau$ gives the wrong variance (20 instead of 10 at $\tau = 1$).
+:::
+
+---
+
+**Q10.** An Euler–Maruyama simulation of the chemical Langevin equation $dm = (k - \delta m)\,dt + \sqrt{k + \delta m}\,dW$ returns `NaN` for a gene with mean 0.5 molecules but works fine for mean 100. Explain.
+
+::: {.callout-tip collapse="true" title="Hint"}
+When is $k + \delta m$ negative?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The normal kicks can push $m$ below zero, and below $-k/\delta$ the square root is of a negative number: `NaN`, which then spreads through every later step. With mean 100 and sd 10 this essentially never happens; with mean 0.5 it happens in several percent of the runs. The Langevin equation replaces whole-number jumps by continuous noise, an approximation that holds only for large copy numbers. For small numbers, use the SSA.
+:::
+
+---
+
+**Q11.** An infection with $R_0 = \beta/\gamma = 3$ enters a large population with 2 infected people. What is the probability that it dies out without a large outbreak? What does the SIR ODE say?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Each initial case starts an independent chain that dies out with probability $1/R_0$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$(1/3)^2 = 1/9 = 0.11$ (simulation: 0.109 with SE 0.003). The ODE always predicts an epidemic with a peak of about 3000 infected in 10 000: it has no state "extinct", because $I$ only decays exponentially towards zero and never reaches it.
+:::

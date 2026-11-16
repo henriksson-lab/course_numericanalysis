@@ -1,0 +1,1288 @@
+---
+title: "Exercise: numerical integration"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- compute an integral with the **left Riemann**, **midpoint**, **trapezoid** and **Simpson** rules, by hand for a few points and in code as **composite** rules,
+- read the **order** of a rule off a log–log plot of error against the number of intervals, and recognise when a non-smooth integrand lowers it,
+- improve the trapezoid rule with **Richardson extrapolation** (**Romberg**), and write a short **adaptive** Simpson routine,
+- explain why `integrate` / `scipy.integrate.quad` can return a confident wrong answer, and fix it by **splitting** the interval, **transforming** it or **giving the scale**,
+- remove an infinite interval or an endpoint singularity by **substitution**,
+- compute an **AUC** from blood samples (linear and linear-up/log-down, extrapolated to infinity), a chromatography **peak area**, and the **normalising constant** of a posterior density.
+
+The by-hand part needs pen, paper and a pocket calculator (for `exp`, `ln` and square roots).
+
+## Background
+
+Every rule replaces the integral by a weighted sum of function values, $\int_a^b f(x)\,dx \approx \sum_i w_i f(x_i)$. With $n$ intervals of width $h = (b-a)/n$ and $f_i = f(a + ih)$:
+
+| rule | formula | error | order |
+|---|---|---|---|
+| left Riemann | $h\,(f_0 + f_1 + \dots + f_{n-1})$ | $\approx \tfrac{(b-a)h}{2} f'$ | 1 |
+| midpoint | $h \sum_i f(a + (i - \tfrac12) h)$ | $-\tfrac{(b-a)h^2}{24} f''$ | 2 |
+| trapezoid $T(h)$ | $h\,(\tfrac12 f_0 + f_1 + \dots + f_{n-1} + \tfrac12 f_n)$ | $\tfrac{(b-a)h^2}{12} f''$ | 2 |
+| Simpson ($n$ even) | $\tfrac{h}{3}(f_0 + 4f_1 + 2f_2 + 4f_3 + \dots + 4f_{n-1} + f_n)$ | $\tfrac{(b-a)h^4}{180} f''''$ | 4 |
+
+(The derivatives are evaluated at some unknown point in $[a, b]$.) A rule of order $p$ has error $\approx C h^p$: halving $h$ divides the error by $2^p$, and on a log–log plot of error against $n$ the slope is $-p$. The orders hold only if the derivative in the error term exists and is bounded.
+
+**Richardson extrapolation** (from *Numerical differentiation*): if $T(h) \approx I + Ch^2$, then $\big(4T(h/2) - T(h)\big)/3$ cancels the $h^2$ term. Repeating it column by column is **Romberg integration**. **Adaptive Simpson** compares Simpson on one panel ($S_1$) and on two half-panels ($S_2$) of each piece: $|S_2 - S_1|/15$ estimates the error of $S_2$; pieces that fail are split in two. **Gaussian quadrature** chooses the points as well: $n$ points integrate polynomials up to degree $2n-1$ exactly.
+
+**Libraries.** R's [`integrate`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/integrate.html) and Python's [`scipy.integrate.quad`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.quad.html) both call QUADPACK: a 21-point Gauss–Kronrod rule on $[a, b]$, then repeated bisection of the piece with the largest estimated error; infinite intervals are mapped to $(0, 1]$. They stop when the estimated error is below $\max(\text{abs.tol}, \text{rel.tol}\cdot|\text{value}|)$; R's defaults are `rel.tol = abs.tol` $\approx 1.2\times10^{-4}$, SciPy's `epsabs = epsrel` $= 1.49\times10^{-8}$. Rust's `quadrature` crate uses the double-exponential (tanh–sinh) rule, whose points crowd towards both ends of the interval; it takes a target absolute error and has no infinite limits. For data, NumPy has [`np.trapezoid`](https://numpy.org/doc/stable/reference/generated/numpy.trapezoid.html) and SciPy [`scipy.integrate.trapezoid`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.trapezoid.html) and [`simpson`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.simpson.html); base R has no trapezoid function (`pracma::trapz` exists), but it is one line.
+
+**Substitution.** $x = t/(1-t)$ maps $t \in [0, 1)$ to $x \in [0, \infty)$ with $dx = dt/(1-t)^2$. $x = u^2$ turns $\int_0^1 g(x)/\sqrt{x}\,dx$ into $\int_0^1 2g(u^2)\,du$.
+
+**The running example.** An oral dose of 500 mg; one-compartment model with volume 50 L, absorption rate 1.5 /h and elimination rate 0.2 /h:
+$$C(t) = \frac{500}{50}\cdot\frac{1.5}{1.5 - 0.2}\left(e^{-0.2t} - e^{-1.5t}\right) \text{ mg/L}, \qquad \mathrm{AUC}_{0-6} = 32.6243601574044, \quad \mathrm{AUC}_{0-24} = 49.5252069010181, \quad \mathrm{AUC}_{0-\infty} = 50.$$
+The blood samples are $C(t)$ at 10 times, rounded to 2 decimals:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t_h  <- c(0, 0.5, 1, 2, 3, 4, 6, 8, 12, 24)                         # hours
+conc <- c(0, 4.99, 6.87, 7.16, 6.20, 5.16, 3.47, 2.33, 1.05, 0.09)  # mg/L
+auc_trap <- function(t, y) sum(diff(t) * (head(y, -1) + tail(y, -1)) / 2)
+auc_trap(t_h, conc)                       # trapezoid rule on data
+# [1] 51.6175
+model <- function(t) 500 / 50 * 1.5 / 1.3 * (exp(-0.2 * t) - exp(-1.5 * t))
+res <- integrate(model, 0, 24)            # adaptive quadrature on a function
+res$value
+# [1] 49.52521
+res$abs.error
+# [1] 1.034305e-07
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import quad
+
+t_h  = np.array([0, 0.5, 1, 2, 3, 4, 6, 8, 12, 24])                         # hours
+conc = np.array([0, 4.99, 6.87, 7.16, 6.20, 5.16, 3.47, 2.33, 1.05, 0.09])  # mg/L
+def auc_trap(t, y):
+    return np.sum(np.diff(t) * (y[:-1] + y[1:]) / 2)
+print(auc_trap(t_h, conc))                 # same as np.trapezoid(conc, t_h)
+# 51.61750000000001
+def model(t):
+    return 500 / 50 * 1.5 / 1.3 * (np.exp(-0.2 * t) - np.exp(-1.5 * t))
+value, abserr = quad(model, 0, 24)         # adaptive quadrature on a function
+print(value)
+# 49.52520690101807
+print(abserr)
+# 1.0343052501277095e-07
+```
+
+### Rust
+
+```rust
+// rust/examples/quadrature_background.rs  —  cargo run --example quadrature_background
+// Background: trapezoid rule on the blood samples (hand-written) and the
+// quadrature crate's integrate (double-exponential rule) on the model.
+fn auc_trap(t: &[f64], y: &[f64]) -> f64 {
+    (1..t.len()).map(|i| (t[i] - t[i - 1]) * (y[i - 1] + y[i]) / 2.0).sum()
+}
+fn model(t: f64) -> f64 {
+    500.0 / 50.0 * 1.5 / 1.3 * ((-0.2 * t).exp() - (-1.5 * t).exp())
+}
+
+fn main() {
+    let t_h = [0.0, 0.5, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 24.0]; // hours
+    let conc = [0.0, 4.99, 6.87, 7.16, 6.20, 5.16, 3.47, 2.33, 1.05, 0.09]; // mg/L
+    println!("{}", auc_trap(&t_h, &conc));
+    let out = quadrature::integrate(model, 0.0, 24.0, 1e-10); // target absolute error
+    println!("{}", out.integral);
+    println!("{:e}", out.error_estimate);
+}
+
+// Output:
+// 51.6175
+// 49.525206901018045
+// 8.958167541095463e-12
+```
+
+:::
+
+## By hand
+
+**B1. Four rules on a cubic.** Take $\int_0^2 x^3\,dx = 4$.
+(a) Compute the left Riemann, midpoint and trapezoid approximations with $h = 1$ (two intervals), and Simpson's rule with the three points $0, 1, 2$.
+(b) Which rule is exact? Why is that not a coincidence?
+(c) Compute the trapezoid rule with $h = 0.5$. By what factor did the error shrink? Which order does that suggest?
+(d) Combine the two trapezoid values by Richardson extrapolation, $(4T(h/2) - T(h))/3$. Compare with (a).
+
+**B2. AUC from seven blood samples.** A sparser version of the data: $t = 0, 1, 2, 4, 8, 12, 24$ h, $C = 0, 6.87, 7.16, 5.16, 2.33, 1.05, 0.09$ mg/L.
+(a) Compute $\mathrm{AUC}_{0-24}$ with the linear trapezoid rule (interval by interval).
+(b) For the falling intervals, use the log-down rule $\Delta t\,(C_1 - C_2)/\ln(C_1/C_2)$ instead. Useful values: $\ln(7.16/5.16) = 0.3276$, $\ln(5.16/2.33) = 0.7951$, $\ln(2.33/1.05) = 0.7971$, $\ln(1.05/0.09) = 2.4567$.
+(c) Estimate the terminal slope $\lambda_z$ from the last two samples and the extrapolated area $C_\text{last}/\lambda_z$. What fraction of $\mathrm{AUC}_{0-\infty}$ is extrapolated?
+(d) The true area from 12 h to 24 h is 4.76. Which interval contributes most of the error of the linear rule, and why is the log-down rule so much better there? The true area from 0 to 1 h is 4.48: what do both rules do there, and what would you change in the sampling plan?
+
+**B3. Order from a table.** For $\mathrm{AUC}_{0-6}$ the absolute errors are:
+
+| $n$ | 4 | 8 | 16 |
+|---|---|---|---|
+| trapezoid | 2.70 | 0.719 | 0.183 |
+| Simpson | 0.664 | 0.0592 | 0.00411 |
+
+(a) Compute the ratios of consecutive errors and the order of each rule.
+(b) Assuming error $= C h^p$ from $n = 16$ on, how many intervals does each rule need for an error of $10^{-6}$?
+
+**B4. Two-point Gauss.** The 2-point Gauss–Legendre rule on $[-1, 1]$ is $f(-1/\sqrt3) + f(1/\sqrt3)$.
+(a) Check that it is exact for $1, x, x^2, x^3$, and find its result for $x^4$ (exact: $2/5$).
+(b) Map it to $[0, 2]$ (points $1 \pm 1/\sqrt3$, weights $1$) and apply it to $\int_0^2 x^3\,dx$. Compare the cost with B1(a).
+
+**B5. Why `integrate(dnorm, 0, 20000)` returns 0.** The 21-point Gauss–Kronrod rule on $[-1, 1]$ has its two outermost points at $\pm 0.99566$ and $\pm 0.97391$.
+(a) Map them to $[0, 20000]$ with $x = 10000(1 + s)$. Where are the two points closest to 0? Estimate $\log_{10}$ of `dnorm` at the closest one ($\text{dnorm}(x) = e^{-x^2/2}/\sqrt{2\pi}$). What does a double make of it?
+(b) Same for $[0, 20]$.
+(c) For which upper limits $b$ does the closest point lie within 5 standard deviations of 0? Predict whether `integrate(dnorm, 0, 2000)` and `integrate(dnorm, 0, 5000)` work. (C5 checks.)
+
+**B6. Substitution.**
+(a) Write $\int_0^\infty e^{-x}\,dx$ as an integral over $t \in [0, 1)$ with $x = t/(1-t)$. Evaluate the new integrand at $t = 0, 0.5, 0.9$ and find its limit as $t \to 1$.
+(b) The Jeffreys prior for a proportion is $\propto 1/\sqrt{x(1-x)}$. Show with $x = \sin^2\theta$ that its normalising constant $\int_0^1 dx/\sqrt{x(1-x)}$ is $\pi$.
+(c) Turn $\int_0^1 e^{-x}/\sqrt{x}\,dx$ into a smooth integral with $x = u^2$, and apply the trapezoid rule with $h = 0.5$ to the new integral. (Exact: $1.49365$.) Why could you not apply the trapezoid rule to the original?
+
+## In code
+
+**C1. (Composite rules and their order)** Write functions `left`, `mid`, `trap` and `simpson(f, a, b, n)` for the composite rules. Apply them to $\mathrm{AUC}_{0-6}$ of the model for $n = 2, 4, \dots, 1024$, plot the absolute errors against $n$ on log–log axes, and fit the slopes for $n \ge 32$. Do they match the table in the Background and your answers to B3?
+
+**C2. (Order needs smoothness)**
+(a) Repeat C1 for $\int_0^1 \sqrt{x}\,dx = 2/3$ with the trapezoid and Simpson rules. What slopes do you get?
+(b) $\int_0^1 e^{-x}/\sqrt{x}\,dx = \sqrt{\pi}\,\mathrm{erf}(1)$. What does the trapezoid rule return? Compute the midpoint rule for $n = 16, 256, 4096$.
+(c) Use the substitution of B6(c) and Simpson's rule with $n = 2, 4, 8, 16$. Compare with `integrate` (Python: `quad`; Rust: `quadrature::integrate`) on the original integrand.
+
+**C3. (Romberg)** Write `romberg(f, a, b, k)` that fills the $k \times k$ table (row $i$: trapezoid with $2^{i-1}$ intervals, then Richardson column by column).
+(a) For $\mathrm{AUC}_{0-6}$, print the error of the last diagonal entry for $k = 4, \dots, 9$, with the number of function values used. Compare with Simpson and 1024 intervals from C1.
+(b) Apply it to $\sqrt{x}$ on $[0, 1]$. Why does extrapolation hardly help?
+
+**C4. (Adaptive Simpson)** Write the adaptive Simpson routine from the slides.
+(a) Integrate the model from 0 to 24 h with tolerances $10^{-4}, 10^{-6}, 10^{-8}$; count the function evaluations and print the errors. How many points would uniform Simpson need for the same accuracy (use C1's order)?
+(b) A chromatogram: one peak at 340 s with $\sigma = 3$ s and height 1000, run from 0 to 600 s: `peak(t) = 1000 * exp(-(t - 340)^2 / (2 * 3^2))`. Its area is $1000 \cdot 3\sqrt{2\pi}$. What does your adaptive routine return, and why?
+(c) Fix it by starting from 60 pieces of 10 s.
+
+**C5. (Inside a library routine)**
+(a) Wrap `dnorm` (Python: `scipy.stats.norm.pdf`; Rust: `statrs`'s `Normal`) in a function that records every $x$ it is called with, and integrate from 0 to 20000. How many points are used, and where are the smallest ones? Compare with B5.
+(b) Integrate `dnorm` from 0 to $b$ for $b = 20, 200, 2000, 5000, 20000, \infty$, printing the value and the error estimate.
+(c) Fix $[0, 20000]$ by splitting at 10. (Python's `quad` has an argument `points` for this.)
+(d) Integrate the chromatogram of C4 over a one-hour run, $[0, 3600]$ s, and over the peak $\pm 10\sigma$.
+
+**C6. (Peak area versus peak height)** A Gaussian peak with $\sigma = 3$ s and height 1000 centred at 300 s is sampled every $h$ seconds from 240 s on, with a sampling offset (phase) between 0 and $h$. For $h = 9, 6, 4.5, 3, 1.5$ s and 40 offsets each, compute the trapezoid area and the largest sample (the measured height). Report the worst relative area error and the worst height error. How many points across the peak (about $4\sigma$ wide) do you need for 1 % area? For 5 % height?
+
+**C7. (AUC from the blood samples)** Use the 10 samples from the Background.
+(a) For each interval, compute the error of the linear trapezoid and of the linear-up/log-down rule against the exact area of the model on that interval (`integrate`). Where are the errors?
+(b) Compute $\mathrm{AUC}_{0-24}$ with both rules, and $\mathrm{AUC}_{0-\infty}$ by adding $C_\text{last}/\lambda_z$, with $\lambda_z$ from a straight-line fit to $\log C$ over the last three samples (R: [`lm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html); Python: [`np.polyfit`](https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html)).
+(c) The model route: integrate the model from 0 to $\infty$ and compare with Dose$/(V k_e) = 50$.
+
+**C8. (Normalising a posterior)** For the zero-truncated Poisson UMI data of *Newton and secant methods* (100 cells), the log-likelihood is $\ell(\lambda) = 173\log\lambda - 100\lambda - 100\log(1 - e^{-\lambda})$, with maximum at $\hat\lambda = 1.2184695258301268$ and standard error 0.1325. With a flat prior, the posterior density is $e^{\ell(\lambda)}/Z$.
+(a) Integrate $e^{\ell(\lambda)}$ over $(0, b)$ for $b = 10, 100, \infty$. Do the answers agree?
+(b) Integrate $g(\lambda) = e^{\ell(\lambda) - \ell(\hat\lambda)}$ instead. Report $Z_g$, $\log Z = \ell(\hat\lambda) + \log Z_g$, and the posterior mean $\int \lambda\,g(\lambda)\,d\lambda / Z_g$.
+(c) With 10 000 cells (every count multiplied by 100: $\ell$ times 100, same $\hat\lambda$, standard error 10 times smaller), integrate the scaled $g$ over $(0, b)$ for $b = 10, 100, \infty$, and over $\hat\lambda \pm 10$ standard errors. Which answers can you trust?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint B1–B4 — the rules by hand"}
+With $h = 1$ on $[0, 2]$: $f_0 = 0$, $f_1 = 1$, $f_2 = 8$; midpoints $0.5^3 = 0.125$ and $1.5^3 = 3.375$. Trapezoid: $h(\tfrac12 f_0 + f_1 + \tfrac12 f_2)$. Simpson: $\tfrac{h}{3}(f_0 + 4f_1 + f_2)$. For the order, divide each error by the next (step halved): 4 means order 2, 16 means order 4. For a target error, solve $e_{16}\,(16/n)^p = 10^{-6}$ for $n$. In B4, $(1/\sqrt3)^2 = 1/3$ and $(1/\sqrt3)^4 = 1/9$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint B2 — linear-up/log-down"}
+A falling interval uses $\Delta t\,(C_1 - C_2)/\ln(C_1/C_2)$; this is the exact area under an exponential through the two samples. Rising intervals (0→1, 1→2) keep the trapezoid. $\lambda_z = \ln(C_{12}/C_{24})/12$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint B5–B6 — mapping points and substituting"}
+B5: a point $s$ near $-1$ maps to $x = 10000(1 + s)$, so $s = -0.99566$ gives $x = 10000 \cdot 0.00434$. $\log_{10} e^{-y} = -0.4343\,y$. The smallest positive double is about $5\times10^{-324}$. B6: replace $x$ and $dx$; for (a) $dx = dt/(1-t)^2$; for (b) $dx = 2\sin\theta\cos\theta\,d\theta$, $1 - \sin^2\theta = \cos^2\theta$; for (c) $dx = 2u\,du$ and $\sqrt{x} = u$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint C1–C3 — composite rules, slopes, Romberg"}
+`seq(a, b, length.out = n + 1)` (Python: `np.linspace(a, b, n + 1)`) gives the grid. Simpson weights: `c(1, rep(c(4, 2), n/2 - 1), 4, 1)` (Python: `np.r_[1, np.tile([4, 2], n//2 - 1), 4, 1]`). Loop over rules with [`sapply`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/lapply.html) over a list of functions. Slope: `coef(lm(log(e) ~ log(n)))[2]` (Python: `np.polyfit(np.log(n), np.log(e), 1)[0]`). Plot with [`matplot`](https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/matplot.html) and `log = "xy"` (Python: `plt.loglog`). Romberg: `R[i, j] <- R[i, j-1] + (R[i, j-1] - R[i-1, j-1]) / (4^(j-1) - 1)`. SciPy 1.15 removed its `romberg` function; [`scipy.integrate.romb`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.romb.html) works on $2^k + 1$ equally spaced samples. In C2(b), [`pnorm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Normal.html) gives $\mathrm{erf}(1) = 2\,\Phi(\sqrt2) - 1$; Python has [`scipy.special.erf`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.erf.html), Rust `statrs::function::erf::erf`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint C4–C5 — counting and recording calls"}
+A function that changes a variable outside itself: in R `calls <<- calls + length(t)` or `seen <<- c(seen, x)` (the `<<-` assigns in the enclosing environment); in Python a `global` counter or `seen.append(x)` on a list; in Rust a [`Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html) or `RefCell` captured by the closure. R's `integrate` passes a whole vector of points at once, so count `length(t)`, not calls. The adaptive routine is recursive: it calls itself on the two halves.
+:::
+
+::: {.callout-tip collapse="true" title="Hint C6–C8 — biology tasks"}
+C6: for each offset `off`, `x <- seq(240 + off, 360, by = h)`; area is the trapezoid on `peak(x)`; height is `max(peak(x))`. C7: [`ifelse`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/ifelse.html)`(y2 < y1 & y2 > 0, logdown, linear)` picks the rule per interval; the slope of `lm(log(conc[8:10]) ~ t_h[8:10])` is $-\lambda_z$. C8: compute $\ell$ with [`log1p`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Log.html)`(-exp(-l))` (Python `np.log1p`), and remember the default absolute tolerance of `integrate` ($1.2\times10^{-4}$) and `quad` ($1.5\times10^{-8}$).
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution — By hand"}
+
+**B1.**
+(a) Left Riemann: $1\cdot(0 + 1) = 1$. Midpoint: $1\cdot(0.125 + 3.375) = 3.5$. Trapezoid: $1\cdot(0 + 1 + 4) = 5$. Simpson: $\tfrac13(0 + 4 + 8) = 4$.
+(b) Simpson is exact. It integrates parabolas exactly by construction, and the cubic term $(x - 1)^3$ is odd around the middle point, so it integrates to 0 and Simpson's symmetric weights also give it 0. Simpson is exact for every cubic.
+(c) $T(0.5) = 0.5\,(0 + 0.125 + 1 + 3.375 + 4) = 4.25$. The error went from 1 to 0.25, a factor 4 $= 2^2$: order 2.
+(d) $(4 \cdot 4.25 - 5)/3 = 12/3 = 4$, exact. Richardson on two trapezoids with $h$ and $h/2$ is Simpson with $h/2$; here it reproduces Simpson's exact answer.
+
+**B2.**
+(a) $\tfrac12(0 + 6.87) = 3.435$; $\tfrac12(6.87 + 7.16) = 7.015$; $1\cdot(7.16 + 5.16) = 12.32$; $2\,(5.16 + 2.33) = 14.98$; $2\,(2.33 + 1.05) = 6.76$; $6\,(1.05 + 0.09) = 6.84$. Total $51.35$ mg·h/L.
+(b) $2 \cdot 2.00/0.3276 = 12.21$; $4 \cdot 2.83/0.7951 = 14.24$; $4 \cdot 1.28/0.7971 = 6.42$; $12 \cdot 0.96/2.4567 = 4.69$. With the two rising intervals: $3.435 + 7.015 + 12.21 + 14.24 + 6.42 + 4.69 = 48.01$.
+(c) $\lambda_z = 2.4567/12 = 0.2047$ /h (true 0.2), $C_\text{last}/\lambda_z = 0.09/0.2047 = 0.44$. $\mathrm{AUC}_{0-\infty} \approx 51.79$ (linear) or $48.45$ (log-down); the extrapolated part is under 1 %.
+(d) The 12–24 h interval: linear 6.84 against the true 4.76, an error of $+2.08$, almost all of the total error ($51.35 - 49.53 = 1.82$). The decline is exponential, strongly convex over a 12 h gap, and the straight line cuts far above it; the log-down rule assumes an exponential and gets 4.69. From 0 to 1 h both rules give 3.435 against 4.48: the absorption phase is concave and the chord lies below it. Remaining error of the log-down total ($48.01 - 49.53 = -1.5$) is mostly there. Add samples in the first 2 h (0.25, 0.5, 1.5 h) and one between 12 and 24 h.
+
+**B3.**
+(a) Trapezoid: $2.70/0.719 = 3.76$, $0.719/0.183 = 3.93$, approaching $4 = 2^2$: order 2. Simpson: $0.664/0.0592 = 11.2$, $0.0592/0.00411 = 14.4$, approaching $16 = 2^4$: order 4.
+(b) Trapezoid: $0.183\,(16/n)^2 = 10^{-6}$ gives $n = 16\sqrt{1.83\times10^5} \approx 6800$ intervals. Simpson: $0.00411\,(16/n)^4 = 10^{-6}$ gives $n = 16 \cdot 4110^{1/4} \approx 16 \cdot 8.0 = 128$. (C1: Simpson with 128 intervals has error $1.0\times10^{-6}$.)
+
+**B4.**
+(a) $f = 1$: $1 + 1 = 2 = \int_{-1}^1 1$. $f = x$: $-\tfrac{1}{\sqrt3} + \tfrac1{\sqrt3} = 0$. $f = x^2$: $\tfrac13 + \tfrac13 = \tfrac23$. $f = x^3$: $0$ by symmetry. $f = x^4$: $\tfrac19 + \tfrac19 = \tfrac29 \ne \tfrac25$. Exact up to degree $3 = 2n - 1$.
+(b) $(1 + 0.57735)^3 + (1 - 0.57735)^3 = 3.92450 + 0.07550 = 4.0000$: exact with **2** function values; Simpson needed 3.
+
+**B5.**
+(a) $10000 \cdot (1 - 0.99566) = 43.4$ and $10000 \cdot (1 - 0.97391) = 260.9$. $\text{dnorm}(43.4) = e^{-941.8}/2.507$, so $\log_{10} \approx -0.4343 \cdot 941.8 - 0.4 \approx -409$. That is below the smallest double ($\approx 10^{-323.3}$, *How computers store numbers*), so it is exactly 0. The other 20 points are even further out: all 21 values are 0.
+(b) On $[0, 20]$ the points are at $10(1 - 0.99566) = 0.0434$, $0.261$, … right where the density is large.
+(c) The closest point is at $b \cdot 0.00217$; it is within 5 of 0 when $b \le 5/0.00217 \approx 2300$. So $b = 2000$ should work and $b = 5000$ should not: the closest point would be at 10.9, where dnorm is $\approx 10^{-26}$. (C5: `integrate` returns 0.5 for 2000 and $2.3\times10^{-6}$ for 5000.)
+
+**B6.**
+(a) $\int_0^1 \dfrac{e^{-t/(1-t)}}{(1-t)^2}\,dt$. At $t = 0$: 1. At $t = 0.5$ ($x = 1$): $e^{-1}/0.25 = 1.47$. At $t = 0.9$ ($x = 9$): $e^{-9}/0.01 = 0.0123$. As $t \to 1$ the exponential beats $1/(1-t)^2$, so the integrand goes to 0: a smooth function on a finite interval.
+(b) $\sqrt{x(1-x)} = \sqrt{\sin^2\theta\cos^2\theta} = \sin\theta\cos\theta$ and $dx = 2\sin\theta\cos\theta\,d\theta$, so the integrand becomes $2\,d\theta$ on $[0, \pi/2]$: $2 \cdot \pi/2 = \pi$.
+(c) $x = u^2$, $dx = 2u\,du$, $\sqrt{x} = u$: $\int_0^1 2e^{-u^2}\,du$. Trapezoid, $h = 0.5$: $0.5\,(\tfrac12\cdot 2 + 2e^{-0.25} + \tfrac12\cdot 2e^{-1}) = 0.5\,(1 + 1.5576 + 0.3679) = 1.4627$, 2 % low. The original integrand is infinite at $x = 0$, and the trapezoid rule needs $f(0)$.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C1"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+model <- function(t) 500 / 50 * 1.5 / 1.3 * (exp(-0.2 * t) - exp(-1.5 * t))
+exact <- 32.6243601574044                 # AUC 0-6 h
+left <- function(f, a, b, n) { h <- (b - a) / n;  h * sum(f(a + (0:(n - 1)) * h)) }
+mid  <- function(f, a, b, n) { h <- (b - a) / n;  h * sum(f(a + (1:n - 0.5) * h)) }
+trap <- function(f, a, b, n) {
+  x <- seq(a, b, length.out = n + 1);  y <- f(x);  h <- (b - a) / n
+  h * (sum(y) - (y[1] + y[n + 1]) / 2)
+}
+simpson <- function(f, a, b, n) {
+  x <- seq(a, b, length.out = n + 1);  h <- (b - a) / n
+  w <- c(1, rep(c(4, 2), n / 2 - 1), 4, 1);  h / 3 * sum(w * f(x))
+}
+rules <- list(left = left, mid = mid, trap = trap, simpson = simpson)
+n <- 2^(1:10)
+E <- sapply(rules, function(r) sapply(n, function(k) abs(r(model, 0, 6, k) - exact)))
+rownames(E) <- n
+signif(E[c(2, 3, 4, 10), ], 3)                     # n = 4, 8, 16, 1024
+#        left      mid     trap  simpson
+# 4    5.3000 1.26e+00 2.70e+00 6.64e-01
+# 8    2.0200 3.53e-01 7.19e-01 5.92e-02
+# 16   0.8340 9.10e-02 1.83e-01 4.11e-03
+# 1024 0.0102 2.24e-05 4.49e-05 2.55e-10
+big <- n >= 32                                     # fit the slope where h is small
+sapply(1:4, function(j) coef(lm(log(E[big, j]) ~ log(n[big])))[[2]])
+# [1] -1.034325 -1.999395 -1.999655 -3.997748
+matplot(n, E, log = "xy", type = "b", pch = 19, ylab = "|error|")
+```
+
+### Python
+
+```python
+import numpy as np
+
+def model(t):
+    return 500 / 50 * 1.5 / 1.3 * (np.exp(-0.2 * t) - np.exp(-1.5 * t))
+exact = 32.6243601574044                   # AUC 0-6 h
+def left(f, a, b, n):
+    h = (b - a) / n
+    return h * np.sum(f(a + np.arange(n) * h))
+def mid(f, a, b, n):
+    h = (b - a) / n
+    return h * np.sum(f(a + (np.arange(1, n + 1) - 0.5) * h))
+def trap(f, a, b, n):
+    x = np.linspace(a, b, n + 1); y = f(x); h = (b - a) / n
+    return h * (np.sum(y) - (y[0] + y[-1]) / 2)
+def simpson(f, a, b, n):
+    x = np.linspace(a, b, n + 1); h = (b - a) / n
+    w = np.r_[1, np.tile([4, 2], n // 2 - 1), 4, 1]
+    return h / 3 * np.sum(w * f(x))
+
+rules = [left, mid, trap, simpson]
+n = 2 ** np.arange(1, 11)
+E = np.array([[abs(r(model, 0, 6, k) - exact) for r in rules] for k in n])
+for k, row in zip(n, E):
+    if k in (4, 8, 16, 1024):
+        print(k, " ".join(f"{e:.3g}" for e in row))
+# 4 5.3 1.26 2.7 0.664
+# 8 2.02 0.353 0.719 0.0592
+# 16 0.834 0.091 0.183 0.00411
+# 1024 0.0102 2.24e-05 4.49e-05 2.55e-10
+big = n >= 32                              # fit the slope where h is small
+print(np.array([np.polyfit(np.log(n[big]), np.log(E[big, j]), 1)[0] for j in range(4)]))
+# [-1.03432524 -1.99939526 -1.99965454 -3.99774818]
+# import matplotlib.pyplot as plt; plt.loglog(n, E, "o-"); plt.show()
+```
+
+### Rust
+
+```rust
+// rust/examples/quadrature_c1.rs  —  cargo run --example quadrature_c1
+// C1: composite left Riemann, midpoint, trapezoid and Simpson rules on the
+// AUC 0-6 h of the drug model; errors and the order (slope on log-log axes).
+fn model(t: f64) -> f64 {
+    500.0 / 50.0 * 1.5 / 1.3 * ((-0.2 * t).exp() - (-1.5 * t).exp())
+}
+fn left(f: fn(f64) -> f64, a: f64, b: f64, n: usize) -> f64 {
+    let h = (b - a) / n as f64;
+    h * (0..n).map(|i| f(a + i as f64 * h)).sum::<f64>()
+}
+fn mid(f: fn(f64) -> f64, a: f64, b: f64, n: usize) -> f64 {
+    let h = (b - a) / n as f64;
+    h * (0..n).map(|i| f(a + (i as f64 + 0.5) * h)).sum::<f64>()
+}
+fn trap(f: fn(f64) -> f64, a: f64, b: f64, n: usize) -> f64 {
+    let h = (b - a) / n as f64;
+    let inner: f64 = (1..n).map(|i| f(a + i as f64 * h)).sum();
+    h * (inner + (f(a) + f(b)) / 2.0)
+}
+fn simpson(f: fn(f64) -> f64, a: f64, b: f64, n: usize) -> f64 {
+    let h = (b - a) / n as f64;
+    let s: f64 = (0..=n)
+        .map(|i| {
+            let w = if i == 0 || i == n { 1.0 } else if i % 2 == 1 { 4.0 } else { 2.0 };
+            w * f(a + i as f64 * h)
+        })
+        .sum();
+    h / 3.0 * s
+}
+// slope of log(e) against log(n) by least squares
+fn slope(n: &[f64], e: &[f64]) -> f64 {
+    let x: Vec<f64> = n.iter().map(|v| v.ln()).collect();
+    let y: Vec<f64> = e.iter().map(|v| v.ln()).collect();
+    let (mx, my) = (x.iter().sum::<f64>() / x.len() as f64, y.iter().sum::<f64>() / y.len() as f64);
+    let sxy: f64 = x.iter().zip(&y).map(|(a, b)| (a - mx) * (b - my)).sum();
+    let sxx: f64 = x.iter().map(|a| (a - mx).powi(2)).sum();
+    sxy / sxx
+}
+
+fn main() {
+    let exact = 32.6243601574044; // AUC 0-6 h
+    let rules: [fn(fn(f64) -> f64, f64, f64, usize) -> f64; 4] = [left, mid, trap, simpson];
+    let ns: Vec<usize> = (1..=10).map(|k| 1usize << k).collect(); // 2, 4, ..., 1024
+    let err = |r: usize, n: usize| (rules[r](model, 0.0, 6.0, n) - exact).abs();
+    for &n in &[4, 8, 16, 1024] {
+        let row: Vec<String> = (0..4).map(|r| format!("{:.3e}", err(r, n))).collect();
+        println!("{} {}", n, row.join(" "));
+    }
+    let big: Vec<usize> = ns.iter().copied().filter(|&n| n >= 32).collect();
+    let nf: Vec<f64> = big.iter().map(|&n| n as f64).collect();
+    let slopes: Vec<String> = (0..4)
+        .map(|r| format!("{:.4}", slope(&nf, &big.iter().map(|&n| err(r, n)).collect::<Vec<_>>())))
+        .collect();
+    println!("slopes: {}", slopes.join(" "));
+}
+
+// Output:
+// 4 5.304e0 1.260e0 2.698e0 6.643e-1
+// 8 2.022e0 3.533e-1 7.190e-1 5.923e-2
+// 16 8.342e-1 9.102e-2 1.828e-1 4.115e-3
+// 1024 1.022e-2 2.245e-5 4.490e-5 2.546e-10
+// slopes: -1.0343 -1.9994 -1.9997 -3.9977
+```
+
+:::
+
+Slopes $-1$, $-2$, $-2$, $-4$: the orders of the table. The errors at $n = 4, 8, 16$ are those of B3. Midpoint errors are about half the trapezoid errors (and of opposite sign, not visible in the absolute values): the error constants are $-1/24$ and $1/12$. For $n \le 16$ the ratios are below their limits because $h$ is not yet small compared with the absorption time scale ($1/1.5$ h).
+:::
+
+::: {.callout-note collapse="true" title="Solution — C2"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+trap <- function(f, a, b, n) {
+  x <- seq(a, b, length.out = n + 1);  y <- f(x);  h <- (b - a) / n
+  h * (sum(y) - (y[1] + y[n + 1]) / 2)
+}
+simpson <- function(f, a, b, n) {
+  x <- seq(a, b, length.out = n + 1);  h <- (b - a) / n
+  w <- c(1, rep(c(4, 2), n / 2 - 1), 4, 1);  h / 3 * sum(w * f(x))
+}
+mid <- function(f, a, b, n) { h <- (b - a) / n;  h * sum(f(a + (1:n - 0.5) * h)) }
+# (a) sqrt(x) on [0, 1], exact 2/3
+n <- 2^(4:10)
+e_t <- sapply(n, function(k) abs(trap(sqrt, 0, 1, k) - 2/3))
+e_s <- sapply(n, function(k) abs(simpson(sqrt, 0, 1, k) - 2/3))
+c(trap = coef(lm(log(e_t) ~ log(n)))[[2]], simpson = coef(lm(log(e_s) ~ log(n)))[[2]])
+#      trap   simpson 
+# -1.489567 -1.499996 
+# (b) exp(-x) / sqrt(x) on (0, 1]
+f <- function(x) exp(-x) / sqrt(x)
+exact <- sqrt(pi) * (2 * pnorm(sqrt(2)) - 1)     # sqrt(pi) * erf(1)
+print(exact, digits = 10)
+# [1] 1.493648266
+trap(f, 0, 1, 16)
+# [1] NaN
+sapply(c(16, 256, 4096), function(k) mid(f, 0, 1, k)) - exact
+# [1] -0.152078159 -0.037820672 -0.009451772
+# (c) substitute x = u^2: integrand 2 exp(-u^2), smooth
+g <- function(u) 2 * exp(-u^2)
+sapply(c(2, 4, 8, 16), function(k) simpson(g, 0, 1, k)) - exact
+# [1] 7.125922e-04 6.249396e-05 3.975430e-06 2.492466e-07
+integrate(f, 0, 1)
+# 1.493648 with absolute error < 9.4e-06
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import quad
+from scipy.special import erf
+
+def trap(f, a, b, n):
+    x = np.linspace(a, b, n + 1); y = f(x); h = (b - a) / n
+    return h * (np.sum(y) - (y[0] + y[-1]) / 2)
+def simpson(f, a, b, n):
+    x = np.linspace(a, b, n + 1); h = (b - a) / n
+    w = np.r_[1, np.tile([4, 2], n // 2 - 1), 4, 1]
+    return h / 3 * np.sum(w * f(x))
+def mid(f, a, b, n):
+    h = (b - a) / n
+    return h * np.sum(f(a + (np.arange(1, n + 1) - 0.5) * h))
+# (a) sqrt(x) on [0, 1], exact 2/3
+n = 2 ** np.arange(4, 11)
+e_t = [abs(trap(np.sqrt, 0, 1, k) - 2/3) for k in n]
+e_s = [abs(simpson(np.sqrt, 0, 1, k) - 2/3) for k in n]
+print(np.polyfit(np.log(n), np.log(e_t), 1)[0], np.polyfit(np.log(n), np.log(e_s), 1)[0])
+# -1.4895671344397983 -1.4999956473170202
+# (b) exp(-x) / sqrt(x) on (0, 1]
+f = lambda x: np.exp(-x) / np.sqrt(x)
+exact = np.sqrt(np.pi) * erf(1)
+print(exact)
+# 1.4936482656248538
+with np.errstate(divide="ignore", invalid="ignore"):
+    print(trap(f, 0, 1, 16))               # f(0) = inf, and inf - inf = nan
+# nan
+print(np.array([mid(f, 0, 1, k) - exact for k in (16, 256, 4096)]))
+# [-0.15207816 -0.03782067 -0.00945177]
+# (c) substitute x = u^2: integrand 2 exp(-u^2), smooth
+g = lambda u: 2 * np.exp(-u**2)
+print(np.array([simpson(g, 0, 1, k) - exact for k in (2, 4, 8, 16)]))
+# [7.12592194e-04 6.24939571e-05 3.97543008e-06 2.49246607e-07]
+print(quad(f, 0, 1))
+# (1.4936482656248504, 4.0730441241976223e-10)
+```
+
+### Rust
+
+```rust
+// rust/examples/quadrature_c2.rs  —  cargo run --example quadrature_c2
+// C2: order drops for sqrt(x); exp(-x)/sqrt(x) by the midpoint rule, by
+// substitution x = u^2, and by the quadrature crate.
+fn trap(f: impl Fn(f64) -> f64, a: f64, b: f64, n: usize) -> f64 {
+    let h = (b - a) / n as f64;
+    let inner: f64 = (1..n).map(|i| f(a + i as f64 * h)).sum();
+    h * (inner + (f(a) + f(b)) / 2.0)
+}
+fn simpson(f: impl Fn(f64) -> f64, a: f64, b: f64, n: usize) -> f64 {
+    let h = (b - a) / n as f64;
+    let s: f64 = (0..=n)
+        .map(|i| {
+            let w = if i == 0 || i == n { 1.0 } else if i % 2 == 1 { 4.0 } else { 2.0 };
+            w * f(a + i as f64 * h)
+        })
+        .sum();
+    h / 3.0 * s
+}
+fn mid(f: impl Fn(f64) -> f64, a: f64, b: f64, n: usize) -> f64 {
+    let h = (b - a) / n as f64;
+    h * (0..n).map(|i| f(a + (i as f64 + 0.5) * h)).sum::<f64>()
+}
+fn slope(n: &[f64], e: &[f64]) -> f64 {
+    let x: Vec<f64> = n.iter().map(|v| v.ln()).collect();
+    let y: Vec<f64> = e.iter().map(|v| v.ln()).collect();
+    let (mx, my) = (x.iter().sum::<f64>() / x.len() as f64, y.iter().sum::<f64>() / y.len() as f64);
+    let sxy: f64 = x.iter().zip(&y).map(|(a, b)| (a - mx) * (b - my)).sum();
+    sxy / x.iter().map(|a| (a - mx).powi(2)).sum::<f64>()
+}
+
+fn main() {
+    // (a) sqrt(x) on [0, 1], exact 2/3
+    let ns: Vec<usize> = (4..=10).map(|k| 1usize << k).collect();
+    let nf: Vec<f64> = ns.iter().map(|&n| n as f64).collect();
+    let e_t: Vec<f64> = ns.iter().map(|&n| (trap(f64::sqrt, 0.0, 1.0, n) - 2.0 / 3.0).abs()).collect();
+    let e_s: Vec<f64> = ns.iter().map(|&n| (simpson(f64::sqrt, 0.0, 1.0, n) - 2.0 / 3.0).abs()).collect();
+    println!("{} {}", slope(&nf, &e_t), slope(&nf, &e_s));
+    // (b) exp(-x) / sqrt(x) on (0, 1]; exact = sqrt(pi) erf(1)
+    let f = |x: f64| (-x).exp() / x.sqrt();
+    let exact = std::f64::consts::PI.sqrt() * statrs::function::erf::erf(1.0);
+    println!("{}", exact);
+    println!("{}", trap(f, 0.0, 1.0, 16)); // f(0) = inf
+    for n in [16, 256, 4096] {
+        println!("midpoint n = {}: {:e}", n, mid(f, 0.0, 1.0, n) - exact);
+    }
+    // (c) substitute x = u^2: integrand 2 exp(-u^2), smooth
+    let g = |u: f64| 2.0 * (-u * u).exp();
+    for n in [2, 4, 8, 16] {
+        println!("Simpson n = {}: {:e}", n, simpson(g, 0.0, 1.0, n) - exact);
+    }
+    // the crate replaces the inf at x = 0 by 0 and packs points near the ends
+    let out = quadrature::integrate(f, 0.0, 1.0, 1e-10);
+    println!("{} with error estimate {:.1e}", out.integral, out.error_estimate);
+}
+
+// Output:
+// -1.4895671344447545 -1.4999956472675866
+// 1.4936482656124468
+// inf
+// midpoint n = 16: -1.5207815891065457e-1
+// midpoint n = 256: -3.7820671852844434e-2
+// midpoint n = 4096: -9.451772183989071e-3
+// Simpson n = 2: 7.125922065740475e-4
+// Simpson n = 4: 6.249396952773267e-5
+// Simpson n = 8: 3.975442486092717e-6
+// Simpson n = 16: 2.4925901387362615e-7
+// 1.493648007282976 with error estimate 3.2e-8
+```
+
+:::
+
+(a) Both slopes are $-1.5$: the infinite slope of $\sqrt{x}$ at 0 limits both rules to order 1.5, so Simpson's extra work is wasted. (b) The trapezoid rule needs $f(0) = \infty$: R and Python give `NaN` (our formula computes $\infty - \infty/2$), Rust `inf`. The midpoint rule never evaluates at 0, but its error shrinks only by 2 for every factor 4 in $n$: order 0.5; 4096 points give two digits. (c) After $x = u^2$ the integrand $2e^{-u^2}$ is smooth, and Simpson converges with order 4: 8 intervals beat 4096 midpoints by three orders of magnitude. `integrate` and `quad` handle the singularity by extrapolation (and R's error estimate is pessimistic). The Rust crate silently replaces the infinite value at 0 by 0 and still gets 6 digits, because its points crowd towards the ends where the singularity is; but its error estimate ($3.2\times10^{-8}$) is smaller than its actual error ($2.6\times10^{-7}$).
+:::
+
+::: {.callout-note collapse="true" title="Solution — C3"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+model <- function(t) 500 / 50 * 1.5 / 1.3 * (exp(-0.2 * t) - exp(-1.5 * t))
+exact <- 32.6243601574044
+trap <- function(f, a, b, n) {
+  x <- seq(a, b, length.out = n + 1);  y <- f(x);  h <- (b - a) / n
+  h * (sum(y) - (y[1] + y[n + 1]) / 2)
+}
+romberg <- function(f, a, b, k) {
+  R <- matrix(NA, k, k)
+  for (i in 1:k) {
+    R[i, 1] <- trap(f, a, b, 2^(i - 1))
+    for (j in seq_len(i - 1) + 1)
+      R[i, j] <- R[i, j-1] + (R[i, j-1] - R[i-1, j-1]) / (4^(j-1) - 1)
+  }
+  R
+}
+# (a) diagonal of the table: best estimate with 2^(k-1) + 1 points
+for (k in 4:9) {
+  R <- romberg(model, 0, 6, k)
+  cat(sprintf("k = %d, %4d points: error %.2e\n", k, 2^(k - 1) + 1, abs(R[k, k] - exact)))
+}
+# k = 4,    9 points: error 1.25e-02
+# k = 5,   17 points: error 9.87e-05
+# k = 6,   33 points: error 1.97e-07
+# k = 7,   65 points: error 9.86e-11
+# k = 8,  129 points: error 2.13e-14
+# k = 9,  257 points: error 7.11e-15
+# (b) sqrt(x) on [0, 1]
+R <- romberg(sqrt, 0, 1, 8)
+signif(abs(diag(R) - 2/3), 2)
+# [1] 1.7e-01 2.9e-02 8.9e-03 3.1e-03 1.1e-03 3.8e-04 1.3e-04 4.7e-05
+```
+
+### Python
+
+```python
+import numpy as np
+
+def model(t):
+    return 500 / 50 * 1.5 / 1.3 * (np.exp(-0.2 * t) - np.exp(-1.5 * t))
+exact = 32.6243601574044
+def trap(f, a, b, n):
+    x = np.linspace(a, b, n + 1); y = f(x); h = (b - a) / n
+    return h * (np.sum(y) - (y[0] + y[-1]) / 2)
+def romberg(f, a, b, k):
+    R = np.full((k, k), np.nan)
+    for i in range(k):
+        R[i, 0] = trap(f, a, b, 2**i)
+        for j in range(1, i + 1):
+            R[i, j] = R[i, j-1] + (R[i, j-1] - R[i-1, j-1]) / (4**j - 1)
+    return R
+# (a) diagonal of the table: best estimate with 2^(k-1) + 1 points
+for k in range(4, 10):
+    R = romberg(model, 0, 6, k)
+    print(f"k = {k}, {2**(k-1) + 1:4d} points: error {abs(R[k-1, k-1] - exact):.2e}")
+# k = 4,    9 points: error 1.25e-02
+# k = 5,   17 points: error 9.87e-05
+# k = 6,   33 points: error 1.97e-07
+# k = 7,   65 points: error 9.86e-11
+# k = 8,  129 points: error 2.13e-14
+# k = 9,  257 points: error 7.11e-15
+# (b) sqrt(x) on [0, 1]
+R = romberg(np.sqrt, 0, 1, 8)
+print(np.array2string(np.abs(np.diag(R) - 2/3), precision=1))
+# [1.7e-01 2.9e-02 8.9e-03 3.1e-03 1.1e-03 3.8e-04 1.3e-04 4.7e-05]
+```
+
+### Rust
+
+```rust
+// rust/examples/quadrature_c3.rs  —  cargo run --example quadrature_c3
+// C3: Romberg integration (repeated Richardson extrapolation of the trapezoid).
+fn model(t: f64) -> f64 {
+    500.0 / 50.0 * 1.5 / 1.3 * ((-0.2 * t).exp() - (-1.5 * t).exp())
+}
+fn trap(f: fn(f64) -> f64, a: f64, b: f64, n: usize) -> f64 {
+    let h = (b - a) / n as f64;
+    let inner: f64 = (1..n).map(|i| f(a + i as f64 * h)).sum();
+    h * (inner + (f(a) + f(b)) / 2.0)
+}
+fn romberg(f: fn(f64) -> f64, a: f64, b: f64, k: usize) -> Vec<Vec<f64>> {
+    let mut r = vec![vec![f64::NAN; k]; k];
+    for i in 0..k {
+        r[i][0] = trap(f, a, b, 1 << i); // 2^i intervals
+        for j in 1..=i {
+            r[i][j] = r[i][j - 1] + (r[i][j - 1] - r[i - 1][j - 1]) / (4f64.powi(j as i32) - 1.0);
+        }
+    }
+    r
+}
+
+fn main() {
+    let exact = 32.6243601574044;
+    // (a) diagonal of the table: best estimate with 2^(k-1) + 1 points
+    for k in 4..=9 {
+        let r = romberg(model, 0.0, 6.0, k);
+        println!("k = {}, {:4} points: error {:.2e}", k, (1 << (k - 1)) + 1, (r[k - 1][k - 1] - exact).abs());
+    }
+    // (b) sqrt(x) on [0, 1]
+    let r = romberg(f64::sqrt, 0.0, 1.0, 8);
+    let d: Vec<String> = (0..8).map(|i| format!("{:.1e}", (r[i][i] - 2.0 / 3.0).abs())).collect();
+    println!("{}", d.join(" "));
+}
+
+// Output:
+// k = 4,    9 points: error 1.25e-2
+// k = 5,   17 points: error 9.87e-5
+// k = 6,   33 points: error 1.97e-7
+// k = 7,   65 points: error 9.86e-11
+// k = 8,  129 points: error 2.84e-14
+// k = 9,  257 points: error 7.11e-15
+// 1.7e-1 2.9e-2 8.9e-3 3.1e-3 1.1e-3 3.8e-4 1.3e-4 4.7e-5
+```
+
+:::
+
+(a) With 129 function values Romberg reaches $2\times10^{-14}$, close to rounding level for a value of 32.6; Simpson with 1025 values gave $2.5\times10^{-10}$. The gain comes from the error expansion $T(h) = I + c_1h^2 + c_2h^4 + \dots$, which Romberg removes term by term. (b) For $\sqrt{x}$ the expansion contains $h^{1.5}$ (and other non-even powers); Richardson removes $h^2$, $h^4$, … which are not the leading terms, so each row gains only the factor $2^{1.5} \approx 2.8$ of the plain trapezoid rule.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C4"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+model <- function(t) 500 / 50 * 1.5 / 1.3 * (exp(-0.2 * t) - exp(-1.5 * t))
+I24 <- 49.5252069010181                    # AUC 0-24 h of the model
+adapt <- function(f, a, b, fa, fm, fb, tol) {
+  m <- (a + b) / 2;  fl <- f((a + m) / 2);  fr <- f((m + b) / 2)
+  S1 <- (b - a) / 6 * (fa + 4 * fm + fb)
+  S2 <- (b - a) / 12 * (fa + 4 * fl + 2 * fm + 4 * fr + fb)
+  if (abs(S2 - S1) < 15 * tol) return(S2 + (S2 - S1) / 15)
+  adapt(f, a, m, fa, fl, fm, tol / 2) + adapt(f, m, b, fm, fr, fb, tol / 2)
+}
+integ <- function(f, a, b, tol) adapt(f, a, b, f(a), f((a + b) / 2), f(b), tol)
+# (a) count evaluations
+calls <- 0
+counted <- function(t) { calls <<- calls + length(t); model(t) }
+for (tol in c(1e-4, 1e-6, 1e-8)) {
+  calls <- 0
+  err <- integ(counted, 0, 24, tol) - I24
+  cat(sprintf("tol %.0e: error %9.2e, %d evaluations\n", tol, err, calls))
+}
+# tol 1e-04: error -4.20e-07, 85 evaluations
+# tol 1e-06: error -8.98e-10, 269 evaluations
+# tol 1e-08: error -7.07e-12, 829 evaluations
+# (b) a chromatogram: one peak at 340 s, sigma 3 s, height 1000, run 0-600 s
+peak <- function(t) 1000 * exp(-(t - 340)^2 / (2 * 3^2))
+1000 * 3 * sqrt(2 * pi)                    # true area
+# [1] 7519.885
+integ(peak, 0, 600, 1e-6)
+# [1] 1.991297e-34
+# (c) fix: start from 60 pieces of 10 s
+edges <- seq(0, 600, by = 10)
+sum(sapply(1:60, function(i) integ(peak, edges[i], edges[i + 1], 1e-6 / 60)))
+# [1] 7519.885
+```
+
+### Python
+
+```python
+import numpy as np
+
+def model(t):
+    return 500 / 50 * 1.5 / 1.3 * (np.exp(-0.2 * t) - np.exp(-1.5 * t))
+I24 = 49.5252069010181                     # AUC 0-24 h of the model
+def adapt(f, a, b, fa, fm, fb, tol):
+    m = (a + b) / 2; fl = f((a + m) / 2); fr = f((m + b) / 2)
+    S1 = (b - a) / 6 * (fa + 4 * fm + fb)
+    S2 = (b - a) / 12 * (fa + 4 * fl + 2 * fm + 4 * fr + fb)
+    if abs(S2 - S1) < 15 * tol:
+        return S2 + (S2 - S1) / 15
+    return adapt(f, a, m, fa, fl, fm, tol / 2) + adapt(f, m, b, fm, fr, fb, tol / 2)
+def integ(f, a, b, tol):
+    return adapt(f, a, b, f(a), f((a + b) / 2), f(b), tol)
+# (a) count evaluations
+calls = 0
+def counted(t):
+    global calls
+    calls += 1
+    return model(t)
+for tol in (1e-4, 1e-6, 1e-8):
+    calls = 0
+    err = integ(counted, 0, 24, tol) - I24
+    print(f"tol {tol:.0e}: error {err:9.2e}, {calls} evaluations")
+# tol 1e-04: error -4.20e-07, 85 evaluations
+# tol 1e-06: error -8.98e-10, 269 evaluations
+# tol 1e-08: error -7.07e-12, 829 evaluations
+# (b) a chromatogram: one peak at 340 s, sigma 3 s, height 1000, run 0-600 s
+def peak(t):
+    return 1000 * np.exp(-(t - 340)**2 / (2 * 3**2))
+print(1000 * 3 * np.sqrt(2 * np.pi))       # true area
+# 7519.884823893
+print(integ(peak, 0, 600, 1e-6))
+# 1.9912970026620386e-34
+# (c) fix: start from 60 pieces of 10 s
+edges = np.arange(0, 601, 10)
+print(sum(integ(peak, edges[i], edges[i + 1], 1e-6 / 60) for i in range(60)))
+# 7519.884824048371
+```
+
+### Rust
+
+```rust
+// rust/examples/quadrature_c4.rs  —  cargo run --example quadrature_c4
+// C4: adaptive Simpson, written by hand; evaluation counts, and a narrow
+// chromatography peak that the first five points miss.
+use std::cell::Cell;
+
+fn model(t: f64) -> f64 {
+    500.0 / 50.0 * 1.5 / 1.3 * ((-0.2 * t).exp() - (-1.5 * t).exp())
+}
+fn adapt(f: &dyn Fn(f64) -> f64, a: f64, b: f64, fa: f64, fm: f64, fb: f64, tol: f64) -> f64 {
+    let m = (a + b) / 2.0;
+    let (fl, fr) = (f((a + m) / 2.0), f((m + b) / 2.0));
+    let s1 = (b - a) / 6.0 * (fa + 4.0 * fm + fb);
+    let s2 = (b - a) / 12.0 * (fa + 4.0 * fl + 2.0 * fm + 4.0 * fr + fb);
+    if (s2 - s1).abs() < 15.0 * tol {
+        return s2 + (s2 - s1) / 15.0;
+    }
+    adapt(f, a, m, fa, fl, fm, tol / 2.0) + adapt(f, m, b, fm, fr, fb, tol / 2.0)
+}
+fn integ(f: &dyn Fn(f64) -> f64, a: f64, b: f64, tol: f64) -> f64 {
+    adapt(f, a, b, f(a), f((a + b) / 2.0), f(b), tol)
+}
+
+fn main() {
+    let i24 = 49.5252069010181; // AUC 0-24 h of the model
+    // (a) count evaluations; Cell lets the closure change a counter
+    let calls = Cell::new(0);
+    let counted = |t: f64| {
+        calls.set(calls.get() + 1);
+        model(t)
+    };
+    for tol in [1e-4, 1e-6, 1e-8] {
+        calls.set(0);
+        let err = integ(&counted, 0.0, 24.0, tol) - i24;
+        println!("tol {:.0e}: error {:9.2e}, {} evaluations", tol, err, calls.get());
+    }
+    // (b) a chromatogram: one peak at 340 s, sigma 3 s, height 1000, run 0-600 s
+    let peak = |t: f64| 1000.0 * (-(t - 340.0).powi(2) / (2.0 * 9.0)).exp();
+    println!("{}", 1000.0 * 3.0 * (2.0 * std::f64::consts::PI).sqrt()); // true area
+    println!("{:e}", integ(&peak, 0.0, 600.0, 1e-6));
+    // (c) fix: start from 60 pieces of 10 s
+    let total: f64 = (0..60).map(|i| integ(&peak, 10.0 * i as f64, 10.0 * (i + 1) as f64, 1e-6 / 60.0)).sum();
+    println!("{}", total);
+}
+
+// Output:
+// tol 1e-4: error  -4.20e-7, 85 evaluations
+// tol 1e-6: error -8.98e-10, 269 evaluations
+// tol 1e-8: error -7.07e-12, 829 evaluations
+// 7519.884823893
+// 1.9912970026620386e-34
+// 7519.884824048371
+```
+
+:::
+
+(a) Each 100-fold tighter tolerance costs about 3 times more points: on each accepted piece the error falls like $h^4$, so $100^{1/4} \approx 3.2$ times more pieces. The routine is also more accurate than asked for, because it adds the correction $(S_2 - S_1)/15$. Uniform Simpson on $[0, 24]$ has error $1.0\times10^{-6}$ with 512 intervals and $6.5\times10^{-8}$ with 1024 (order 4), so it needs about 1600 evaluations for $10^{-8}$; the adaptive routine reaches $7\times10^{-12}$ with 829. The adaptive points are dense in the absorption phase and sparse in the tail. (b) The first five points are 0, 150, 300, 450 and 600 s; the nearest to the peak is 40 s ($13\sigma$) away, where the signal is $10^{-35}$. $S_1$ and $S_2$ agree, and the whole run is accepted with area $\approx 0$. (c) With 10 s pieces, at least one piece has a point within 5 s of the peak, the two Simpson estimates disagree there, and the routine refines. In practice: give the routine pieces no wider than the features you expect.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C5"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# (a) which points does integrate use?
+seen <- NULL
+spy <- function(x) { seen <<- c(seen, x); dnorm(x) }
+integrate(spy, 0, 20000)
+# 0 with absolute error < 0
+length(seen)
+# [1] 21
+round(sort(seen)[1:3], 1)
+# [1]  43.4 260.9 698.4
+# (b) vary the upper limit
+for (b in c(20, 200, 2000, 5000, 20000, Inf)) {
+  r <- integrate(dnorm, 0, b)
+  cat(sprintf("b = %5g: %.6g  (error estimate %.1e)\n", b, r$value, r$abs.error))
+}
+# b =    20: 0.5  (error estimate 3.7e-05)
+# b =   200: 0.5  (error estimate 1.6e-07)
+# b =  2000: 0.5  (error estimate 4.4e-06)
+# b =  5000: 2.32632e-06  (error estimate 4.6e-06)
+# b = 20000: 0  (error estimate 0.0e+00)
+# b =   Inf: 0.5  (error estimate 4.7e-05)
+# (c) split at the feature
+integrate(dnorm, 0, 10)$value + integrate(dnorm, 10, 20000)$value
+# [1] 0.5
+# (d) a one-hour chromatogram with one peak at 340 s
+peak <- function(t) 1000 * exp(-(t - 340)^2 / (2 * 3^2))
+integrate(peak, 0, 3600)
+# 1.199796e-59 with absolute error < 2.3e-59
+integrate(peak, 340 - 30, 340 + 30)          # give the scale: +-10 sigma
+# 7519.885 with absolute error < 0.56
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import quad
+from scipy.stats import norm
+
+# (a) which points does quad use?
+seen = []
+def spy(x):
+    seen.append(x)
+    return norm.pdf(x)
+print(quad(spy, 0, 20000))
+# (0.0, 0.0)
+print(len(seen))
+# 21
+print(np.round(np.sort(seen)[:3], 1))
+# [ 43.4 260.9 698.4]
+# (b) vary the upper limit
+for b in (20, 200, 2000, 5000, 20000, np.inf):
+    v, e = quad(norm.pdf, 0, b)
+    print(f"b = {b:5g}: {v:.6g}  (error estimate {e:.1e})")
+# b =    20: 0.5  (error estimate 4.3e-10)
+# b =   200: 0.5  (error estimate 5.2e-13)
+# b =  2000: 0.5  (error estimate 9.1e-13)
+# b =  5000: 0.5  (error estimate 3.7e-10)
+# b = 20000: 0  (error estimate 0.0e+00)
+# b =   inf: 0.5  (error estimate 5.1e-09)
+# (c) split at the feature (or quad(norm.pdf, 0, 20000, points=[10]))
+print(quad(norm.pdf, 0, 10)[0] + quad(norm.pdf, 10, 20000)[0])
+# 0.5000000000000001
+# (d) a one-hour chromatogram with one peak at 340 s
+peak = lambda t: 1000 * np.exp(-(t - 340)**2 / (2 * 3**2))
+print(quad(peak, 0, 3600))
+# (1.1997955764401264e-59, 2.2683315422332952e-59)
+print(quad(peak, 340 - 30, 340 + 30))      # give the scale: +-10 sigma
+# (7519.8848238929795, 6.520516427577228e-06)
+```
+
+### Rust
+
+```rust
+// rust/examples/quadrature_c5.rs  —  cargo run --example quadrature_c5
+// C5: what the quadrature crate (double-exponential rule) sees. Its points
+// are packed towards both ends of the interval, unlike QUADPACK's.
+use statrs::distribution::{Continuous, Normal};
+use std::cell::RefCell;
+
+fn main() {
+    let dnorm = |x: f64| Normal::standard().pdf(x);
+    // (a) record the points; RefCell lets the closure push to a vector
+    let seen = RefCell::new(Vec::new());
+    let spy = |x: f64| {
+        seen.borrow_mut().push(x);
+        dnorm(x)
+    };
+    let out = quadrature::integrate(spy, 0.0, 20000.0, 1e-8);
+    let mut s = seen.borrow().clone();
+    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    println!("{} with error estimate {:.1e}", out.integral, out.error_estimate);
+    println!("{} points, smallest: {:.2e} {:.2e} {:.2e}", s.len(), s[0], s[1], s[2]);
+    // (b) vary the upper limit (no infinite limits in this crate)
+    for b in [20.0, 200.0, 2000.0, 5000.0, 20000.0] {
+        let o = quadrature::integrate(dnorm, 0.0, b, 1e-8);
+        println!("b = {:5}: {:.6} (error estimate {:.1e})", b, o.integral, o.error_estimate);
+    }
+    // (c) a peak inside the interval: the points miss it; split at the feature
+    let shifted = |x: f64| dnorm(x - 5000.0);
+    println!("{}", quadrature::integrate(shifted, 0.0, 20000.0, 1e-8).integral);
+    let parts = quadrature::integrate(shifted, 0.0, 5000.0, 1e-8).integral
+        + quadrature::integrate(shifted, 5000.0, 20000.0, 1e-8).integral;
+    println!("{}", parts);
+    // (d) a one-hour chromatogram with one peak at 340 s
+    let peak = |t: f64| 1000.0 * (-(t - 340.0).powi(2) / (2.0 * 9.0)).exp();
+    let o = quadrature::integrate(peak, 0.0, 3600.0, 1e-6);
+    println!("{:e} with error estimate {:.1e}", o.integral, o.error_estimate);
+    let o = quadrature::integrate(peak, 310.0, 370.0, 1e-6); // +-10 sigma
+    println!("{} with error estimate {:.1e}", o.integral, o.error_estimate);
+}
+
+// Output:
+// 0.4999999998676251 with error estimate 2.8e-8
+// 385 points, smallest: 4.29e-10 7.02e-10 1.14e-9
+// b =    20: 0.500000 (error estimate 1.6e-13)
+// b =   200: 0.500000 (error estimate 3.2e-13)
+// b =  2000: 0.500000 (error estimate 8.5e-11)
+// b =  5000: 0.500000 (error estimate 1.1e-9)
+// b = 20000: 0.500000 (error estimate 2.8e-8)
+// 0
+// 0.9999999998677589
+// 6.526074485307542e-179 with error estimate 6.5e-179
+// 7519.884823892994 with error estimate 3.4e-12
+```
+
+:::
+
+(a) R and SciPy use the same 21 points; the smallest is 43.4, as in B5. All values are 0, so the Gauss and Kronrod estimates agree, the error estimate is 0 and QUADPACK stops. The Rust crate puts its points at $4\times10^{-10}$, $7\times10^{-10}$, …: packed towards both ends, so it finds a peak at 0. (b) R: 0.5 up to $b = 2000$, then $2.3\times10^{-6}$ for 5000 (error estimate larger than the value) and 0 for 20000, as predicted in B5. SciPy's tighter default tolerance makes it subdivide at $b = 5000$ and recover; at 20000 it fails too. The infinite interval works: QAGI's transform spreads the points over $x$ from about 0.004 to 233. Rust: right for all $b$ here, because the peak sits at an end. (c) Splitting at 10 gives a piece with points near 0. For the Rust crate, a peak at 5000 inside $[0, 20000]$ returns 0; splitting at 5000 puts the peak at an end and gives 1. (d) A one-hour run with a 3 s peak fails in all three languages, with a tiny error estimate; integrating over the peak $\pm 10\sigma$ is right. Every rule that samples finitely many points can miss a narrow feature; the defence is to tell the routine where the feature is.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C6"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+peak <- function(t) 1000 * exp(-(t - 300)^2 / (2 * 3^2))   # sigma = 3 s
+A <- 1000 * 3 * sqrt(2 * pi)                                # true area
+for (h in c(9, 6, 4.5, 3, 1.5)) {
+  out <- sapply(seq(0, h, length.out = 41)[-41], function(off) {   # 40 phases
+    x <- seq(240 + off, 360, by = h);  y <- peak(x)
+    area <- h * (sum(y) - (y[1] + y[length(y)]) / 2)
+    c(area / A - 1, max(y) / 1000 - 1)
+  })
+  cat(sprintf("h = %3.1f s (%3.1f sigma): worst area error %.1e, worst height error %3.0f%%\n",
+              h, h / 3, max(abs(out[1, ])), 100 * min(out[2, ])))
+}
+# h = 9.0 s (3.0 sigma): worst area error 2.2e-01, worst height error -66%
+# h = 6.0 s (2.0 sigma): worst area error 1.4e-02, worst height error -39%
+# h = 4.5 s (1.5 sigma): worst area error 3.1e-04, worst height error -24%
+# h = 3.0 s (1.0 sigma): worst area error 5.4e-09, worst height error -12%
+# h = 1.5 s (0.5 sigma): worst area error 2.2e-16, worst height error  -3%
+```
+
+### Python
+
+```python
+import numpy as np
+
+def peak(t):
+    return 1000 * np.exp(-(t - 300)**2 / (2 * 3**2))   # sigma = 3 s
+A = 1000 * 3 * np.sqrt(2 * np.pi)                      # true area
+for h in (9, 6, 4.5, 3, 1.5):
+    area_err, height_err = [], []
+    for off in np.linspace(0, h, 41)[:-1]:             # 40 phases
+        x = np.arange(240 + off, 360 + 1e-9, h); y = peak(x)
+        area = h * (np.sum(y) - (y[0] + y[-1]) / 2)
+        area_err.append(area / A - 1); height_err.append(y.max() / 1000 - 1)
+    print(f"h = {h:3.1f} s ({h/3:3.1f} sigma): worst area error "
+          f"{max(np.abs(area_err)):.1e}, worst height error {100*min(height_err):3.0f}%")
+# h = 9.0 s (3.0 sigma): worst area error 2.2e-01, worst height error -66%
+# h = 6.0 s (2.0 sigma): worst area error 1.4e-02, worst height error -39%
+# h = 4.5 s (1.5 sigma): worst area error 3.1e-04, worst height error -24%
+# h = 3.0 s (1.0 sigma): worst area error 5.4e-09, worst height error -12%
+# h = 1.5 s (0.5 sigma): worst area error 2.2e-16, worst height error  -3%
+```
+
+### Rust
+
+```rust
+// rust/examples/quadrature_c6.rs  —  cargo run --example quadrature_c6
+// C6: area and height of a Gaussian chromatography peak (sigma = 3 s) from
+// samples every h seconds, worst case over 40 sampling phases.
+fn peak(t: f64) -> f64 {
+    1000.0 * (-(t - 300.0).powi(2) / (2.0 * 9.0)).exp()
+}
+
+fn main() {
+    let area_true = 1000.0 * 3.0 * (2.0 * std::f64::consts::PI).sqrt();
+    for h in [9.0, 6.0, 4.5, 3.0, 1.5] {
+        let (mut worst_area, mut worst_height) = (0.0f64, 0.0f64);
+        for k in 0..40 {
+            let off = h * k as f64 / 40.0;
+            let x: Vec<f64> = (0..).map(|i| 240.0 + off + i as f64 * h).take_while(|&t| t <= 360.0 + 1e-9).collect();
+            let y: Vec<f64> = x.iter().map(|&t| peak(t)).collect();
+            let area = h * (y.iter().sum::<f64>() - (y[0] + y[y.len() - 1]) / 2.0);
+            let ymax = y.iter().cloned().fold(f64::MIN, f64::max);
+            worst_area = worst_area.max((area / area_true - 1.0).abs());
+            worst_height = worst_height.min(ymax / 1000.0 - 1.0);
+        }
+        println!("h = {:3.1} s ({:3.1} sigma): worst area error {:.1e}, worst height error {:3.0}%",
+                 h, h / 3.0, worst_area, 100.0 * worst_height);
+    }
+}
+
+// Output:
+// h = 9.0 s (3.0 sigma): worst area error 2.2e-1, worst height error -66%
+// h = 6.0 s (2.0 sigma): worst area error 1.4e-2, worst height error -39%
+// h = 4.5 s (1.5 sigma): worst area error 3.1e-4, worst height error -24%
+// h = 3.0 s (1.0 sigma): worst area error 5.4e-9, worst height error -12%
+// h = 1.5 s (0.5 sigma): worst area error 4.4e-16, worst height error  -3%
+```
+
+:::
+
+The area is remarkably robust: $h = 1.5\sigma$ (about 3 points across the $4\sigma$-wide peak) already gives 0.03 %, and $h = \sigma$ gives $5\times10^{-9}$. For 1 % area, $h = 2\sigma$ (2 points across, 1.4 %) is almost enough. The trapezoid error for a whole peak that returns to baseline falls faster than any power of $h$, because the $h^2$ error term involves $f'(b) - f'(a)$, which is 0 here (as are all higher terms of that kind). The height is not robust: it depends on whether a sample lands on the apex. For 5 % height you need $h$ between $0.5\sigma$ (worst error 3 %) and $\sigma$ (12 %), about 6–8 points across the peak. That is where the common advice of 8–10 points per peak comes from, together with noise and peak detection; for quantification, use areas.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C7"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t_h  <- c(0, 0.5, 1, 2, 3, 4, 6, 8, 12, 24)
+conc <- c(0, 4.99, 6.87, 7.16, 6.20, 5.16, 3.47, 2.33, 1.05, 0.09)
+model <- function(t) 500 / 50 * 1.5 / 1.3 * (exp(-0.2 * t) - exp(-1.5 * t))
+dt <- diff(t_h);  y1 <- head(conc, -1);  y2 <- tail(conc, -1)
+lin  <- dt * (y1 + y2) / 2
+logd <- ifelse(y2 < y1 & y2 > 0, dt * (y1 - y2) / log(y1 / y2), lin)
+true <- sapply(1:9, function(i) integrate(model, t_h[i], t_h[i + 1])$value)
+round(rbind(lin = lin - true, lul = logd - true), 3)        # error per interval
+#       [,1]   [,2]   [,3]   [,4]   [,5]   [,6]   [,7]  [,8]   [,9]
+# lin -0.184 -0.085 -0.214 -0.033  0.007  0.102  0.072 0.346  2.081
+# lul -0.184 -0.085 -0.214 -0.044 -0.009 -0.010 -0.003 0.009 -0.070
+c(linear = sum(lin), lul = sum(logd), true = sum(true))
+#   linear      lul     true 
+# 51.61750 48.91575 49.52521 
+last <- 8:10
+lz <- -coef(lm(log(conc[last]) ~ t_h[last]))[[2]]
+c(linear = sum(lin), lul = sum(logd)) + conc[10] / lz      # AUC 0-infinity
+#   linear      lul 
+# 52.05937 49.35762 
+integrate(model, 0, Inf)                                   # model route
+# 50 with absolute error < 1.1e-05
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import quad
+
+t_h  = np.array([0, 0.5, 1, 2, 3, 4, 6, 8, 12, 24])
+conc = np.array([0, 4.99, 6.87, 7.16, 6.20, 5.16, 3.47, 2.33, 1.05, 0.09])
+def model(t):
+    return 500 / 50 * 1.5 / 1.3 * (np.exp(-0.2 * t) - np.exp(-1.5 * t))
+dt = np.diff(t_h); y1 = conc[:-1]; y2 = conc[1:]
+lin = dt * (y1 + y2) / 2
+down = (y2 < y1) & (y2 > 0)
+logd = lin.copy()
+logd[down] = dt[down] * (y1[down] - y2[down]) / np.log(y1[down] / y2[down])
+true = np.array([quad(model, t_h[i], t_h[i + 1])[0] for i in range(9)])
+print(np.round(lin - true, 3))             # error per interval
+# [-0.184 -0.085 -0.214 -0.033  0.007  0.102  0.072  0.346  2.081]
+print(np.round(logd - true, 3))
+# [-0.184 -0.085 -0.214 -0.044 -0.009 -0.01  -0.003  0.009 -0.07 ]
+print(lin.sum(), logd.sum(), true.sum())
+# 51.61750000000001 48.91574959191489 49.52520690101807
+last = slice(7, 10)                        # 8, 12, 24 h
+lz = -np.polyfit(t_h[last], np.log(conc[last]), 1)[0]
+print(lin.sum() + conc[-1] / lz, logd.sum() + conc[-1] / lz)   # AUC 0-infinity
+# 52.05937333485391 49.35762292676879
+print(quad(model, 0, np.inf))              # model route
+# (50.0, 6.490858963886585e-08)
+```
+
+### Rust
+
+```rust
+// rust/examples/quadrature_c7.rs  —  cargo run --example quadrature_c7
+// C7: AUC from the blood samples: linear trapezoid vs linear-up/log-down,
+// per interval and in total, and extrapolation to infinity.
+fn model(t: f64) -> f64 {
+    500.0 / 50.0 * 1.5 / 1.3 * ((-0.2 * t).exp() - (-1.5 * t).exp())
+}
+
+fn main() {
+    let t: [f64; 10] = [0.0, 0.5, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 24.0];
+    let c: [f64; 10] = [0.0, 4.99, 6.87, 7.16, 6.20, 5.16, 3.47, 2.33, 1.05, 0.09];
+    let (mut lin_sum, mut lul_sum, mut true_sum) = (0.0, 0.0, 0.0);
+    let (mut e_lin, mut e_lul) = (Vec::new(), Vec::new());
+    for i in 0..9 {
+        let (dt, y1, y2) = (t[i + 1] - t[i], c[i], c[i + 1]);
+        let lin = dt * (y1 + y2) / 2.0;
+        let lul = if y2 < y1 && y2 > 0.0 { dt * (y1 - y2) / (y1 / y2).ln() } else { lin };
+        let tr = quadrature::integrate(model, t[i], t[i + 1], 1e-12).integral;
+        e_lin.push(format!("{:.3}", lin - tr));
+        e_lul.push(format!("{:.3}", lul - tr));
+        lin_sum += lin; lul_sum += lul; true_sum += tr;
+    }
+    println!("lin {}", e_lin.join(" "));
+    println!("lul {}", e_lul.join(" "));
+    println!("{} {} {}", lin_sum, lul_sum, true_sum);
+    // terminal slope: least-squares line through log(c) at 8, 12, 24 h
+    let (x, y): (Vec<f64>, Vec<f64>) = (7..10).map(|i| (t[i], c[i].ln())).unzip();
+    let (mx, my) = (x.iter().sum::<f64>() / 3.0, y.iter().sum::<f64>() / 3.0);
+    let sxy: f64 = x.iter().zip(&y).map(|(a, b)| (a - mx) * (b - my)).sum();
+    let sxx: f64 = x.iter().map(|a| (a - mx).powi(2)).sum();
+    let lz = -sxy / sxx;
+    println!("{} {}", lin_sum + c[9] / lz, lul_sum + c[9] / lz);
+    // model route: no infinite limits in the crate; substitute t = s / (1 - s)
+    let g = |s: f64| model(s / (1.0 - s)) / (1.0 - s).powi(2);
+    println!("{}", quadrature::integrate(g, 0.0, 1.0, 1e-10).integral);
+}
+
+// Output:
+// lin -0.184 -0.085 -0.214 -0.033 0.007 0.102 0.072 0.346 2.081
+// lul -0.184 -0.085 -0.214 -0.044 -0.009 -0.010 -0.003 0.009 -0.070
+// 51.6175 48.91574959191488 49.525206901017455
+// 52.0593733348539 49.357622926768784
+// 49.999999999999986
+```
+
+:::
+
+(a) The linear rule's largest error is the 12–24 h interval ($+2.08$), then 8–12 h ($+0.35$): the convex elimination phase. Linear-up/log-down shrinks those to $-0.07$ and $0.01$. Both rules share the errors of the first three intervals ($-0.18$, $-0.09$, $-0.21$): the absorption phase is concave, and a straight line underestimates it. The interval 2–3 h is just after the peak, where the curve is not yet a pure exponential, and the log-down rule slightly underestimates it. (b) $\mathrm{AUC}_{0-24}$: 51.62 (linear, $+4.2$ %), 48.92 (log-down, $-1.2$ %), true 49.53. Extrapolating with $\lambda_z = 0.2037$ adds 0.44: 52.06 and 49.36, against the true 50. (c) The model route gives 50. In a real study the model parameters are estimated (Part 9), and then the model route is only as good as the model; the data route is only as good as the sampling. Agreement between them is a useful check.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C8"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+loglik <- function(l, m = 1) m * (173 * log(l) - 100 * l - 100 * log1p(-exp(-l)))
+lhat <- 1.2184695258301268;  se <- 0.1325           # from Newton and secant methods
+# (a) raw likelihood
+L <- function(l) exp(loglik(l))
+sapply(c(10, 100, Inf), function(b) integrate(L, 0, b)$value)
+# [1] 4.450271e-24 3.226339e-26 4.708206e-24
+# (b) scaled to a maximum of 1
+g <- function(l) exp(loglik(l) - loglik(lhat))
+Z <- integrate(g, 0, Inf)$value
+Z
+# [1] 0.3322104
+loglik(lhat) + log(Z)                                # log normalising constant
+# [1] -53.71232
+integrate(function(l) l * g(l) / Z, 0, Inf)$value    # posterior mean
+# [1] 1.231049
+# (c) 10 000 cells: same proportions, 100 times the data
+g2 <- function(l) exp(loglik(l, 100) - loglik(lhat, 100))
+sapply(c(10, 100, Inf), function(b) integrate(g2, 0, b)$value)
+# [1]  6.383083e-22 1.484020e-278  2.306626e-08
+se2 <- se / 10                                        # SE shrinks like 1/sqrt(n)
+integrate(g2, lhat - 10 * se2, lhat + 10 * se2)$value
+# [1] 0.03322479
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import quad
+
+def loglik(l, m=1):
+    return m * (173 * np.log(l) - 100 * l - 100 * np.log1p(-np.exp(-l)))
+lhat = 1.2184695258301268; se = 0.1325     # from Newton and secant methods
+# (a) raw likelihood
+L = lambda l: np.exp(loglik(l))
+print([quad(L, 0, b)[0] for b in (10, 100, np.inf)])
+# [4.45027065131027e-24, 3.2263386761116073e-26, 4.7082064145730736e-24]
+# (b) scaled to a maximum of 1
+g = lambda l: np.exp(loglik(l) - loglik(lhat))
+Z = quad(g, 0, np.inf)[0]
+print(Z)
+# 0.33221037724957386
+print(loglik(lhat) + np.log(Z))            # log normalising constant
+# -53.7123209302782
+print(quad(lambda l: l * g(l) / Z, 0, np.inf)[0])   # posterior mean
+# 1.2310485289305235
+# (c) 10 000 cells: same proportions, 100 times the data
+g2 = lambda l: np.exp(loglik(l, 100) - loglik(lhat, 100))
+print([quad(g2, 0, b)[0] for b in (10, 100, np.inf)])
+# [6.383082724294136e-22, 1.484019742235207e-278, 0.033224793978016295]
+se2 = se / 10                              # SE shrinks like 1/sqrt(n)
+print(quad(g2, lhat - 10 * se2, lhat + 10 * se2)[0])
+# 0.033224793978028924
+```
+
+### Rust
+
+```rust
+// rust/examples/quadrature_c8.rs  —  cargo run --example quadrature_c8
+// C8: normalising a posterior density (zero-truncated Poisson UMI rate),
+// with the quadrature crate. Infinite limits by x = t / (1 - t).
+fn loglik(l: f64, m: f64) -> f64 {
+    m * (173.0 * l.ln() - 100.0 * l - 100.0 * (-(-l).exp()).ln_1p())
+}
+// integrate f over [0, b], or [0, inf) when b is infinite
+fn integ(f: impl Fn(f64) -> f64, b: f64, tol: f64) -> f64 {
+    if b.is_infinite() {
+        let g = |t: f64| f(t / (1.0 - t)) / (1.0 - t).powi(2);
+        quadrature::integrate(g, 0.0, 1.0, tol).integral
+    } else {
+        quadrature::integrate(f, 0.0, b, tol).integral
+    }
+}
+
+fn main() {
+    let (lhat, se) = (1.2184695258301268, 0.1325); // from Newton and secant methods
+    // (a) raw likelihood, target absolute error 1e-8 (like scipy's epsabs)
+    let l = |x: f64| loglik(x, 1.0).exp();
+    for b in [10.0, 100.0, f64::INFINITY] {
+        println!("raw, 0 to {}: {:e}", b, integ(l, b, 1e-8));
+    }
+    // (b) scaled to a maximum of 1
+    let g = |x: f64| (loglik(x, 1.0) - loglik(lhat, 1.0)).exp();
+    let z = integ(g, f64::INFINITY, 1e-10);
+    println!("{}", z);
+    println!("{}", loglik(lhat, 1.0) + z.ln());
+    println!("{}", integ(|x| x * g(x) / z, f64::INFINITY, 1e-10)); // posterior mean
+    // (c) 10 000 cells
+    let g2 = |x: f64| (loglik(x, 100.0) - loglik(lhat, 100.0)).exp();
+    for b in [10.0, 100.0, f64::INFINITY] {
+        println!("10 000 cells, 0 to {}: {:e}", b, integ(g2, b, 1e-10));
+    }
+    let se2 = se / 10.0;
+    let o = quadrature::integrate(g2, lhat - 10.0 * se2, lhat + 10.0 * se2, 1e-10);
+    println!("{}", o.integral);
+}
+
+// Output:
+// raw, 0 to 10: 3.03449145746844e-25
+// raw, 0 to 100: 2.488052474520912e-29
+// raw, 0 to inf: 2.4302456105212273e-24
+// 0.3322103772495725
+// -53.7123209302782
+// 1.2310485289305237
+// 10 000 cells, 0 to 10: 7.901954233488117e-176
+// 10 000 cells, 0 to 100: 0e0
+// 10 000 cells, 0 to inf: 6.150289910733008e-67
+// 0.03322479397802385
+```
+
+:::
+
+(a) The three answers disagree by orders of magnitude. The integrand is about $10^{-23}$, far below `abs.tol` ($1.2\times10^{-4}$ in R, $1.5\times10^{-8}$ in SciPy), so the very first estimate passes the test, however wrong. The Rust crate, with target $10^{-8}$, has the same problem. (b) Scaling to a maximum of 1 makes every routine agree: $Z_g = 0.33221$, $\log Z = -53.712$, posterior mean 1.2310 (slightly above $\hat\lambda$, since the posterior is right-skewed). Scaling by the maximum is the log-sum-exp idea of *How computers store numbers*. (c) With 10 000 cells the posterior has width $0.013$; on $(0, 10)$ and $(0, 100)$ every routine misses it, and only SciPy's transform of $(0, \infty)$ happens to land on it (R and Rust do not). Integrating over $\hat\lambda \pm 10$ SE gives $0.033225$ in all three languages: $\sqrt{100} = 10$ times smaller than $Z_g$ in (b), as expected for a peak 10 times narrower with the same height. Give the routine the scale of the integrand: its maximum (values) and its width (axis).
+:::
+
+## Where this leads
+
+- **Random numbers and Monte Carlo** (next): integrals over many dimensions (a marginal likelihood with 10 parameters), where any grid is far too large and random points with error $1/\sqrt{N}$ take over.
+- **Initial value problems and Euler's method** and **Runge–Kutta and adaptive step size** (Part 8): solving $y' = f(t, y)$ is integration in which the integrand depends on the answer. Euler is the left Riemann sum, Heun the trapezoid rule, and adaptive step-size control is the adaptive idea of C4.
+- **Nonlinear least squares and ODE fitting** (Part 9): fitting the pharmacokinetic model to the samples, for the model route of C7, and fitting overlapping chromatography peaks.
+- Gauss–Kronrod rules, the double-exponential rule and QUADPACK's extrapolation are used here as black boxes; their derivations are beyond this course.

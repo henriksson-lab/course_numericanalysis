@@ -1,0 +1,1056 @@
+---
+title: "Exercise: optimisation in one dimension"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- tell a **minimum** from a **root** of $f'$, and say what each search can and cannot confuse,
+- find a **bracket** for a minimum (three points, a low one in the middle) from a table of values,
+- carry out **golden-section** steps and **parabolic-interpolation** steps by hand, and predict how many evaluations golden section needs,
+- write a golden-section search and read off its **linear** convergence (0.618 per evaluation),
+- use **Brent's method** (`optimize`, `minimize_scalar`, `BrentOpt`) with a sensible tolerance,
+- explain why a minimum can only be located to about $\sqrt{\varepsilon}$, and show it,
+- run **Newton for minimisation** with the checks that catch its failures,
+- recognise a function with several **local minima** and find the global one with a grid and a refinement.
+
+The by-hand part uses pen, paper and a pocket calculator. The code part checks your hand answers and then works at sizes where only code works.
+
+## Background
+
+To minimise a function $f$ of one variable on an interval:
+
+1. **Minimum and root.** At a smooth minimum $x^*$, $f'(x^*) = 0$ and $f''(x^*) \ge 0$. A root of $f'$ can also be a maximum ($f'' < 0$). Maximising a log-likelihood $\ell$ is minimising $f = -\ell$.
+2. **Bracket.** Three points $a < c < b$ with $f(c) < f(a)$ and $f(c) < f(b)$ enclose a (local) minimum. $f$ is **unimodal** on $[a, b]$ if it has a single minimum there and no other dips.
+3. **Golden section.** With $g = (\sqrt5 - 1)/2 = 0.6180$, evaluate $x_1 = b - g(b - a)$ and $x_2 = a + g(b - a)$. If $f(x_1) < f(x_2)$ keep $[a, x_2]$, otherwise keep $[x_1, b]$. One of the two points is reused, so each step costs **one** evaluation and shrinks the bracket by $g$: after $m \ge 2$ evaluations the width is $g^{m-1}(b - a)$. Linear convergence.
+4. **Parabolic interpolation.** The vertex of the parabola through $(a, f_a)$, $(b, f_b)$, $(c, f_c)$ is
+   $$x_\text{new} = b - \frac12\,\frac{(b-a)^2(f_b - f_c) - (b-c)^2(f_b - f_a)}{(b-a)(f_b - f_c) - (b-c)(f_b - f_a)} .$$
+   Superlinear (order about 1.32) near the minimum; can go anywhere far from it.
+5. **Brent's method** combines the two: parabolic steps while they behave, golden-section steps otherwise. R: [`optimize`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/optimize.html) (default `tol` $=\varepsilon^{1/4} \approx 1.2\times10^{-4}$, absolute). Python: [`scipy.optimize.minimize_scalar`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize_scalar.html) with `bounds` and `method="bounded"` (default `xatol` $= 10^{-5}$). Rust: [`argmin`'s `BrentOpt`](https://docs.rs/argmin/latest/argmin/solver/brent/struct.BrentOpt.html) (default absolute part $10^{-5}$).
+6. **Newton for minimisation.** $x_{k+1} = x_k - f'(x_k)/f''(x_k)$: the vertex of the local parabola, which is Newton's method on $f'$. Quadratic near a minimum; if $f''(x_k) < 0$ the local parabola opens downwards and the step heads for a maximum.
+7. **The flat bottom.** Near a minimum $f(x^* + \delta) \approx f(x^*) + \tfrac12 f''(x^*)\delta^2$. The change is lost in rounding when $\tfrac12 f''\delta^2 < \varepsilon|f(x^*)|$, so a method that compares values of $f$ can locate $x^*$ only to about $|\delta| \approx \sqrt{\varepsilon}\sqrt{2|f(x^*)|/f''(x^*)}$, with $\sqrt\varepsilon = 1.49\times10^{-8}$. A root of $f'$ can be found to about $\varepsilon$.
+8. **Convexity.** If $f'' \ge 0$ on the whole interval, $f$ is **convex**: a local minimum is the global minimum. Otherwise a local method can return a **local** minimum without any warning.
+
+The running examples of the lecture:
+
+- **mRNA decay.** Fraction of an mRNA left after transcription stops: $t = 0, 0.5, 1, 2, 4, 6, 8$ h, $y = 1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083$. Model $e^{-kt}$; the least-squares (Gaussian maximum-likelihood) rate minimises $\text{SSE}(k) = \sum_i (y_i - e^{-kt_i})^2$; $\hat k = 0.3753873095$ per hour.
+- **Zero-truncated Poisson** (from *Newton and secant methods*). UMI counts 1, 2, 3, 4, 5 in 52, 30, 12, 5, 1 cells; $n = 100$, $\sum x_i = 173$. Minus the log-likelihood is $f(\lambda) = -173\log\lambda + 100\lambda + 100\log(1 - e^{-\lambda})$; the MLE is $\hat\lambda = 1.2184695258$.
+- **Circadian period.** A simulated bioluminescence recording every 4 h for 6 days (36 values, given in C5). $\text{RSS}(T)$ is the residual sum of squares of the best sine wave with period $T$; the global minimum is at $T = 24.63$ h.
+
+Brent's method on the decay rate, in each language:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t <- c(0, 0.5, 1, 2, 4, 6, 8)                            # hours
+y <- c(1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083)  # fraction of mRNA left
+sse <- function(k) sum((y - exp(-k * t))^2)
+fit <- optimize(sse, interval = c(0, 1), tol = 1e-10)
+fit$minimum                  # decay rate (per hour)
+fit$objective                # SSE at the minimum
+log(2) / fit$minimum         # half-life (hours)
+# Output:
+# [1] 0.3753873
+# [1] 0.002042809
+# [1] 1.846485
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import minimize_scalar
+
+t = np.array([0, 0.5, 1, 2, 4, 6, 8])                              # hours
+y = np.array([1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083])    # fraction of mRNA left
+def sse(k):
+    return np.sum((y - np.exp(-k * t))**2)
+fit = minimize_scalar(sse, bounds=(0, 1), method="bounded", options={"xatol": 1e-10})
+print(f"{fit.x:.7f}")         # decay rate (per hour)
+print(f"{fit.fun:.9f}")       # SSE at the minimum
+print(f"{np.log(2) / fit.x:.6f}")  # half-life (hours)
+# Output:
+# 0.3753873
+# 0.002042809
+# 1.846485
+```
+
+### Rust
+
+```rust
+// rust/examples/optimisation_1d_background.rs  —  cargo run --example optimisation_1d_background
+// Background: minimise the decay-rate SSE with Brent's method (argmin's BrentOpt,
+// Rust's counterpart of R's optimize and scipy's minimize_scalar).
+use argmin::core::{CostFunction, Error, Executor, State};
+use argmin::solver::brent::BrentOpt;
+
+const T: [f64; 7] = [0.0, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0]; // hours
+const Y: [f64; 7] = [1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083]; // fraction left
+
+// argmin wants the objective as a type with a `cost` method
+struct Sse;
+impl CostFunction for Sse {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, k: &f64) -> Result<f64, Error> {
+        Ok(T.iter().zip(Y.iter()).map(|(t, y)| (y - (-k * t).exp()).powi(2)).sum())
+    }
+}
+
+fn main() -> Result<(), Error> {
+    // BrentOpt stops when the bracket is below eps*|x| + t: here eps = sqrt(machine eps), t = 1e-10
+    let solver = BrentOpt::new(0.0, 1.0).set_tolerance(f64::EPSILON.sqrt(), 1e-10);
+    let res = Executor::new(Sse, solver).configure(|s| s.max_iters(100)).run()?;
+    let k = *res.state().get_best_param().unwrap();
+    println!("{:.7}", k);                          // decay rate (per hour)
+    println!("{:.9}", res.state().get_best_cost()); // SSE at the minimum
+    println!("{:.6}", 2f64.ln() / k);               // half-life (hours)
+    Ok(())
+}
+// Output:
+// 0.3753873
+// 0.002042809
+// 1.846485
+```
+
+:::
+
+Rust prints numbers in its own format (e.g. `1e-8` rather than `1e-08`); the values are the same unless the text says otherwise. The minimisers do not all take the same steps, so the last digits of a result computed with a loose tolerance can differ between languages.
+
+## By hand
+
+**B1. Minimum, maximum or neither?** Take $f(x) = \tfrac13 x^3 - x$.
+(a) Find all roots of $f'$ and classify each with $f''$.
+(b) Run two steps of Newton's method on $f'(x) = 0$ from $x_0 = -0.5$, and two from $x_0 = 2$. Where does each sequence go? Which one has found a minimum?
+(c) Is $(0, 1, 3)$ a bracket for a minimum? Is $(-3, -1, 0)$?
+(d) On the interval $[-3, 3]$, where is the **smallest** value of $f$? Would a local method started near 1 find it?
+
+**B2. Golden section by hand.** Take $f(x) = x - 2\ln x$ on $[1, 4]$ (its minimum is at $x^* = 2$, $f(2) = 0.6137$).
+(a) Compute $x_1$, $x_2$, $f(x_1)$, $f(x_2)$ and decide which part of the interval to keep.
+(b) Do a second step. Which point is reused? Which point is new?
+(c) Compute the widths of the three brackets. What is the ratio of consecutive widths?
+(d) How many evaluations of $f$ does golden section need to shrink $[1, 4]$ to a width of $10^{-6}$? How many evaluations of $f'$ would bisection on $f'$ need?
+
+**B3. Parabolic interpolation.**
+(a) For $g(x) = (x - 2)^2 + 1$, use the vertex formula with the points $0, 1, 3$. Explain the result.
+(b) For $f(x) = x - 2\ln x$, use the points $1, 1.5, 3$ (values $1$, $0.68907$, $0.80278$). How far is the vertex from $x^* = 2$? Compare with the bracket after the two golden-section steps of B2.
+(c) What happens if the middle value is the **largest** of the three, for example $h(x) = -(x - 2)^2$ at $1, 2, 3$?
+
+**B4. Newton for minimisation can leave the domain.** Again $f(x) = x - 2\ln x$, $x > 0$.
+(a) Compute $f'$ and $f''$. Is $f$ convex?
+(b) Show that the Newton step is $x_{k+1} = 2x_k - x_k^2/2$, and that the error $e_k = x_k - 2$ satisfies $e_{k+1} = -e_k^2/2$.
+(c) Run three steps from $x_0 = 1$. How many correct digits does each step have?
+(d) What happens from $x_0 = 3$, $x_0 = 4$ and $x_0 = 5$? For which $x_0$ does Newton converge?
+(e) Which check from the lecture would have stopped the iteration from $x_0 = 4$ and $x_0 = 5$?
+
+**B5. How flat is the bottom?** Use $\varepsilon = 2.2\times10^{-16}$; a double near 1 has neighbours $\varepsilon$ apart, near 1000 they are $1.1\times10^{-13}$ apart.
+(a) For $f(x) = 1 + (x - 1)^2$: for which $\delta$ does the computed $f(1 + \delta)$ equal $f(1) = 1$ exactly?
+(b) The same for $f(x) = 1 + 100(x - 1)^2$ and for $f(x) = 1000 + (x - 1)^2$. What makes the flat bottom wider, what makes it narrower?
+(c) For the zero-truncated Poisson, $f(\hat\lambda) = 52.61$ and $f''(\hat\lambda) = 56.92$. How many digits of $\hat\lambda = 1.218\ldots$ can a minimiser find?
+(d) The score $S(\lambda) = -f'(\lambda)$ near $\hat\lambda$ is about $-56.92\,(\lambda - \hat\lambda)$. Why can a root finder locate $\hat\lambda$ much more precisely?
+
+**B6. Brackets from a table: the circadian period.** $\text{RSS}(T)$ for the circadian data at a grid with spacing 4 h:
+
+| $T$ (h) | 10 | 14 | 18 | 22 | 26 | 30 | 34 | 38 |
+|---|---|---|---|---|---|---|---|---|
+| RSS | 10.55 | 10.50 | 10.33 | 9.31 | 4.45 | 10.66 | 10.40 | 10.66 |
+
+(a) Find every bracket for a minimum in this table. Which one would you refine?
+(b) A colleague uses the grid $10, 20, 30, 40$ and gets $10.55, 10.48, 10.66, 10.45$. What does she conclude?
+(c) `optimize` on $[10, 40]$ first evaluates $T = 21.46$ (RSS $10.361$) and $T = 28.54$ (RSS $10.311$), then $T = 32.92$ (RSS $10.249$). Follow the golden-section logic: which brackets does it keep? Can it still find the minimum near 24.6?
+(d) The dip around the true period is about 3 h wide. What grid spacing would you use?
+
+## In code
+
+**C1. Golden-section search.** Write `golden(f, a, b, tol)` that returns the midpoint of the final bracket, the number of evaluations of `f`, and the bracket width after every step.
+(a) Run it on the decay-rate $\text{SSE}(k)$ on $[0, 1]$ with `tol = 1e-8`. Check the number of evaluations against the formula from B2(d).
+(b) Compute the ratios of consecutive widths, and plot the widths on a log scale against the step number.
+
+**C2. Brent's method.** Minimise $\text{SSE}(k)$ on $[0, 1]$ with `optimize` (Python: `minimize_scalar(..., method="bounded")`; Rust: `BrentOpt`), once with the default tolerance and once with an absolute tolerance of $10^{-10}$. Count the evaluations (wrap $f$ in a counter) and print $\hat k$ to 10 decimals. Compare with C1. Compute the half-life $\ln 2/\hat k$. Then call it on $[0.5, 2]$. What happens, and how would you notice?
+
+**C3. The flat bottom.** For the zero-truncated Poisson:
+(a) Find $\hat\lambda$ as the root of the score with `uniroot` (`tol = 1e-15`; Python: `brentq`; Rust: `BrentRoot`) and as the minimum of $f = -\ell$ with `optimize` (`tol = 1e-15`). How far apart are they?
+(b) For $\delta = 10^{-4}, \dots, 10^{-10}$ print $f(\hat\lambda + \delta) - f(\hat\lambda)$ and $S(\hat\lambda + \delta)$. From which $\delta$ on is the change in $f$ pure rounding?
+(c) Compare with the prediction $\sqrt{2\varepsilon|f(\hat\lambda)|/f''(\hat\lambda)}$, using $f'' = -S'$ from *Newton and secant methods*: $S'(\lambda) = -173/\lambda^2 + 100\,e^{-\lambda}/(1 - e^{-\lambda})^2$.
+
+**C4. Newton for minimisation, with checks.** For $\text{SSE}(k)$:
+(a) Write $\text{SSE}'(k) = \sum_i 2(y_i - e^{-kt_i})\,t_i e^{-kt_i}$ and $\text{SSE}''(k) = \sum_i 2t_i^2 e^{-kt_i}(2e^{-kt_i} - y_i)$ as functions and check them against central differences at $k = 0.3$.
+(b) Write `newton_min(f, d1, d2, x0)` that stops with a message when $f''(x_k) \le 0$ or when a step **increases** $f$, and otherwise iterates until the relative step is below $10^{-12}$.
+(c) Run it from $k_0 = 0.2$, $0.7$ and $1.0$. Which check stops each failing run?
+(d) In which order must the "converged?" test and the "did $f$ increase?" test come? Try it the other way round.
+
+**C5. The circadian period: local and global minima.** The data (bioluminescence, arbitrary units, every 4 h from $t = 0$ to $140$ h) are in the solution code below.
+(a) Write `rss(T)`: the residual sum of squares of the least-squares fit of $c + a\cos(2\pi t/T) + b\sin(2\pi t/T)$ (R: [`lm.fit`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lmfit.html); Python: [`np.linalg.lstsq`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.lstsq.html); Rust: `nalgebra`'s SVD `solve`). Minimise it with Brent's method on $[10, 40]$ and on $[15, 35]$.
+(b) Evaluate `rss` on a grid from 10 to 40 h with spacing 0.25 h, take the best grid point $T_0$, and refine with Brent on $[T_0 - 0.5, T_0 + 0.5]$. Plot $\text{RSS}(T)$ and compare RSS at the two candidates.
+(c) Check your answer to B6(b) with the grid $10, 20, 30, 40$.
+
+**C6. The growth rate of the OD curve.** The logistic OD curve of *Convergence and cost*, $N(t) = K/(1 + (K/N_0 - 1)e^{-rt})$, with $K = 1.2$ and $N_0 = 0.05$ **known**, measured every 10 min for 10 h with noise (the 61 values of *Numerical differentiation*, in the solution code).
+(a) Evaluate $\text{SSE}(r)$ at $r = 0.1, 0.4, 0.8, 1.2, 2, 3$ per hour. Is there one valley?
+(b) Find $\hat r$ with Brent's method to $10^{-10}$. The data were simulated with $r = 0.8$.
+(c) Estimate the noise standard deviation as $\sqrt{\text{SSE}(\hat r)/(n - 1)}$. The simulation used 0.005.
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — stationary points and brackets (B1, B6)"}
+Solve $f'(x) = 0$; then $f'' > 0$ means minimum, $f'' < 0$ maximum. Newton on $f'$ is $x_{k+1} = x_k - f'(x_k)/f''(x_k)$. A bracket needs the **middle** value lower than **both** neighbours. A minimum of $f$ on a closed interval can also sit at an end point.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — golden section (B2, C1)"}
+$g = 0.6180$, $1 - g = 0.3820$. Start: $x_1 = a + 0.382(b - a)$, $x_2 = a + 0.618(b - a)$. If you keep $[a, x_2]$, the old $x_1$ becomes the new $x_2$ and only the new $x_1 = b - g(b - a)$ (with the new $b$) is evaluated. Number of evaluations: solve $g^{m-1}(b - a) \le \text{tol}$ for $m$, i.e. $m - 1 \ge \ln(\text{tol}/(b-a))/\ln g$. Bisection: $0.5^m (b-a) \le \text{tol}$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — the vertex formula (B3)"}
+Compute the four differences $b - a$, $b - c$, $f_b - f_c$, $f_b - f_a$ first, then the numerator and the denominator. For a quadratic the parabola through three of its points is the function itself.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — Newton on x - 2 ln x (B4)"}
+$f'(x) = 1 - 2/x$, $f''(x) = 2/x^2$. Then $f'/f'' = (x - 2)x/2$. For the error, write $x_{k+1} - 2 = -\tfrac12(x_k^2 - 4x_k + 4)$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — the flat bottom (B5, C3)"}
+A sum $F + s$ with $|s|$ less than half the gap between doubles near $F$ rounds back to $F$. The gap near $F$ is about $\varepsilon|F|$ (exactly a power of 2: $2^{-52}$ near 1, $2^{-43}$ near 1000, $2^{-47} = 7.1\times10^{-15}$ near 52.6). In code: R `uniroot(S, c(0.01, 10), tol = 1e-15)` and `optimize(nll, c(0.01, 10), tol = 1e-15)`; Python [`brentq(S, 0.01, 10, xtol=1e-15, rtol=1e-15)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html) and `minimize_scalar(nll, bounds=(0.01, 10), method="bounded", options={"xatol": 1e-15})`; Rust `BrentRoot::new(0.01, 10.0, 1e-15)` and `BrentOpt::new(0.01, 10.0).set_tolerance(1e-15, 1e-15)`. Use `-expm1(-l)` for $1 - e^{-\lambda}$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — library minimisers and counting (C2, C5, C6)"}
+R: `optimize(f, interval = c(a, b), tol = ...)` returns a list with `minimum` and `objective`; count calls with a wrapper `fc <- function(k) { count <<- count + 1; f(k) }`. Python: `res = minimize_scalar(f, bounds=(a, b), method="bounded", options={"xatol": ...})` returns `res.x`, `res.fun` and `res.nfev`; `method="brent"` with `bracket=(a, c, b)` is the unbounded version. Rust: `Executor::new(problem, BrentOpt::new(a, b).set_tolerance(f64::EPSILON.sqrt(), t)).run()?`, then `res.state().get_best_param()`; count evaluations with an `AtomicU64` inside `cost`, as in the Newton exercise. A minimum returned **at an end of the interval** means the interval was wrong.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — checks for Newton (C4)"}
+Central difference: $f'(x) \approx (f(x + h) - f(x - h))/(2h)$ with $h = 10^{-5}$. In the loop: (1) if `d2(x) <= 0`, stop; (2) compute the step; (3) if the step is tiny, return; (4) if `f(x_new)` is not finite or larger than `f(x)`, stop. Near the minimum $f$ is flat to rounding level, so (4) can fire on a step of size $10^{-16}$ if it comes before (3).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 8 — the sine-wave fit (C5)"}
+For fixed $T$, the design matrix has the columns $1$, $\cos(2\pi t/T)$, $\sin(2\pi t/T)$. R: `X <- cbind(1, cos(2*pi*t/T), sin(2*pi*t/T)); sum(lm.fit(X, y)$residuals^2)`. Python: `coef = np.linalg.lstsq(X, y, rcond=None)[0]; np.sum((y - X @ coef)**2)`. Grid: `sapply(Tg, rss)` and `which.min` (R), a list comprehension and `np.argmin` (Python).
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $f'(x) = x^2 - 1 = 0$ at $x = \pm1$. $f''(x) = 2x$: $f''(1) = 2 > 0$, a **minimum** with $f(1) = -2/3$; $f''(-1) = -2 < 0$, a **maximum** with $f(-1) = 2/3$.
+(b) Newton on $f'$: $x_{k+1} = x_k - (x_k^2 - 1)/(2x_k)$. From $-0.5$: $-0.5 - (-0.75)/(-1) = -1.25$, then $-1.25 - 0.5625/(-2.5) = -1.025$: towards $-1$, the **maximum**. From 2: $2 - 3/4 = 1.25$, then $1.25 - 0.5625/2.5 = 1.025$: towards the minimum. Root finding on $f'$ cannot tell them apart.
+(c) $f(0) = 0$, $f(1) = -0.667$, $f(3) = 6$: yes, a bracket. $f(-3) = -6$, $f(-1) = 0.667$, $f(0) = 0$: the middle value is the **largest**, so this brackets a maximum, not a minimum.
+(d) $f(-3) = -6 < f(1) = -0.667$: the smallest value on $[-3, 3]$ is at the **end point** $-3$, and $f$ keeps falling beyond it. A local method near 1 returns 1, the only interior minimum. "Minimum" always means "on which interval?".
+
+**B2.**
+(a) $x_1 = 4 - 0.618\cdot3 = 2.1459$, $f(x_1) = 2.1459 - 2\ln 2.1459 = 0.6188$. $x_2 = 1 + 0.618\cdot3 = 2.8541$, $f(x_2) = 0.7566$. $f(x_1) < f(x_2)$: keep $[1, 2.8541]$.
+(b) The old $x_1 = 2.1459$ becomes the new $x_2$ (reused, $f = 0.6188$). New $x_1 = 2.8541 - 0.618\cdot1.8541 = 1.7082$, $f(1.7082) = 0.6373$. $0.6373 > 0.6188$: keep $[1.7082, 2.8541]$. (Step 3 would reuse 2.1459 as $x_1$ and add $x_2 = 2.4164$.)
+(c) Widths $3$, $1.8541$, $1.1459$. Ratios $1.8541/3 = 0.618$ and $1.1459/1.8541 = 0.618$. After four evaluations the minimum 2 is inside $[1.7082, 2.8541]$.
+(d) $3\cdot0.618^{m-1} \le 10^{-6}$ gives $m - 1 \ge \ln(3.33\times10^{-7})/\ln 0.618 = 30.99$, so $m = 32$ evaluations. Bisection on $f'$: $3\cdot0.5^{m} \le 10^{-6}$ gives $m \ge 21.5$, so 22 evaluations of $f'$. Golden section is about 1.44 times slower ($\ln 2/\ln 1.618$), the price for not needing $f'$.
+
+**B3.**
+(a) $g(0) = 5$, $g(1) = 2$, $g(3) = 2$. With $a = 0, b = 1, c = 3$: numerator $1\cdot(2 - 2) - 4\cdot(2 - 5) = 12$, denominator $1\cdot0 - (-2)(-3) = -6$; $x_\text{new} = 1 - \tfrac12\cdot12/(-6) = 2$, exactly the minimum: the interpolating parabola **is** $g$.
+(b) $b - a = 0.5$, $b - c = -1.5$, $f_b - f_c = -0.11371$, $f_b - f_a = -0.31093$. Numerator $0.25(-0.11371) - 2.25(-0.31093) = 0.67117$; denominator $0.5(-0.11371) - 1.5\cdot0.31093 = -0.52325$; $x_\text{new} = 1.5 + 0.64134 = 2.1413$. Error 0.14 after three evaluations; golden section after four still had a bracket of width 1.15. The parabola uses the **sizes** of the values, golden section only their order.
+(c) $h(1) = -1$, $h(2) = 0$, $h(3) = -1$: the parabola is $h$ itself, which opens **downwards**; the formula returns its vertex 2, a **maximum**. Parabolic interpolation only makes sense when the middle value is the lowest (a bracket); Brent's method checks that.
+
+**B4.**
+(a) $f'(x) = 1 - 2/x$, $f''(x) = 2/x^2 > 0$ for every $x > 0$: $f$ is convex on its whole domain.
+(b) $x - f'/f'' = x - (1 - 2/x)x^2/2 = x - (x^2 - 2x)/2 = 2x - x^2/2$. Then $x_{k+1} - 2 = -\tfrac12(x_k - 2)^2$, so $e_{k+1} = -e_k^2/2$: quadratic convergence.
+(c) $1 \to 1.5 \to 1.875 \to 1.9921875$; errors $0.5, 0.125, 0.0078$ (then $3.1\times10^{-5}$): correct digits roughly double each step.
+(d) From 3: $e_0 = 1$, $x_1 = 1.5$, then as in (c): converges. From 4: $x_1 = 8 - 8 = 0$, where $\ln 0 = -\infty$ and $f = +\infty$. From 5: $x_1 = -2.5$, outside the domain ($\ln$ of a negative number is `NaN`). From $e_{k+1} = -e_k^2/2$: converges if $|e_0| < 2$, i.e. $0 < x_0 < 4$. Convexity guarantees that the step points **downhill**, not that it is not too **long**: $f''$ is small for large $x$, the local parabola is too flat, and the step overshoots.
+(e) "$f(x_{k+1}) < f(x_k)$, and finite": $f(0) = \infty$ and $f(-2.5) = $ `NaN` both fail it. The fix is to shorten the step until $f$ decreases (a line search, *Gradient descent, Newton and quasi-Newton*).
+
+**B5.**
+(a) $f(1 + \delta) = 1 + \delta^2$ rounds to 1 when $\delta^2 < \varepsilon/2 = 1.1\times10^{-16}$, i.e. $|\delta| < 1.05\times10^{-8}$. (R: `1 + (1e-8)^2 == 1` is `TRUE`, `1 + (1e-7)^2 == 1` is `FALSE`.)
+(b) $1 + 100\delta^2$: $|\delta| < 1.05\times10^{-9}$, ten times narrower: a larger **curvature** $f''$ makes the bottom narrower. $1000 + \delta^2$: half the gap near 1000 is $5.7\times10^{-14}$, so $|\delta| < 2.4\times10^{-7}$, more than 20 times wider: a larger **value** $|f(x^*)|$ makes it wider. Both are in the formula $\sqrt{2\varepsilon|f|/f''}$.
+(c) $\sqrt{2\cdot2.2\times10^{-16}\cdot52.61/56.92} = 2.0\times10^{-8}$; relative to 1.218 that is $1.7\times10^{-8}$: about **8 significant digits**.
+(d) Near $\hat\lambda$, $S$ changes **linearly**: $|S(\hat\lambda + \delta)| \approx 56.9\,|\delta|$, which stays above the rounding error in $S$ (about $\varepsilon \cdot 173/\lambda \approx 3\times10^{-14}$) down to $\delta \approx 10^{-15}$. A root changes sign; a minimum only changes $f$ quadratically, which disappears below $\varepsilon|f|$ much sooner.
+
+**B6.**
+(a) $(22, 26, 30)$: $9.31 > 4.45 < 10.66$, a bracket. Also $(30, 34, 38)$: $10.66 > 10.40 < 10.66$, a second, much shallower local minimum. Refine the first: its RSS is less than half of everything else.
+(b) Her lowest value is 10.45 at $T = 40$, the end of the grid, and every value is close to the RSS of no rhythm at all (10.72). She would conclude that there is no clear rhythm, or a period of 40 h or more. The grid stepped over the dip.
+(c) $10.311 < 10.361$: keep $[21.46, 40]$, which still contains 24.6. Next it compares 28.54 with 32.92: $10.249 < 10.311$, so it keeps $[28.54, 40]$. Now 24.6 is outside the bracket and can never be found again. It converges to the local minimum at 32.4 h. The first two points both lay on the flat part, and their tiny difference (noise) decided.
+(d) The dip is 3 h wide; a spacing of 0.5–1 h puts several points inside it. We use 0.25 h in C5, 121 evaluations, which is cheap.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t <- c(0, 0.5, 1, 2, 4, 6, 8)
+y <- c(1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083)
+sse <- function(k) sum((y - exp(-k * t))^2)
+
+golden <- function(f, a, b, tol = 1e-8) {
+  g <- (sqrt(5) - 1) / 2
+  x1 <- b - g * (b - a); f1 <- f(x1)
+  x2 <- a + g * (b - a); f2 <- f(x2)
+  nev <- 2; width <- b - a                 # evaluations so far, bracket widths
+  while (b - a > tol) {
+    if (f1 < f2) { b <- x2; x2 <- x1; f2 <- f1; x1 <- b - g * (b - a); f1 <- f(x1) }
+    else         { a <- x1; x1 <- x2; f1 <- f2; x2 <- a + g * (b - a); f2 <- f(x2) }
+    nev <- nev + 1; width <- c(width, b - a)
+  }
+  list(xmin = (a + b) / 2, nev = nev, width = width)
+}
+res <- golden(sse, 0, 1)
+res$xmin; res$nev
+2 + ceiling(log(1e-8) / log(0.618034))        # predicted number of evaluations
+ratio <- res$width[-1] / res$width[-length(res$width)]
+range(ratio)
+plot(res$width, log = "y", xlab = "step", ylab = "bracket width")
+# Output:
+# [1] 0.3753873
+# [1] 41
+# [1] 41
+# [1] 0.618034 0.618034
+```
+
+### Python
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+t = np.array([0, 0.5, 1, 2, 4, 6, 8])
+y = np.array([1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083])
+def sse(k):
+    return np.sum((y - np.exp(-k * t))**2)
+
+def golden(f, a, b, tol=1e-8):
+    g = (np.sqrt(5) - 1) / 2
+    x1 = b - g * (b - a); f1 = f(x1)
+    x2 = a + g * (b - a); f2 = f(x2)
+    nev = 2; width = [b - a]                  # evaluations so far, bracket widths
+    while b - a > tol:
+        if f1 < f2:
+            b, x2, f2 = x2, x1, f1
+            x1 = b - g * (b - a); f1 = f(x1)
+        else:
+            a, x1, f1 = x1, x2, f2
+            x2 = a + g * (b - a); f2 = f(x2)
+        nev += 1; width.append(b - a)
+    return (a + b) / 2, nev, np.array(width)
+
+xmin, nev, width = golden(sse, 0, 1)
+print(f"{xmin:.7f}", nev)
+print(2 + int(np.ceil(np.log(1e-8) / np.log(0.618034))))   # predicted number of evaluations
+ratio = width[1:] / width[:-1]
+print(f"{ratio.min():.6f} {ratio.max():.6f}")
+plt.semilogy(width, "o"); plt.xlabel("step"); plt.ylabel("bracket width")
+# Output:
+# 0.3753873 41
+# 41
+# 0.618034 0.618034
+```
+
+### Rust
+
+```rust
+// rust/examples/optimisation_1d_c1.rs  —  cargo run --example optimisation_1d_c1
+// C1: golden-section search, hand-written, recording the bracket width per step.
+const T: [f64; 7] = [0.0, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0];
+const Y: [f64; 7] = [1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083];
+
+fn sse(k: f64) -> f64 {
+    T.iter().zip(Y.iter()).map(|(t, y)| (y - (-k * t).exp()).powi(2)).sum()
+}
+
+// returns (midpoint of final bracket, number of evaluations, bracket widths)
+fn golden(f: impl Fn(f64) -> f64, mut a: f64, mut b: f64, tol: f64) -> (f64, usize, Vec<f64>) {
+    let g = (5f64.sqrt() - 1.0) / 2.0;
+    let (mut x1, mut x2) = (b - g * (b - a), a + g * (b - a));
+    let (mut f1, mut f2) = (f(x1), f(x2));
+    let mut nev = 2;
+    let mut width = vec![b - a];
+    while b - a > tol {
+        if f1 < f2 {
+            b = x2; x2 = x1; f2 = f1;
+            x1 = b - g * (b - a); f1 = f(x1);
+        } else {
+            a = x1; x1 = x2; f1 = f2;
+            x2 = a + g * (b - a); f2 = f(x2);
+        }
+        nev += 1;
+        width.push(b - a);
+    }
+    ((a + b) / 2.0, nev, width)
+}
+
+fn main() {
+    let (xmin, nev, width) = golden(sse, 0.0, 1.0, 1e-8);
+    println!("{:.7} {}", xmin, nev);
+    let pred = 2 + (1e-8f64.ln() / 0.618034f64.ln()).ceil() as usize; // predicted evaluations
+    println!("{}", pred);
+    let ratios: Vec<f64> = width.windows(2).map(|w| w[1] / w[0]).collect();
+    let lo = ratios.iter().cloned().fold(f64::INFINITY, f64::min);
+    let hi = ratios.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    println!("{:.6} {:.6}", lo, hi);
+}
+// Output:
+// 0.3753873 41
+// 41
+// 0.618034 0.618034
+```
+
+:::
+
+41 evaluations, as predicted: $2 + \lceil \ln 10^{-8}/\ln 0.618 \rceil = 2 + 39$. Every width is $0.618034$ times the previous one, so on a log scale the widths lie on a straight line with slope $\log_{10} 0.618 = -0.209$: linear convergence. (The ratio deviates from $g$ in the 9th digit near the end, because the bracket ends are rounded to doubles.) The argmin crate also has a ready-made [`GoldenSectionSearch`](https://docs.rs/argmin/latest/argmin/solver/goldensectionsearch/struct.GoldenSectionSearch.html); here it is hand-written so that the widths can be recorded.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t <- c(0, 0.5, 1, 2, 4, 6, 8)
+y <- c(1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083)
+sse <- function(k) sum((y - exp(-k * t))^2)
+count <- 0
+fc <- function(k) { count <<- count + 1; sse(k) }   # counts evaluations
+
+fit1 <- optimize(fc, c(0, 1)); n1 <- count; count <- 0
+fit2 <- optimize(fc, c(0, 1), tol = 1e-10); n2 <- count
+sprintf("%.10f", c(fit1$minimum, fit2$minimum)); c(n1, n2)
+log(2) / fit2$minimum                                # half-life (h)
+optimize(sse, c(0.5, 2), tol = 1e-10)$minimum        # minimum outside the interval
+# Output:
+# [1] "0.3754002280" "0.3753873095"
+# [1] 11 14
+# [1] 1.846485
+# [1] 0.5
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import minimize_scalar
+
+t = np.array([0, 0.5, 1, 2, 4, 6, 8])
+y = np.array([1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083])
+def sse(k):
+    return np.sum((y - np.exp(-k * t))**2)
+
+fit1 = minimize_scalar(sse, bounds=(0, 1), method="bounded")      # default xatol = 1e-5
+fit2 = minimize_scalar(sse, bounds=(0, 1), method="bounded", options={"xatol": 1e-10})
+fit3 = minimize_scalar(sse, bracket=(0, 0.5, 1), method="brent")  # default tol = 1.48e-8 (relative)
+for fit in (fit1, fit2, fit3):
+    print(f"{fit.x:.10f}", fit.nfev)
+print(f"{np.log(2) / fit2.x:.6f}")                                # half-life (h)
+print(f"{minimize_scalar(sse, bounds=(0.5, 2), method='bounded', options={'xatol': 1e-10}).x:.7f}")
+# Output:
+# 0.3753861744 11
+# 0.3753873095 13
+# 0.3753873097 15
+# 1.846485
+# 0.5000000
+```
+
+### Rust
+
+```rust
+// rust/examples/optimisation_1d_c2.rs  —  cargo run --example optimisation_1d_c2
+// C2: Brent's minimiser (argmin's BrentOpt) with its default and a tight tolerance,
+// counting function evaluations.
+use argmin::core::{CostFunction, Error, Executor, State};
+use argmin::solver::brent::BrentOpt;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+// evaluation counter (argmin owns the objective, so we count in a global)
+static EVALS: AtomicU64 = AtomicU64::new(0);
+
+const T: [f64; 7] = [0.0, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0];
+const Y: [f64; 7] = [1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083];
+
+struct Sse;
+impl CostFunction for Sse {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, k: &f64) -> Result<f64, Error> {
+        EVALS.fetch_add(1, Ordering::Relaxed);
+        Ok(T.iter().zip(Y.iter()).map(|(t, y)| (y - (-k * t).exp()).powi(2)).sum())
+    }
+}
+
+// minimise on [a, b]; tol = None keeps argmin's default (eps = sqrt(machine eps), t = 1e-5)
+fn brent(a: f64, b: f64, tol: Option<f64>) -> Result<(f64, u64), Error> {
+    EVALS.store(0, Ordering::Relaxed);
+    let mut solver = BrentOpt::new(a, b);
+    if let Some(t) = tol {
+        solver = solver.set_tolerance(f64::EPSILON.sqrt(), t);
+    }
+    let res = Executor::new(Sse, solver).configure(|s| s.max_iters(100)).run()?;
+    let st = res.state();
+    let nev = EVALS.load(Ordering::Relaxed);
+    Ok((*st.get_best_param().unwrap(), nev))
+}
+
+fn main() -> Result<(), Error> {
+    let (k1, n1) = brent(0.0, 1.0, None)?;
+    let (k2, n2) = brent(0.0, 1.0, Some(1e-10))?;
+    println!("{:.10} {}", k1, n1);
+    println!("{:.10} {}", k2, n2);
+    println!("{:.6}", 2f64.ln() / k2); // half-life (h)
+    let (k3, _) = brent(0.5, 2.0, Some(1e-10))?; // minimum outside the interval
+    println!("{:.7}", k3);
+    Ok(())
+}
+// Output:
+// 0.3753861744 11
+// 0.3753873095 13
+// 1.846485
+// 0.5000000
+```
+
+:::
+
+With its default tolerance `optimize` stops after 11 evaluations at 0.3754002, wrong in the 5th digit ($\text{tol} = 1.2\times10^{-4}$); SciPy's and argmin's default ($10^{-5}$) give 0.3753862. With an absolute tolerance of $10^{-10}$ Brent needs 13–14 evaluations for 10 correct decimals; golden section needed 41 for $10^{-8}$ (C1). The half-life is 1.85 h. On $[0.5, 2]$ every method returns the **end point** 0.5 without a warning: the true minimum 0.375 is outside the interval, and Brent's method only searches inside it. The check: an answer at (or within `tol` of) an end of the interval means the interval was wrong; widen it and plot $f$.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x  <- rep(1:5, times = c(52, 30, 12, 5, 1)); n <- length(x); sx <- sum(x)
+nll <- function(l) -(sx * log(l) - n * l - n * log(-expm1(-l)))  # minus log-likelihood
+S   <- function(l) sx / l - n / (-expm1(-l))                     # score = -nll'
+dS  <- function(l) -sx / l^2 + n * exp(-l) / expm1(-l)^2         # S' = -nll''
+
+lhat <- uniroot(S, c(0.01, 10), tol = 1e-15)$root                # root of the score
+lopt <- optimize(nll, c(0.01, 10), tol = 1e-15)$minimum          # minimum of nll
+sprintf("%.16f", c(lhat, lopt)); lopt - lhat
+
+d <- 10^-(4:10)
+data.frame(d, change_in_nll = nll(lhat + d) - nll(lhat), score = S(lhat + d))
+
+# predicted size of the flat bottom: sqrt(2 eps |f| / f'')
+sqrt(2 * .Machine$double.eps * nll(lhat) / -dS(lhat))
+# Output:
+# [1] "1.2184695258301268" "1.2184695265160335"
+# [1] 6.859067e-10
+#       d change_in_nll         score
+# 1 1e-04  2.845794e-07 -5.691452e-03
+# 2 1e-05  2.845923e-09 -5.691820e-04
+# 3 1e-06  2.845013e-11 -5.691856e-05
+# 4 1e-07  2.629008e-13 -5.691860e-06
+# 5 1e-08  0.000000e+00 -5.691860e-07
+# 6 1e-09  7.105427e-15 -5.691859e-08
+# 7 1e-10 -2.842171e-14 -5.691874e-09
+# [1] 2.026019e-08
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import brentq, minimize_scalar
+
+x = np.repeat([1, 2, 3, 4, 5], [52, 30, 12, 5, 1]); n = len(x); sx = x.sum()
+def nll(l):                                     # minus log-likelihood
+    return -(sx * np.log(l) - n * l - n * np.log(-np.expm1(-l)))
+def S(l):                                       # score = -nll'
+    return sx / l - n / (-np.expm1(-l))
+def dS(l):                                      # S' = -nll''
+    return -sx / l**2 + n * np.exp(-l) / np.expm1(-l)**2
+
+lhat = brentq(S, 0.01, 10, xtol=1e-15, rtol=1e-15)             # root of the score
+lopt = minimize_scalar(nll, bounds=(0.01, 10), method="bounded",
+                       options={"xatol": 1e-15}).x            # minimum of nll
+print(f"{lhat:.16f} {lopt:.16f}"); print(f"{lopt - lhat:.6e}")
+
+for d in 10.0 ** -np.arange(4, 11):
+    print(f"{d:.0e}  {nll(lhat + d) - nll(lhat): .6e}  {S(lhat + d): .6e}")
+
+# predicted size of the flat bottom: sqrt(2 eps |f| / f'')
+print(f"{np.sqrt(2 * np.finfo(float).eps * nll(lhat) / -dS(lhat)):.6e}")
+# Output:
+# 1.2184695258301268 1.2184695265011152
+# 6.709884e-10
+# 1e-04   2.845794e-07  -5.691452e-03
+# 1e-05   2.845923e-09  -5.691820e-04
+# 1e-06   2.846434e-11  -5.691856e-05
+# 1e-07   2.771117e-13  -5.691860e-06
+# 1e-08   1.421085e-14  -5.691860e-07
+# 1e-09   0.000000e+00  -5.691862e-08
+# 1e-10  -1.421085e-14  -5.691874e-09
+# 2.026019e-08
+```
+
+### Rust
+
+```rust
+// rust/examples/optimisation_1d_c3.rs  —  cargo run --example optimisation_1d_c3
+// C3: the flat bottom. Root of the score (BrentRoot) versus minimum of minus the
+// log-likelihood (BrentOpt), for the zero-truncated Poisson UMI counts.
+use argmin::core::{CostFunction, Error, Executor, State};
+use argmin::solver::brent::{BrentOpt, BrentRoot};
+
+const N: f64 = 100.0; // cells
+const SX: f64 = 173.0; // total UMIs
+
+fn nll(l: f64) -> f64 { -(SX * l.ln() - N * l - N * (-(-l).exp_m1()).ln()) } // minus log-lik
+fn score(l: f64) -> f64 { SX / l - N / (-(-l).exp_m1()) }                    // = -nll'
+fn dscore(l: f64) -> f64 { -SX / l.powi(2) + N * (-l).exp() / (-l).exp_m1().powi(2) }
+
+struct Nll;
+impl CostFunction for Nll {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, l: &f64) -> Result<f64, Error> { Ok(nll(*l)) }
+}
+struct Score;
+impl CostFunction for Score {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, l: &f64) -> Result<f64, Error> { Ok(score(*l)) }
+}
+
+fn main() -> Result<(), Error> {
+    let r = Executor::new(Score, BrentRoot::new(0.01, 10.0, 1e-15))
+        .configure(|s| s.max_iters(200)).run()?;
+    let lhat = *r.state().get_best_param().unwrap();
+    let o = Executor::new(Nll, BrentOpt::new(0.01, 10.0).set_tolerance(1e-15, 1e-15))
+        .configure(|s| s.max_iters(200)).run()?;
+    let lopt = *o.state().get_best_param().unwrap();
+    println!("{:.16} {:.16}", lhat, lopt);
+    println!("{:.6e}", lopt - lhat);
+    for k in 4..=10 {
+        let d = 10f64.powi(-k);
+        println!("{:.0e}  {:>13.6e}  {:>13.6e}", d, nll(lhat + d) - nll(lhat), score(lhat + d));
+    }
+    // predicted size of the flat bottom: sqrt(2 eps |f| / f'')
+    println!("{:.6e}", (2.0 * f64::EPSILON * nll(lhat) / -dscore(lhat)).sqrt());
+    Ok(())
+}
+// Output:
+// 1.2184695258301268 1.2184695280068372
+// 2.176710e-9
+// 1e-4    2.845794e-7   -5.691452e-3
+// 1e-5    2.845923e-9   -5.691820e-4
+// 1e-6   2.845013e-11   -5.691856e-5
+// 1e-7   2.629008e-13   -5.691860e-6
+// 1e-8     0.000000e0   -5.691860e-7
+// 1e-9   7.105427e-15   -5.691859e-8
+// 1e-10  -2.842171e-14   -5.691874e-9
+// 2.026019e-8
+```
+
+:::
+
+(a) The root of the score is found to all 16 digits; the minimum of $-\ell$, even with `tol = 1e-15`, is off by about $7\times10^{-10}$ (R, Python) or $2\times10^{-9}$ (Rust). Asking for a smaller tolerance does not help.
+(b) Down to $\delta = 10^{-6}$ the change in $f$ is $\approx \tfrac12\cdot56.92\,\delta^2$ ($2.85\times10^{-7}$, $2.85\times10^{-9}$, $2.85\times10^{-11}$). At $10^{-7}$ it is already off by 8% (R) and below that it is rounding noise: whole multiples of $7.1\times10^{-15}$, the gap between doubles near 52.6, sometimes 0, sometimes negative. The score keeps shrinking by a factor 10 per row all the way down. (Python's values in the noisy rows differ from R's and Rust's: the sum inside `nll` is rounded slightly differently. That is exactly the point: those digits are noise.)
+(c) The prediction $2.0\times10^{-8}$ matches where the change in $f$ turns into noise (between $10^{-7}$ and $10^{-8}$). The minimisers did better than the worst case (they land somewhere in the flat region, here by luck close to its centre); you cannot rely on that.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t <- c(0, 0.5, 1, 2, 4, 6, 8)
+y <- c(1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083)
+sse <- function(k) sum((y - exp(-k * t))^2)
+d1  <- function(k) sum(2 * (y - exp(-k * t)) * t * exp(-k * t))        # SSE'
+d2  <- function(k) sum(2 * t^2 * exp(-k * t) * (2 * exp(-k * t) - y))  # SSE''
+
+h <- 1e-5                                    # (a) check against central differences
+c(d1(0.3), (sse(0.3 + h) - sse(0.3 - h)) / (2 * h))
+c(d2(0.3), (d1(0.3 + h) - d1(0.3 - h)) / (2 * h))
+
+newton_min <- function(f, d1, d2, x0, tol = 1e-12, maxit = 50) {
+  x <- x0
+  for (k in 1:maxit) {
+    if (d2(x) <= 0) {                        # local parabola opens downwards
+      message("stopped: f'' <= 0 at x = ", signif(x, 4)); return(NA)
+    }
+    xnew <- x - d1(x) / d2(x)
+    if (abs(xnew - x) <= tol * abs(xnew)) return(list(xmin = xnew, iter = k))
+    if (!is.finite(f(xnew)) || f(xnew) > f(x)) {   # the step went uphill
+      message("stopped: f increases, step from ", signif(x, 4), " to ", signif(xnew, 4))
+      return(NA)
+    }
+    x <- xnew
+  }
+  message("no convergence in ", maxit, " steps"); NA
+}
+res <- newton_min(sse, d1, d2, 0.2); sprintf("%.10f", res$xmin); res$iter
+newton_min(sse, d1, d2, 0.7)
+newton_min(sse, d1, d2, 1.0)
+# Output:
+# [1] -0.630771 -0.630771
+# [1] 11.94409 11.94409
+# [1] "0.3753873095"
+# [1] 7
+# stopped: f increases, step from 0.7 to -1.66
+# [1] NA
+# stopped: f'' <= 0 at x = 1
+# [1] NA
+```
+
+### Python
+
+```python
+import numpy as np
+
+t = np.array([0, 0.5, 1, 2, 4, 6, 8])
+y = np.array([1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083])
+def sse(k): return np.sum((y - np.exp(-k * t))**2)
+def d1(k):  return np.sum(2 * (y - np.exp(-k * t)) * t * np.exp(-k * t))        # SSE'
+def d2(k):  return np.sum(2 * t**2 * np.exp(-k * t) * (2 * np.exp(-k * t) - y))  # SSE''
+
+h = 1e-5                                         # (a) check against central differences
+print(f"{d1(0.3):.6f} {(sse(0.3 + h) - sse(0.3 - h)) / (2 * h):.6f}")
+print(f"{d2(0.3):.5f} {(d1(0.3 + h) - d1(0.3 - h)) / (2 * h):.5f}")
+
+def newton_min(f, d1, d2, x0, tol=1e-12, maxit=50):
+    x = x0
+    for k in range(1, maxit + 1):
+        if d2(x) <= 0:                           # local parabola opens downwards
+            print(f"stopped: f'' <= 0 at x = {x:.4g}"); return None
+        xnew = x - d1(x) / d2(x)
+        if abs(xnew - x) <= tol * abs(xnew):
+            return xnew, k
+        if not np.isfinite(f(xnew)) or f(xnew) > f(x):   # the step went uphill
+            print(f"stopped: f increases, step from {x:.4g} to {xnew:.4g}"); return None
+        x = xnew
+    print(f"no convergence in {maxit} steps"); return None
+
+xmin, it = newton_min(sse, d1, d2, 0.2)
+print(f"{xmin:.10f}", it)
+print(newton_min(sse, d1, d2, 0.7))
+print(newton_min(sse, d1, d2, 1.0))
+# Output:
+# -0.630771 -0.630771
+# 11.94409 11.94409
+# 0.3753873095 7
+# stopped: f increases, step from 0.7 to -1.66
+# None
+# stopped: f'' <= 0 at x = 1
+# None
+```
+
+### Rust
+
+```rust
+// rust/examples/optimisation_1d_c4.rs  —  cargo run --example optimisation_1d_c4
+// C4: Newton for minimisation of the decay-rate SSE, with derivative checks and
+// the two safety checks (f'' > 0, f decreases).
+const T: [f64; 7] = [0.0, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0];
+const Y: [f64; 7] = [1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083];
+
+fn sse(k: f64) -> f64 {
+    T.iter().zip(Y.iter()).map(|(t, y)| (y - (-k * t).exp()).powi(2)).sum()
+}
+fn d1(k: f64) -> f64 { // SSE'
+    T.iter().zip(Y.iter()).map(|(t, y)| 2.0 * (y - (-k * t).exp()) * t * (-k * t).exp()).sum()
+}
+fn d2(k: f64) -> f64 { // SSE''
+    T.iter().zip(Y.iter())
+        .map(|(t, y)| 2.0 * t * t * (-k * t).exp() * (2.0 * (-k * t).exp() - y)).sum()
+}
+
+// Some((xmin, iterations)) on success, None (with a message) when a check fails
+fn newton_min(f: fn(f64) -> f64, d1: fn(f64) -> f64, d2: fn(f64) -> f64,
+              x0: f64, tol: f64, maxit: usize) -> Option<(f64, usize)> {
+    let mut x = x0;
+    for k in 1..=maxit {
+        if d2(x) <= 0.0 { // local parabola opens downwards
+            println!("stopped: f'' <= 0 at x = {:.4}", x);
+            return None;
+        }
+        let xnew = x - d1(x) / d2(x);
+        if (xnew - x).abs() <= tol * xnew.abs() {
+            return Some((xnew, k));
+        }
+        if !f(xnew).is_finite() || f(xnew) > f(x) { // the step went uphill
+            println!("stopped: f increases, step from {:.4} to {:.4}", x, xnew);
+            return None;
+        }
+        x = xnew;
+    }
+    println!("no convergence in {} steps", maxit);
+    None
+}
+
+fn main() {
+    let h = 1e-5; // (a) check against central differences
+    println!("{:.6} {:.6}", d1(0.3), (sse(0.3 + h) - sse(0.3 - h)) / (2.0 * h));
+    println!("{:.5} {:.5}", d2(0.3), (d1(0.3 + h) - d1(0.3 - h)) / (2.0 * h));
+    if let Some((xmin, it)) = newton_min(sse, d1, d2, 0.2, 1e-12, 50) {
+        println!("{:.10} {}", xmin, it);
+    }
+    println!("{:?}", newton_min(sse, d1, d2, 0.7, 1e-12, 50));
+    println!("{:?}", newton_min(sse, d1, d2, 1.0, 1e-12, 50));
+}
+// Output:
+// -0.630771 -0.630771
+// 11.94409 11.94409
+// 0.3753873095 7
+// stopped: f increases, step from 0.7000 to -1.6596
+// None
+// stopped: f'' <= 0 at x = 1.0000
+// None
+```
+
+:::
+
+(a) Both derivatives agree with the central differences to all printed digits.
+(c) From 0.2: 7 steps to $\hat k = 0.3753873095$ (digits double from the 4th step on). From 0.7: $\text{SSE}'' = 0.25$ is small, the local parabola is very flat and the step lands at $k = -1.66$, where SSE is huge: the "$f$ increases" check stops it. From 1.0: $\text{SSE}''(1) = -0.19 < 0$, the "$f'' \le 0$" check stops it before a step towards $k = \infty$ is taken.
+(d) Test convergence **first**. If the "did $f$ increase?" test comes first, the run from 0.2 is stopped at the very last step: there $x$ moves by about $10^{-16}$, $f$ is flat to rounding level, and $f(x_\text{new})$ comes out one rounding unit larger than $f(x)$. The R version with the two tests swapped prints `stopped: f increases, step from 0.3754 to 0.3754`. The flat bottom of the lecture strikes even inside the safety check.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t <- seq(0, 140, by = 4)                       # hours
+y <- c(2.10, 3.07, 2.42, 2.29, 1.64, 1.08, 1.95, 2.81, 2.52, 1.77, 1.80, 1.32,
+       1.92, 2.06, 3.02, 2.17, 1.59, 1.42, 1.44, 2.22, 3.01, 2.67, 1.54, 1.27,
+       2.03, 2.44, 2.82, 2.11, 1.82, 1.67, 1.52, 2.24, 3.03, 2.60, 2.08, 1.55)
+rss <- function(T) {                           # best sine wave with period T
+  X <- cbind(1, cos(2 * pi * t / T), sin(2 * pi * t / T))
+  sum(lm.fit(X, y)$residuals^2)
+}
+c(optimize(rss, c(10, 40))$minimum, optimize(rss, c(15, 35))$minimum)
+
+Tg <- seq(10, 40, by = 0.25)                   # (b) grid, then refine
+r  <- sapply(Tg, rss)
+T0 <- Tg[which.min(r)]; T0
+Tbest <- optimize(rss, c(T0 - 0.5, T0 + 0.5), tol = 1e-6)$minimum
+c(Tbest, rss(Tbest), rss(32.40162))
+plot(Tg, r, type = "l", xlab = "period T (h)", ylab = "RSS(T)")
+
+Tc <- seq(10, 40, by = 10)                     # (c) a coarse grid
+round(sapply(Tc, rss), 2)
+# Output:
+# [1] 32.40162 24.63047
+# [1] 24.75
+# [1] 24.630470  1.908081 10.225063
+# [1] 10.55 10.48 10.66 10.45
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import minimize_scalar
+import matplotlib.pyplot as plt
+
+t = np.arange(0, 141, 4.0)                    # hours
+y = np.array([2.10, 3.07, 2.42, 2.29, 1.64, 1.08, 1.95, 2.81, 2.52, 1.77, 1.80, 1.32,
+              1.92, 2.06, 3.02, 2.17, 1.59, 1.42, 1.44, 2.22, 3.01, 2.67, 1.54, 1.27,
+              2.03, 2.44, 2.82, 2.11, 1.82, 1.67, 1.52, 2.24, 3.03, 2.60, 2.08, 1.55])
+def rss(T):                                   # best sine wave with period T
+    X = np.column_stack([np.ones_like(t), np.cos(2 * np.pi * t / T), np.sin(2 * np.pi * t / T)])
+    coef = np.linalg.lstsq(X, y, rcond=None)[0]
+    return np.sum((y - X @ coef)**2)
+
+for lo, hi in [(10, 40), (15, 35)]:
+    print(f"{minimize_scalar(rss, bounds=(lo, hi), method='bounded').x:.5f}")
+
+Tg = np.arange(10, 40.001, 0.25)              # (b) grid, then refine
+r = np.array([rss(T) for T in Tg])
+T0 = Tg[np.argmin(r)]; print(T0)
+Tbest = minimize_scalar(rss, bounds=(T0 - 0.5, T0 + 0.5), method="bounded",
+                        options={"xatol": 1e-6}).x
+print(f"{Tbest:.5f} {rss(Tbest):.6f} {rss(32.40162):.6f}")
+plt.plot(Tg, r); plt.xlabel("period T (h)"); plt.ylabel("RSS(T)")
+
+Tc = np.arange(10, 41, 10.0)                  # (c) a coarse grid
+print(np.round([rss(T) for T in Tc], 2))
+# Output:
+# 32.40162
+# 24.63047
+# 24.75
+# 24.63047 1.908081 10.225063
+# [10.55 10.48 10.66 10.45]
+```
+
+### Rust
+
+```rust
+// rust/examples/optimisation_1d_c5.rs  —  cargo run --example optimisation_1d_c5
+// C5: the period of a circadian signal. RSS(T) from a linear least-squares fit
+// (nalgebra SVD) for each period T; BrentOpt on a wide interval, then grid + refine.
+use argmin::core::{CostFunction, Error, Executor, State};
+use argmin::solver::brent::BrentOpt;
+use nalgebra::{DMatrix, DVector};
+use std::f64::consts::PI;
+
+const Y: [f64; 36] = [2.10, 3.07, 2.42, 2.29, 1.64, 1.08, 1.95, 2.81, 2.52, 1.77, 1.80, 1.32,
+                      1.92, 2.06, 3.02, 2.17, 1.59, 1.42, 1.44, 2.22, 3.01, 2.67, 1.54, 1.27,
+                      2.03, 2.44, 2.82, 2.11, 1.82, 1.67, 1.52, 2.24, 3.03, 2.60, 2.08, 1.55];
+
+// best sine wave with period T: least squares on the columns 1, cos, sin
+fn rss(period: f64) -> f64 {
+    let n = Y.len();
+    let x = DMatrix::from_fn(n, 3, |i, j| {
+        let t = 4.0 * i as f64; // hours: 0, 4, ..., 140
+        match j { 0 => 1.0, 1 => (2.0 * PI * t / period).cos(), _ => (2.0 * PI * t / period).sin() }
+    });
+    let y = DVector::from_column_slice(&Y);
+    let coef = x.clone().svd(true, true).solve(&y, 1e-12).unwrap();
+    (y - x * coef).norm_squared()
+}
+
+struct Rss;
+impl CostFunction for Rss {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, p: &f64) -> Result<f64, Error> { Ok(rss(*p)) }
+}
+
+fn brent(a: f64, b: f64, t: f64) -> Result<f64, Error> {
+    let solver = BrentOpt::new(a, b).set_tolerance(f64::EPSILON.sqrt(), t);
+    let res = Executor::new(Rss, solver).configure(|s| s.max_iters(200)).run()?;
+    Ok(*res.state().get_best_param().unwrap())
+}
+
+fn main() -> Result<(), Error> {
+    println!("{:.5} {:.5}", brent(10.0, 40.0, 1e-5)?, brent(15.0, 35.0, 1e-5)?);
+
+    // (b) grid, then refine
+    let grid: Vec<f64> = (0..=120).map(|i| 10.0 + 0.25 * i as f64).collect();
+    let t0 = grid.iter().cloned()
+        .min_by(|a, b| rss(*a).partial_cmp(&rss(*b)).unwrap()).unwrap();
+    println!("{}", t0);
+    let tbest = brent(t0 - 0.5, t0 + 0.5, 1e-6)?;
+    println!("{:.5} {:.6} {:.6}", tbest, rss(tbest), rss(32.40162));
+
+    // (c) a coarse grid
+    let coarse: Vec<String> = [10.0, 20.0, 30.0, 40.0].iter().map(|&p| format!("{:.2}", rss(p))).collect();
+    println!("{}", coarse.join(" "));
+    Ok(())
+}
+// Output:
+// 32.40162 24.63047
+// 24.75
+// 24.63047 1.908081 10.225063
+// 10.55 10.48 10.66 10.45
+```
+
+:::
+
+(a) All three Brent implementations return the local minimum $T = 32.40$ h on $[10, 40]$ (they make the same first comparisons as in B6(c)), and the global minimum $T = 24.63$ h on $[15, 35]$. (b) The grid puts $T_0 = 24.75$ in the dip; refining gives 24.63 h with $\text{RSS} = 1.91$, against 10.23 at the local minimum. The simulation used 24.5 h. (c) The coarse grid's lowest value is at its end point, 40 h: it misses the dip entirely, as in B6(b).
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+K <- 1.2; N0 <- 0.05                           # fixed, known
+t <- seq(0, 10, by = 1/6)                      # hours, every 10 min
+y <- c(0.047, 0.058, 0.060, 0.081, 0.084, 0.090, 0.108, 0.123, 0.137, 0.150, 0.177,
+       0.192, 0.210, 0.226, 0.269, 0.292, 0.322, 0.359, 0.393, 0.428, 0.466, 0.504,
+       0.540, 0.569, 0.622, 0.659, 0.698, 0.730, 0.772, 0.812, 0.851, 0.876, 0.909,
+       0.935, 0.955, 0.985, 1.007, 1.029, 1.054, 1.069, 1.079, 1.092, 1.109, 1.120,
+       1.123, 1.132, 1.145, 1.154, 1.155, 1.166, 1.168, 1.167, 1.175, 1.171, 1.187,
+       1.192, 1.183, 1.181, 1.191, 1.189, 1.203)
+od  <- function(t, r) K / (1 + (K / N0 - 1) * exp(-r * t))
+sse <- function(r) sum((y - od(t, r))^2)
+rg <- c(0.1, 0.4, 0.8, 1.2, 2, 3)               # (a) look first
+round(sapply(rg, sse), 3)
+fit <- optimize(sse, c(0.1, 3), tol = 1e-10)   # (b)
+c(fit$minimum, fit$objective)
+sqrt(fit$objective / (length(t) - 1))          # (c) residual sd
+# Output:
+# [1] 34.707 11.129  0.001  2.574  8.919 13.407
+# [1] 0.800270322 0.001232394
+# [1] 0.004532097
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import minimize_scalar
+
+K, N0 = 1.2, 0.05                              # fixed, known
+t = np.arange(61) / 6                          # hours, every 10 min
+y = np.array([0.047, 0.058, 0.060, 0.081, 0.084, 0.090, 0.108, 0.123, 0.137, 0.150, 0.177,
+              0.192, 0.210, 0.226, 0.269, 0.292, 0.322, 0.359, 0.393, 0.428, 0.466, 0.504,
+              0.540, 0.569, 0.622, 0.659, 0.698, 0.730, 0.772, 0.812, 0.851, 0.876, 0.909,
+              0.935, 0.955, 0.985, 1.007, 1.029, 1.054, 1.069, 1.079, 1.092, 1.109, 1.120,
+              1.123, 1.132, 1.145, 1.154, 1.155, 1.166, 1.168, 1.167, 1.175, 1.171, 1.187,
+              1.192, 1.183, 1.181, 1.191, 1.189, 1.203])
+def od(t, r):  return K / (1 + (K / N0 - 1) * np.exp(-r * t))
+def sse(r):    return np.sum((y - od(t, r))**2)
+rg = [0.1, 0.4, 0.8, 1.2, 2, 3]               # (a) look first
+print(" ".join(f"{sse(r):.3f}" for r in rg))
+fit = minimize_scalar(sse, bounds=(0.1, 3), method="bounded", options={"xatol": 1e-10})  # (b)
+print(f"{fit.x:.9f} {fit.fun:.9f}")
+print(f"{np.sqrt(fit.fun / (len(t) - 1)):.9f}")   # (c) residual sd
+# Output:
+# 34.707 11.129 0.001 2.574 8.919 13.407
+# 0.800270322 0.001232394
+# 0.004532097
+```
+
+### Rust
+
+```rust
+// rust/examples/optimisation_1d_c6.rs  —  cargo run --example optimisation_1d_c6
+// C6: the growth rate r of the logistic OD curve, with K and N0 fixed (BrentOpt).
+use argmin::core::{CostFunction, Error, Executor, State};
+use argmin::solver::brent::BrentOpt;
+
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const Y: [f64; 61] = [0.047, 0.058, 0.060, 0.081, 0.084, 0.090, 0.108, 0.123, 0.137, 0.150, 0.177,
+    0.192, 0.210, 0.226, 0.269, 0.292, 0.322, 0.359, 0.393, 0.428, 0.466, 0.504,
+    0.540, 0.569, 0.622, 0.659, 0.698, 0.730, 0.772, 0.812, 0.851, 0.876, 0.909,
+    0.935, 0.955, 0.985, 1.007, 1.029, 1.054, 1.069, 1.079, 1.092, 1.109, 1.120,
+    1.123, 1.132, 1.145, 1.154, 1.155, 1.166, 1.168, 1.167, 1.175, 1.171, 1.187,
+    1.192, 1.183, 1.181, 1.191, 1.189, 1.203];
+
+fn od(t: f64, r: f64) -> f64 { K / (1.0 + (K / N0 - 1.0) * (-r * t).exp()) }
+fn sse(r: f64) -> f64 {
+    Y.iter().enumerate().map(|(i, y)| (y - od(i as f64 / 6.0, r)).powi(2)).sum() // t = i/6 h
+}
+
+struct Sse;
+impl CostFunction for Sse {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, r: &f64) -> Result<f64, Error> { Ok(sse(*r)) }
+}
+
+fn main() -> Result<(), Error> {
+    let look: Vec<String> = [0.1, 0.4, 0.8, 1.2, 2.0, 3.0].iter().map(|&r| format!("{:.3}", sse(r))).collect();
+    println!("{}", look.join(" ")); // (a) look first
+    let solver = BrentOpt::new(0.1, 3.0).set_tolerance(f64::EPSILON.sqrt(), 1e-10); // (b)
+    let res = Executor::new(Sse, solver).configure(|s| s.max_iters(200)).run()?;
+    let r = *res.state().get_best_param().unwrap();
+    println!("{:.9} {:.9}", r, sse(r));
+    println!("{:.9}", (sse(r) / 60.0).sqrt()); // (c) residual sd
+    Ok(())
+}
+// Output:
+// 34.707 11.129 0.001 2.574 8.919 13.407
+// 0.800270322 0.001232394
+// 0.004532097
+```
+
+:::
+
+(a) One valley: SSE falls from 34.7 at $r = 0.1$ to 0.001 at 0.8 and rises again. (b) $\hat r = 0.80027$ per hour, close to the true 0.8. (Fitting $K$ and $N_0$ as well gives $\hat r = 0.7954$, see *Numerical differentiation*; with three parameters a one-dimensional method no longer suffices: *Gradient descent, Newton and quasi-Newton*.) (c) The residual standard deviation 0.0045 is close to the 0.005 used in the simulation, so the model fits as well as the noise allows.
+
+:::
+
+## Where this leads
+
+- ***Gradient descent, Newton and quasi-Newton* (next unit):** with several parameters, $f'$ becomes the gradient and $f''$ the Hessian matrix. Every multivariate method chooses a direction and then does a one-dimensional search along it (a **line search**): the methods of this exercise reappear inside. The checks of C4 become the line-search and trust-region safeguards.
+- ***Nonlinear least squares and ODE fitting*:** the decay fit with two parameters (initial amount and rate) and fits of ODE models, where multistart replaces the grid of C5.
+- ***Identifiability and uncertainty of fitted parameters*:** the curvature $f''(\hat x)$ at the minimum gives the standard error; a flat valley in $f$ means a parameter the data cannot pin down.
+- ***Fourier series and the FFT*:** the periodogram computes something very close to $\text{RSS}(T)$ on a whole grid of periods at once.

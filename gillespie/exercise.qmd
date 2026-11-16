@@ -1,0 +1,929 @@
+---
+title: "Exercise: stochastic simulation"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- write down the **propensities** and **stoichiometry** of a small reaction network, and the ODE for its mean,
+- write the **chemical master equation** of a birth–death process and find its steady state (Poisson) by hand,
+- carry out steps of **Gillespie's direct method** by hand, and hand-write the algorithm in code,
+- run many simulated cells, compare the **mean with the ODE** (with a standard error) and the **distribution** with a known answer,
+- explain how a two-state (**telegraph**) promoter gives **transcriptional bursting**, and compute and interpret the **Fano factor**,
+- spot the event-averaging bug, the **negative counts** of tau-leaping and the `NaN`s of **Euler–Maruyama** at small numbers,
+- estimate the probability that an epidemic started by one case dies out.
+
+The by-hand part uses pen, paper and a pocket calculator (for `log` and `exp`). The code part hand-writes the SSA in each language: no simulation package is needed.
+
+## Background
+
+**Facts used below:**
+
+1. **Propensity.** Reaction $j$ fires in the next short time $dt$ with probability $a_j(\mathbf x)\,dt$, where $\mathbf x$ is the vector of molecule counts. It changes $\mathbf x$ by its **stoichiometry** (change) vector, column $j$ of the matrix $S$. Production at rate $k$: $a = k$; first-order decay of $m$ molecules at rate $\delta$ each: $a = \delta m$. The ODE for the mean is $\mathbf x' = S\,\mathbf a(\mathbf x)$; for propensities linear in $\mathbf x$ it is **exact** for the mean.
+2. **Chemical master equation (CME).** For the birth–death process ($\varnothing \to M$ at rate $k$, $M \to \varnothing$ at rate $\delta m$), with $P_n(t)$ the probability of $n$ molecules:
+   $$P_n' = k P_{n-1} + \delta (n+1) P_{n+1} - (k + \delta n) P_n.$$
+   Its steady state is Poisson with mean $k/\delta$.
+3. **Gillespie's direct method (SSA).** With $a_0 = \sum_j a_j$ and two uniform numbers $u_1, u_2$:
+   $$\tau = -\frac{\log u_1}{a_0} \quad(\text{time to the next reaction}), \qquad j = \text{the reaction whose piece of } [0, a_0) \text{ contains } u_2 a_0.$$
+   Then $t \to t + \tau$, $\mathbf x \to \mathbf x + S_{\cdot j}$, recompute the propensities, repeat. A $u$ that falls exactly on a boundary goes to the next piece.
+4. **Telegraph promoter.** Promoter state $g \in \{0, 1\}$: off → on with propensity $k_\text{on}(1 - g)$, on → off with $k_\text{off} g$, transcription $k_m g$. Steady-state mRNA mean and Fano factor:
+   $$\bar m = \frac{k_m}{\delta_m}\,\frac{k_\text{on}}{k_\text{on} + k_\text{off}}, \qquad F_m = \frac{\text{var}}{\text{mean}} = 1 + \frac{k_m k_\text{off}}{(k_\text{on} + k_\text{off})(k_\text{on} + k_\text{off} + \delta_m)}.$$
+   Constitutive transcription (always on) gives Poisson, $F = 1$. Protein with constitutive mRNA: $F_p = 1 + k_p/(\delta_m + \delta_p)$.
+5. **Tau-leaping.** Fixed step $\tau$: reaction $j$ fires Poisson$(a_j \tau)$ times. **Euler–Maruyama** for the chemical Langevin equation $dm = (k - \delta m)\,dt + \sqrt{k + \delta m}\,dW$: $\;m_{n+1} = m_n + (k - \delta m_n) h + \sqrt{(k + \delta m_n) h}\; Z_n$, $Z_n \sim N(0, 1)$.
+
+**Parameters used throughout** (time in hours): constitutive gene $k = 10$, $\delta_m = 1$, translation $k_p = 2$ per mRNA, protein decay $\delta_p = 0.2$; telegraph gene $k_\text{on} = 0.5$, $k_\text{off} = 4.5$, $k_m = 100$, same $\delta_m, k_p, \delta_p$. Both have mean 10 mRNA and 100 protein molecules.
+
+One SSA step from $m = 10$, where both reactions have propensity 10 per hour. The three languages use **different random number generators** (R: Mersenne Twister; numpy: PCG64; Rust: ChaCha12), so the same seed gives different numbers: compare **statistics** between languages, never single trajectories. R's `runif` never returns 0; numpy's and Rust's generators can, so Python and Rust use $1 - u$ inside the `log` (also uniform).
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+set.seed(1)
+a <- c(make = 10, degrade = 10)      # propensities at m = 10 (per hour)
+a0 <- sum(a)
+tau <- -log(runif(1)) / a0           # waiting time, Exp(a0) by inverse transform
+j <- findInterval(runif(1) * a0, cumsum(a)) + 1   # reaction j with probability a_j / a0
+cat("tau =", tau, " reaction =", names(a)[j], "\n")
+# tau = 0.06630539  reaction = make
+```
+
+### Python
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(1)
+a = np.array([10.0, 10.0])               # propensities at m = 10: make, degrade
+a0 = a.sum()
+tau = -np.log(1 - rng.random()) / a0     # waiting time, Exp(a0) by inverse transform
+j = np.searchsorted(np.cumsum(a), rng.random() * a0, side="right")  # 0-based reaction
+print("tau =", tau, " reaction =", ["make", "degrade"][j])
+# tau = 0.03585372083805462  reaction = degrade
+```
+
+### Rust
+
+```rust
+// rust/examples/gillespie_background.rs  —  cargo run --release --example gillespie_background
+// Background: one step of Gillespie's algorithm, with a seeded generator.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+
+fn main() {
+    let mut rng = StdRng::seed_from_u64(1);
+    let a = [10.0, 10.0]; // propensities at m = 10: make, degrade (per hour)
+    let a0: f64 = a.iter().sum();
+    let tau = -(1.0 - rng.random::<f64>()).ln() / a0; // waiting time, Exp(a0) by inverse transform
+    let r = rng.random::<f64>() * a0; // reaction j with probability a_j / a0
+    let j = if r < a[0] { 0 } else { 1 };
+    println!("tau = {}  reaction = {}", tau, ["make", "degrade"][j]);
+}
+
+// Output:
+// tau = 0.18295581472201694  reaction = degrade
+```
+
+:::
+
+## By hand
+
+**B1. Propensities and the ODE.** The constitutive gene has the reactions $\varnothing \to M$ ($k = 10$), $M \to \varnothing$ ($\delta_m m$, $\delta_m = 1$), $M \to M + P$ ($k_p m$, $k_p = 2$), $P \to \varnothing$ ($\delta_p p$, $\delta_p = 0.2$), all per hour.
+(a) Write the stoichiometry matrix $S$ (rows $m$, $p$; one column per reaction).
+(b) In the state $(m, p) = (4, 30)$, compute the four propensities, $a_0$, the probability that each reaction is the next one, and the mean waiting time in minutes.
+(c) Write the ODE $\mathbf x' = S\,\mathbf a(\mathbf x)$ and its steady state.
+(d) The telegraph gene in the state $(g, m, p) = (0, 4, 30)$: which reactions are possible, and what is $a_0$?
+
+**B2. Gillespie by hand.** Birth–death with $k = 10$, $\delta = 1$ per hour, starting at $t = 0$ with $m = 2$. (Useful: $\ln 0.5 = -0.693$, $\ln 0.2 = -1.609$.)
+(a) Step 1 with $u_1 = 0.5$, $u_2 = 0.3$: the waiting time, the reaction, the new $t$ and $m$.
+(b) Step 2 with $u_1 = 0.2$, $u_2 = 0.9$.
+(c) Starting from $m = 0$: which reaction is certainly the first, and what is its mean waiting time?
+(d) What plays the role of Euler's step size $h$ here?
+
+**B3. The master equation of a small gene.** Birth–death with $k = 2$, $\delta = 1$ per hour.
+(a) Write $P_0'$ and $P_1'$ from Fact 2.
+(b) At steady state all $P_n' = 0$. Show that $P_1 = 2P_0$ and $P_2 = 2P_0$, and guess $P_n$. Normalise and compute $P_0, \dots, P_3$. Which distribution is this?
+(c) A model with three species, each between 0 and 199 molecules: how many equations does its master equation have? Why does that favour simulation?
+
+**B4. The telegraph gene.** $k_\text{on} = 0.5$, $k_\text{off} = 4.5$, $k_m = 100$, $\delta_m = 1$ per hour.
+(a) Write the ODE for the mean promoter state $g$ (the fraction of time on) and for $m$, and find their steady states. Then the protein steady state ($k_p = 2$, $\delta_p = 0.2$).
+(b) How long is the promoter on, and off, on average? How many mRNA does one burst make on average?
+(c) Compute the Fano factor of the mRNA (Fact 4) and compare it with the constitutive gene.
+(d) Keep the mean at 10 but make bursts half as large: $k_\text{on} = 1$, $k_\text{off} = 9$, $k_m = 100$. Compute the mean and the Fano factor.
+
+**B5. Fano factors from counts.** smFISH counts of two genes in 8 cells: gene A: 6, 12, 8, 14, 10, 7, 13, 10; gene B: 0, 0, 31, 2, 0, 45, 1, 1.
+(a) Compute the mean, the sample variance (divide by $n - 1$) and the Fano factor of each.
+(b) For a Poisson(10) gene, what is the probability that a cell has no mRNA? How many of the 8 cells of gene B have none?
+(c) A colleague measures gene A by fluorescence, 50 units per molecule. What Fano factor do they get, and what is wrong with comparing it with 1?
+
+**B6. Tau-leaping goes negative.** After transcription has stopped ($k = 0$), a cell has $m = 3$ mRNA, $\delta = 1$ per hour.
+(a) In one tau-leap of $\tau = 1.5$ h, how many degradations are expected?
+(b) The number of degradations is Poisson(4.5); $P(N \le 3) = 0.342$. What is the probability that the count becomes negative?
+(c) Why can the exact SSA never produce a negative count?
+(d) Choose $\tau$ so that at most 10% of the molecules are expected to go in one leap. What is then the chance of going negative? ($P(\text{Poisson}(0.3) \ge 4) = 2.7 \times 10^{-4}$.)
+
+**B7. Will the outbreak die out?** SIR with $\beta = 0.3$, $\gamma = 0.1$ per day in a large population ($S \approx N$), starting with $I = 1$.
+(a) With $S \approx N$ the infection propensity is $\beta I$ and the recovery propensity $\gamma I$. What is the probability that the next event is a recovery?
+(b) Each infected person independently starts a chain that dies out with probability $q$. Explain why $q = 0.25 + 0.75\,q^2$, and solve it.
+(c) What is the extinction probability with 3 initial cases? With 10 (the start of the SIR example in *Initial value problems and Euler's method*)?
+(d) What does the ODE predict in each case?
+
+## In code
+
+**C1. Gillespie's algorithm, hand-written.** Birth–death, $k = 10$, $\delta = 1$ per hour, $m(0) = 0$.
+(a) Write a function that simulates one cell up to $t = 10$ h and returns all event times and counts. How many reactions happen? (Expected: $\int_0^{10}(10 + m(t))\,dt \approx 190$.)
+(b) Simulate 2000 cells and record $m$ at $t = 0.5, 1, 2, 10$ h (the count after the last event at or before $t$: [`findInterval`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/findInterval.html); Python [`np.searchsorted`](https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html)). Compare the mean $\pm$ SE with the ODE $m(t) = 10(1 - e^{-t})$.
+(c) At $t = 10$ h: the variance and Fano factor, and the fractions of cells with 5, 10 and 15 molecules against Poisson(10) ([`dpois`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Poisson.html); Python [`scipy.stats.poisson.pmf`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.poisson.html)).
+
+**C2. A general SSA: constitutive versus bursty.** Write `ssa(x, S, propensity, times)` that takes a start state, a stoichiometry matrix (species × reactions), a propensity function and output times, and returns the state at each output time.
+(a) Simulate 1000 cells of the constitutive gene with protein (B1) from $(0, 0)$ to $t = 30$ h. Compare the means with the ODE (10 and 99.7 at $t = 30$ h) and the Fano factors with 1 and $1 + k_p/(\delta_m + \delta_p) = 2.67$.
+(b) Simulate 1000 cells of the telegraph gene from $(g, m, p) = (0, 0, 0)$. Compare the means with (a), and the Fano factors with 16 (mRNA, B4) and 32.5 (protein, exact value from the moment equations).
+(c) What fraction of cells has **no** mRNA in each model? Compare with Poisson(10).
+
+**C3. A bug: averaging over events.** Simulate one cell of the birth–death process for 5000 h. After a burn-in of 10 h, compute the mean of $m$ in two ways: (i) the average of $m$ after each event, (ii) the time-weighted average $\frac{1}{T}\int m\,dt$ (each state weighted by how long it lasts). Which is right? Explain the value 10.5 that (i) approaches.
+
+**C4. Tau-leaping.** Birth–death, $k = 10$, $\delta = 1$ per hour, from $m = 0$ to $t = 10$ h, with steps $\tau = 0.01, 0.1, 0.5, 1, 1.5$ h. In each step, add Poisson$(k\tau)$ and subtract Poisson$(\delta m \tau)$ molecules ([`rpois`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Poisson.html); Python [`rng.poisson`](https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.poisson.html)); if $m < 0$, record it and set $m = 0$. Over 2000 runs, print the mean and variance at $t = 10$ h, the theoretical tau-leap variance $2k/(\delta(2 - \delta\tau))$ (the exact SSA value is 10), and the fraction of runs that went negative.
+
+**C5. Euler–Maruyama.** Simulate the chemical Langevin equation of Fact 5 with $h = 0.01$ h to $t = 10$ h, 2000 runs ([`rnorm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Normal.html); Python [`rng.standard_normal`](https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.standard_normal.html)).
+(a) With $k = 10$: compare the mean and variance with Poisson(10).
+(b) With $k = 0.5$ (mean 0.5 molecules): what fraction of runs end in `NaN`? Of the others, what fraction ends negative?
+
+**C6. Early extinction of an epidemic.** SIR with $N = 10\,000$, $\beta = 0.3$, $\gamma = 0.1$ per day. Simulate only the **order** of events (no times needed): infection with probability $a_1/(a_1 + a_2)$, $a_1 = \beta S I/N$, $a_2 = \gamma I$. Stop when $I = 0$ (extinct) or $I = 100$ (established). With 10 000 runs each, estimate the extinction probability for $I_0 = 1, 2, 3$ with its SE, and compare with $(1/3)^{I_0}$ from B7.
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — propensities and the master equation (B1, B3)"}
+A column of $S$ is "what this reaction does to each species": translation does not use up the mRNA. The probability that reaction $j$ is next is $a_j/a_0$, and the waiting time has mean $1/a_0$. For B3, set $P_0' = 0$ first: it involves only $P_0$ and $P_1$. Then use $P_1' = 0$. The guess $P_n = (2^n/n!)\,P_0$ sums to $e^2 P_0$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — the SSA (B2, C1, C2)"}
+One loop: compute the propensities, $a_0$, $\tau = -\log(u_1)/a_0$, then choose the reaction by comparing $u_2 a_0$ with the cumulative sums ([`cumsum`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/cumsum.html), [`findInterval`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/findInterval.html); Python [`np.cumsum`](https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html), `np.searchsorted(..., side="right")`; Rust a running sum or `partition_point`). Uniforms: R [`runif`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Uniform.html); Python [`rng.random()`](https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.random.html) with `rng = np.random.default_rng(1)`; Rust `rng.random::<f64>()` with `StdRng::seed_from_u64(1)` from [`rand`](https://docs.rs/rand/0.10/rand/). To record the state at output times, note that the state does not change between events: every output time before the next event time sees the current state. Repeat runs with [`replicate`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/lapply.html) in R or a list comprehension in Python.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — Fano factors (B4, B5, C2)"}
+$F = \text{var}/\text{mean}$ with the sample variance: R [`var`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/cor.html), Python `x.var(ddof=1)` (numpy's default `ddof=0` divides by $n$). Multiplying every value by $c$ multiplies the mean by $c$ and the variance by $c^2$. With 1000 cells, a Fano factor is uncertain by roughly $F\sqrt{2/1000} \approx 4.5\%$ of its value; the mean of a bursty gene is uncertain by $\sqrt{F \cdot \text{mean}/1000}$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — events versus time (C3)"}
+For the time-weighted mean, add $m \cdot \tau$ (the current count times the waiting time) **before** the jump. Events happen at rate $a_0 = 10 + m$, so states with large $m$ are left more often. If a fraction $P_n$ of the **time** is spent in state $n$, a fraction proportional to $P_n (10 + n)$ of the **events** happens there. Use $\mathrm E[m] = 10$, $\mathrm E[m^2] = 110$ (Poisson).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — tau-leaping and Euler–Maruyama (B6, C4, C5)"}
+$P(\text{negative}) = P(N > m) = 1 - P(N \le m)$. In Rust, `rand_distr::Poisson::new(lambda)` refuses `lambda = 0`, so return 0 yourself in that case; normal numbers from `rand_distr::StandardNormal`. In R, `sqrt` of a negative number gives `NaN` with a warning; in numpy a `RuntimeWarning` (silence it with `np.errstate(invalid="ignore")`); in Rust `f64::sqrt` silently returns `NaN`. Once a value is `NaN`, every later step is `NaN` too.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — extinction (B7, C6)"}
+A chain of infections dies out if the first person recovers before infecting anyone (probability 0.25), **or** infects someone first and then both the new chain and their own continued chain die out (probability $0.75\,q \cdot q$). Solve the quadratic $3q^2 - 4q + 1 = 0$. In code, the propensities change after every event, so recompute them in the loop; the waiting times are not needed for this question.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) Columns: transcription, mRNA decay, translation, protein decay.
+$$S = \begin{pmatrix} 1 & -1 & 0 & 0 \\ 0 & 0 & 1 & -1 \end{pmatrix}.$$
+(b) $a = (10,\ 1 \cdot 4,\ 2 \cdot 4,\ 0.2 \cdot 30) = (10, 4, 8, 6)$, $a_0 = 28$ per hour. Probabilities $10/28 = 0.357$, $4/28 = 0.143$, $8/28 = 0.286$, $6/28 = 0.214$. Mean waiting time $1/28$ h $= 2.1$ min.
+(c) $m' = 10 - m$, $p' = 2m - 0.2p$. Steady state $m = 10$, $p = 2 \cdot 10/0.2 = 100$.
+(d) The promoter is off, so transcription has propensity $100 \cdot 0 = 0$ and switching off has $4.5 \cdot 0 = 0$. Possible: switching on (0.5), mRNA decay (4), translation (8), protein decay (6); $a_0 = 18.5$ per hour.
+
+**B2.**
+(a) $a = (10, 2)$, $a_0 = 12$. $\tau = 0.693/12 = 0.0578$ h. $u_2 a_0 = 3.6 < 10$: transcription. $t = 0.0578$ h, $m = 3$.
+(b) $a = (10, 3)$, $a_0 = 13$. $\tau = 1.609/13 = 0.1238$ h. $u_2 a_0 = 11.7 \ge 10$: degradation. $t = 0.1816$ h, $m = 2$.
+(c) With $m = 0$ the degradation propensity is 0, so the first reaction is certainly a transcription; $a_0 = 10$, mean waiting time 0.1 h = 6 min.
+(d) Nothing: the step lengths are random waiting times set by the model. The SSA has no step-size error; its only error is the Monte Carlo error of averaging over a finite number of runs.
+
+**B3.**
+(a) $P_0' = \delta P_1 - k P_0 = P_1 - 2P_0$ (state 0 can only be entered from 1, and left by a transcription). $P_1' = k P_0 + 2\delta P_2 - (k + \delta) P_1 = 2P_0 + 2P_2 - 3P_1$.
+(b) $P_0' = 0 \Rightarrow P_1 = 2P_0$. $P_1' = 0 \Rightarrow 2P_2 = 3P_1 - 2P_0 = 4P_0$, so $P_2 = 2P_0$. In general $P_n = \frac{2^n}{n!} P_0$; the sum is $e^2 P_0 = 1$, so $P_0 = e^{-2} = 0.135$, $P_1 = 0.271$, $P_2 = 0.271$, $P_3 = 0.180$: **Poisson(2)**, mean $k/\delta = 2$.
+(c) $200^3 = 8 \times 10^6$ equations (one per state). A simulation needs memory only for the current state; it samples the distribution instead of computing all of it.
+
+**B4.**
+(a) $g' = k_\text{on}(1 - g) - k_\text{off}\, g$ gives $g^* = 0.5/5 = 0.1$. $m' = k_m g - \delta_m m$ gives $m^* = 100 \cdot 0.1 = 10$. $p^* = 2 \cdot 10/0.2 = 100$. The same as the constitutive gene.
+(b) On for $1/k_\text{off} = 0.22$ h (13 min), off for $1/k_\text{on} = 2$ h on average. One burst makes on average $k_m/k_\text{off} = 22.2$ mRNA. (Check: about $1/2.22 = 0.45$ bursts per hour × 22.2 = 10 mRNA per hour, as for the constitutive gene.)
+(c) $F_m = 1 + \frac{100 \cdot 4.5}{5 \cdot 6} = 1 + 15 = 16$. The constitutive gene has $F = 1$: the same mean, 16 times the variance.
+(d) $g^* = 1/10$, mean $100 \cdot 0.1 = 10$ again; burst size $100/9 = 11.1$; $F_m = 1 + \frac{100 \cdot 9}{10 \cdot 11} = 9.18$. Smaller bursts, less noise; the Fano factor follows the burst size, roughly.
+
+**B5.**
+(a) Gene A: mean 80/8 = 10; squared deviations 16, 4, 4, 16, 0, 9, 9, 0, sum 58; variance $58/7 = 8.29$; $F = 0.83$. Gene B: mean 80/8 = 10; squared deviations 100, 100, 441, 64, 100, 1225, 81, 81, sum 2192; variance $313.1$; $F = 31.3$. Gene A is consistent with Poisson (with 8 cells, $F$ between about 0.3 and 2 is normal); gene B is far from it.
+(b) $e^{-10} = 4.5 \times 10^{-5}$: in 8 cells we expect no zeros at all. Gene B has 3 cells with none: long silent periods between bursts.
+(c) Mean $500$, variance $50^2 \cdot 8.29 = 20\,700$, $F = 41.4$. The Fano factor scales with the unit, so only molecule **counts** can be compared with the Poisson value 1. Fluorescence data need a calibration to molecule numbers first.
+
+**B6.**
+(a) $\delta m \tau = 1 \cdot 3 \cdot 1.5 = 4.5$, more than the 3 molecules there are.
+(b) Negative if $N \ge 4$: $1 - 0.342 = 0.658$.
+(c) Each SSA step fires one reaction, and a reaction with no molecules to act on has propensity 0 ($\delta \cdot 0 = 0$), so it is never chosen.
+(d) $\delta \tau \le 0.1$, so $\tau \le 0.1$ h: expected 0.3 degradations, and $P(N \ge 4) = 2.7 \times 10^{-4}$. Not zero: with many leaps and many cells, some will still go negative. That is why practical tau-leaping codes treat species with few molecules with exact SSA steps.
+
+**B7.**
+(a) $\gamma/(\beta + \gamma) = 0.1/0.4 = 0.25$.
+(b) With probability 0.25 the first event is a recovery: extinct at once. With probability 0.75 it is an infection: now two independent chains, both of which must die out ($q^2$). So $q = 0.25 + 0.75 q^2$, i.e. $3q^2 - 4q + 1 = (3q - 1)(q - 1) = 0$, $q = 1/3$ or $q = 1$. The relevant root is the smaller, $q = 1/3 = 1/R_0$.
+(c) $(1/3)^3 = 0.037$; $(1/3)^{10} = 1.7 \times 10^{-5}$: with 10 initial cases, the outbreak practically always takes off.
+(d) The ODE predicts a full epidemic (peak about 3000 infected) in every case: it has no extinction.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+k <- 10; delta <- 1                       # per hour
+bd_run <- function(t_end) {               # one cell, from m = 0
+  t <- 0; m <- 0; tt <- 0; mm <- 0
+  while (t < t_end) {
+    a <- c(k, delta * m); a0 <- sum(a)
+    t <- t - log(runif(1)) / a0           # waiting time
+    m <- m + if (runif(1) * a0 < a[1]) 1 else -1
+    tt <- c(tt, t); mm <- c(mm, m)        # every event
+  }
+  list(t = tt, m = mm)
+}
+set.seed(1)
+run <- bd_run(10)
+length(run$t) - 1                         # number of reactions in 10 h
+# [1] 223
+tm <- c(0.5, 1, 2, 10)                    # m at time T: count after the last event <= T
+M <- replicate(2000, { r <- bd_run(10); r$m[findInterval(tm, r$t)] })
+rbind(t = tm, mean = rowMeans(M), se = apply(M, 1, sd) / sqrt(2000),
+      ode = 10 * (1 - exp(-tm)))
+#            [,1]      [,2]       [,3]        [,4]
+# t    0.50000000 1.0000000 2.00000000 10.00000000
+# mean 3.89150000 6.2705000 8.68950000  9.99800000
+# se   0.04408895 0.0562294 0.06474674  0.06996746
+# ode  3.93469340 6.3212056 8.64664717  9.99954600
+m10 <- M[4, ]
+c(var = var(m10), fano = var(m10) / mean(m10))
+#      var     fano
+# 9.790891 0.979285
+rbind(sim = sapply(c(5, 10, 15), function(n) mean(m10 == n)),
+      poisson = dpois(c(5, 10, 15), 10))       # P(m = 5), P(m = 10), P(m = 15)
+#               [,1]    [,2]       [,3]
+# sim     0.03200000 0.13100 0.03450000
+# poisson 0.03783327 0.12511 0.03471807
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.stats import poisson
+
+k, delta = 10.0, 1.0                     # per hour
+rng = np.random.default_rng(1)
+
+def bd_run(t_end):                       # one cell, from m = 0
+    t, m = 0.0, 0
+    tt, mm = [0.0], [0]
+    while t < t_end:
+        a1, a2 = k, delta * m
+        a0 = a1 + a2
+        t += -np.log(1 - rng.random()) / a0   # waiting time
+        m += 1 if rng.random() * a0 < a1 else -1
+        tt.append(t); mm.append(m)            # every event
+    return np.array(tt), np.array(mm)
+
+tt, mm = bd_run(10)
+print(len(tt) - 1)                       # number of reactions in 10 h
+# 209
+tm = np.array([0.5, 1, 2, 10])           # m at time T: count after the last event <= T
+M = np.array([mm[np.searchsorted(tt, tm, side="right") - 1]
+              for tt, mm in (bd_run(10) for _ in range(2000))]).T
+print("mean", M.mean(axis=1))
+# mean [3.9825 6.325  8.7035 9.985 ]
+print("se  ", M.std(axis=1, ddof=1) / np.sqrt(2000))
+# se   [0.04504011 0.05542764 0.0648953  0.07023784]
+print("ode ", 10 * (1 - np.exp(-tm)))
+# ode  [3.9346934  6.32120559 8.64664717 9.999546  ]
+m10 = M[3]
+print("var", m10.var(ddof=1), "fano", m10.var(ddof=1) / m10.mean())
+# var 9.866708354177089 fano 0.9881530650152318
+print("sim    ", np.array([np.mean(m10 == n) for n in (5, 10, 15)]))
+# sim     [0.0375 0.13   0.034 ]
+print("poisson", poisson.pmf([5, 10, 15], 10))
+# poisson [0.03783327 0.12511004 0.03471807]
+```
+
+### Rust
+
+```rust
+// rust/examples/gillespie_c1.rs  —  cargo run --release --example gillespie_c1
+// C1: Gillespie's direct method for mRNA birth-death, hand-written.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+
+const K: f64 = 10.0; // transcription, per hour
+const DELTA: f64 = 1.0; // mRNA decay, per hour
+
+// one cell from m = 0: event times and counts after each event
+fn bd_run(t_end: f64, rng: &mut StdRng) -> (Vec<f64>, Vec<i64>) {
+    let (mut t, mut m) = (0.0, 0i64);
+    let (mut tt, mut mm) = (vec![0.0], vec![0i64]);
+    while t < t_end {
+        let (a1, a2) = (K, DELTA * m as f64);
+        let a0 = a1 + a2;
+        t += -(1.0 - rng.random::<f64>()).ln() / a0; // waiting time
+        m += if rng.random::<f64>() * a0 < a1 { 1 } else { -1 };
+        tt.push(t);
+        mm.push(m);
+    }
+    (tt, mm)
+}
+
+fn main() {
+    let mut rng = StdRng::seed_from_u64(1);
+    let (tt, _) = bd_run(10.0, &mut rng);
+    println!("{}", tt.len() - 1); // number of reactions in 10 h
+
+    let tm = [0.5, 1.0, 2.0, 10.0];
+    let n = 2000;
+    let mut m_at = vec![vec![0.0; n]; tm.len()];
+    for c in 0..n {
+        let (tt, mm) = bd_run(10.0, &mut rng);
+        for (i, &t) in tm.iter().enumerate() {
+            let idx = tt.partition_point(|&s| s <= t) - 1; // last event <= t
+            m_at[i][c] = mm[idx] as f64;
+        }
+    }
+    for (i, &t) in tm.iter().enumerate() {
+        let v = &m_at[i];
+        let mean = v.iter().sum::<f64>() / n as f64;
+        let var = v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
+        println!("t {:4.1}  mean {:.4}  se {:.4}  ode {:.4}", t, mean, (var / n as f64).sqrt(),
+                 10.0 * (1.0 - (-t as f64).exp()));
+    }
+    let v = &m_at[3];
+    let mean = v.iter().sum::<f64>() / n as f64;
+    let var = v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
+    println!("var {:.4}  fano {:.4}", var, var / mean);
+    for k in [5.0, 10.0, 15.0] {
+        let p_sim = v.iter().filter(|&&x| x == k).count() as f64 / n as f64;
+        // Poisson(10) probability, exp(k log 10 - 10 - log k!)
+        let lfact: f64 = (1..=k as u32).map(|i| (i as f64).ln()).sum();
+        let p_pois = (k * 10f64.ln() - 10.0 - lfact).exp();
+        println!("P(m = {:2})  sim {:.4}  poisson {:.4}", k, p_sim, p_pois);
+    }
+}
+
+// Output:
+// 221
+// t  0.5  mean 4.0125  se 0.0443  ode 3.9347
+// t  1.0  mean 6.3255  se 0.0557  ode 6.3212
+// t  2.0  mean 8.5330  se 0.0666  ode 8.6466
+// t 10.0  mean 10.0150  se 0.0712  ode 9.9995
+// var 10.1498  fano 1.0135
+// P(m =  5)  sim 0.0355  poisson 0.0378
+// P(m = 10)  sim 0.1300  poisson 0.1251
+// P(m = 15)  sim 0.0380  poisson 0.0347
+```
+
+:::
+
+(a) 223, 209 and 221 reactions in the three languages, near the expected 190 (the count is random; its sd is about $\sqrt{190} \approx 14$). (b) The means agree with the ODE within about 2 SE at all four times (the largest deviations: R 1.0 SE, Python 1.1 SE, Rust 1.8 SE). (c) Variance ≈ mean, Fano 0.98–1.01, and the frequencies of 5, 10, 15 molecules agree with Poisson(10) within their sampling error (about $\sqrt{0.035/2000} = 0.004$ for the outer two). The numbers differ between languages because the generators differ; the statistics agree.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+ssa <- function(x, S, propensity, times) {   # S: species x reactions
+  out <- matrix(0, length(times), length(x)); t <- 0; i <- 1
+  repeat {
+    a <- propensity(x); a0 <- sum(a)
+    t <- t - log(runif(1)) / a0               # Inf if a0 = 0: nothing more happens
+    while (i <= length(times) && times[i] < t) { out[i, ] <- x; i <- i + 1 }
+    if (i > length(times)) return(out)
+    j <- findInterval(runif(1) * a0, cumsum(a)) + 1   # reaction j w.p. a_j / a0
+    x <- x + S[, j]
+  }
+}
+fano <- function(v) var(v) / mean(v)
+# C2: constitutive gene, species (m, p)
+S2 <- rbind(m = c(1, -1, 0,  0),
+            p = c(0,  0, 1, -1))
+gene <- function(x) c(10, 1 * x[1], 2 * x[1], 0.2 * x[2])  # k, dm m, kp m, dp p
+set.seed(1)
+X <- t(replicate(1000, ssa(c(0, 0), S2, gene, 30)[1, ]))     # 1000 cells at t = 30 h
+c(mean_m = mean(X[, 1]), mean_p = mean(X[, 2]),
+  fano_m = fano(X[, 1]), fano_p = fano(X[, 2]))
+#     mean_m     mean_p     fano_m     fano_p
+#  10.149000 100.853000   1.024652   2.635848
+# C3: telegraph, species (g, m, p)
+S3 <- rbind(g = c(1, -1, 0,  0, 0,  0),
+            m = c(0,  0, 1, -1, 0,  0),
+            p = c(0,  0, 0,  0, 1, -1))
+telegraph <- function(x) c(0.5 * (1 - x[1]), 4.5 * x[1], 100 * x[1],
+                           1 * x[2], 2 * x[2], 0.2 * x[3])
+set.seed(1)
+Y <- t(replicate(1000, ssa(c(0, 0, 0), S3, telegraph, 30)[1, ]))
+c(mean_m = mean(Y[, 2]), mean_p = mean(Y[, 3]),
+  fano_m = fano(Y[, 2]), fano_p = fano(Y[, 3]))
+#    mean_m    mean_p    fano_m    fano_p
+#  10.10700 100.21200  15.26168  32.92882
+cat("P(m = 0): bursty", mean(Y[, 2] == 0), " constitutive", mean(X[, 1] == 0),
+    " Poisson(10)", dpois(0, 10), "\n")
+# P(m = 0): bursty 0.189  constitutive 0  Poisson(10) 4.539993e-05
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.stats import poisson
+
+rng = np.random.default_rng(1)
+
+def ssa(x, S, propensity, times):         # S: species x reactions
+    x = np.array(x, dtype=float)
+    out = np.zeros((len(times), len(x)))
+    t, i = 0.0, 0
+    while True:
+        a = np.cumsum(propensity(x)); a0 = a[-1]
+        t += -np.log(1 - rng.random()) / a0 if a0 > 0 else np.inf
+        while i < len(times) and times[i] < t:
+            out[i] = x; i += 1
+        if i == len(times):
+            return out
+        j = np.searchsorted(a, rng.random() * a0, side="right")  # reaction j w.p. a_j / a0
+        x += S[:, j]
+
+def fano(v):
+    return v.var(ddof=1) / v.mean()
+
+# C2: constitutive gene, species (m, p)
+S2 = np.array([[1, -1, 0,  0],
+               [0,  0, 1, -1]])
+gene = lambda x: [10, 1 * x[0], 2 * x[0], 0.2 * x[1]]   # k, dm m, kp m, dp p
+X = np.array([ssa([0, 0], S2, gene, [30])[0] for _ in range(1000)])  # 1000 cells, t = 30 h
+print("mean m", X[:, 0].mean(), " mean p", X[:, 1].mean(),
+      " Fano m", fano(X[:, 0]), " Fano p", fano(X[:, 1]))
+# mean m 10.13  mean p 99.783  Fano m 1.028778037662539  Fano p 2.528890204255747
+
+# C3: telegraph, species (g, m, p)
+S3 = np.array([[1, -1, 0,  0, 0,  0],
+               [0,  0, 1, -1, 0,  0],
+               [0,  0, 0,  0, 1, -1]])
+telegraph = lambda x: [0.5 * (1 - x[0]), 4.5 * x[0], 100 * x[0],
+                       1 * x[1], 2 * x[1], 0.2 * x[2]]
+Y = np.array([ssa([0, 0, 0], S3, telegraph, [30])[0] for _ in range(1000)])
+print("mean m", Y[:, 1].mean(), " mean p", Y[:, 2].mean(),
+      " Fano m", fano(Y[:, 1]), " Fano p", fano(Y[:, 2]))
+# mean m 11.318  mean p 103.55  Fano m 16.802531105058055  Fano p 32.60600532932739
+print("P(m = 0): bursty", np.mean(Y[:, 1] == 0), " constitutive", np.mean(X[:, 0] == 0),
+      " Poisson(10)", poisson.pmf(0, 10))
+# P(m = 0): bursty 0.169  constitutive 0.0  Poisson(10) 4.5399929762484854e-05
+```
+
+### Rust
+
+```rust
+// rust/examples/gillespie_c2.rs  —  cargo run --release --example gillespie_c2
+// C2: a general Gillespie SSA; constitutive gene vs telegraph (bursty) gene.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+
+// state at the given output times; s[i][j] = change of species i by reaction j
+fn ssa(x0: &[f64], s: &[Vec<f64>], propensity: &dyn Fn(&[f64]) -> Vec<f64>,
+       times: &[f64], rng: &mut StdRng) -> Vec<Vec<f64>> {
+    let mut x = x0.to_vec();
+    let mut out = Vec::new();
+    let (mut t, mut i) = (0.0, 0);
+    loop {
+        let a = propensity(&x);
+        let a0: f64 = a.iter().sum();
+        t += -(1.0 - rng.random::<f64>()).ln() / a0; // inf if a0 = 0
+        while i < times.len() && times[i] < t {
+            out.push(x.clone());
+            i += 1;
+        }
+        if i == times.len() {
+            return out;
+        }
+        let r = rng.random::<f64>() * a0; // reaction j with probability a_j / a0
+        let mut j = 0;
+        let mut cum = a[0];
+        while cum <= r {
+            j += 1;
+            cum += a[j];
+        }
+        for (xi, si) in x.iter_mut().zip(s) {
+            *xi += si[j];
+        }
+    }
+}
+
+fn mean_fano(v: &[f64]) -> (f64, f64) {
+    let n = v.len() as f64;
+    let m = v.iter().sum::<f64>() / n;
+    let var = v.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (n - 1.0);
+    (m, var / m)
+}
+
+fn main() {
+    let mut rng = StdRng::seed_from_u64(1);
+    // (a) constitutive gene, species (m, p)
+    let s2 = vec![vec![1.0, -1.0, 0.0, 0.0], vec![0.0, 0.0, 1.0, -1.0]];
+    let gene = |x: &[f64]| vec![10.0, 1.0 * x[0], 2.0 * x[0], 0.2 * x[1]];
+    let cells: Vec<Vec<f64>> = (0..1000)
+        .map(|_| ssa(&[0.0, 0.0], &s2, &gene, &[30.0], &mut rng)[0].clone()).collect();
+    let m: Vec<f64> = cells.iter().map(|c| c[0]).collect();
+    let p: Vec<f64> = cells.iter().map(|c| c[1]).collect();
+    let ((mm, fm), (mp, fp)) = (mean_fano(&m), mean_fano(&p));
+    println!("constitutive: mean m {:.3}  mean p {:.3}  Fano m {:.4}  Fano p {:.4}", mm, mp, fm, fp);
+
+    // (b) telegraph, species (g, m, p)
+    let s3 = vec![vec![1.0, -1.0, 0.0, 0.0, 0.0, 0.0],
+                  vec![0.0, 0.0, 1.0, -1.0, 0.0, 0.0],
+                  vec![0.0, 0.0, 0.0, 0.0, 1.0, -1.0]];
+    let telegraph = |x: &[f64]| vec![0.5 * (1.0 - x[0]), 4.5 * x[0], 100.0 * x[0],
+                                     1.0 * x[1], 2.0 * x[1], 0.2 * x[2]];
+    let cells: Vec<Vec<f64>> = (0..1000)
+        .map(|_| ssa(&[0.0, 0.0, 0.0], &s3, &telegraph, &[30.0], &mut rng)[0].clone()).collect();
+    let mb: Vec<f64> = cells.iter().map(|c| c[1]).collect();
+    let pb: Vec<f64> = cells.iter().map(|c| c[2]).collect();
+    let ((mm, fm), (mp, fp)) = (mean_fano(&mb), mean_fano(&pb));
+    println!("bursty:       mean m {:.3}  mean p {:.3}  Fano m {:.4}  Fano p {:.4}", mm, mp, fm, fp);
+    let zero = |v: &[f64]| v.iter().filter(|&&x| x == 0.0).count() as f64 / v.len() as f64;
+    println!("P(m = 0): bursty {}  constitutive {}  Poisson(10) {:.4e}", zero(&mb), zero(&m),
+             (-10f64).exp());
+}
+
+// Output:
+// constitutive: mean m 10.141  mean p 100.121  Fano m 0.9120  Fano p 2.6036
+// bursty:       mean m 9.245  mean p 100.173  Fano m 15.3154  Fano p 31.9487
+// P(m = 0): bursty 0.2  constitutive 0  Poisson(10) 4.5400e-5
+```
+
+:::
+
+(a) Constitutive: means 10.1 and 100 (the ODE gives 10.0 and $100 - 125e^{-6} = 99.7$ at $t = 30$ h), Fano factors 0.91–1.03 for mRNA and 2.53–2.64 for protein, against 1 and 2.67. (b) Telegraph: the same means (R 10.1; Rust 9.2 is 2.0 SE low; Python 11.3 is 3.0 SE high, a rare fluke: seeds 2, 3, 4 give 9.90, 9.46, 10.47), but Fano factors 15–17 for mRNA and about 32 for protein. The bursty mean converges slowly, because a large variance means a large SE: $\sqrt{16 \cdot 10/1000} = 0.4$. (c) About one cell in five (17–20%) has no mRNA, against $4.5 \times 10^{-5}$ for Poisson(10) and none of the 1000 constitutive cells.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+k <- 10; delta <- 1
+set.seed(1)
+t <- 0; m <- 0
+n_ev <- 0; sum_ev <- 0; area <- 0           # statistics after a 10 h burn-in
+while (t < 5000) {
+  a <- c(k, delta * m); a0 <- sum(a)
+  tau <- -log(runif(1)) / a0
+  if (t > 10) area <- area + m * tau        # m holds for a time tau
+  t <- t + tau
+  m <- m + if (runif(1) * a0 < a[1]) 1 else -1
+  if (t > 10) { n_ev <- n_ev + 1; sum_ev <- sum_ev + m }   # one record per event
+}
+cat(sprintf("per event %.4f   time-weighted %.4f   (%d events)\n",
+            sum_ev / n_ev, area / (t - 10), n_ev))
+# per event 10.4555   time-weighted 9.9577   (99167 events)
+```
+
+### Python
+
+```python
+import numpy as np
+
+k, delta = 10.0, 1.0
+rng = np.random.default_rng(1)
+t, m = 0.0, 0
+n_ev, sum_ev, area = 0, 0, 0.0            # statistics after a 10 h burn-in
+while t < 5000:
+    a1, a2 = k, delta * m
+    a0 = a1 + a2
+    tau = -np.log(1 - rng.random()) / a0
+    if t > 10: area += m * tau            # m holds for a time tau
+    t += tau
+    m += 1 if rng.random() * a0 < a1 else -1
+    if t > 10: n_ev += 1; sum_ev += m     # one record per event
+print(f"per event {sum_ev / n_ev:.4f}   time-weighted {area / (t - 10):.4f}   ({n_ev} events)")
+# per event 10.5248   time-weighted 10.0259   (100066 events)
+```
+
+### Rust
+
+```rust
+// rust/examples/gillespie_c3.rs  —  cargo run --release --example gillespie_c3
+// C3: averaging over events instead of over time biases the mean.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+
+fn main() {
+    let (k, delta) = (10.0, 1.0);
+    let mut rng = StdRng::seed_from_u64(1);
+    let (mut t, mut m) = (0.0f64, 0i64);
+    let (mut n_ev, mut sum_ev, mut area) = (0u64, 0i64, 0.0f64); // after a 10 h burn-in
+    while t < 5000.0 {
+        let (a1, a2) = (k, delta * m as f64);
+        let a0 = a1 + a2;
+        let tau = -(1.0 - rng.random::<f64>()).ln() / a0;
+        if t > 10.0 { area += m as f64 * tau; } // m holds for a time tau
+        t += tau;
+        m += if rng.random::<f64>() * a0 < a1 { 1 } else { -1 };
+        if t > 10.0 { n_ev += 1; sum_ev += m; } // one record per event
+    }
+    println!("per event {:.4}   time-weighted {:.4}   ({} events)",
+             sum_ev as f64 / n_ev as f64, area / (t - 10.0), n_ev);
+}
+
+// Output:
+// per event 10.3702   time-weighted 9.8655   (98946 events)
+```
+
+:::
+
+The time-weighted mean (9.96, 10.03, 9.87) is right; the per-event mean (10.46, 10.52, 10.37) is about 0.5 too high in all three languages. Events happen at rate $a_0 = 10 + m$, so a state $n$ is the starting point of a fraction $\propto P_n (10 + n)$ of the events, giving a mean pre-event state of $\frac{\mathrm E[m(10 + m)]}{\mathrm E[10 + m]} = \frac{100 + 110}{20} = 10.5$ (and the same for the state after the event). Recording a value per event weights each state by how often it **changes**, not by how long it **lasts**.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+tau_leap <- function(tau, t_end = 10, k = 10, delta = 1) {
+  m <- 0; went_negative <- FALSE
+  for (n in 1:round(t_end / tau)) {
+    m <- m + rpois(1, k * tau) - rpois(1, delta * m * tau)   # many reactions per leap
+    if (m < 0) { went_negative <- TRUE; m <- 0 }             # impossible: clip
+  }
+  c(m, went_negative)
+}
+set.seed(1)
+for (tau in c(0.01, 0.1, 0.5, 1, 1.5)) {
+  r <- replicate(2000, tau_leap(tau))
+  cat(sprintf("tau %4.2f  mean %6.3f  var %6.3f  theory var %6.3f  negative %.4f\n",
+              tau, mean(r[1, ]), var(r[1, ]), 20 / (2 - tau), mean(r[2, ])))
+}
+# tau 0.01  mean  9.969  var  9.874  theory var 10.050  negative 0.0010
+# tau 0.10  mean  9.960  var 10.018  theory var 10.526  negative 0.0040
+# tau 0.50  mean  9.956  var 12.823  theory var 13.333  negative 0.0190
+# tau 1.00  mean  9.954  var 20.367  theory var 20.000  negative 0.1030
+# tau 1.50  mean 10.074  var 33.712  theory var 40.000  negative 0.3215
+```
+
+### Python
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(1)
+
+def tau_leap(tau, t_end=10, k=10, delta=1):
+    m, went_negative = 0, False
+    for n in range(round(t_end / tau)):
+        m += rng.poisson(k * tau) - rng.poisson(delta * m * tau)  # many reactions per leap
+        if m < 0:
+            went_negative, m = True, 0                            # impossible: clip
+    return m, went_negative
+
+for tau in [0.01, 0.1, 0.5, 1, 1.5]:
+    r = np.array([tau_leap(tau) for _ in range(2000)])
+    print(f"tau {tau:4.2f}  mean {r[:, 0].mean():6.3f}  var {r[:, 0].var(ddof=1):6.3f}"
+          f"  theory var {20 / (2 - tau):6.3f}  negative {r[:, 1].mean():.4f}")
+# tau 0.01  mean 10.057  var  9.680  theory var 10.050  negative 0.0000
+# tau 0.10  mean 10.039  var 11.642  theory var 10.526  negative 0.0010
+# tau 0.50  mean  9.936  var 13.127  theory var 13.333  negative 0.0140
+# tau 1.00  mean 10.003  var 19.652  theory var 20.000  negative 0.0925
+# tau 1.50  mean 10.297  var 31.834  theory var 40.000  negative 0.3070
+```
+
+### Rust
+
+```rust
+// rust/examples/gillespie_c4.rs  —  cargo run --release --example gillespie_c4
+// C4: tau-leaping for mRNA birth-death; variance and negative counts versus tau.
+use rand::{rngs::StdRng, SeedableRng};
+use rand_distr::{Distribution, Poisson};
+
+fn rpois(lambda: f64, rng: &mut StdRng) -> i64 {
+    if lambda <= 0.0 { 0 } else { Poisson::new(lambda).unwrap().sample(rng) as i64 }
+}
+
+fn tau_leap(tau: f64, rng: &mut StdRng) -> (i64, bool) {
+    let (t_end, k, delta) = (10.0, 10.0, 1.0);
+    let (mut m, mut went_negative) = (0i64, false);
+    for _ in 0..(t_end / tau as f64).round() as usize {
+        m += rpois(k * tau, rng) - rpois(delta * m as f64 * tau, rng); // many reactions per leap
+        if m < 0 { went_negative = true; m = 0; } // impossible: clip
+    }
+    (m, went_negative)
+}
+
+fn main() {
+    let mut rng = StdRng::seed_from_u64(1);
+    for tau in [0.01, 0.1, 0.5, 1.0, 1.5] {
+        let r: Vec<(i64, bool)> = (0..2000).map(|_| tau_leap(tau, &mut rng)).collect();
+        let n = r.len() as f64;
+        let mean = r.iter().map(|x| x.0 as f64).sum::<f64>() / n;
+        let var = r.iter().map(|x| (x.0 as f64 - mean).powi(2)).sum::<f64>() / (n - 1.0);
+        let neg = r.iter().filter(|x| x.1).count() as f64 / n;
+        println!("tau {:4.2}  mean {:6.3}  var {:6.3}  theory var {:6.3}  negative {:.4}",
+                 tau, mean, var, 20.0 / (2.0 - tau), neg);
+    }
+}
+
+// Output:
+// tau 0.01  mean 10.056  var  9.901  theory var 10.050  negative 0.0005
+// tau 0.10  mean 10.011  var 10.932  theory var 10.526  negative 0.0030
+// tau 0.50  mean 10.085  var 13.937  theory var 13.333  negative 0.0075
+// tau 1.00  mean  9.976  var 19.030  theory var 20.000  negative 0.0965
+// tau 1.50  mean 10.019  var 32.193  theory var 40.000  negative 0.3295
+```
+
+:::
+
+The mean stays near 10 for all $\tau$ (for linear propensities tau-leaping gets the mean right), but the variance follows the tau-leap formula $20/(2 - \tau)$ instead of the exact 10: twice too large at $\tau = 1$. At $\tau = 1.5$ the clipping at zero holds the variance below the formula, and about a third of the runs went negative. Small $\tau$ (0.01) is accurate but costs 1000 steps for 10 h, five times more than the about 200 SSA steps: tau-leaping pays only when $a_0 \tau \gg 1$, i.e. for abundant species.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+em <- function(h, k, t_end = 10, delta = 1) {      # chemical Langevin equation
+  m <- 0
+  for (n in 1:round(t_end / h))
+    m <- m + (k - delta * m) * h + sqrt((k + delta * m) * h) * rnorm(1)
+  m
+}
+set.seed(1)
+m <- replicate(2000, em(0.01, k = 10))
+c(mean = mean(m), var = var(m), fano = var(m) / mean(m))
+#      mean       var      fano
+# 9.9177643 9.8171422 0.9898544
+m <- suppressWarnings(replicate(2000, em(0.01, k = 0.5)))
+c(nan = mean(is.nan(m)), negative = mean(m < 0, na.rm = TRUE))
+#       nan  negative
+# 0.0760000 0.2678571
+```
+
+### Python
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(1)
+
+def em(h, k, t_end=10, delta=1):          # chemical Langevin equation
+    m = 0.0
+    for n in range(round(t_end / h)):
+        m += (k - delta * m) * h + np.sqrt((k + delta * m) * h) * rng.standard_normal()
+    return m
+
+m = np.array([em(0.01, k=10) for _ in range(2000)])
+print("mean", m.mean(), " var", m.var(ddof=1), " fano", m.var(ddof=1) / m.mean())
+# mean 9.945831144441698  var 10.652036617945152  fano 1.0710051742531466
+with np.errstate(invalid="ignore"):       # sqrt of a negative number gives nan
+    m = np.array([em(0.01, k=0.5) for _ in range(2000)])
+print("nan", np.mean(np.isnan(m)), " negative", np.mean(m[~np.isnan(m)] < 0))
+# nan 0.0665  negative 0.2785216925549009
+```
+
+### Rust
+
+```rust
+// rust/examples/gillespie_c5.rs  —  cargo run --release --example gillespie_c5
+// C5: Euler-Maruyama for the chemical Langevin equation of mRNA birth-death.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+use rand_distr::StandardNormal;
+
+fn em(h: f64, k: f64, rng: &mut StdRng) -> f64 {
+    let (t_end, delta) = (10.0, 1.0);
+    let mut m = 0.0f64;
+    for _ in 0..(t_end / h as f64).round() as usize {
+        let z: f64 = rng.sample(StandardNormal);
+        m += (k - delta * m) * h + ((k + delta * m) * h).sqrt() * z; // sqrt(<0) is NaN
+    }
+    m
+}
+
+fn main() {
+    let mut rng = StdRng::seed_from_u64(1);
+    let m: Vec<f64> = (0..2000).map(|_| em(0.01, 10.0, &mut rng)).collect();
+    let n = m.len() as f64;
+    let mean = m.iter().sum::<f64>() / n;
+    let var = m.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0);
+    println!("mean {:.4}  var {:.4}  fano {:.4}", mean, var, var / mean);
+    let m: Vec<f64> = (0..2000).map(|_| em(0.01, 0.5, &mut rng)).collect();
+    let nan = m.iter().filter(|x| x.is_nan()).count();
+    let ok: Vec<&f64> = m.iter().filter(|x| !x.is_nan()).collect();
+    let neg = ok.iter().filter(|&&&x| x < 0.0).count() as f64 / ok.len() as f64;
+    println!("nan {:.4}  negative {:.4}", nan as f64 / n, neg);
+}
+
+// Output:
+// mean 10.0255  var 10.6279  fano 1.0601
+// nan 0.0670  negative 0.2738
+```
+
+:::
+
+(a) Mean 9.92–10.03, variance 9.8–10.7: the Langevin equation reproduces mean and variance of Poisson(10). (b) With a mean of 0.5 molecules, 7% of the runs reach $m < -k$, where the square root fails and the rest of the run is `NaN`; of the remaining runs, more than a quarter end at a negative "number of molecules". Continuous noise is a large-number approximation; at a few molecules, use the SSA.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+sir_fate <- function(I0, N = 10000, beta = 0.3, gamma = 0.1) {
+  S <- N - I0; I <- I0
+  while (I > 0 && I < 100) {                 # stop: extinct, or 100 infected
+    a1 <- beta * S * I / N; a2 <- gamma * I  # infection, recovery
+    if (runif(1) * (a1 + a2) < a1) { S <- S - 1; I <- I + 1 } else I <- I - 1
+  }
+  I == 0                                     # TRUE if the outbreak died out
+}
+set.seed(1)
+for (I0 in 1:3) {
+  ext <- replicate(10000, sir_fate(I0))
+  cat(sprintf("I0 = %d  extinct %.4f  se %.4f  branching (1/3)^I0 = %.4f\n",
+              I0, mean(ext), sd(ext) / 100, (1 / 3)^I0))
+}
+# I0 = 1  extinct 0.3348  se 0.0047  branching (1/3)^I0 = 0.3333
+# I0 = 2  extinct 0.1086  se 0.0031  branching (1/3)^I0 = 0.1111
+# I0 = 3  extinct 0.0373  se 0.0019  branching (1/3)^I0 = 0.0370
+```
+
+### Python
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(1)
+
+def sir_fate(I0, N=10000, beta=0.3, gamma=0.1):
+    S, I = N - I0, I0
+    while 0 < I < 100:                       # stop: extinct, or 100 infected
+        a1, a2 = beta * S * I / N, gamma * I # infection, recovery
+        if rng.random() * (a1 + a2) < a1:
+            S, I = S - 1, I + 1
+        else:
+            I -= 1
+    return I == 0                            # True if the outbreak died out
+
+for I0 in [1, 2, 3]:
+    ext = np.array([sir_fate(I0) for _ in range(10000)])
+    print(f"I0 = {I0}  extinct {ext.mean():.4f}  se {ext.std(ddof=1) / 100:.4f}"
+          f"  branching (1/3)^I0 = {(1 / 3)**I0:.4f}")
+# I0 = 1  extinct 0.3358  se 0.0047  branching (1/3)^I0 = 0.3333
+# I0 = 2  extinct 0.1094  se 0.0031  branching (1/3)^I0 = 0.1111
+# I0 = 3  extinct 0.0391  se 0.0019  branching (1/3)^I0 = 0.0370
+```
+
+### Rust
+
+```rust
+// rust/examples/gillespie_c6.rs  —  cargo run --release --example gillespie_c6
+// C6: early extinction of an epidemic (SIR, N = 10 000, beta = 0.3, gamma = 0.1 per day).
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+
+fn sir_fate(i0: i64, rng: &mut StdRng) -> bool {
+    let (n, beta, gamma) = (10000.0, 0.3, 0.1);
+    let (mut s, mut i) = (10000 - i0, i0);
+    while i > 0 && i < 100 { // stop: extinct, or 100 infected
+        let a1 = beta * s as f64 * i as f64 / n; // infection
+        let a2 = gamma * i as f64; // recovery
+        if rng.random::<f64>() * (a1 + a2) < a1 { s -= 1; i += 1; } else { i -= 1; }
+    }
+    i == 0 // true if the outbreak died out
+}
+
+fn main() {
+    let mut rng = StdRng::seed_from_u64(1);
+    for i0 in 1..=3 {
+        let ext = (0..10000).filter(|_| sir_fate(i0, &mut rng)).count() as f64 / 10000.0;
+        println!("I0 = {}  extinct {:.4}  se {:.4}  branching (1/3)^I0 = {:.4}", i0, ext,
+                 (ext * (1.0 - ext) / 9999.0).sqrt(), (1.0f64 / 3.0).powi(i0 as i32));
+    }
+}
+
+// Output:
+// I0 = 1  extinct 0.3364  se 0.0047  branching (1/3)^I0 = 0.3333
+// I0 = 2  extinct 0.1100  se 0.0031  branching (1/3)^I0 = 0.1111
+// I0 = 3  extinct 0.0369  se 0.0019  branching (1/3)^I0 = 0.0370
+```
+
+:::
+
+All three languages agree with $(1/3)^{I_0}$ within about 1 SE. The small differences from the branching-process value would come from $S$ being slightly less than $N$, which is negligible here. With $I_0 = 10$ the extinction probability $1.7 \times 10^{-5}$ is too small to estimate with 10 000 runs (expected 0.17 extinctions: the rare-event problem of *Random numbers and Monte Carlo*).
+:::
+
+## Where this leads
+
+- ***Optimisation in one dimension* and *Nonlinear least squares and ODE fitting* (Part 9):** fitting rates such as $k_\text{on}$, $k_\text{off}$ and $k_m$ to measured mean and Fano factor, or ODE parameters to time courses; the cell-to-cell variability of this unit is one reason why an ODE fitted to single-cell data can mislead.
+- ***Identifiability and uncertainty of fitted parameters* (Part 9):** from a mean and a Fano factor alone, burst size and burst frequency can be estimated, but not all four telegraph rates.
+- ***Reaction–diffusion and pattern formation* (Part 10):** reactions plus space. Stochastic versions (molecules hopping between compartments) use the same SSA with diffusion as an extra "reaction".
+- **Not covered in this course:** solving the master equation directly for small systems (finite state projection), the next-reaction method and adaptive tau-leaping, and the theory of stochastic differential equations (Itô calculus, strong and weak order).
