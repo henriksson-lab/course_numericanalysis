@@ -1,0 +1,155 @@
+---
+title: "Quiz: Runge–Kutta and adaptive step size"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of Runge–Kutta methods and adaptive step size. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** Heun's method uses two slopes per step. Which two, and how are they combined?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The first is Euler's slope. Where is the second one evaluated?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$k_1 = f(t_n, y_n)$ at the start, and $k_2 = f(t_n + h, y_n + h k_1)$ at the point an Euler step would reach. The step uses their **average**: $y_{n+1} = y_n + \tfrac h2 (k_1 + k_2)$, the trapezoid rule applied to the slope. Two evaluations, order 2.
+:::
+
+---
+
+**Q2.** One step of RK4 with $h = 0.5$ on $C' = -0.8\,C$, $C_0 = 10$ gave $k_1 = -8$, $k_2 = -6.4$, $k_3 = -6.72$, $k_4 = -5.312$. What is $C_1$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Weights $1, 2, 2, 1$, divided by 6, times $h$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$C_1 = 10 + \tfrac{0.5}{6}(-8 - 2\cdot6.4 - 2\cdot6.72 - 5.312) = 10 - \tfrac{0.5}{6}\cdot 39.552 = 6.704$. Exact: $10e^{-0.4} = 6.7032$, so the error is $8\times10^{-4}$ (Euler: $-0.70$).
+:::
+
+---
+
+**Q3.** You halve the step size and the error of your ODE solver drops from $3.2\times10^{-6}$ to $2.0\times10^{-7}$. What is the order of the method? Which method could it be?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Error $\approx C h^p$; halving $h$ divides it by $2^p$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The ratio is 16 $= 2^4$, so order 4: for example classical RK4. On a log–log plot of error against $h$ this is a slope of 4. If you expected RK4 and got a ratio of 2 or 4, there is a bug in one of the stages.
+:::
+
+---
+
+**Q4.** RK4 costs four function evaluations per step, Euler one. Why is RK4 nevertheless much cheaper for a given accuracy?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How does the number of steps needed scale with the target error $\varepsilon$ for order 1 and order 4?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+For error $\varepsilon$, Euler needs $h \propto \varepsilon$ and RK4 $h \propto \varepsilon^{1/4}$. For $\varepsilon = 10^{-6}$ on the logistic curve that was about 61 000 evaluations for Euler and 140 for RK4. Four times the work per step is a small price for steps that can be hundreds of times longer. Only for very rough answers (one digit) is Euler competitive.
+:::
+
+---
+
+**Q5.** In the Lotka–Volterra model, how can you tell from a numerical solution, without knowing the exact solution, that it is inaccurate?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What should stay constant along every true orbit?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The quantity $V = cx - d\ln x + by - a\ln y$ is conserved by the exact solution. Compute $V$ along the numerical solution: if it drifts (Euler: by 0.5 over 50 years; RK4 with $h = 0.1$: by $6\times10^{-6}$), the solution has that much error, and an outward drift shows up as an orbit that spirals out. Any conserved quantity of a model (total mass, total number of molecules) can be used this way, although linear ones like $S + I + R$ are kept exactly by every Runge–Kutta method and are therefore no test.
+:::
+
+---
+
+**Q6.** What is an **embedded pair**, and why is it useful?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Heun's first stage is an Euler step.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Two Runge–Kutta formulas of different order (e.g. 1 and 2, or 4 and 5) that share the same stages, so one step gives two answers at almost no extra cost. Their difference estimates the error of the step. An adaptive solver uses that estimate to accept or reject the step and to choose the next step size. Dormand–Prince 5(4), behind `ode45`, `RK45` and `Dopri5`, is the standard example.
+:::
+
+---
+
+**Q7.** An adaptive solver with a pair of orders 4 and 5 finds the scaled error $\text{err} = 32$ for a step of $h = 0.1$. Is the step accepted? What step does it try next (safety factor 0.9, exponent $-1/5$, change at most a factor 5)?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$32^{-1/5} = 1/2$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\text{err} > 1$, so the step is **rejected**. New step: $0.1\cdot\max(0.2,\ 0.9\cdot 32^{-1/5}) = 0.1\cdot 0.45 = 0.045$. The solver retries from the same point with $h = 0.045$. The exponent $-1/5$ comes from the local error of the order-4 member, which is $\propto h^5$.
+:::
+
+---
+
+**Q8.** You solve an SIR model in counts of people ($S \approx 10\,000$, $I(0) = 10$) with `rtol = 1e-6`. A colleague says `atol = 10` is fine, "ten people do not matter". What do you answer?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Allowed error per step $=$ `atol` $+$ `rtol` $\cdot|y|$. How large is that for $I$ at the start, compared with $I$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+At the start the allowed error in $I$ is about 10 people, the size of $I$ itself: the solver may get the seed of the epidemic wrong by 100%, and that error grows with the epidemic. In our runs it left a 3–5% error in $I$ at day 60 that no value of `rtol` removed. `atol` must be well below the smallest value you care about in **every** variable (here, say, `atol = 1e-6`). It has the units of the variable, so it must change when you change units.
+:::
+
+---
+
+**Q9.** What does `rtol = 1e-6` guarantee about the answer at $t = 50$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Is the tolerance about one step or about the whole run?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Nothing directly. It controls the estimated error **per step**; errors from many steps add up and can be amplified (in an oscillator they shift the phase). For the repressilator, tolerance $10^{-6}$ gave 4 correct digits of $p_1(50)$, not 6. The practical check is to solve again with 10–100 times smaller tolerances and keep the digits that agree.
+:::
+
+---
+
+**Q10.** In deSolve, `ode(y0, times = 0:50, func, parms, method = "rk4")` gave $p_1(50) = 3\times10^{58}$ for the repressilator, while `method = "ode45"` with the same `times` was fine. Why?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What step size does a fixed-step method in deSolve use?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+deSolve's fixed-step methods step from one output time to the next unless `hini` is given, so `"rk4"` used $h = 1$, which is unstable for this model and blew up. `"ode45"` chooses its own steps (capped at the output spacing) to meet the tolerance. Choose fixed steps deliberately, and check them by halving.
+:::
+
+---
+
+**Q11.** What is **dense output**, and why does it matter for finding the peak of an epidemic?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Adaptive steps can be several days long.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A polynomial through each step, built from the stages already computed, that gives the solution at any time inside the step at no extra cost. Without it, the solution is known only at the solver's steps (or at your output grid): taking `max(I)` over a daily grid misses the true SIR peak (3007.96) by 1.7 people, and joining long steps with straight lines cuts the peak. Event location (finding where $\beta S/N - \gamma = 0$) applies a root finder to the dense output.
+:::
+
+---
+
+**Q12.** Why can an event solver miss a population briefly crossing a threshold, and what can you do about it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The solver only checks the sign of $g$ at the ends of each step.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+If $g$ crosses zero and back within one step, it has the same sign at both ends, and no event is reported (lynx above 20 for 0.8 years, steps of 2.5 years). Remedies: limit the maximum step (`hmax` in deSolve, `max_step` in `solve_ivp`) to below the shortest excursion that matters, or watch a quantity that changes sign once per excursion, such as the derivative at a maximum.
+:::

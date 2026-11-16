@@ -153,13 +153,15 @@ function clipGroup(svg: SVGSVGElement, fr: Frame, id: string): SVGGElement {
   return svgEl("g", { "clip-path": `url(#${id})` }, svg);
 }
 
-function legend(svg: SVGSVGElement, x: number, y: number, items: [string, string, string][], w: number): void {
-  svgEl("rect", { x: x - 8, y: y - 20, width: w, height: items.length * 24 + 8, fill: "#fff", "fill-opacity": 0.88, rx: 4 }, svg);
-  items.forEach(([txt, c, dash], i) => {
-    const yy = y + i * 24;
-    svgEl("line", { x1: x, x2: x + 26, y1: yy - 6, y2: yy - 6, stroke: c, "stroke-width": 3, "stroke-dasharray": dash }, svg);
-    svgEl("text", { x: x + 34, y: yy }, svg).textContent = txt;
-  });
+/** One row of legend items [text, colour, dash, width?] starting at (x, y). */
+function legend(svg: SVGSVGElement, x: number, y: number, items: [string, string, string, number?][]): void {
+  for (const [txt, c, dash, wd] of items) {
+    svgEl("line", { x1: x, x2: x + 24, y1: y - 6, y2: y - 6, stroke: c, "stroke-width": wd ?? 3, "stroke-dasharray": dash, "stroke-opacity": wd && wd > 4 ? 0.35 : 1 }, svg);
+    const t = svgEl("text", { x: x + 30, y }, svg);
+    t.textContent = txt;
+    x += 30 + t.getComputedTextLength() + 18;
+    if (!t.getComputedTextLength()) x += txt.length * 9;
+  }
 }
 
 function readItem(ro: HTMLElement, k: string, v: string, cls = ""): void {
@@ -196,9 +198,22 @@ function mount(host: HTMLElement): void {
   host.append(oneBox, sysBox);
   const oneApi = buildOne(oneBox, withSys ? tabRow : null, uid,
     startModel === "clearance" ? CLEARANCE : LOGISTIC, startTab === "one" ? startH : NaN, ds.field !== "0");
-  const sysApi = withSys ? buildSys(sysBox, uid, startModel === "osc" ? "osc" : "sir", startTab === "sys" ? startH : NaN)
+  const sysApi = withSys ? buildSys(sysBox, tabRow, uid, startModel === "osc" ? "osc" : "sir", startTab === "sys" ? startH : NaN)
     : { stop: () => { /* no systems tab */ } };
   show(withSys ? startTab : "one");
+}
+
+/** A group for the model buttons: on the tab row (shown only while `box` is visible), or
+ *  on a row of its own when there are no tabs. */
+function tabGroup(tabRow: HTMLElement | null, box: HTMLElement): HTMLElement {
+  const r1 = tabRow ?? htmlEl("div", "es-row", "", box);
+  const mg = htmlEl("div", "es-group", "", r1);
+  if (!tabRow) htmlEl("span", "", "model:", mg);
+  else {
+    const obs = new MutationObserver(() => { mg.style.display = box.style.display === "none" ? "none" : "flex"; });
+    obs.observe(box, { attributes: true, attributeFilter: ["style"] });
+  }
+  return mg;
 }
 
 // ---------------------------------------------------------------- tab 1: one equation
@@ -211,16 +226,9 @@ function buildOne(box: HTMLElement, tabRow: HTMLElement | null, uid: number, m0:
   const st = { ...init };
 
   // row 1: model (on the tab row if there is one)
-  const r1 = tabRow ?? htmlEl("div", "es-row", "", box);
-  const mg = htmlEl("div", "es-group", "", r1);
-  if (!tabRow) htmlEl("span", "", "model:", mg);
+  const mg = tabGroup(tabRow, box);
   const models = [LOGISTIC, CLEARANCE];
   const mBtns = presets(mg, models.map(mm => ({ label: mm.label, apply: () => setModel(mm) })));
-  if (tabRow) {
-    // the model buttons belong to this tab only
-    const obs = new MutationObserver(() => { mg.style.display = box.style.display === "none" ? "none" : "flex"; });
-    obs.observe(box, { attributes: true, attributeFilter: ["style"] });
-  }
   // row 2: h and stepping
   const r2 = htmlEl("div", "es-row", "", box);
   const hS = slider(r2, "step h", 0, st.m.hList.length - 1, 1, st.hi, v => { st.hi = v; rerun(); }, v => fmtH(st.m.hList[v] ?? NaN) + " h");
@@ -254,7 +262,7 @@ function buildOne(box: HTMLElement, tabRow: HTMLElement | null, uid: number, m0:
 
   // plots
   const plots = htmlEl("div", "es-plots", "", box);
-  const H = 350, WA = 640, WB = 460, WT = WA + WB;
+  const H = 370, WA = 640, WB = 460, WT = WA + WB;
   const svgA = svgEl("svg", { viewBox: `0 0 ${WA} ${H}`, role: "img", "aria-label": "Direction field, exact solution and Euler steps" }, plots);
   svgA.style.width = `calc(${(100 * WA / WT).toFixed(2)}% - 6px)`;
   const svgB = svgEl("svg", { viewBox: `0 0 ${WB} ${H}`, role: "img", "aria-label": "Global error against step size, log-log" }, plots);
@@ -285,7 +293,7 @@ function buildOne(box: HTMLElement, tabRow: HTMLElement | null, uid: number, m0:
 
     // ---------- (a) ----------
     svgA.replaceChildren();
-    const fr: Frame = { L: 66, R: WA - 12, T: 34, B: H - 50 };
+    const fr: Frame = { L: 66, R: WA - 14, T: 60, B: H - 50 };
     const sx = scale(0, st.span, fr.L, fr.R), sy = scale(ylo, yhi, fr.B, fr.T);
     svgEl("text", { x: 8, y: 22, class: "ttl" }, svgA).textContent =
       `(a) ${m.key === "logistic" ? "N′ = 0.8 N (1 − N/1.2)" : "C′ = −0.8 C"},  h = ${fmtH(h)} h`;
@@ -333,20 +341,18 @@ function buildOne(box: HTMLElement, tabRow: HTMLElement | null, uid: number, m0:
     if (yn >= ylo && yn <= yhi) svgEl("circle", { cx: sx(tn), cy: sy(yn), r: 7, fill: COL.euler, stroke: COL.ink, "stroke-width": 2 }, g);
     else {
       const up = yn > yhi;
-      const t = svgEl("text", { x: Math.min(fr.R - 4, sx(tn) + 6), y: up ? fr.T + 40 : fr.B - 10, "text-anchor": sx(tn) > fr.R - 200 ? "end" : "start", "font-weight": 600 }, svgA);
+      const t = svgEl("text", { x: fr.R - 8, y: up ? fr.T + 22 : fr.B - 10, "text-anchor": "end", "font-weight": 600 }, svgA);
       t.style.fill = COL.euler; t.textContent = `${up ? "↑" : "↓"} off scale: y = ${minus(sci(yn, 3))}`;
     }
     // legend
-    const items: [string, string, string][] = [
-      ["exact", COL.exact, ""], ["Euler steps", COL.euler, ""],
+    legend(svgA, 10, 48, [
+      ["exact", COL.exact, ""], ["Euler", COL.euler, ""],
       ["exact through current point", COL.local, "7 5"], ["next step", COL.next, "8 5"],
-    ];
-    if (m.key === "logistic") legend(svgA, fr.R - 300, fr.B - 4 * 24 + 6, items, 300);
-    else legend(svgA, fr.R - 300, fr.T + 40, items, 300);
+    ]);
 
     // ---------- (b) ----------
     svgB.replaceChildren();
-    const fb: Frame = { L: 70, R: WB - 12, T: 34, B: H - 50 };
+    const fb: Frame = { L: 70, R: WB - 18, T: 60, B: H - 50 };
     const X0 = -2.4, X1 = Math.log10(m.Te) + 0.12, Y0 = -5, Y1 = 2;
     const bx = scale(X0, X1, fb.L, fb.R), by = scale(Y0, Y1, fb.B, fb.T);
     svgEl("text", { x: 8, y: 22, class: "ttl" }, svgB).textContent = `(b) error at t = ${m.Te} h against h`;
@@ -385,7 +391,7 @@ function buildOne(box: HTMLElement, tabRow: HTMLElement | null, uid: number, m0:
     readItem(ro, "exact here", fix(m.exactFrom(tn, 0, m.y0), 5));
     readItem(ro, `factor 1 − ${m.rateName}h =`, minus(fac.toFixed(2)) + (Math.abs(fac) > 1 ? "  (|·| > 1: unstable)" : ""), Math.abs(fac) > 1 ? "es-warn" : "");
     if (Number.isFinite(e)) {
-      readItem(ro, `at t = ${m.Te}: Euler`, fix(globalErr(m, h) + m.exactFrom(m.Te, 0, m.y0), 6));
+      readItem(ro, `at t = ${m.Te}: Euler`, minus(fix(globalErr(m, h) + m.exactFrom(m.Te, 0, m.y0), 6)));
       readItem(ro, "exact", fix(m.exactFrom(m.Te, 0, m.y0), 6));
       readItem(ro, "error", minus(sci(e, 4)));
       if (Number.isFinite(eh2) && eh2 !== 0) readItem(ro, "error(h)/error(h/2) =", (e / eh2).toFixed(2));
@@ -398,7 +404,7 @@ function buildOne(box: HTMLElement, tabRow: HTMLElement | null, uid: number, m0:
 }
 
 // ---------------------------------------------------------------- tab 2: systems
-function buildSys(box: HTMLElement, uid: number, model0: "sir" | "osc", h0: number) {
+function buildSys(box: HTMLElement, tabRow: HTMLElement, uid: number, model0: "sir" | "osc", h0: number) {
   const LIST = {
     sir: [0.01, 0.02, 0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 4, 5, 8],
     osc: [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.25, 0.5, 1, 2],
@@ -410,21 +416,24 @@ function buildSys(box: HTMLElement, uid: number, model0: "sir" | "osc", h0: numb
   };
   const st = { k: model0, hi: pickH(model0, h0), span: SPANS[model0][0] };
 
-  const r1 = htmlEl("div", "es-row", "", box);
-  const mg = htmlEl("div", "es-group", "", r1);
-  htmlEl("span", "", "model:", mg);
+  const mg = tabGroup(tabRow, box);
   const keys: ("sir" | "osc")[] = ["sir", "osc"];
   const mBtns = presets(mg, [
     { label: "SIR epidemic", apply: () => setModel("sir") },
     { label: "24-hour oscillator", apply: () => setModel("osc") },
   ]);
-  const sg = htmlEl("div", "es-group", "", r1);
-  const spanLab = htmlEl("span", "", "time span:", sg);
-  const spanBtns = presets(sg, [0, 1].map(i => ({ label: "", apply: () => { st.span = SPANS[st.k][i] ?? st.span; rerun(); } })));
   const r2 = htmlEl("div", "es-row", "", box);
   const unit = () => (st.k === "sir" ? " d" : " h");
   const hS = slider(r2, "step h", 0, LIST[st.k].length - 1, 1, st.hi, v => { st.hi = v; rerun(); }, v => String(LIST[st.k][v] ?? "") + unit());
   const sp = stepper(r2, () => draw());
+  const r3 = htmlEl("div", "es-row", "", box);
+  const QUICK = { sir: [4, 1, 0.1, 0.01], osc: [1, 0.1, 0.01] };
+  const qg = htmlEl("div", "es-group", "", r3);
+  htmlEl("span", "", "h =", qg);
+  const qBtns = presets(qg, [0, 1, 2, 3].map(i => ({ label: "", apply: () => { const h = QUICK[st.k][i]; if (h !== undefined) { st.hi = pickH(st.k, h); hS.set(st.hi); rerun(); } } })));
+  const sg = htmlEl("div", "es-group", "", r3);
+  const spanLab = htmlEl("span", "", "time span:", sg);
+  const spanBtns = presets(sg, [0, 1].map(i => ({ label: "", apply: () => { st.span = SPANS[st.k][i] ?? st.span; rerun(); } })));
 
   function setModel(k: "sir" | "osc"): void {
     st.k = k; st.span = SPANS[k][0];
@@ -433,7 +442,7 @@ function buildSys(box: HTMLElement, uid: number, model0: "sir" | "osc", h0: numb
   }
 
   const plots = htmlEl("div", "es-plots", "", box);
-  const H = 350, WA = 640, WB = 460, WT = WA + WB;
+  const H = 370, WA = 640, WB = 460, WT = WA + WB;
   const svgA = svgEl("svg", { viewBox: `0 0 ${WA} ${H}`, role: "img", "aria-label": "Euler solution of a system" }, plots);
   svgA.style.width = `calc(${(100 * WA / WT).toFixed(2)}% - 6px)`;
   const svgB = svgEl("svg", { viewBox: `0 0 ${WB} ${H}`, role: "img", "aria-label": "Error against step size, log-log" }, plots);
@@ -466,6 +475,11 @@ function buildSys(box: HTMLElement, uid: number, model0: "sir" | "osc", h0: numb
   function draw(): void {
     const h = LIST[st.k][st.hi], n = sp.n, N = sp.N;
     mBtns.forEach((b, i) => b.classList.toggle("active", keys[i] === st.k));
+    const q = QUICK[st.k];
+    qBtns.forEach((b, i) => {
+      b.style.display = i < q.length ? "" : "none";
+      if (i < q.length) { b.textContent = `${q[i]}${unit()}`; b.classList.toggle("active", Math.abs(q[i] - h) < 1e-12); }
+    });
     const spans = SPANS[st.k];
     spanLab.style.display = spans.length > 1 ? "" : "none";
     spanBtns.forEach((b, i) => {
@@ -477,7 +491,7 @@ function buildSys(box: HTMLElement, uid: number, model0: "sir" | "osc", h0: numb
 
   function drawSir(h: number, n: number, N: number): void {
     svgA.replaceChildren();
-    const fr: Frame = { L: 76, R: WA - 12, T: 34, B: H - 50 };
+    const fr: Frame = { L: 76, R: WA - 22, T: 60, B: H - 50 };
     const sx = scale(0, SIR.T, fr.L, fr.R), sy = scale(0, 10000, fr.B, fr.T);
     svgEl("text", { x: 8, y: 22, class: "ttl" }, svgA).textContent = `(a) SIR, N = 10 000, β = 0.3, γ = 0.1,  h = ${h} d`;
     axesLin(svgA, fr, sx, sy, [0, 40, 80, 120, 160], [0, 2500, 5000, 7500, 10000], "time t (days)", "people", v => String(v), H);
@@ -494,13 +508,11 @@ function buildSys(box: HTMLElement, uid: number, model0: "sir" | "osc", h0: numb
     });
     const pk = sirPeak(Y.slice(0, n + 1), h);
     if (n > 0) svgEl("circle", { cx: sx(pk.day), cy: sy(pk.peak), r: 7, fill: "none", stroke: COL.ink, "stroke-width": 2.5 }, g);
-    legend(svgA, fr.R - 250, fr.T + 30, [["S", COL.S, ""], ["I", COL.I, ""], ["R", COL.R, ""], ["exact peak of I", COL.I, "6 5"]], 250);
-    const tx = svgEl("text", { x: fr.R - 250, y: fr.T + 30 + 4 * 24 + 6, class: "sm" }, svgA);
-    tx.textContent = "wide pale: reference";
+    legend(svgA, 10, 48, [["S", COL.S, ""], ["I", COL.I, ""], ["R", COL.R, ""], ["exact peak of I", COL.I, "6 5"], ["reference", COL.ref, "", 7]]);
 
     // (b) peak error vs h
     svgB.replaceChildren();
-    const fb: Frame = { L: 70, R: WB - 12, T: 34, B: H - 50 };
+    const fb: Frame = { L: 70, R: WB - 18, T: 60, B: H - 50 };
     const X0 = -2.15, X1 = 1.0, Y0 = -1, Y1 = 4;
     const bx = scale(X0, X1, fb.L, fb.R), by = scale(Y0, Y1, fb.B, fb.T);
     svgEl("text", { x: 8, y: 22, class: "ttl" }, svgB).textContent = "(b) error in the peak of I against h";
@@ -533,7 +545,7 @@ function buildSys(box: HTMLElement, uid: number, model0: "sir" | "osc", h0: numb
     const w = OSC.w;
     svgA.replaceChildren();
     // phase plane, left square
-    const fp: Frame = { L: 66, R: 66 + 266, T: 34, B: 34 + 266 };
+    const fp: Frame = { L: 66, R: 66 + 260, T: 60, B: 60 + 260 };
     const L = 2.6;
     const px = scale(-L, L, fp.L, fp.R), py = scale(-L, L, fp.B, fp.T);
     svgEl("text", { x: 8, y: 22, class: "ttl" }, svgA).textContent = `(a) x″ = −ω²x,  ω = 2π/24 per h,  h = ${h} h`;
@@ -556,8 +568,9 @@ function buildSys(box: HTMLElement, uid: number, model0: "sir" | "osc", h0: numb
     const inside = Math.abs(yn[0]) <= L && Math.abs(yn[1] / w) <= L;
     if (inside) svgEl("circle", { cx: px(yn[0]), cy: py(yn[1] / w), r: 6, fill: COL.euler, stroke: COL.ink, "stroke-width": 2 }, g);
     svgEl("circle", { cx: px(1), cy: py(0), r: 5, fill: COL.ink }, g);
+    legend(svgA, 10, 48, [["exact", COL.exact, ""], ["Euler", COL.euler, ""]]);
     // x(t) on the right
-    const ft: Frame = { L: fp.R + 62, R: WA - 12, T: 34, B: fp.B };
+    const ft: Frame = { L: fp.R + 62, R: WA - 12, T: fp.T, B: fp.B };
     const tx = scale(0, st.span, ft.L, ft.R), ty = scale(-L, L, ft.B, ft.T);
     for (const v of [-2, -1, 0, 1, 2]) {
       svgEl("line", { x1: ft.L, x2: ft.R, y1: ty(v), y2: ty(v), class: v === 0 ? "axis" : "grid" }, svgA);
@@ -579,7 +592,7 @@ function buildSys(box: HTMLElement, uid: number, model0: "sir" | "osc", h0: numb
 
     // (b) amplitude error after 10 days
     svgB.replaceChildren();
-    const fb: Frame = { L: 70, R: WB - 12, T: 34, B: H - 50 };
+    const fb: Frame = { L: 70, R: WB - 18, T: 60, B: H - 50 };
     const X0 = -2.4, X1 = 0.4, Y0 = -3, Y1 = 4;
     const bx = scale(X0, X1, fb.L, fb.R), by = scale(Y0, Y1, fb.B, fb.T);
     svgEl("text", { x: 8, y: 22, class: "ttl" }, svgB).textContent = "(b) amplitude − 1 after 10 days";

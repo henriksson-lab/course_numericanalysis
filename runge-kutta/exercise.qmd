@@ -1,0 +1,1374 @@
+---
+title: "Exercise: Runge–Kutta and adaptive step size"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- take one step of the **midpoint**, **Heun** and classical **RK4** methods by hand, and write each as a short function,
+- read the **order** of a method off a table or a log–log plot of error against step size, and compare methods by the number of **function evaluations**,
+- use a **conserved quantity** (Lotka–Volterra) to detect the error of an ODE solver,
+- explain how an **embedded pair** estimates the error of a step, and how an adaptive solver **accepts or rejects** the step and chooses the next one,
+- say what `rtol` and `atol` mean, choose them for a model, and check a result **by tightening** them,
+- use the library solvers (`deSolve::ode`, `scipy.integrate.solve_ivp`, `ode_solvers`), and locate **events** such as the peak of an epidemic.
+
+The by-hand part needs pen, paper and a pocket calculator. The code part checks the hand answers and then works at sizes where only code works.
+
+## Background
+
+To solve $y' = f(t, y)$, $y(t_0) = y_0$ with step $h$:
+
+1. **Euler** (order 1, 1 evaluation of $f$): $y_{n+1} = y_n + h k_1$, $k_1 = f(t_n, y_n)$.
+2. **Midpoint** (order 2, 2 evaluations): $k_2 = f(t_n + \tfrac h2, y_n + \tfrac h2 k_1)$, $y_{n+1} = y_n + h k_2$.
+3. **Heun** (order 2, 2 evaluations): $k_2 = f(t_n + h, y_n + h k_1)$, $y_{n+1} = y_n + \tfrac h2 (k_1 + k_2)$.
+4. **RK4** (order 4, 4 evaluations): $k_2 = f(t_n + \tfrac h2, y_n + \tfrac h2 k_1)$, $k_3 = f(t_n + \tfrac h2, y_n + \tfrac h2 k_2)$, $k_4 = f(t_n + h, y_n + h k_3)$, $y_{n+1} = y_n + \tfrac h6 (k_1 + 2k_2 + 2k_3 + k_4)$.
+5. **Order.** A method of order $p$ has global error $\approx C h^p$. Halving $h$ divides the error by $2^p$, so $p \approx \log_2(\text{err}(h)/\text{err}(h/2))$, and on a log–log plot the error is a line with slope $p$. The error of a **single** step is $\propto h^{p+1}$.
+6. **Embedded pair.** Two answers of orders $q$ and $q+1$ from the same stages (Euler and Heun; or orders 4 and 5 in Dormand–Prince). Their difference estimates the error of the step. With the allowed error $\text{sc}_i = \texttt{atol} + \texttt{rtol}\cdot\max(|y_{n,i}|, |y_{n+1,i}|)$ per component, the scaled error is
+   $$\text{err} = \sqrt{\tfrac1m \textstyle\sum_{i=1}^m \big(\text{est}_i / \text{sc}_i\big)^2}.$$
+   The step is **accepted** if $\text{err} \le 1$, otherwise **rejected** and retried. Either way the next step is $h_{\text{new}} = h\cdot \min\!\big(5, \max(0.2,\ 0.9\, \text{err}^{-1/(q+1)})\big)$.
+7. **Library solvers.** R: [`deSolve::ode`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) with `method = "ode45"` (Dormand–Prince, defaults `rtol = atol = 1e-6`) or `"rk4"` (fixed step = spacing of `times`, see [`rk`](https://search.r-project.org/CRAN/refmans/deSolve/html/rk.html)). Python: [`scipy.integrate.solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) with `method="RK45"` (the default; `rtol=1e-3`, `atol=1e-6`). Rust: the [`ode_solvers`](https://docs.rs/ode_solvers) crate with `Dopri5` (adaptive) and `Rk4` (fixed step); you give both tolerances.
+
+The running examples:
+
+- **Logistic OD curve** $N' = rN(1 - N/K)$, $r = 0.8$ per hour, $K = 1.2$, $N_0 = 0.05$; exact $N(t) = K / \big(1 + (K/N_0 - 1)e^{-rt}\big)$.
+- **Drug clearance** $C' = -0.8\, C$, $C_0 = 10$ mg/L; exact $C(t) = 10 e^{-0.8t}$.
+- **SIR epidemic** (as in *Initial value problems and Euler's method*): $S' = -\beta SI/N$, $I' = \beta SI/N - \gamma I$, $R' = \gamma I$ with $N = 10\,000$ people, $\beta = 0.3$ and $\gamma = 0.1$ per day, $(S, I, R)(0) = (9990, 10, 0)$. Exact peak $I_{\max} = 3007.961$.
+- **Lotka–Volterra** (hares $x$, lynx $y$): $x' = ax - bxy$, $y' = cxy - dy$ with $a = 1$, $b = 0.1$, $c = 0.075$, $d = 1.5$ per year, $(x, y)(0) = (10, 5)$.
+- **Repressilator** (Elowitz & Leibler 2000, dimensionless): $m_i' = -m_i + \alpha/(1 + p_j^{\,n}) + \alpha_0$, $p_i' = -\beta(p_i - m_i)$, $(i, j) = (1,3), (2,1), (3,2)$, with $\alpha = 216$, $\alpha_0 = 0.216$, $\beta = 5$, $n = 2$, start $m = (1, 0, 0)$, $p = (0, 0, 0)$.
+
+The basic tools in each language: one hand-written RK4 step, then the library solver on the logistic curve.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+rk4_step <- function(f, t, y, h) {
+  k1 <- f(t, y)
+  k2 <- f(t + h / 2, y + h / 2 * k1)
+  k3 <- f(t + h / 2, y + h / 2 * k2)
+  k4 <- f(t + h, y + h * k3)
+  y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+}
+f <- function(t, N) 0.8 * N * (1 - N / 1.2)          # logistic, per hour
+rk4_step(f, 0, 0.05, 1)                              # one RK4 step of h = 1
+library(deSolve)
+out <- ode(y = c(N = 0.05), times = c(0, 1, 10),
+           func = function(t, y, parms) list(f(t, y)), parms = NULL,
+           method = "ode45", rtol = 1e-8, atol = 1e-10)
+out[, "N"]
+
+# Output:
+# [1] 0.1057646
+# [1] 0.0500000 0.1058708 1.1908121
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import solve_ivp
+
+def rk4_step(f, t, y, h):
+    k1 = f(t, y)
+    k2 = f(t + h / 2, y + h / 2 * k1)
+    k3 = f(t + h / 2, y + h / 2 * k2)
+    k4 = f(t + h, y + h * k3)
+    return y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+def f(t, N):
+    return 0.8 * N * (1 - N / 1.2)                   # logistic, per hour
+
+print(rk4_step(f, 0, 0.05, 1))                       # one RK4 step of h = 1
+sol = solve_ivp(f, (0, 10), [0.05], method="RK45", t_eval=[0, 1, 10],
+                rtol=1e-8, atol=1e-10)
+print(sol.y[0])
+
+# Output:
+# 0.10576460658854711
+# [0.05       0.10587084 1.19081212]
+```
+
+### Rust
+
+```rust
+// rust/examples/runge_kutta_background.rs  —  cargo run --example runge_kutta_background
+// Background: one hand-written RK4 step, then the library solver (ode_solvers::Dopri5)
+use ode_solvers::continuous_output_model::ContinuousOutputModel;
+use ode_solvers::{Dopri5, System, Vector1};
+
+fn f(_t: f64, n: f64) -> f64 {
+    0.8 * n * (1.0 - n / 1.2) // logistic, per hour
+}
+
+fn rk4_step(f: fn(f64, f64) -> f64, t: f64, y: f64, h: f64) -> f64 {
+    let k1 = f(t, y);
+    let k2 = f(t + h / 2.0, y + h / 2.0 * k1);
+    let k3 = f(t + h / 2.0, y + h / 2.0 * k2);
+    let k4 = f(t + h, y + h * k3);
+    y + h / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+}
+
+// ode_solvers wants the ODE as a type implementing the System trait
+struct Logistic;
+impl System<f64, Vector1<f64>> for Logistic {
+    fn system(&self, t: f64, y: &Vector1<f64>, dy: &mut Vector1<f64>) {
+        dy[0] = f(t, y[0]);
+    }
+}
+
+fn main() {
+    println!("{}", rk4_step(f, 0.0, 0.05, 1.0)); // one RK4 step of h = 1
+
+    // Dopri5::new(system, t0, t_end, output spacing, y0, rtol, atol)
+    let mut solver = Dopri5::new(Logistic, 0.0, 10.0, 1.0, Vector1::new(0.05), 1e-8, 1e-10);
+    let mut dense = ContinuousOutputModel::default(); // the solution at any t
+    solver.integrate_with_continuous_output_model(&mut dense).unwrap();
+    for t in [0.0, 1.0, 10.0] {
+        println!("t = {:>2}: N = {:.7}", t, dense.evaluate(t).unwrap()[0]);
+    }
+}
+
+// Output:
+// 0.10576460658854711
+// t =  0: N = 0.0500000
+// t =  1: N = 0.1058708
+// t = 10: N = 1.1908121
+```
+
+:::
+
+`deSolve::ode` wants the right-hand side as `func(t, y, parms)` returning a **list**; `solve_ivp` wants `fun(t, y)` returning an array; `ode_solvers` wants a type that implements its `System` trait. Rust prints numbers in its own format (e.g. `1e-3` rather than `1e-03`); the values are the same unless the text says otherwise.
+
+## By hand
+
+**B1. Midpoint and Heun.** Drug clearance $C' = -0.8\,C$, $C_0 = 10$ mg/L, one step of $h = 0.5$ hours.
+(a) Take one Euler, one midpoint and one Heun step. Write down $k_1$, $k_2$ and the point where $k_2$ is evaluated for each.
+(b) Compare with the exact $C(0.5) = 10e^{-0.4} = 6.70320$. Give the error of each method.
+(c) Show that for $C' = -kC$ midpoint and Heun both give $C_1 = C_0(1 + z + z^2/2)$ with $z = -kh$. Which Taylor polynomial is this?
+
+**B2. One RK4 step.** Same problem and step.
+(a) Compute $k_1, k_2, k_3, k_4$ (fill in a table: stage, point, slope) and $C_1$.
+(b) Compare with the exact value. How many times smaller is the error than Heun's?
+(c) The error of **one** step is $\propto h^5$. Predict the error of a single RK4 step with $h = 0.25$, then check it: the exact value is $10e^{-0.2} = 8.187308$.
+
+**B3. Reading the order.** Errors in $N(10)$ for the logistic curve:
+
+| $h$ | 0.5 | 0.25 | 0.125 |
+|---|---|---|---|
+| Heun | $1.51\times10^{-3}$ | $3.36\times10^{-4}$ | $8.05\times10^{-5}$ |
+| RK4 | $9.25\times10^{-6}$ | $5.31\times10^{-7}$ | $3.20\times10^{-8}$ |
+
+(a) Estimate the order of each method from consecutive ratios.
+(b) Predict both errors for $h = 0.0625$.
+(c) About how many function evaluations does each method need (from $t = 0$ to $10$) for an error of $10^{-8}$?
+
+**B4. An embedded pair by hand.** Clearance again, from $C_0 = 10$ with $h = 0.5$, using Euler (order 1) and Heun (order 2) from B1 as a pair, with `rtol = 0.01` and `atol = 0`.
+(a) What is the error estimate? Compare it with the true errors of Euler and Heun. Which of the two does it estimate?
+(b) Compute $\text{sc}$, the scaled error err and decide: accept or reject? Compute the next step size.
+(c) The error estimate of this pair is $\propto h^2$. Predict err for the new step, then compute it.
+
+**B5. What `rtol` and `atol` mean.** SIR at $t = 0$: $S = 9990$, $I = 10$, $R = 0$ people.
+(a) With `rtol = 1e-3` and `atol = 1e-6`, what error is allowed in one step for each of $S$, $I$ and $R$?
+(b) A colleague writes the same model in fractions of the population ($S = 0.999$, $I = 0.001$) and keeps `atol = 1e-6`. What error does this allow in $I$, in people? Is that still fine?
+(c) Another colleague sets `atol = 10` ("ten people do not matter in a town of 10 000"). What error does this allow in $I$ at $t = 0$, relative to $I$ itself? What could go wrong?
+(d) A signalling model measures concentrations in mol/L; the important species is around $10^{-9}$ M. What is wrong with `atol = 1e-6`? Give two fixes.
+
+**B6. A conserved quantity.** Lotka–Volterra with $V(x, y) = c x - d \ln x + b y - a \ln y$.
+(a) Use the chain rule, $\frac{dV}{dt} = \frac{\partial V}{\partial x} x' + \frac{\partial V}{\partial y} y'$, to show that $dV/dt = 0$ along every solution.
+(b) Compute $V$ at the start $(10, 5)$ and at the equilibrium $(x^*, y^*) = (d/c,\ a/b)$. (Use $\ln 2 = 0.6931$, $\ln 5 = 1.6094$, $\ln 10 = 2.3026$.)
+(c) $V$ is smallest at the equilibrium, and the orbits are the curves $V = $ constant around it. Euler makes $V$ increase. What does the plotted orbit do? Why is that a biologically misleading picture?
+
+**B7. Events.** For SIR let $g = \beta S/N - \gamma$.
+(a) Show that $I' = g\, I$, so $I$ peaks where $g$ changes sign from $+$ to $-$. What is $S$ at the peak?
+(b) An adaptive solver (`rtol = 1e-4`) takes two consecutive steps ending at $t = 35.16$ with $S = 4426.1$ and at $t = 42.04$ with $S = 2404.5$. Compute $g$ at both, and locate the peak by linear interpolation of $g$. The true peak time is $38.355$ days; why is your estimate off, and what does a solver do instead?
+(c) Lynx numbers rise above 20 for about 0.8 years in each 5.5-year cycle. A program only checks $y - 20$ at the end of each step, and its steps are 2.5 years long. Can it miss the event? What two remedies are there?
+
+## In code
+
+**C1. Write the methods.**
+(a) Write step functions `euler_step`, `midpoint_step`, `heun_step`, `rk4_step` with arguments `(f, t, y, h)`, and a driver `rk_solve(step, f, t0, y0, h, n)` that takes `n` fixed steps and returns all times and states. Check your answers to B1 and B2.
+(b) For the logistic curve, compute the error in $N(10)$ for $h = 1, \tfrac12, \dots, \tfrac1{64}$ with Euler, Heun and RK4. Compute the observed order from consecutive ratios, and compare with B3.
+(c) Plot the errors against $h$ on log–log axes. Read off the slopes.
+
+**C2. Cost versus accuracy.** With $n = 10\cdot 2^k$ steps ($k = 0, \dots, 13$), find for each of Euler, Heun and RK4 the smallest $n$ that gives an error below $10^{-6}$ in $N(10)$, and the number of function evaluations that costs. Compare with your estimate in B3(c).
+
+**C3. Predator–prey.**
+(a) Solve Lotka–Volterra for 50 years with Euler ($h = 0.01$), Heun ($h = 0.01$) and RK4 ($h = 0.1$), and report the largest $|V(t) - V(0)|$ for each.
+(b) Do the same with the library's Dormand–Prince solver, with `rtol = atol = 1e-3` and `1e-6`. In Python, also try the defaults of `solve_ivp`. Which setting would you trust for a 50-year simulation?
+
+**C4. An adaptive solver of your own.** Write `adapt_heun(f, t, y, tend, h, rtol, atol)` using the Heun–Euler pair and the rules of Background item 6 ($q = 1$). Record every accepted step and count the rejected ones.
+(a) Logistic curve from $h = 1$ to $t = 10$ with `rtol = 1e-3` and `1e-6` (`atol = 1e-9`): report the error in $N(10)$, the number of accepted and rejected steps and of function evaluations. Does the first step get rejected, as in B4?
+(b) SIR to day 160 with `rtol = atol = 1e-6`: how many steps? Plot $h$ against $t$ (log scale) and find where the steps are smallest and largest. Why there?
+
+**C5. The library on the repressilator.**
+(a) Solve the repressilator to $t = 50$ with Dormand–Prince (`ode45` / `RK45` / `Dopri5`) and `rtol = atol` $= 10^{-3}, \dots, 10^{-9}$. Report $p_1(50)$ and the numbers of steps and function evaluations. How many digits of $p_1(50)$ can you trust at each tolerance? How do the step counts grow?
+(b) Solve with fixed-step RK4 and $h = 1$, $0.2$, $0.01$. In R, `ode(..., method = "rk4")` uses the spacing of `times` as the step unless you give `hini`. Which of the answers are usable?
+
+**C6. When `atol` is too large.** Use your `adapt_heun` from C4 on SIR to day 60, with `rtol` $= 10^{-3}, \dots, 10^{-6}$ and `atol` $= 10$, $1$ and $10^{-6}$ people. Report the relative error in $I(60)$; the reference value is $I(60) = 998.2012187$. Explain the pattern with B5(c).
+
+**C7. Events.**
+(a) Find the time and height of the epidemic peak as an event ($g = \beta S/N - \gamma$ crosses zero), with tight tolerances (`rtol = 1e-10`). Compare with $I_{\max} = 3007.961$. In R use `ode(..., method = "lsoda", rootfunc = ...)` (root finding is not available with `ode45` in deSolve); in Python `solve_ivp(..., events=...)`; in Rust, `ode_solvers` has no event location, so scan the dense output for a sign change and refine it by bisection.
+(b) Find the first time the lynx population reaches 20 (from below).
+(c) Now look only at the solution at $t = 0, 2.5, 5, \dots, 15$. Is there a sign change of $y - 20$? Compare with B7(c).
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — one step by hand (B1, B2)"}
+Write a table with one row per stage: where the slope is evaluated ($t$ and the point $C$), and the slope $-0.8\,C$ there. Each point uses the previous slope: the point for $k_2$ is $C_0 + \tfrac h2 k_1$, for $k_3$ it is $C_0 + \tfrac h2 k_2$, for $k_4$ it is $C_0 + h k_3$. For B2(c), the single-step error shrinks by $2^5 = 32$ when $h$ is halved.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — order and cost (B3, C1, C2)"}
+$p \approx \log_2(\text{err}(h)/\text{err}(h/2))$. To get from error $e_1$ at step $h_1$ to error $e_2$, take $h_2 = h_1 (e_2/e_1)^{1/p}$. Number of steps $= 10/h$; evaluations $=$ steps $\times$ stages. In code, `log2` in R, `np.log2` in Python, `f64::log2` in Rust; log–log plots with `plot(..., log = "xy")`, `plt.loglog`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — embedded pair and controller (B4, C4)"}
+The estimate is $|y^{\text{Heun}} - y^{\text{Euler}}| = \tfrac h2 |k_2 - k_1|$. With `atol = 0`, $\text{sc} = \texttt{rtol}\cdot\max(|y_n|, |y_{n+1}|)$. For the Heun–Euler pair $q = 1$, so $h_{\text{new}} = h\cdot\min(5, \max(0.2, 0.9\,\text{err}^{-1/2}))$. In code, keep a `while (t < tend)` loop; shorten the last step with `h <- min(h, tend - t)`; on rejection, do not advance `t` or `y`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — tolerances (B5, C5, C6)"}
+Allowed error per step $= \texttt{atol} + \texttt{rtol}\cdot|y|$. Below $|y| \approx \texttt{atol}/\texttt{rtol}$ the `atol` term dominates. In R, `attributes(out)$istate[2:3]` (or [`diagnostics(out)`](https://search.r-project.org/CRAN/refmans/deSolve/html/diagnostics.html)) gives the numbers of steps and function evaluations; in Python `sol.t.size - 1` and `sol.nfev`; in Rust the `Stats` returned by `integrate()` (`accepted_steps`, `num_eval`). For Rust, set `OutputType::Sparse` to get the solver's own steps.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — the conserved quantity (B6, C3)"}
+$\partial V/\partial x = c - d/x$ and $\partial V/\partial y = b - a/y$. Factor $x' = x(a - by)$ and $y' = y(cx - d)$. In code, compute $V$ for every row of the solution and take `max(abs(v - v[1]))`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — events (B7, C7)"}
+In deSolve, give `rootfunc = function(t, y, parms) ...` returning $g$; without an `events` argument the integration stops at the first root, whose time is in `attributes(out)$troot` (see [`lsoda`](https://search.r-project.org/CRAN/refmans/deSolve/html/lsoda.html) and [`events`](https://search.r-project.org/CRAN/refmans/deSolve/html/events.html)). In `solve_ivp`, give `events=g`, and set the attributes `g.terminal = True` (stop) and `g.direction = -1` (only $+ \to -$); results are in `sol.t_events` and `sol.y_events`. In Rust, `integrate_with_continuous_output_model` fills a `ContinuousOutputModel` whose `evaluate(t)` gives the dense output at any $t$.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $k_1 = -0.8\cdot10 = -8$. Euler: $C_1 = 10 + 0.5\cdot(-8) = 6$. Midpoint: point $10 + 0.25\cdot(-8) = 8$ at $t = 0.25$, $k_2 = -6.4$, $C_1 = 10 + 0.5\cdot(-6.4) = 6.8$. Heun: point $6$ (the Euler point) at $t = 0.5$, $k_2 = -4.8$, $C_1 = 10 + 0.25\cdot(-8 - 4.8) = 6.8$.
+(b) Errors: Euler $6 - 6.70320 = -0.703$; midpoint and Heun $+0.097$, seven times smaller.
+(c) Midpoint: $C_1 = C_0 + h\cdot(-k)(C_0 - \tfrac h2 k C_0) = C_0(1 - kh + \tfrac12 k^2h^2)$. Heun: $C_1 = C_0 + \tfrac h2\big(-kC_0 - k(C_0 - hkC_0)\big) = C_0(1 - kh + \tfrac12 k^2 h^2)$. Both are the degree-2 Taylor polynomial of $C_0 e^{z}$, $z = -kh$: second order. (For nonlinear $f$ the two methods differ.)
+
+**B2.**
+(a)
+
+| stage | $t$ | point $C$ | slope $-0.8\,C$ |
+|---|---|---|---|
+| $k_1$ | 0 | 10 | $-8$ |
+| $k_2$ | 0.25 | $10 + 0.25\cdot(-8) = 8$ | $-6.4$ |
+| $k_3$ | 0.25 | $10 + 0.25\cdot(-6.4) = 8.4$ | $-6.72$ |
+| $k_4$ | 0.5 | $10 + 0.5\cdot(-6.72) = 6.64$ | $-5.312$ |
+
+$C_1 = 10 + \tfrac{0.5}{6}(-8 - 12.8 - 13.44 - 5.312) = 10 - 3.296 = 6.704$.
+(b) Error $6.704 - 6.70320 = 8.0\times10^{-4}$, about 120 times smaller than Heun's. (Check: $10(1 + z + z^2/2 + z^3/6 + z^4/24)$ with $z = -0.4$ is $6.704$, the degree-4 Taylor polynomial.)
+(c) Predicted $8.0\times10^{-4}/32 = 2.5\times10^{-5}$. With $z = -0.2$: $C_1 = 10(1 - 0.2 + 0.02 - 0.0013333 + 0.0000667) = 8.187333$, error $8.187333 - 8.187308 = 2.6\times10^{-5}$. Ratio 31, close to 32.
+
+**B3.**
+(a) Heun: $1.51/0.336 = 4.5$, $3.36/0.805 = 4.2$, so $p \approx 2.2, 2.1 \to 2$. RK4: $9.25/0.531 = 17.4$, $5.31/0.32 = 16.6$, so $p \approx 4.1 \to 4$.
+(b) Heun $8.05\times10^{-5}/4 = 2.0\times10^{-5}$ (measured: $1.98\times10^{-5}$). RK4 $3.20\times10^{-8}/16 = 2.0\times10^{-9}$ (measured: $1.97\times10^{-9}$).
+(c) Heun: from $8.05\times10^{-5}$ at $h = 0.125$ the error must fall by 8050, so $h$ by $\sqrt{8050} \approx 90$: $h \approx 0.0014$, about 7200 steps, **14 000** evaluations. RK4: fall by 3.2, so $h$ by $3.2^{1/4} = 1.34$: $h \approx 0.093$, about 110 steps, **430** evaluations.
+
+**B4.**
+(a) Estimate $|6.8 - 6| = 0.8$. True errors: Euler $-0.70$, Heun $+0.097$. The estimate has the size of the **Euler** (lower-order) error.
+(b) $\text{sc} = 0.01\cdot\max(10, 6.8) = 0.1$, $\text{err} = 0.8/0.1 = 8 > 1$: **reject**. $0.9\cdot 8^{-1/2} = 0.318$, so $h_{\text{new}} = 0.5\cdot0.318 = 0.159$.
+(c) Predicted $8\cdot(0.159/0.5)^2 = 0.81 \le 1$: accept. Computed: $z = -0.8\cdot0.159 = -0.127$; Euler $10(1 + z) = 8.727$, Heun $10(1 + z + z^2/2) = 8.808$, estimate $10 z^2/2 = 0.081$, $\text{err} = 0.081/0.1 = 0.81$: accepted. The next step size would be $0.159\cdot 0.9\cdot 0.81^{-1/2} = 0.159$: the controller has found its step.
+
+**B5.**
+(a) $S$: $10^{-6} + 10^{-3}\cdot 9990 \approx 10$ people. $I$: $10^{-6} + 10^{-3}\cdot 10 \approx 0.01$ people. $R$: $10^{-6}$ people (only `atol`, since $R = 0$).
+(b) In fractions, $I$ is allowed $10^{-6} + 10^{-3}\cdot 0.001 = 2\times10^{-6}$, i.e. $0.02$ people: still fine, but now the `atol` term is as large as the `rtol` term. With a much smaller seed (one infected per million) it would not be.
+(c) $10 + 0.01 \approx 10$ people: an error **as large as $I$ itself** is allowed at the start. The solver may take big, inaccurate steps in the early exponential phase; the error in the seed is then amplified, and the whole epidemic is shifted (C6).
+(d) The allowed error $10^{-6}$ M is 1000 times larger than the concentration: the solver may return anything for that species. Fixes: set `atol` far below the scale (e.g. $10^{-15}$, one value per variable if the scales differ), or rescale the model to nM so that values are of order 1.
+
+**B6.**
+(a) $\frac{dV}{dt} = (c - \tfrac dx)\, x(a - by) + (b - \tfrac ay)\, y(cx - d) = (cx - d)(a - by) + (by - a)(cx - d) = 0.$
+(b) $V(10, 5) = 0.75 - 1.5\cdot2.3026 + 0.5 - 1.6094 = -3.8133$. Equilibrium $(20, 10)$: $V = 1.5 - 1.5(\ln 2 + \ln 10) + 1 - \ln 10 = 2.5 - 4.4936 - 2.3026 = -4.2962$.
+(c) Larger $V$ means an orbit further from the equilibrium, so Euler's orbit **spirals outwards**: ever larger booms and deeper crashes. A reader would conclude that the populations are unstable and will go extinct, which the model does not say.
+
+**B7.**
+(a) $I' = \beta SI/N - \gamma I = (\beta S/N - \gamma) I = g I$, and $I > 0$, so $I' $ has the sign of $g$. At the peak $g = 0$: $S = N\gamma/\beta = 3333.3$.
+(b) $g(35.16) = 0.3\cdot0.44261 - 0.1 = 0.0328$; $g(42.04) = 0.3\cdot0.24045 - 0.1 = -0.0279$. Linear interpolation: $t = 35.16 + 6.88\cdot 0.0328/(0.0328 + 0.0279) = 38.88$ days, half a day late. The step is long and $g$ is curved, so a straight line through the two ends is not accurate. A solver interpolates with its **dense output** (a polynomial of degree 4 in Dormand–Prince) and finds the root of that with a root finder; with a cubic through the two steps we get $38.37$ (figure on the events slide).
+(c) Yes: the excursion above 20 lasts 0.8 years, shorter than one step, so $y - 20$ can be negative at both ends of a step (here at all of $t = 0, 2.5, \dots, 15$). Remedies: limit the step (`hmax` in deSolve, `max_step` in `solve_ivp`) to below the shortest excursion, or detect a quantity that changes sign only once per excursion (e.g. $y' = 0$ at the maximum, then compare the maximum with 20).
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+euler_step <- function(f, t, y, h) y + h * f(t, y)
+midpoint_step <- function(f, t, y, h) {
+  k1 <- f(t, y)
+  k2 <- f(t + h / 2, y + h / 2 * k1)
+  y + h * k2
+}
+heun_step <- function(f, t, y, h) {
+  k1 <- f(t, y)
+  k2 <- f(t + h, y + h * k1)
+  y + h / 2 * (k1 + k2)
+}
+rk4_step <- function(f, t, y, h) {
+  k1 <- f(t, y)
+  k2 <- f(t + h / 2, y + h / 2 * k1)
+  k3 <- f(t + h / 2, y + h / 2 * k2)
+  k4 <- f(t + h, y + h * k3)
+  y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+}
+rk_solve <- function(step, f, t0, y0, h, n) {
+  t <- t0 + (0:n) * h
+  Y <- matrix(0, n + 1, length(y0)); Y[1, ] <- y0
+  for (i in 1:n) Y[i + 1, ] <- step(f, t[i], Y[i, ], h)
+  list(t = t, y = Y)
+}
+methods <- list(Euler = euler_step, Midpoint = midpoint_step, Heun = heun_step, RK4 = rk4_step)
+
+# (a) check B1 and B2: drug clearance C' = -0.8 C, C0 = 10 mg/L, one step h = 0.5
+clear <- function(t, C) -0.8 * C
+sapply(methods, function(s) s(clear, 0, 10, 0.5))
+10 * exp(-0.4)
+
+# (b) logistic: error in N(10) for h = 1, 1/2, ..., 1/64
+f <- function(t, N) 0.8 * N * (1 - N / 1.2)
+exact <- function(t) 1.2 / (1 + (1.2 / 0.05 - 1) * exp(-0.8 * t))
+hs <- 2^(0:-6)
+err <- sapply(methods[c("Euler", "Heun", "RK4")], function(s)
+  sapply(hs, function(h) abs(rk_solve(s, f, 0, 0.05, h, 10 / h)$y[10 / h + 1] - exact(10))))
+signif(err, 3)
+round(log2(err[-7, ] / err[-1, ]), 2)        # observed order
+
+# (c) log-log plot
+matplot(hs, err, log = "xy", type = "o", pch = 19, lty = 1,
+        xlab = "step size h", ylab = "error in N(10)")
+
+# Output:
+#    Euler Midpoint     Heun      RK4
+#    6.000    6.800    6.800    6.704
+# [1] 6.7032
+#         Euler     Heun      RK4
+# [1,] 7.45e-03 8.80e-03 1.83e-04
+# [2,] 3.41e-03 1.51e-03 9.25e-06
+# [3,] 1.61e-03 3.36e-04 5.31e-07
+# [4,] 7.80e-04 8.05e-05 3.20e-08
+# [5,] 3.84e-04 1.98e-05 1.97e-09
+# [6,] 1.91e-04 4.92e-06 1.22e-10
+# [7,] 9.49e-05 1.23e-06 7.59e-12
+#      Euler Heun  RK4
+# [1,]  1.13 2.54 4.31
+# [2,]  1.08 2.17 4.12
+# [3,]  1.04 2.06 4.05
+# [4,]  1.02 2.02 4.02
+# [5,]  1.01 2.01 4.01
+# [6,]  1.01 2.00 4.01
+```
+
+### Python
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+def euler_step(f, t, y, h):
+    return y + h * f(t, y)
+
+def midpoint_step(f, t, y, h):
+    k1 = f(t, y)
+    k2 = f(t + h / 2, y + h / 2 * k1)
+    return y + h * k2
+
+def heun_step(f, t, y, h):
+    k1 = f(t, y)
+    k2 = f(t + h, y + h * k1)
+    return y + h / 2 * (k1 + k2)
+
+def rk4_step(f, t, y, h):
+    k1 = f(t, y)
+    k2 = f(t + h / 2, y + h / 2 * k1)
+    k3 = f(t + h / 2, y + h / 2 * k2)
+    k4 = f(t + h, y + h * k3)
+    return y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+def rk_solve(step, f, t0, y0, h, n):
+    t = t0 + h * np.arange(n + 1)
+    Y = np.zeros((n + 1, np.size(y0))); Y[0] = y0
+    for i in range(n):
+        Y[i + 1] = step(f, t[i], Y[i], h)
+    return t, Y
+
+methods = {"Euler": euler_step, "Midpoint": midpoint_step, "Heun": heun_step, "RK4": rk4_step}
+
+# (a) check B1 and B2: drug clearance C' = -0.8 C, C0 = 10 mg/L, one step h = 0.5
+clear = lambda t, C: -0.8 * C
+for name, s in methods.items():
+    print(f"{name}: {s(clear, 0, 10.0, 0.5):.7f}")
+print(f"exact: {10 * np.exp(-0.4):.7f}")
+
+# (b) logistic: error in N(10) for h = 1, 1/2, ..., 1/64
+f = lambda t, N: 0.8 * N * (1 - N / 1.2)
+exact = lambda t: 1.2 / (1 + (1.2 / 0.05 - 1) * np.exp(-0.8 * t))
+hs = 2.0 ** -np.arange(7)
+err = np.array([[abs(rk_solve(methods[m], f, 0, 0.05, h, int(10 / h))[1][-1, 0] - exact(10))
+                 for m in ["Euler", "Heun", "RK4"]] for h in hs])
+print(np.array2string(err, precision=2))
+print(np.round(np.log2(err[:-1] / err[1:]), 2))     # observed order
+
+# (c) log-log plot
+plt.loglog(hs, err, "o-"); plt.legend(["Euler", "Heun", "RK4"])
+plt.xlabel("step size h"); plt.ylabel("error in N(10)"); plt.show()
+
+# Output:
+# Euler: 6.0000000
+# Midpoint: 6.8000000
+# Heun: 6.8000000
+# RK4: 6.7040000
+# exact: 6.7032005
+# [[7.45e-03 8.80e-03 1.83e-04]
+#  [3.41e-03 1.51e-03 9.25e-06]
+#  [1.61e-03 3.36e-04 5.31e-07]
+#  [7.80e-04 8.05e-05 3.20e-08]
+#  [3.84e-04 1.98e-05 1.97e-09]
+#  [1.91e-04 4.92e-06 1.22e-10]
+#  [9.49e-05 1.23e-06 7.59e-12]]
+# [[1.13 2.54 4.31]
+#  [1.08 2.17 4.12]
+#  [1.04 2.06 4.05]
+#  [1.02 2.02 4.02]
+#  [1.01 2.01 4.01]
+#  [1.01 2.   4.01]]
+```
+
+### Rust
+
+```rust
+// rust/examples/runge_kutta_c1.rs  —  cargo run --example runge_kutta_c1
+// C1: midpoint, Heun and RK4 by hand; order on the logistic curve
+type Rhs = dyn Fn(f64, &[f64]) -> Vec<f64>;
+type Step = fn(&Rhs, f64, &[f64], f64) -> Vec<f64>;
+
+// y + a * k, element by element (R and numpy do this with `y + a * k`)
+fn axpy(y: &[f64], a: f64, k: &[f64]) -> Vec<f64> {
+    y.iter().zip(k).map(|(yi, ki)| yi + a * ki).collect()
+}
+
+fn euler_step(f: &Rhs, t: f64, y: &[f64], h: f64) -> Vec<f64> {
+    axpy(y, h, &f(t, y))
+}
+fn midpoint_step(f: &Rhs, t: f64, y: &[f64], h: f64) -> Vec<f64> {
+    let k1 = f(t, y);
+    let k2 = f(t + h / 2.0, &axpy(y, h / 2.0, &k1));
+    axpy(y, h, &k2)
+}
+fn heun_step(f: &Rhs, t: f64, y: &[f64], h: f64) -> Vec<f64> {
+    let k1 = f(t, y);
+    let k2 = f(t + h, &axpy(y, h, &k1));
+    let k: Vec<f64> = k1.iter().zip(&k2).map(|(a, b)| a + b).collect();
+    axpy(y, h / 2.0, &k)
+}
+fn rk4_step(f: &Rhs, t: f64, y: &[f64], h: f64) -> Vec<f64> {
+    let k1 = f(t, y);
+    let k2 = f(t + h / 2.0, &axpy(y, h / 2.0, &k1));
+    let k3 = f(t + h / 2.0, &axpy(y, h / 2.0, &k2));
+    let k4 = f(t + h, &axpy(y, h, &k3));
+    let k: Vec<f64> = (0..y.len()).map(|i| k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]).collect();
+    axpy(y, h / 6.0, &k)
+}
+// n fixed steps of any method; returns the final state
+fn rk_solve(step: Step, f: &Rhs, t0: f64, y0: &[f64], h: f64, n: usize) -> Vec<f64> {
+    let mut y = y0.to_vec();
+    for i in 0..n {
+        y = step(f, t0 + i as f64 * h, &y, h);
+    }
+    y
+}
+
+fn main() {
+    let methods: [(&str, Step); 4] = [("Euler", euler_step), ("Midpoint", midpoint_step),
+                                      ("Heun", heun_step), ("RK4", rk4_step)];
+    // (a) check B1 and B2: drug clearance C' = -0.8 C, C0 = 10 mg/L, one step h = 0.5
+    let clear = |_t: f64, c: &[f64]| vec![-0.8 * c[0]];
+    for (name, s) in methods {
+        println!("{}: {:.7}", name, s(&clear, 0.0, &[10.0], 0.5)[0]);
+    }
+    println!("exact: {:.7}", 10.0 * (-0.4f64).exp());
+
+    // (b) logistic: error in N(10) for h = 1, 1/2, ..., 1/64
+    let f = |_t: f64, n: &[f64]| vec![0.8 * n[0] * (1.0 - n[0] / 1.2)];
+    let exact = |t: f64| 1.2 / (1.0 + (1.2 / 0.05 - 1.0) * (-0.8 * t).exp());
+    let mut err = vec![[0.0; 3]; 7];
+    for (i, row) in err.iter_mut().enumerate() {
+        let h = 0.5f64.powi(i as i32);
+        let n = (10.0 / h) as usize;
+        for (j, s) in [euler_step as Step, heun_step, rk4_step].into_iter().enumerate() {
+            row[j] = (rk_solve(s, &f, 0.0, &[0.05], h, n)[0] - exact(10.0)).abs();
+        }
+        println!("h = {:<9} {:.2e} {:.2e} {:.2e}", h, row[0], row[1], row[2]);
+    }
+    println!("observed order (Euler, Heun, RK4):");
+    for i in 0..6 {
+        let p: Vec<String> = (0..3).map(|j| format!("{:.2}", (err[i][j] / err[i + 1][j]).log2())).collect();
+        println!("{}", p.join(" "));
+    }
+}
+
+// Output:
+// Euler: 6.0000000
+// Midpoint: 6.8000000
+// Heun: 6.8000000
+// RK4: 6.7040000
+// exact: 6.7032005
+// h = 1         7.45e-3 8.80e-3 1.83e-4
+// h = 0.5       3.41e-3 1.51e-3 9.25e-6
+// h = 0.25      1.61e-3 3.36e-4 5.31e-7
+// h = 0.125     7.80e-4 8.05e-5 3.20e-8
+// h = 0.0625    3.84e-4 1.98e-5 1.97e-9
+// h = 0.03125   1.91e-4 4.92e-6 1.22e-10
+// h = 0.015625  9.49e-5 1.23e-6 7.59e-12
+// observed order (Euler, Heun, RK4):
+// 1.13 2.54 4.31
+// 1.08 2.17 4.12
+// 1.04 2.06 4.05
+// 1.02 2.02 4.02
+// 1.01 2.01 4.01
+// 1.01 2.00 4.01
+```
+
+:::
+
+Midpoint and Heun agree on the linear clearance problem (B1c), and RK4 gives $6.704$ (B2). The observed orders tend to 1, 2 and 4; for $h = 1$ the ratios are off because $h$ is not yet small (Heun is even worse than Euler there). The slopes on the plot are 1, 2 and 4.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses the step functions, `methods` and `rk_solve` from C1
+f <- function(t, N) 0.8 * N * (1 - N / 1.2)
+exact <- function(t) 1.2 / (1 + (1.2 / 0.05 - 1) * exp(-0.8 * t))
+nsteps <- 10 * 2^(0:13)                      # h = 1, 1/2, ..., 1/8192
+stages <- c(Euler = 1, Heun = 2, RK4 = 4)    # f evaluations per step
+for (m in names(stages)) {
+  e <- sapply(nsteps, function(n)
+    abs(rk_solve(methods[[m]], f, 0, 0.05, 10 / n, n)$y[n + 1] - exact(10)))
+  i <- which(e < 1e-6)[1]                    # first n that reaches 1e-6
+  cat(m, ":", nsteps[i], "steps,", nsteps[i] * stages[m], "evaluations, error",
+      signif(e[i], 3), "\n")
+}
+
+# Output:
+# Euler : 81920 steps, 81920 evaluations, error 7.39e-07
+# Heun : 1280 steps, 2560 evaluations, error 3.06e-07
+# RK4 : 40 steps, 160 evaluations, error 5.31e-07
+```
+
+### Python
+
+```python
+import numpy as np
+# uses the step functions, methods and rk_solve from C1
+f = lambda t, N: 0.8 * N * (1 - N / 1.2)
+exact = lambda t: 1.2 / (1 + (1.2 / 0.05 - 1) * np.exp(-0.8 * t))
+nsteps = 10 * 2 ** np.arange(14)               # h = 1, 1/2, ..., 1/8192
+stages = {"Euler": 1, "Heun": 2, "RK4": 4}     # f evaluations per step
+for m, s in stages.items():
+    for n in nsteps:
+        e = abs(rk_solve(methods[m], f, 0, 0.05, 10 / n, n)[1][-1, 0] - exact(10))
+        if e < 1e-6:                           # first n that reaches 1e-6
+            print(f"{m}: {n} steps, {n * s} evaluations, error {e:.3g}")
+            break
+
+# Output:
+# Euler: 81920 steps, 81920 evaluations, error 7.39e-07
+# Heun: 1280 steps, 2560 evaluations, error 3.06e-07
+# RK4: 40 steps, 160 evaluations, error 5.31e-07
+```
+
+### Rust
+
+```rust
+// rust/examples/runge_kutta_c2.rs  —  cargo run --example runge_kutta_c2
+// C2: cost per step versus accuracy (scalar versions of the C1 steppers)
+type Step = fn(&dyn Fn(f64) -> f64, f64, f64) -> f64; // autonomous: f depends on N only
+
+fn euler_step(f: &dyn Fn(f64) -> f64, y: f64, h: f64) -> f64 {
+    y + h * f(y)
+}
+fn heun_step(f: &dyn Fn(f64) -> f64, y: f64, h: f64) -> f64 {
+    let k1 = f(y);
+    let k2 = f(y + h * k1);
+    y + h / 2.0 * (k1 + k2)
+}
+fn rk4_step(f: &dyn Fn(f64) -> f64, y: f64, h: f64) -> f64 {
+    let k1 = f(y);
+    let k2 = f(y + h / 2.0 * k1);
+    let k3 = f(y + h / 2.0 * k2);
+    let k4 = f(y + h * k3);
+    y + h / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+}
+
+fn main() {
+    let f = |n: f64| 0.8 * n * (1.0 - n / 1.2);
+    let exact = |t: f64| 1.2 / (1.0 + (1.2 / 0.05 - 1.0) * (-0.8 * t).exp());
+    let methods: [(&str, Step, usize); 3] =
+        [("Euler", euler_step, 1), ("Heun", heun_step, 2), ("RK4", rk4_step, 4)];
+    for (name, step, stages) in methods {
+        for k in 0..14 {
+            let n = 10 * 2usize.pow(k); // h = 1, 1/2, ..., 1/8192
+            let h = 10.0 / n as f64;
+            let mut y = 0.05;
+            for _ in 0..n {
+                y = step(&f, y, h);
+            }
+            let e = (y - exact(10.0)).abs();
+            if e < 1e-6 {
+                println!("{}: {} steps, {} evaluations, error {:.3e}", name, n, n * stages, e);
+                break;
+            }
+        }
+    }
+}
+
+// Output:
+// Euler: 81920 steps, 81920 evaluations, error 7.387e-7
+// Heun: 1280 steps, 2560 evaluations, error 3.060e-7
+// RK4: 40 steps, 160 evaluations, error 5.312e-7
+```
+
+:::
+
+RK4 needs 160 evaluations where Heun needs 2560 and Euler 82 000 (the powers-of-two grid overshoots a little; the finer search on the lecture slide gives 140, 1400 and 61 000). The B3(c) estimates are of the right size.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses the step functions, `methods` and `rk_solve` from C1
+a <- 1; b <- 0.1; c <- 0.075; d <- 1.5               # per year
+lv <- function(t, y) c(a * y[1] - b * y[1] * y[2], c * y[1] * y[2] - d * y[2])
+V  <- function(x, y) c * x - d * log(x) + b * y - a * log(y)
+drift <- function(Y) { v <- V(Y[, 1], Y[, 2]); max(abs(v - v[1])) }
+c(Euler = drift(rk_solve(euler_step, lv, 0, c(10, 5), 0.01, 5000)$y),
+  Heun  = drift(rk_solve(heun_step,  lv, 0, c(10, 5), 0.01, 5000)$y),
+  RK4   = drift(rk_solve(rk4_step,   lv, 0, c(10, 5), 0.1, 500)$y))
+
+library(deSolve)
+lv_ds <- function(t, y, parms) list(lv(t, y))
+for (tol in c(1e-3, 1e-6)) {
+  out <- ode(c(x = 10, y = 5), times = 0:50, func = lv_ds, parms = NULL,
+             method = "ode45", rtol = tol, atol = tol)
+  cat("ode45, tol =", tol, ": drift", signif(drift(out[, c("x", "y")]), 3),
+      ", steps", attributes(out)$istate[2], "\n")
+}
+
+# Output:
+#        Euler         Heun          RK4
+# 5.106736e-01 6.268976e-05 5.691154e-06
+# ode45, tol = 0.001 : drift 0.0167 , steps 88
+# ode45, tol = 1e-06 : drift 2.5e-06 , steps 277
+```
+
+### Python
+
+```python
+import numpy as np
+# uses the step functions, methods and rk_solve from C1
+from scipy.integrate import solve_ivp
+a, b, c, d = 1, 0.1, 0.075, 1.5                     # per year
+lv = lambda t, y: np.array([a * y[0] - b * y[0] * y[1], c * y[0] * y[1] - d * y[1]])
+V = lambda x, y: c * x - d * np.log(x) + b * y - a * np.log(y)
+def drift(Y):
+    v = V(Y[:, 0], Y[:, 1])
+    return np.max(np.abs(v - v[0]))
+for name, step, h in [("Euler", euler_step, 0.01), ("Heun", heun_step, 0.01),
+                      ("RK4", rk4_step, 0.1)]:
+    print(f"{name}: drift {drift(rk_solve(step, lv, 0, [10, 5], h, round(50 / h))[1]):.4g}")
+
+for tol in [1e-3, 1e-6]:
+    sol = solve_ivp(lv, (0, 50), [10, 5], method="RK45", rtol=tol, atol=tol)
+    print(f"RK45, tol = {tol}: drift {drift(sol.y.T):.3g}, steps {sol.t.size - 1}")
+sol = solve_ivp(lv, (0, 50), [10, 5])                # defaults: rtol=1e-3, atol=1e-6
+print(f"RK45, defaults: drift {drift(sol.y.T):.3g}, steps {sol.t.size - 1}")
+
+# Output:
+# Euler: drift 0.5107
+# Heun: drift 6.269e-05
+# RK4: drift 5.691e-06
+# RK45, tol = 0.001: drift 0.0165, steps 67
+# RK45, tol = 1e-06: drift 1.06e-06, steps 228
+# RK45, defaults: drift 0.0248, steps 70
+```
+
+### Rust
+
+```rust
+// rust/examples/runge_kutta_c3.rs  —  cargo run --example runge_kutta_c3
+// C3: predator-prey; drift of the conserved quantity V for fixed steps and for Dopri5
+use ode_solvers::{Dopri5, OutputType, System, Vector2};
+
+const A: f64 = 1.0; const B: f64 = 0.1; const C: f64 = 0.075; const D: f64 = 1.5; // per year
+type State = Vector2<f64>;
+
+fn lv(y: &State) -> State {
+    State::new(A * y[0] - B * y[0] * y[1], C * y[0] * y[1] - D * y[1])
+}
+fn v(y: &State) -> f64 {
+    C * y[0] - D * y[0].ln() + B * y[1] - A * y[1].ln()
+}
+fn drift(ys: &[State]) -> f64 {
+    ys.iter().map(|y| (v(y) - v(&ys[0])).abs()).fold(0.0, f64::max)
+}
+
+// nalgebra vectors support y + k * h directly
+fn euler_step(y: &State, h: f64) -> State { y + lv(y) * h }
+fn heun_step(y: &State, h: f64) -> State {
+    let k1 = lv(y);
+    let k2 = lv(&(y + k1 * h));
+    y + (k1 + k2) * (h / 2.0)
+}
+fn rk4_step(y: &State, h: f64) -> State {
+    let k1 = lv(y);
+    let k2 = lv(&(y + k1 * (h / 2.0)));
+    let k3 = lv(&(y + k2 * (h / 2.0)));
+    let k4 = lv(&(y + k3 * h));
+    y + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0)
+}
+
+struct LotkaVolterra;
+impl System<f64, State> for LotkaVolterra {
+    fn system(&self, _t: f64, y: &State, dy: &mut State) { *dy = lv(y); }
+}
+
+fn main() {
+    let methods: [(&str, fn(&State, f64) -> State, f64); 3] =
+        [("Euler", euler_step, 0.01), ("Heun", heun_step, 0.01), ("RK4", rk4_step, 0.1)];
+    for (name, step, h) in methods {
+        let mut ys = vec![State::new(10.0, 5.0)];
+        for _ in 0..(50.0 / h).round() as usize {
+            ys.push(step(ys.last().unwrap(), h));
+        }
+        println!("{}: drift {:.4e}", name, drift(&ys));
+    }
+    for tol in [1e-3, 1e-6] {
+        let mut s = Dopri5::new(LotkaVolterra, 0.0, 50.0, 1.0, State::new(10.0, 5.0), tol, tol);
+        s.set_output(OutputType::Sparse); // keep the solver's own steps
+        let stats = s.integrate().unwrap();
+        println!("Dopri5, tol = {:e}: drift {:.3e}, steps {}", tol, drift(s.y_out()), stats.accepted_steps);
+    }
+}
+
+// Output:
+// Euler: drift 5.1067e-1
+// Heun: drift 6.2690e-5
+// RK4: drift 5.6912e-6
+// Dopri5, tol = 1e-3: drift 3.871e-2, steps 74
+// Dopri5, tol = 1e-6: drift 1.587e-6, steps 238
+```
+
+:::
+
+Euler's drift of $0.51$ in $V$ (compare $V(0) - V^* = 0.48$, the whole "height" of the orbit above the equilibrium) means the orbit has moved as far from the true one as the true one is from the equilibrium: useless. RK4 with ten times larger steps keeps $V$ to $6\times10^{-6}$. With tolerance $10^{-3}$ the adaptive solvers drift by 0.02–0.04, visible on a plot after a few cycles; with $10^{-6}$ by $10^{-6}$. The defaults of `solve_ivp` (`rtol = 1e-3`) are too loose for a long oscillatory simulation; set `rtol` and `atol` yourself. The three libraries take different numbers of steps for the same tolerance (different first step, step limits and controller details), and deSolve also caps the step at the spacing of `times` (here 1 year).
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+adapt_heun <- function(f, t, y, tend, h, rtol = 1e-6, atol = 1e-9) {
+  ts <- t; hs <- c(); Y <- y; nrej <- 0
+  while (t < tend) {
+    h   <- min(h, tend - t)
+    k1  <- f(t, y); k2 <- f(t + h, y + h * k1)
+    ylo <- y + h * k1                            # Euler, order 1
+    yhi <- y + h / 2 * (k1 + k2)                 # Heun, order 2
+    sc  <- atol + rtol * pmax(abs(y), abs(yhi))
+    err <- sqrt(mean(((yhi - ylo) / sc)^2))
+    if (err <= 1) {                              # accept and record
+      t <- t + h; y <- yhi
+      ts <- c(ts, t); hs <- c(hs, h); Y <- rbind(Y, y)
+    } else nrej <- nrej + 1                      # reject: retry with smaller h
+    h <- h * min(5, max(0.2, 0.9 * err^(-1/2)))
+  }
+  list(t = ts, h = hs, y = unname(Y), nrej = nrej)
+}
+# (a) logistic to t = 10
+f <- function(t, N) 0.8 * N * (1 - N / 1.2)
+exact <- function(t) 1.2 / (1 + (1.2 / 0.05 - 1) * exp(-0.8 * t))
+for (rtol in c(1e-3, 1e-6)) {
+  s <- adapt_heun(f, 0, 0.05, 10, h = 1, rtol = rtol)
+  n <- length(s$h)
+  cat("rtol", rtol, ": error", signif(s$y[n + 1] - exact(10), 3), ", steps", n,
+      ", rejected", s$nrej, ", f evaluations", 2 * (n + s$nrej), "\n")
+}
+# (b) SIR epidemic (people) to day 160
+beta <- 0.3; gamma <- 0.1; N <- 10000
+sir <- function(t, y) {
+  S <- y[1]; I <- y[2]
+  c(-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I)
+}
+s <- adapt_heun(sir, 0, c(9990, 10, 0), 160, h = 0.1, rtol = 1e-6, atol = 1e-6)
+cat("steps", length(s$h), ", rejected", s$nrej, "\n")
+tstart <- s$t[-length(s$t)]                      # each step starts here
+for (T in c(0, 13, 38, 100, 159)) cat("h near t =", T, ":", signif(s$h[findInterval(T, tstart)], 3), "\n")
+plot(tstart, s$h, log = "y", type = "l", xlab = "time (days)", ylab = "step size h")
+
+# Output:
+# rtol 0.001 : error -0.00027 , steps 83 , rejected 5 , f evaluations 176
+# rtol 1e-06 : error -3.44e-07 , steps 2526 , rejected 7 , f evaluations 5066
+# steps 10059 , rejected 2
+# h near t = 0 : 0.004
+# h near t = 13 : 0.00718
+# h near t = 38 : 0.0152
+# h near t = 100 : 0.0207
+# h near t = 159 : 0.0413
+```
+
+### Python
+
+```python
+import numpy as np
+
+def adapt_heun(f, t, y, tend, h, rtol=1e-6, atol=1e-9):
+    y = np.atleast_1d(np.asarray(y, dtype=float))
+    ts, hs, Y, nrej = [t], [], [y], 0
+    while t < tend:
+        h = min(h, tend - t)
+        k1 = f(t, y); k2 = f(t + h, y + h * k1)
+        ylo = y + h * k1                         # Euler, order 1
+        yhi = y + h / 2 * (k1 + k2)              # Heun, order 2
+        sc = atol + rtol * np.maximum(np.abs(y), np.abs(yhi))
+        err = np.sqrt(np.mean(((yhi - ylo) / sc) ** 2))
+        if err <= 1:                             # accept and record
+            t, y = t + h, yhi
+            ts.append(t); hs.append(h); Y.append(y)
+        else:                                    # reject: retry with smaller h
+            nrej += 1
+        h = h * min(5, max(0.2, 0.9 * err ** -0.5))
+    return np.array(ts), np.array(hs), np.array(Y), nrej
+import matplotlib.pyplot as plt
+# (a) logistic to t = 10
+f = lambda t, N: 0.8 * N * (1 - N / 1.2)
+exact = lambda t: 1.2 / (1 + (1.2 / 0.05 - 1) * np.exp(-0.8 * t))
+for rtol in [1e-3, 1e-6]:
+    t, h, Y, nrej = adapt_heun(f, 0, 0.05, 10, h=1, rtol=rtol)
+    n = len(h)
+    print(f"rtol {rtol}: error {Y[-1, 0] - exact(10):.3g}, steps {n}, rejected {nrej}, "
+          f"f evaluations {2 * (n + nrej)}")
+# (b) SIR epidemic (people) to day 160
+beta, gamma, N = 0.3, 0.1, 10000
+def sir(t, y):
+    S, I = y[0], y[1]
+    return np.array([-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I])
+t, h, Y, nrej = adapt_heun(sir, 0, [9990, 10, 0], 160, h=0.1, rtol=1e-6, atol=1e-6)
+print(f"steps {len(h)}, rejected {nrej}")
+tstart = t[:-1]                                   # each step starts here
+for T in [0, 13, 38, 100, 159]:
+    print(f"h near t = {T}: {h[np.searchsorted(tstart, T, side='right') - 1]:.3g}")
+plt.semilogy(tstart, h); plt.xlabel("time (days)"); plt.ylabel("step size h"); plt.show()
+
+# Output:
+# rtol 0.001: error -0.00027, steps 83, rejected 5, f evaluations 176
+# rtol 1e-06: error -3.44e-07, steps 2526, rejected 7, f evaluations 5066
+# steps 10059, rejected 2
+# h near t = 0: 0.004
+# h near t = 13: 0.00718
+# h near t = 38: 0.0152
+# h near t = 100: 0.0207
+# h near t = 159: 0.0413
+```
+
+### Rust
+
+```rust
+// rust/examples/runge_kutta_c4.rs  —  cargo run --example runge_kutta_c4
+// C4: an adaptive Heun-Euler 2(1) solver, written by hand
+struct Run { t: Vec<f64>, h: Vec<f64>, y: Vec<Vec<f64>>, nrej: usize }
+
+fn adapt_heun(f: &dyn Fn(f64, &[f64]) -> Vec<f64>, mut t: f64, y0: &[f64], tend: f64,
+              mut h: f64, rtol: f64, atol: f64) -> Run {
+    let mut y = y0.to_vec();
+    let mut run = Run { t: vec![t], h: vec![], y: vec![y.clone()], nrej: 0 };
+    let m = y.len();
+    while t < tend {
+        h = h.min(tend - t);
+        let k1 = f(t, &y);
+        let ye: Vec<f64> = (0..m).map(|i| y[i] + h * k1[i]).collect(); // Euler, order 1
+        let k2 = f(t + h, &ye);
+        let yhi: Vec<f64> = (0..m).map(|i| y[i] + h / 2.0 * (k1[i] + k2[i])).collect(); // Heun
+        let mut ss = 0.0;
+        for i in 0..m {
+            let sc = atol + rtol * y[i].abs().max(yhi[i].abs());
+            ss += ((yhi[i] - ye[i]) / sc).powi(2);
+        }
+        let err = (ss / m as f64).sqrt();
+        if err <= 1.0 { // accept and record
+            t += h;
+            y = yhi;
+            run.t.push(t); run.h.push(h); run.y.push(y.clone());
+        } else { // reject: retry with smaller h
+            run.nrej += 1;
+        }
+        h *= (0.9 * err.powf(-0.5)).clamp(0.2, 5.0);
+    }
+    run
+}
+
+fn main() {
+    // (a) logistic to t = 10
+    let f = |_t: f64, n: &[f64]| vec![0.8 * n[0] * (1.0 - n[0] / 1.2)];
+    let exact = |t: f64| 1.2 / (1.0 + (1.2 / 0.05 - 1.0) * (-0.8 * t).exp());
+    for rtol in [1e-3, 1e-6] {
+        let s = adapt_heun(&f, 0.0, &[0.05], 10.0, 1.0, rtol, 1e-9);
+        let n = s.h.len();
+        println!("rtol {:e}: error {:.3e}, steps {}, rejected {}, f evaluations {}",
+                 rtol, s.y[n][0] - exact(10.0), n, s.nrej, 2 * (n + s.nrej));
+    }
+    // (b) SIR epidemic (people) to day 160
+    let (beta, gamma, n) = (0.3, 0.1, 10000.0);
+    let sir = |_t: f64, y: &[f64]| {
+        let (s, i) = (y[0], y[1]);
+        vec![-beta * s * i / n, beta * s * i / n - gamma * i, gamma * i]
+    };
+    let s = adapt_heun(&sir, 0.0, &[9990.0, 10.0, 0.0], 160.0, 0.1, 1e-6, 1e-6);
+    println!("steps {}, rejected {}", s.h.len(), s.nrej);
+    for tq in [0.0, 13.0, 38.0, 100.0, 159.0] {
+        let i = s.t.iter().filter(|&&ti| ti <= tq).count() - 1; // step that starts before tq
+        println!("h near t = {}: {:.3e}", tq, s.h[i]);
+    }
+}
+
+// Output:
+// rtol 1e-3: error -2.695e-4, steps 83, rejected 5, f evaluations 176
+// rtol 1e-6: error -3.443e-7, steps 2526, rejected 7, f evaluations 5066
+// steps 10059, rejected 2
+// h near t = 0: 4.000e-3
+// h near t = 13: 7.176e-3
+// h near t = 38: 1.519e-2
+// h near t = 100: 2.073e-2
+// h near t = 159: 4.128e-2
+```
+
+:::
+
+(a) The first step (err $\approx 133$) is rejected, as in B4; the controller then settles. The achieved error is a fraction of `rtol`, but 1000 times tighter tolerance cost 30 times more steps: for an order-2 pair, steps grow like $\texttt{rtol}^{-1/2}$. That is why production solvers use order 5.
+(b) About 10 000 steps. The steps are smallest at the very start, where $R \approx 0$ is protected only by `atol = 1e-6` and grows by a large factor; they stay small through the early exponential phase (where $I$ and $R$ change by a large relative amount per day), and grow after the peak as everything slows down. A fixed-step method would need the smallest step everywhere.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+alpha <- 216; alpha0 <- 0.216; beta <- 5; n <- 2
+repress <- function(t, y, parms) {
+  m <- y[1:3]; p <- y[4:6]
+  prep <- p[c(3, 1, 2)]                  # m1 repressed by p3, m2 by p1, m3 by p2
+  list(c(-m + alpha / (1 + prep^n) + alpha0, -beta * (p - m)))
+}
+y0 <- c(m1 = 1, m2 = 0, m3 = 0, p1 = 0, p2 = 0, p3 = 0)
+# (a) ode45 with tolerances 1e-3 ... 1e-9
+for (tol in 10^-(3:9)) {
+  out <- ode(y0, times = 0:50, func = repress, parms = NULL,
+             method = "ode45", rtol = tol, atol = tol)
+  cat("tol", tol, ": p1(50) =", format(out[51, "p1"], digits = 8),
+      ", steps", attributes(out)$istate[2], ", f evaluations", attributes(out)$istate[3], "\n")
+}
+# (b) fixed-step RK4: the step is the spacing of `times` unless hini is given
+for (h in c(1, 0.2, 0.01)) {
+  out <- ode(y0, times = 0:50, func = repress, parms = NULL, method = "rk4", hini = h)
+  cat("rk4, h =", h, ": p1(50) =", format(out[51, "p1"], digits = 8), "\n")
+}
+
+# Output:
+# tol 0.001 : p1(50) = 46.841932 , steps 159 , f evaluations 979
+# tol 1e-04 : p1(50) = 47.371034 , steps 217 , f evaluations 1319
+# tol 1e-05 : p1(50) = 47.333346 , steps 317 , f evaluations 1910
+# tol 1e-06 : p1(50) = 47.335748 , steps 487 , f evaluations 2929
+# tol 1e-07 : p1(50) = 47.33596 , steps 760 , f evaluations 4568
+# tol 1e-08 : p1(50) = 47.335986 , steps 1190 , f evaluations 7148
+# tol 1e-09 : p1(50) = 47.335989 , steps 1871 , f evaluations 11233
+# rk4, h = 1 : p1(50) = 2.9892957e+58
+# rk4, h = 0.2 : p1(50) = 58.785051
+# rk4, h = 0.01 : p1(50) = 47.338477
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import solve_ivp
+# uses rk_solve and rk4_step from C1
+alpha, alpha0, beta, n = 216, 0.216, 5, 2
+def repress(t, y):
+    m, p = y[:3], y[3:]
+    prep = p[[2, 0, 1]]                    # m1 repressed by p3, m2 by p1, m3 by p2
+    return np.concatenate([-m + alpha / (1 + prep**n) + alpha0, -beta * (p - m)])
+y0 = [1, 0, 0, 0, 0, 0]
+# (a) RK45 with tolerances 1e-3 ... 1e-9
+for tol in 10.0 ** -np.arange(3, 10):
+    sol = solve_ivp(repress, (0, 50), y0, method="RK45", rtol=tol, atol=tol)
+    print(f"tol {tol:.0e}: p1(50) = {sol.y[3, -1]:.8g}, steps {sol.t.size - 1}, "
+          f"f evaluations {sol.nfev}")
+# (b) fixed-step RK4 (scipy has none: use rk_solve from C1)
+for h in [1, 0.2, 0.01]:
+    t, Y = rk_solve(rk4_step, repress, 0, y0, h, round(50 / h))
+    print(f"rk4, h = {h}: p1(50) = {Y[-1, 3]:.8g}")
+
+# Output:
+# tol 1e-03: p1(50) = 47.190514, steps 139, f evaluations 938
+# tol 1e-04: p1(50) = 47.289992, steps 207, f evaluations 1250
+# tol 1e-05: p1(50) = 47.333636, steps 318, f evaluations 1916
+# tol 1e-06: p1(50) = 47.335791, steps 493, f evaluations 2972
+# tol 1e-07: p1(50) = 47.335964, steps 770, f evaluations 4622
+# tol 1e-08: p1(50) = 47.335986, steps 1210, f evaluations 7268
+# tol 1e-09: p1(50) = 47.335989, steps 1906, f evaluations 11438
+# rk4, h = 1: p1(50) = 2.9892957e+58
+# rk4, h = 0.2: p1(50) = 58.785051
+# rk4, h = 0.01: p1(50) = 47.338477
+```
+
+### Rust
+
+```rust
+// rust/examples/runge_kutta_c5.rs  —  cargo run --example runge_kutta_c5
+// C5: the repressilator with ode_solvers: Dopri5 at several tolerances, then fixed-step Rk4
+use ode_solvers::{Dopri5, OutputType, Rk4, System, Vector6};
+
+type State = Vector6<f64>;
+const ALPHA: f64 = 216.0; const ALPHA0: f64 = 0.216; const BETA: f64 = 5.0; const N: f64 = 2.0;
+
+struct Repressilator;
+impl System<f64, State> for Repressilator {
+    fn system(&self, _t: f64, y: &State, dy: &mut State) {
+        let rep = [y[5], y[3], y[4]]; // m1 repressed by p3, m2 by p1, m3 by p2
+        for i in 0..3 {
+            dy[i] = -y[i] + ALPHA / (1.0 + rep[i].powf(N)) + ALPHA0;
+            dy[i + 3] = -BETA * (y[i + 3] - y[i]);
+        }
+    }
+}
+
+fn main() {
+    let y0 = State::from_column_slice(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    // (a) Dopri5 with tolerances 1e-3 ... 1e-9
+    for k in 3..10 {
+        let tol = 10f64.powi(-k);
+        let mut s = Dopri5::new(Repressilator, 0.0, 50.0, 1.0, y0, tol, tol);
+        s.set_output(OutputType::Sparse); // last output = the step that ends at t = 50
+        let st = s.integrate().unwrap();
+        println!("tol {:e}: p1(50) = {:.8}, steps {}, f evaluations {}",
+                 tol, s.y_out().last().unwrap()[3], st.accepted_steps, st.num_eval);
+    }
+    // (b) fixed-step RK4: Rk4::new(system, t0, y0, t_end, h)
+    for h in [1.0, 0.2, 0.01] {
+        let mut s = Rk4::new(Repressilator, 0.0, y0, 50.0, h);
+        s.integrate().unwrap();
+        println!("rk4, h = {}: p1(50) = {:.8e}", h, s.y_out().last().unwrap()[3]);
+    }
+}
+
+// Output:
+// tol 1e-3: p1(50) = 47.17352205, steps 145, f evaluations 879
+// tol 1e-4: p1(50) = 47.33158639, steps 219, f evaluations 1317
+// tol 1e-5: p1(50) = 47.33461890, steps 337, f evaluations 2025
+// tol 1e-6: p1(50) = 47.33582599, steps 523, f evaluations 3141
+// tol 1e-7: p1(50) = 47.33597099, steps 816, f evaluations 4899
+// tol 1e-8: p1(50) = 47.33598704, steps 1281, f evaluations 7689
+// tol 1e-9: p1(50) = 47.33598872, steps 2017, f evaluations 12105
+// rk4, h = 1: p1(50) = 2.98929575e58
+// rk4, h = 0.2: p1(50) = 5.87850514e1
+// rk4, h = 0.01: p1(50) = 4.73384767e1
+```
+
+:::
+
+(a) Agreeing digits: tolerance $10^{-3}$ gives 2 correct digits ($47$), $10^{-5}$ gives 4, $10^{-7}$ gives 6 (reference $47.335989$). Each factor 10 costs about 1.5 times more steps ($10^{1/5} = 1.58$ for order 5). The three libraries differ in the third or fourth digit at loose tolerances (they take different steps), and agree once tightened: that is the check.
+(b) $h = 1$ is unstable and blows up to $3\times10^{58}$; $h = 0.2$ gives 58.8, a plausible-looking but wrong value (the oscillation has drifted out of phase, see the lecture figure); only $h = 0.01$ (20 000 evaluations) is close, and still less accurate than Dormand–Prince with 3000 evaluations at tolerance $10^{-6}$. In R, `method = "rk4"` with `times = 0:50` silently uses $h = 1$.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses adapt_heun from C4
+beta <- 0.3; gamma <- 0.1; N <- 10000
+sir <- function(t, y) {
+  S <- y[1]; I <- y[2]
+  c(-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I)
+}
+Iref <- 998.2012187                            # I(60), from a very tight solve
+for (atol in c(10, 1, 1e-6)) {
+  cat("atol", atol, ": ")
+  for (rtol in 10^-(3:6)) {
+    s <- adapt_heun(sir, 0, c(9990, 10, 0), 60, h = 0.1, rtol = rtol, atol = atol)
+    cat(signif(abs(s$y[nrow(s$y), 2] / Iref - 1), 2), " ")
+  }
+  cat("\n")
+}
+
+# Output:
+# atol 10 : 0.068  0.053  0.051  0.051
+# atol 1 : 0.014  0.011  0.0089  0.0084
+# atol 1e-06 : 5e-04  5.1e-05  5.1e-06  5.4e-07
+```
+
+### Python
+
+```python
+import numpy as np
+# uses adapt_heun from C4
+beta, gamma, N = 0.3, 0.1, 10000
+def sir(t, y):
+    S, I = y[0], y[1]
+    return np.array([-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I])
+Iref = 998.2012187                             # I(60), from a very tight solve
+for atol in [10, 1, 1e-6]:
+    errs = []
+    for rtol in 10.0 ** -np.arange(3, 7):
+        t, h, Y, nrej = adapt_heun(sir, 0, [9990, 10, 0], 60, h=0.1, rtol=rtol, atol=atol)
+        errs.append(f"{abs(Y[-1, 1] / Iref - 1):.2g}")
+    print(f"atol {atol}:", "  ".join(errs))
+
+# Output:
+# atol 10: 0.068  0.053  0.051  0.051
+# atol 1: 0.014  0.011  0.0089  0.0084
+# atol 1e-06: 0.0005  5.1e-05  5.1e-06  5.4e-07
+```
+
+### Rust
+
+```rust
+// rust/examples/runge_kutta_c6.rs  —  cargo run --example runge_kutta_c6
+// C6: atol too large: the hand-written adaptive solver of C4 on the SIR epidemic
+struct Run { t: Vec<f64>, h: Vec<f64>, y: Vec<Vec<f64>>, nrej: usize }
+
+fn adapt_heun(f: &dyn Fn(f64, &[f64]) -> Vec<f64>, mut t: f64, y0: &[f64], tend: f64,
+              mut h: f64, rtol: f64, atol: f64) -> Run {
+    let mut y = y0.to_vec();
+    let mut run = Run { t: vec![t], h: vec![], y: vec![y.clone()], nrej: 0 };
+    let m = y.len();
+    while t < tend {
+        h = h.min(tend - t);
+        let k1 = f(t, &y);
+        let ye: Vec<f64> = (0..m).map(|i| y[i] + h * k1[i]).collect(); // Euler, order 1
+        let k2 = f(t + h, &ye);
+        let yhi: Vec<f64> = (0..m).map(|i| y[i] + h / 2.0 * (k1[i] + k2[i])).collect(); // Heun
+        let mut ss = 0.0;
+        for i in 0..m {
+            let sc = atol + rtol * y[i].abs().max(yhi[i].abs());
+            ss += ((yhi[i] - ye[i]) / sc).powi(2);
+        }
+        let err = (ss / m as f64).sqrt();
+        if err <= 1.0 { // accept and record
+            t += h;
+            y = yhi;
+            run.t.push(t); run.h.push(h); run.y.push(y.clone());
+        } else { // reject: retry with smaller h
+            run.nrej += 1;
+        }
+        h *= (0.9 * err.powf(-0.5)).clamp(0.2, 5.0);
+    }
+    run
+}
+
+fn main() {
+    let (beta, gamma, n) = (0.3, 0.1, 10000.0);
+    let sir = |_t: f64, y: &[f64]| {
+        let (s, i) = (y[0], y[1]);
+        vec![-beta * s * i / n, beta * s * i / n - gamma * i, gamma * i]
+    };
+    let i_ref = 998.2012187; // I(60), from a very tight solve
+    for atol in [10.0, 1.0, 1e-6] {
+        print!("atol {:e}:", atol);
+        for k in 3..7 {
+            let rtol = 10f64.powi(-k);
+            let s = adapt_heun(&sir, 0.0, &[9990.0, 10.0, 0.0], 60.0, 0.1, rtol, atol);
+            print!("  {:.1e}", (s.y.last().unwrap()[1] / i_ref - 1.0).abs());
+        }
+        println!();
+    }
+}
+
+// Output:
+// atol 1e1:  6.8e-2  5.3e-2  5.1e-2  5.1e-2
+// atol 1e0:  1.4e-2  1.1e-2  8.9e-3  8.4e-3
+// atol 1e-6:  5.0e-4  5.1e-5  5.1e-6  5.4e-7
+```
+
+:::
+
+With `atol = 10` the error is stuck at 5%, with `atol = 1` at about 1%, however small `rtol` is; with `atol = 1e-6` it falls in proportion to `rtol`. In the first days $I \approx 10$, so with `atol = 10` the allowed error in $I$ is as large as $I$ (B5c): the solver takes large steps with a large relative error in $I$, and that error grows with the epidemic. Tightening only `rtol` does not reveal it; tightening `atol` does. (The same holds for the library solvers: `solve_ivp` with `atol=10` gives a few percent error in $I(60)$ as well.)
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+# (a) SIR: the peak as an event
+beta <- 0.3; gamma <- 0.1; N <- 10000
+sir <- function(t, y, parms) {
+  S <- y[1]; I <- y[2]
+  list(c(-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I))
+}
+peak <- function(t, y, parms) beta * y[1] / N - gamma     # dI/dt = 0
+out <- ode(c(S = 9990, I = 10, R = 0), 0:160, sir, parms = NULL, method = "lsoda",
+           rootfunc = peak, rtol = 1e-10, atol = 1e-8)
+print(tail(out, 1), digits = 10)
+# (b) predator-prey: first time the lynx exceed 20
+a <- 1; b <- 0.1; c <- 0.075; d <- 1.5
+lv <- function(t, y, parms) list(c(a * y[1] - b * y[1] * y[2], c * y[1] * y[2] - d * y[2]))
+lynx20 <- function(t, y, parms) y[2] - 20
+out <- ode(c(x = 10, y = 5), seq(0, 15, by = 0.1), lv, parms = NULL, method = "lsoda",
+           rootfunc = lynx20, rtol = 1e-10, atol = 1e-10)
+print(tail(out, 1), digits = 10)
+# (c) only looking at t = 0, 2.5, ..., 15
+out <- ode(c(x = 10, y = 5), seq(0, 15, by = 2.5), lv, parms = NULL, method = "ode45")
+round(out[, "y"], 2)
+any(diff(sign(out[, "y"] - 20)) != 0)
+
+# Output:
+#              time           S           I           R
+# [40,] 38.35530767 3333.333333 3007.960705 3658.705961
+#              time           x  y
+# [32,] 3.017154749 31.31269527 20
+# [1]  5.00 10.21  7.42  5.18 11.42  3.45 17.17
+# [1] FALSE
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import solve_ivp
+# (a) SIR: the peak as an event
+beta, gamma, N = 0.3, 0.1, 10000
+def sir(t, y):
+    S, I = y[0], y[1]
+    return [-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I]
+def peak(t, y):
+    return beta * y[0] / N - gamma             # dI/dt = 0
+peak.terminal = True                           # stop at the first root
+peak.direction = -1                            # only + to - (a maximum of I)
+sol = solve_ivp(sir, (0, 160), [9990, 10, 0], events=peak, rtol=1e-10, atol=1e-8)
+print(sol.t_events[0], sol.y_events[0])
+# (b) predator-prey: first time the lynx exceed 20
+a, b, c, d = 1, 0.1, 0.075, 1.5
+lv = lambda t, y: [a * y[0] - b * y[0] * y[1], c * y[0] * y[1] - d * y[1]]
+def lynx20(t, y):
+    return y[1] - 20
+lynx20.terminal = True; lynx20.direction = 1
+sol = solve_ivp(lv, (0, 15), [10, 5], events=lynx20, rtol=1e-10, atol=1e-10)
+print(sol.t_events[0], sol.y_events[0])
+# (c) only looking at t = 0, 2.5, ..., 15
+sol = solve_ivp(lv, (0, 15), [10, 5], t_eval=np.arange(0, 15.1, 2.5), rtol=1e-8, atol=1e-8)
+print(np.round(sol.y[1], 2))
+print(np.any(np.diff(np.sign(sol.y[1] - 20)) != 0))
+
+# Output:
+# [38.35530767] [[3333.33333333 3007.96070533 3658.70596134]]
+# [3.01715475] [[31.31269523 20.        ]]
+# [ 5.   10.21  7.42  5.18 11.42  3.45 17.17]
+# False
+```
+
+### Rust
+
+```rust
+// rust/examples/runge_kutta_c7.rs  —  cargo run --example runge_kutta_c7
+// C7: events by hand: ode_solvers has no event location, so we bracket the sign
+// change of g on the dense output and refine it by bisection
+use ode_solvers::continuous_output_model::ContinuousOutputModel;
+use ode_solvers::{Dopri5, System, Vector2, Vector3};
+
+struct Sir;
+impl System<f64, Vector3<f64>> for Sir {
+    fn system(&self, _t: f64, y: &Vector3<f64>, dy: &mut Vector3<f64>) {
+        let (beta, gamma, n) = (0.3, 0.1, 10000.0);
+        let (s, i) = (y[0], y[1]);
+        *dy = Vector3::new(-beta * s * i / n, beta * s * i / n - gamma * i, gamma * i);
+    }
+}
+struct LotkaVolterra;
+impl System<f64, Vector2<f64>> for LotkaVolterra {
+    fn system(&self, _t: f64, y: &Vector2<f64>, dy: &mut Vector2<f64>) {
+        let (a, b, c, d) = (1.0, 0.1, 0.075, 1.5);
+        *dy = Vector2::new(a * y[0] - b * y[0] * y[1], c * y[0] * y[1] - d * y[1]);
+    }
+}
+
+// first root of g(t) on [t0, t1]: scan with spacing dt, then bisect
+fn first_root(g: &dyn Fn(f64) -> f64, t0: f64, t1: f64, dt: f64) -> Option<f64> {
+    let mut lo = t0;
+    while lo < t1 {
+        let hi = (lo + dt).min(t1);
+        if g(lo).signum() != g(hi).signum() {
+            let (mut a, mut b) = (lo, hi);
+            for _ in 0..60 {
+                let m = 0.5 * (a + b);
+                if g(a).signum() == g(m).signum() { a = m } else { b = m }
+            }
+            return Some(0.5 * (a + b));
+        }
+        lo = hi;
+    }
+    None
+}
+
+fn main() {
+    // (a) SIR: the peak as an event, g = beta S / N - gamma
+    let mut dense = ContinuousOutputModel::default();
+    let mut s = Dopri5::new(Sir, 0.0, 160.0, 1.0, Vector3::new(9990.0, 10.0, 0.0), 1e-10, 1e-8);
+    s.integrate_with_continuous_output_model(&mut dense).unwrap();
+    let g = |t: f64| 0.3 * dense.evaluate(t).unwrap()[0] / 10000.0 - 0.1;
+    let tp = first_root(&g, 0.0, 160.0, 0.1).unwrap();
+    let y = dense.evaluate(tp).unwrap();
+    println!("peak at t = {:.8}: S = {:.6}, I = {:.6}, R = {:.6}", tp, y[0], y[1], y[2]);
+
+    // (b) predator-prey: first time the lynx exceed 20
+    let mut dense = ContinuousOutputModel::default();
+    let mut s = Dopri5::new(LotkaVolterra, 0.0, 15.0, 1.0, Vector2::new(10.0, 5.0), 1e-10, 1e-10);
+    s.integrate_with_continuous_output_model(&mut dense).unwrap();
+    let g = |t: f64| dense.evaluate(t).unwrap()[1] - 20.0;
+    let t20 = first_root(&g, 0.0, 15.0, 0.1).unwrap();
+    println!("lynx reach 20 at t = {:.8}, prey x = {:.6}", t20, dense.evaluate(t20).unwrap()[0]);
+
+    // (c) only looking at t = 0, 2.5, ..., 15
+    let ys: Vec<f64> = (0..7).map(|k| dense.evaluate(2.5 * k as f64).unwrap()[1]).collect();
+    println!("{:.2?}", ys);
+    println!("found with spacing 2.5: {:?}", first_root(&g, 0.0, 15.0, 2.5));
+}
+
+// Output:
+// peak at t = 38.35530767: S = 3333.333333, I = 3007.960705, R = 3658.705961
+// lynx reach 20 at t = 3.01715475, prey x = 31.312695
+// [5.00, 10.21, 7.42, 5.18, 11.42, 3.45, 17.17]
+// found with spacing 2.5: None
+```
+
+:::
+
+(a) Peak at day 38.3553 with $I = 3007.9607$, $S = N/3$: the exact $I_{\max} = 3007.961$ to all printed digits. (b) The lynx first reach 20 at $t = 3.0172$ years. (c) At $t = 0, 2.5, \dots, 15$ the lynx numbers are $5, 10.2, 7.4, 5.2, 11.4, 3.5, 17.2$: never above 20, so a check at those points misses all three excursions above 20 (B7c). Event detection is only as good as the points at which $g$ is evaluated: it needs steps (or dense output) fine enough to see every sign change.
+
+:::
+
+## Where this leads
+
+- ***Stiffness and implicit methods*** (Part 8): on stiff problems (fast and slow processes together) every explicit method, RK4 and Dormand–Prince included, needs tiny steps for **stability**, not accuracy; the adaptive solver then takes millions of steps. Implicit methods and LSODA (the `lsoda` used for events above) fix this.
+- ***Equilibria, stability and the phase plane*** (Part 8): the closed predator–prey orbits and the repressilator's limit cycle are studied there with nullclines and the Jacobian; the solvers of this unit draw the trajectories.
+- ***Nonlinear least squares and ODE fitting*** (Part 9): fitting ODE parameters to data calls the solver thousands of times; tolerances that are too loose make the fit noisy, tolerances that are too tight make it slow.

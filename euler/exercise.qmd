@@ -229,6 +229,48 @@ Give the order of each method.
 (b) Plot the run with $h = 1$ h for 2 days in the $(x, x'/\omega)$ plane, together with the exact circle.
 (c) Using $\ln(1 + \omega^2h^2) \approx \omega^2 h^2$, find the largest $h$ for which the amplitude is less than 1 % too large after 10 days. How many steps is that? Check by running it.
 
+## Explore {#explore}
+
+The demo below runs Euler's method in your browser. The tab **One equation** has the lecture's logistic OD curve ($K = 1.2$, $N_0 = 0.05$, $r = 0.8$ per hour) and drug clearance ($C' = -0.8\,C$, $C_0 = 10$ mg/L). Panel (a) shows the direction field, the exact solution (blue) and the Euler steps (red); **Step** takes one step at a time, **Run** animates, **Reset** goes back to $t = 0$, **All steps** jumps to the end. At the current point, the dashed orange segment is the next step (the tangent, of length $h$) and the dashed grey curve is the exact solution through the current Euler point. Panel (b) shows the global error at a fixed time ($t = 5$ h for the logistic, $t = 6$ h for clearance) against $h$ on log–log axes, with a slope-1 line and the unstable range $h > 2/k$ shaded; the large dot is the current $h$. The readout gives the current step, the factor $1 - kh$ (or $1 - rh$), the error and the ratio $\text{error}(h)/\text{error}(h/2)$. The tab **Systems** runs the SIR epidemic and the 24-hour oscillator from the lecture.
+
+The browser computes in the same IEEE doubles as R, Python and Rust, so the numbers agree with the lecture to the digits shown.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="eulerstep" data-model="logistic" data-h="1"></div>
+<script src="../demos/dist/eulerstep.js"></script>
+```
+
+**E1. (follow the slope)** With logistic growth and $h = 1$, click **Reset** and then **Step** three times. After each step write down $N_n$, the slope $f(N_n)$ and the exact value, and compare with your table from B3. Where does the dashed grey curve go after each step, and why does Euler fall behind?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+$N_1 = 0.08833$, $N_2 = 0.15380$, $N_3 = 0.26107$ against the exact $0.10587$, $0.21263$, $0.38879$: the hand table. The slopes used are $0.03833$, $0.06547$, $0.10727$. Each step follows the tangent at its **start**, but the curve bends upwards (it is convex below $N = K/2 = 0.6$), so the true slope increases during the step and Euler lands below the curve. The dashed grey curve is the exact solution through the current Euler point: after the first step Euler is on a different solution curve, lower than ours, and each further step moves to yet another one. The gap between that curve and the next Euler point is the local error; the gap to the blue curve is the global error.
+:::
+
+**E2. (order 1)** Set $h = 1$, $0.5$, $0.1$ and $0.01$ with the slider. For each, read the error at $t = 5$ and the ratio $\text{error}(h)/\text{error}(h/2)$. Where does the large dot sit in panel (b)? How many steps would four correct digits at $t = 5$ cost?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Errors $-0.2004$, $-0.09399$, $-0.01703$, $-0.001660$; ratios $2.13$, $2.12$, $2.03$, $2.00$. Dividing $h$ by 10 divides the error by 10, and halving $h$ halves it: order 1. The dot moves down the slope-1 line $0.17\,h$, so an error of $10^{-4}$ needs $h \approx 10^{-4}/0.17 = 6\times10^{-4}$, about 8300 steps to reach $t = 5$ (C2(c)). At $h = 1$ the ratio is not yet 2 and the dot lies slightly off the line: the step is too large for the leading error term to dominate.
+:::
+
+**E3. (instability)** Switch to **drug clearance**. Try $h = 0.5$, $1.25$, $2$, $2.4$ and $3$, and use **Step** to watch the first few steps. Read the factor $1 - kh$ and $C$ at $t = 12$ h. Which runs decay, which change sign, which grow? What happens in panel (b) as $h$ passes $2/k = 2.5$?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+$h = 0.5$: factor $0.60$, monotone decay, $C(12) = 5\times10^{-5}$ (exact $6.8\times10^{-4}$). $h = 1.25$: factor $0$, the first step lands exactly on $C = 0$ and stays there. $h = 2$: factor $-0.60$, the sign flips every step but the size decays ($C(12) = 0.467$). $h = 2.4$: factor $-0.92$, still decaying but slowly ($C(12) = -6.59$). $h = 3$: factor $-1.40$, the sign flips and the size grows; after two steps the solution leaves the plot, and $C(12) = 38.4$ (the introduction's example). In panel (b) the error at $t = 6$ follows the slope-1 line for small $h$, bends away for $h$ around 1–2, and jumps to $19.5$ in the shaded range $h > 2.5$. A small $h$ is accurate; a large one is not even stable, and the limit $2/k$ depends only on the rate.
+:::
+
+**E4. (a confident wrong answer)** Back on logistic growth, click the preset **logistic h = 3, 60 h** and step through it. What does Euler settle into? Compare $h = 2.6$, $2.4$ and $1.5$ (time span 60 h). Which step sizes give the wrong long-term behaviour, and what single check would have shown it without the exact solution?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+With $h = 3$ ($1 - rh = -1.40$) the culture first grows like the true curve, then overshoots $K = 1.2$ and settles into a boom–bust cycle between about $0.75$ and $1.44$ (the lecture's 2-cycle $0.77 \leftrightarrow 1.43$, reached after more steps). With $h = 2.6$ ($-1.08$) there is a smaller cycle, $1.01 \leftrightarrow 1.34$. With $h = 2.4$ ($-0.92$) the oscillation around $K$ is damped, $1.18 / 1.22$ after 60 h, and with $h = 1.5$ ($-0.20$) the run sits at $K$. Above $h = 2/r = 2.5$ the long-term behaviour is wrong: a regular cycle that the logistic ODE does not have. The check: **halve the step**. The cycle at $h = 3$ disappears at $h = 1.5$; a real oscillation would not.
+:::
+
+**E5. (systems)** Open the **Systems** tab. For the SIR epidemic, click $h = 4$, $1$, $0.1$ and $0.01$ days and read the Euler peak, its day, the error and the conservation check. Then switch to the **24-hour oscillator**, choose the 10-day span, and compare $h = 1$, $0.1$ and $0.01$ h. Is either error check (conservation, amplitude) an accuracy check?
+
+::: {.callout-note collapse="true" title="Answer E5"}
+SIR peaks $3535.245$ (day 48), $3127.315$ (day 41), $3019.556$ (day 38.6), $3009.117$ (day 38.38) against the exact $3007.961$: errors $527$, $119$, $11.6$, $1.16$, falling in proportion to $h$ (order 1, panel (b)). $S + I + R$ stays within about $10^{-11}$ of $10\,000$ for **every** $h$, so conservation says nothing about accuracy. The oscillator's amplitude after 10 days is $2850$, $2.2755$ and $1.0857$; the orbit in the $(x, x'/\omega)$ plane spirals outwards instead of closing, growing by $\sqrt{1 + \omega^2h^2}$ per step ($1.0337$ for $h = 1$ h, a factor $2.2$ per day). The amplitude should be exactly 1, so its drift **is** an accuracy check: it shrinks in proportion to $h$, but never vanishes, whatever the step.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — models and equilibria (B1, B2)"}

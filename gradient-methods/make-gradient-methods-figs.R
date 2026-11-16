@@ -58,8 +58,8 @@ abline(h = pstar[1:2], lty = 2, col = oi["grey"], lwd = 1.5)
 mid <- (pstar[1] + pstar[2]) / 2
 segments(pstar[3], -10, pstar[3], mid, lty = 3, lwd = 2)
 segments(1e-3, mid, pstar[3], mid, lty = 3, lwd = 2)
-text(0.006, pstar[2] + 6, "top", cex = 1.3, adj = 0)
-text(0.006, pstar[1] - 6, "bottom", cex = 1.3, adj = 0)
+text(0.0075, pstar[2] + 6, "top", cex = 1.3, adj = 0)
+text(0.0075, pstar[1] - 6, "bottom", cex = 1.3, adj = 0)
 text(pstar[3] * 1.2, 2, "EC50", cex = 1.3, adj = 0)
 text(5, 40, "slope set\nby hill", cex = 1.3, adj = 0)
 dev.off()
@@ -95,7 +95,7 @@ svg("fig03-zigzag.svg", width = 12, height = 5)
 par(mfrow = c(1, 2), mar = c(4.6, 4.8, 2.2, 1), cex.lab = 1.5, cex.axis = 1.3,
     las = 1, cex.main = 1.4)
 kap <- 10
-xs <- seq(-11, 11, length.out = 200); ys <- seq(-3, 3, length.out = 200)
+xs <- seq(-16, 16, length.out = 300); ys <- seq(-5, 5, length.out = 200)
 contour(xs, ys, outer(xs, ys, function(a, b) (a^2 + kap * b^2) / 2),
         levels = c(1, 5, 15, 30, 50), drawlabels = FALSE, asp = 1,
         col = oi["grey"], lwd = 1.5, xlab = expression(x[1]), ylab = expression(x[2]),
@@ -103,17 +103,17 @@ contour(xs, ys, outer(xs, ys, function(a, b) (a^2 + kap * b^2) / 2),
 P <- sd_exact(kap, c(10, 1), 12)
 lines(P, type = "o", pch = 19, col = oi["red"], lwd = 2.5, cex = 0.9)
 points(0, 0, pch = 4, cex = 2, lwd = 3)
-plot(NA, xlim = c(0, 100), ylim = c(1e-12, 10), log = "y", yaxt = "n",
-     xlab = "iteration", ylab = expression("error " * group("||", x[k] - x^"*", "||")),
-     main = "exact line search, start (1, 1)")
-axis(2, at = 10^c(-12, -8, -4, 0), labels = expression(10^-12, 10^-8, 10^-4, 10^0))
+plot(NA, xlim = c(0, 300), ylim = c(1e-8, 2), log = "y", yaxt = "n",
+     xlab = "iteration", ylab = "distance to minimum",
+     main = expression("start (1, 1/" * kappa * ")"))
+axis(2, at = 10^c(-8, -6, -4, -2, 0), labels = expression(10^-8, 10^-6, 10^-4, 10^-2, 10^0))
 cols <- c(oi["blue"], oi["orange"], oi["red"])
 for (i in 1:3) {
   kk <- c(10, 100, 1000)[i]
-  P <- sd_exact(kk, c(1, 1), 100)
-  lines(0:100, apply(P, 1, nrm), lwd = 3, col = cols[i])
+  P <- sd_exact(kk, c(1, 1 / kk), 300)
+  lines(0:300, apply(P, 1, nrm), lwd = 3, col = cols[i])
 }
-legend("bottomleft", legend = expression(kappa == 10, kappa == 100, kappa == 1000),
+legend("bottomright", legend = expression(kappa == 10, kappa == 100, kappa == 1000),
        col = cols, lwd = 3, cex = 1.3, bty = "n")
 dev.off()
 
@@ -163,7 +163,7 @@ par(mfrow = c(1, 2), mar = c(4.6, 4.8, 2.2, 1), cex.lab = 1.5, cex.axis = 1.3,
     las = 1, cex.main = 1.4)
 yl <- c(1e-10, 100)
 plot(NA, xlim = c(0, 30), ylim = yl, log = "y", yaxt = "n", xlab = "iteration",
-     ylab = expression("error " * group("||", p[k] - p^"*", "||")), main = "first 30 iterations")
+     ylab = "distance to minimum", main = "first 30 iterations")
 axis(2, at = 10^c(-10, -6, -2, 2), labels = expression(10^-10, 10^-6, 10^-2, 10^2))
 lines(0:(nrow(Psd) - 1), err(Psd), lwd = 3, col = oi["red"])
 lines(0:(nrow(Pn) - 1), err(Pn), type = "o", pch = 19, lwd = 3, col = oi["blue"])
@@ -184,7 +184,7 @@ par(mfrow = c(1, 2), mar = c(4.6, 4.8, 2.2, 1), cex.lab = 1.5, cex.axis = 1.3,
 S <- rbind(c(0, 0), c(2, 0.4), c(0.6, 1.8))     # worst point = 1st
 cen <- colMeans(S[2:3, ])
 R <- cen + (cen - S[1, ]); E <- cen + 2 * (cen - S[1, ]); C <- cen - 0.5 * (cen - S[1, ])
-plot(NA, xlim = c(-0.3, 4.2), ylim = c(-0.3, 3.6), asp = 1, axes = FALSE, xlab = "", ylab = "",
+plot(NA, xlim = c(-0.3, 5.2), ylim = c(-0.3, 3.6), asp = 1, axes = FALSE, xlab = "", ylab = "",
      main = "moves of the simplex")
 polygon(S, border = oi["blue"], lwd = 3)
 polygon(rbind(R, S[2, ], S[3, ]), border = oi["orange"], lwd = 2, lty = 2)
@@ -214,12 +214,14 @@ dev.off()
 
 # ---- fig06: dose in nM, start on a plateau ---------------------------------
 open_svg("fig06-units-plateau.svg", 8, 4.8)
+par(mar = c(4.6, 6.2, 1.5, 1))
 dose_nM <- dose * 1000
 sse_nM <- function(p) sum((y - f4(p, dose_nM))^2)
 ecs <- 10^seq(-1, 6, length.out = 400)
 prof <- sapply(ecs, function(e) sse_nM(c(0, 100, e, 1)))
 plot(ecs, prof, log = "x", type = "l", lwd = 3, col = oi["blue"], xaxt = "n",
-     xlab = "EC50 (nM)", ylab = "SSE", ylim = c(0, max(prof) * 1.05))
+     xlab = "EC50 (nM)", ylab = "", ylim = c(0, max(prof) * 1.05))
+mtext("SSE", side = 2, line = 4.8, cex = 1.5, las = 0)
 axis(1, at = 10^(-1:6), labels = c("0.1", "1", "10", "100", "1000", "1e4", "1e5", "1e6"))
 rect(min(dose_nM), -1e6, max(dose_nM), 1e6, col = adjustcolor(oi["sky"], 0.15), border = NA)
 points(1, sse_nM(c(0, 100, 1, 1)), pch = 17, cex = 2.2, col = oi["red"])

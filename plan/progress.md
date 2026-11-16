@@ -26,7 +26,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 21 | euler | done | running | |
 | 22 | runge-kutta | running | | |
 | 23 | stiffness | running | | |
-| 24 | phase-plane | running | | |
+| 24 | phase-plane | done | running | |
 | 25 | gillespie | running | | |
 | 26 | optimisation-1d | running | | |
 | 27 | gradient-methods | running | | |
@@ -52,3 +52,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - polynomial-interpolation: figure slides not screenshotted (Chrome hung) — check overflow.
 - euler: slides not screenshotted; densest 'Why global error is O(h)', 'Euler by hand'. SIR = N 10000, β .3, γ .1, (9990,10,0), 160 d; runge-kutta told to match.
 - eigen-algorithms: install irlba, RSpectra. Timings typed into fig script (single run, 1 thread). Matrix 20 000 cells (contentplan says 100 000) — align plan text.
+- phase-plane: oscillator = Sel'kov (no repressilator xref existed); runge-kutta may define repressilator — reconcile in pass 2 (fine to have both). Slides not screenshotted; densest separatrix slide, 'Failure: Re λ ≈ 0'. Install: rootSolve.
