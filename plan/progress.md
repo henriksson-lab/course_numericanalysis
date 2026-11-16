@@ -18,7 +18,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 13 | power-iteration | done | done | done |
 | 14 | eigen-algorithms | done | running | |
 | 15 | polynomial-interpolation | done | done | done |
-| 16 | splines | done | running | |
+| 16 | splines | done | done | done |
 | 17 | fourier-fft | running | | |
 | 18 | finite-differences | done | done | done |
 | 19 | quadrature | running | | |
@@ -32,7 +32,8 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 27 | gradient-methods | running | | |
 | 28 | nonlinear-least-squares | running | | |
 | 29 | identifiability | running | | |
-| 30–37 | | queued | | |
+| 30 | constrained-lp | running | | |
+| 31–37 | | queued | | |
 
 ## Audit notes (pass 3)
 
