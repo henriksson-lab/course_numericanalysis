@@ -36,9 +36,9 @@ const STYLE = `
 [data-demo="${NAME}"] .ox-read { width: 100%; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: .1em 1.3em; }
 [data-demo="${NAME}"] .ox-warn { color: #b00020; font-weight: 600; }
 [data-demo="${NAME}"] .qb-check { gap: .2em; }
-.reveal [data-demo="${NAME}"].qb-demo { font-size: 18px; gap: .2em; }
-.reveal [data-demo="${NAME}"] .qb-readout { font-size: 16px; padding: .2em .45em; }
-.reveal [data-demo="${NAME}"] .qb-btn { font-size: .85em; padding: .12em .5em; }
+.reveal [data-demo="${NAME}"].qb-demo { font-size: 19px; gap: .2em; }
+.reveal [data-demo="${NAME}"] .qb-readout { font-size: 17px; padding: .2em .45em; }
+.reveal [data-demo="${NAME}"] .qb-btn { font-size: .92em; padding: .1em .45em; }
 `;
 
 function injectStyle(): void {
@@ -424,7 +424,7 @@ function mount(host: HTMLElement): void {
       st.cut === "x" ? `(b) along x at y = ${Math.round(st.cutPos / g.h) * g.h} µm` : `(b) along y at x = ${Math.round(st.cutPos / g.h) * g.h} µm`;
     if (lo < 0) {
       svgEl("rect", { x: L, y: sy(0), width: R - L, height: B - sy(0), fill: "#ececec" }, svgB);
-      svgEl("text", { x: (L + R) / 2, y: (sy(0) + B) / 2 + 6, "text-anchor": "middle", class: "sm" }, svgB).textContent = "impossible: c < 0";
+      svgEl("text", { x: L + 8, y: B - 14, class: "sm" }, svgB).textContent = "impossible: c < 0";
     }
     const step = 210 - lo > 300 ? 100 : 50;
     for (let v = lo; v <= 200 + 1e-9; v += step) {
@@ -449,7 +449,7 @@ function mount(host: HTMLElement): void {
     }
     // threshold
     svgEl("line", { x1: L, x2: R, y1: sy(st.thr), y2: sy(st.thr), stroke: COL.hyp, "stroke-width": 2.5, "stroke-dasharray": "8 5" }, svgB);
-    svgEl("text", { x: R - 4, y: sy(st.thr) - 6, "text-anchor": "end", fill: COL.hyp }, svgB).textContent = `hypoxic < ${st.thr} µM`;
+    svgEl("text", { x: L + 8, y: sy(st.thr) - 6, fill: COL.hyp }, svgB).textContent = `hypoxic < ${st.thr} µM`;
     const poly = (xs: number[], ys: number[]) => xs.map((x, k) => `${sx(x).toFixed(1)},${sy(ys[k]).toFixed(1)}`).join(" ");
     if (ghost && ghost.xs.length) {
       svgEl("polyline", { points: poly(ghost.xs, ghost.ys), fill: "none", stroke: COL.ghost, "stroke-width": 3, "stroke-dasharray": "6 4" }, svgB);

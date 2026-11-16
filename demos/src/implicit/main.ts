@@ -452,9 +452,8 @@ function buildRace(box: HTMLElement, ds: DOMStringMap, uid: number): () => void 
     if (ic === "step") item("c(10 µm):", `BE ${s0.c.be[1].toFixed(4)}, CN ${s0.c.cn[1].toFixed(4)}, exact ${exact(ic, 10, tn).toFixed(4)}`);
     else item("amplitude (x = L/2):", `BE ${s0.c.be[N / 2].toFixed(4)}, CN ${s0.c.cn[N / 2].toFixed(4)}, exact ${exact(ic, L / 2, tn).toFixed(4)}`);
     const ftcsSteps = Math.ceil(tn / dtOf(0.5) - 1e-9);
-    item("cost:", `${fmtInt(n)} steps = ${fmtInt(n)} Thomas solves of ${N - 1} unknowns ` +
-      `(BE ≈ ${fmtInt(n * OPS.be * (N - 1))}, CN ≈ ${fmtInt(n * OPS.cn * (N - 1))} operations); ` +
-      `stable FTCS (r = ½) needs ${fmtInt(ftcsSteps)} steps ≈ ${fmtInt(ftcsSteps * OPS.ftcs * (N - 1))} operations`);
+    item("cost:", `${fmtInt(n)} steps = Thomas solves (${N - 1} unknowns): BE ≈ ${fmtInt(n * OPS.be * (N - 1))}, ` +
+      `CN ≈ ${fmtInt(n * OPS.cn * (N - 1))} operations; FTCS at r = ½: ${fmtInt(ftcsSteps)} steps ≈ ${fmtInt(ftcsSteps * OPS.ftcs * (N - 1))}`);
   }
   draw();
   return stop;
