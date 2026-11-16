@@ -1378,6 +1378,48 @@ fn main() -> Result<(), Error> {
 (a) $D = 398$ µm²/s against the true 400: the noise allows a few µm²/s either way. Every evaluation of the objective runs the PDE solver (40 tridiagonal solves); Brent needs 19 of them. (b) The grid matters more than the noise: a single 1 mm step gives 505 (27 % above the converged value), $\Delta x = 250$ µm gives 419, and the estimate settles near 396 only for $\Delta x \le 25$ µm. Backward Euler damps a mode with rate $\lambda$ by $1/(1 + \lambda\Delta x)$ per step, less than the exact $e^{-\lambda\Delta x}$: a coarse step spreads the interface **too little**, and the fit compensates with a **larger** $D$. The solver's error is absorbed into the parameter. Refine until the fitted parameter stops changing. (c) $D = 318.56 = 0.8 \times 398.20$: the data fix only $D/\bar u$. A 20 % error in the flow rate is a 20 % error in $D$, whatever the quality of the profile.
 :::
 
+## Explore {#explore}
+
+The demo below runs the lecture's three problems in your browser, with the lecture's numbers. **Steady layer**: the back-diffusion test problem ($L = 500$ µm, $u = 100$ µm/s, $D = 1000$ µm²/s), solved with central (a) and upwind (b) differences on the grid set by the slider, against the exact solution (black) and, for upwind, the exact solution with $D + u\Delta x/2$ (grey dashed). **Moving pulse**: the 1 s stimulus pulse ($u = 200$ µm/s, $D = 100$ µm²/s, cells at 2000 µm), explicit Euler in time with upwind and (tick **central**) central differences; (a) shows the profile at the snapshot time, (b) what the cells see; the readout checks $C + 2r \le 1$ and gives the numerical diffusion and the peaks. **T-sensor / H-filter**: the channel seen from above ($w = 100$ µm, Poiseuille flow, sample in the lower half), computed by implicit marching as in C3 and C4 ($M = 50$ cells across, 800 steps of $L/800$); the orange lines are the 10 % and 90 % levels of the interdiffusion zone, the purple line marks where every $|c - \tfrac12| \le 0.01$, and panel (b) shows the outlet profile and the share of each species' flux that leaves through the buffer half.
+
+The browser computes in the same IEEE doubles as R, Python and Rust. The tridiagonal solves and the explicit updates are the ones on this page, so the scheme values agree with your C1 and C2 code to the digits shown. The exact pulse uses a 7-digit approximation of erfc, so its last digits can differ a little.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="advect" data-tab="layer" data-p="5"></div>
+<script src="../demos/dist/advect.js"></script>
+```
+
+**E1. (where the wiggles start)** In the **Steady layer** tab, click the lecture grids $P = 1$, $P = 2$ and $P = 5$, and use the slider for $P = 2.5$. For each, note $\rho$ of the central scheme, its minimum value and its maximum error, and compare $\rho$ with the exact growth factor per cell $e^P$. Tick **whole channel** at $P = 5$: how far upstream do the wiggles reach?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+$P = 1$ ($\Delta x = 10$ µm): $\rho = 3$ ($e^P = 2.72$), min $c = 0$, error 0.035, no wiggles. $P = 2$ ($\Delta x = 20$ µm): $\rho = \infty$, min $c = 0$, error 0.14: every value copies its upstream neighbour, so the solution is 0 up to the last interior point and then jumps to 1 (a kink, but no negative values). $P = 2.5$ ($\Delta x = 25$ µm): $\rho = -9$, min $c = -0.111$, error 0.19, wiggles. $P = 5$ ($\Delta x = 50$ µm): $\rho = -2.33$ ($e^P = 148$), min $c = -0.429$, error 0.44. The threshold is exactly $P = 2$, where $1 - P/2$ changes sign and $\rho$ jumps from $+\infty$ to negative values. The whole-channel view at $P = 5$ shows the sign alternating all the way to the inlet ($-0.429$, $0.184$, $-0.079$, $0.034$, …), shrinking by a factor $|\rho| = 2.33$ per cell upstream: the oscillation is a property of the discrete equations everywhere, not only at the layer.
+:::
+
+**E2. (smooth but smeared)** Stay in **Steady layer**. At $P = 5$, compare the upwind solution (b) with the black and grey curves and read off $D_\text{num}$. Then move the slider to the left until $D_\text{num}$ is below 10 % of $D$. What are $P$, $\Delta x$ and the two maximum errors there? Compare the upwind errors at $P = 0.25$ and $P = 0.125$, and the central errors at the same two grids: which orders do you see?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+At $P = 5$ the blue points lie on the grey curve (exact with $D + u\Delta x/2 = 3500$ µm²/s), not on the black one: $D_\text{num} = 2500$ µm²/s $= 2.5\,D$, error 0.16, and no wiggles ($\rho = 6 > 0$). $D_\text{num} = u\Delta x/2 = (P/2)\,D$, so it is below $0.1\,D$ only for $P < 0.2$: the slider gives $P = 0.125$, $\Delta x = 1.25$ µm (400 cells), $D_\text{num} = 62.5$ µm²/s $= 0.063\,D$. There the upwind error is still 0.022, the central error $4.8\times10^{-4}$. From $P = 0.25$ to $0.125$ (halving $\Delta x$) the upwind error goes from 0.042 to 0.022 (halves: first order), the central error from 0.0019 to $4.8\times10^{-4}$ (quarters: second order). Upwind never wiggles, but it needs a much finer grid for the same accuracy.
+:::
+
+**E3. (numerical diffusion and the CFL limit in time)** Open **Moving pulse** and click **lecture: Δx 10, C 0.5**. Read the peak the cells see, and compare the blue curve with the black and grey ones. Click **Δx 1** and move $\Delta x$ to 5. Then click **C 0.9** and **C 0.95** (both at $\Delta x = 10$ µm, snapshot $t = 6$ s) and read $C + 2r$ and the range of $c$.
+
+::: {.callout-note collapse="true" title="Answer E3"}
+Lecture setting: $\Delta t = 0.025$ s, $r = 0.025$, $C + 2r = 0.55$; the cells see a peak of 0.6405 at 10.48 s against the exact 0.975 at 10.50 s. The blue curve lies on the grey one: exact with $D + D_\text{num} = 100 + 500 = 600$ µm²/s. $\Delta x = 5$: peak 0.769 ($D_\text{num} = 250$); $\Delta x = 1$: 0.932 ($D_\text{num} = 50$). The peak time is right in every case; only the height and width are wrong. **C 0.9**: $C + 2r = 0.990$, stable, range 0 … 0.971 at 6 s, peak 0.886 at the cells: a larger time step **reduces** $D_\text{num}$ to $u\Delta x(1 - C)/2 = 100$. **C 0.95**: $C + 2r = 1.045 > 1$, and by $t = 6$ s a zigzag has grown to $-1750$ … $1743$ (the lecture's 1700); at the cells the readout reports a maximum of $1.3\times10^7$. The limit is $C + 2r \le 1$, not $C \le 1$ alone.
+:::
+
+**E4. (central differences with explicit time steps)** Tick **central** and click **lecture: Δx 10, C 0.5** again. What happens, and what does the readout say about the condition $C \le 2/P$? Now lower $C$ to 0.1. Then try $\Delta x = 2$ with $C = 0.5$, and finally **Δx 1**. Note the range of $c$ at $t = 10.5$ s and the peak at the cells for the central scheme each time. Why can the central peak be **higher** than the exact one? Also try $C = 0.9$ at $\Delta x = 1$: which scheme fails now?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+At $\Delta x = 10$ µm ($P = 20$), $C = 0.5$ violates $C \le 2/P = 0.1$: the central solution grows to $|c| \approx 10^6$ by 6 s and exceeds $10^{12}$ at 11 s, while upwind with the same $\Delta t$ is stable. At $C = 0.1$ (condition met) it no longer explodes but wiggles: range $-0.339$ … $1.23$ at 10.5 s, peak 1.236 at the cells, against the exact 0.975. $\Delta x = 2$, $C = 0.5$ ($P = 4$, exactly at $C = 2/P$): range $-0.244$ … $1.25$, peak 1.245, wiggles again because $P > 2$. $\Delta x = 1$, $C = 0.5$ ($P = 2$): range 0 … 0.998, no wiggles, peak 0.998 at 10.51 s, higher than the exact 0.975 (upwind gives 0.932). Explicit Euler adds a **negative** numerical diffusion $-u^2\Delta t/2 = -C u\Delta x/2 = -50$ µm²/s, so the central scheme behaves like $D = 50$: too sharp a peak. The condition $C \le 2/P$ is the same as $D - C u\Delta x/2 \ge 0$: the scheme blows up when its effective diffusion coefficient is negative. At $\Delta x = 1$, $C = 0.9$ the roles swap: $r = 0.45$, $C + 2r = 1.8$, and **upwind** blows up within 0.2 s, while central stays bounded (peak 1.000, effective $D = 10$). On a fine grid the diffusion part $2r = 2C/P$ of the condition dominates.
+:::
+
+**E5. (the H-filter)** Open **T-sensor / H-filter** and set $L = 2$ mm ($\bar u = 1000$ µm/s). Click the three species and read the fractions in the buffer outlet, the width of the 10–90 % zone at the outlet and where the stream is mixed to 1 %. Compare the small molecule's mixing point with $\bar u w^2/D$ and with the plug-flow estimate $0.42\,\bar u w^2/D$ (Fact 1). Then set $\bar u = 500$ µm/s and $L = 1$ mm: what changes and why?
+
+::: {.callout-note collapse="true" title="Answer E5"}
+At 2 mm the buffer outlet receives 47.4 % of the small molecule, 19.3 % of the protein and 0.1 % of the cells (the lecture's 47 %, 19 %, 0.1 %). The 10–90 % zone fills the whole channel for the small molecule, is 45 µm wide for the protein and 1.7 µm for the cells (less than one 2 µm grid cell). The small molecule is mixed to 1 % at about 3.1 mm (3.13 mm with $L = 2$), against $\bar u w^2/D = 10$ mm and $0.42\,\bar u w^2/D = 4.2$ mm for plug flow: with the Poiseuille profile the slow fluid near the walls mixes early, and here that wins. The protein needs 31 mm, ten times longer ($D$ is ten times smaller); the cells 62 m. With $\bar u = 500$ µm/s and $L = 1$ mm every number is the same (47.4 %, 19.3 %, 0.1 %; $Dx/\bar u = 2000$ µm² for the small molecule in both cases) and the mixing point halves to 1.56 mm: only $Dx/\bar u$ matters (B6). A slower flow is a longer channel, at half the throughput.
+:::
+
 ## Where this leads
 
 - **Reaction–diffusion and pattern formation** (unit 35) adds production and degradation terms to the diffusion equation; the explicit/implicit stability rules and grid-refinement checks of this unit carry over.

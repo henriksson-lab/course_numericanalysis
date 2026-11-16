@@ -524,8 +524,7 @@ Numerical analysis for biologists
 <span id="cb2-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.121325e-14</span></span>
 <span id="cb2-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.076916e-14</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
-<li>One Thomas solve per step, <strong>any</strong> <span class="math inline">f</span>, no Newton. Order 1 in time.</li>
-<li>The steady state of IMEX is <strong>exact</strong> for every <span class="math inline">\Delta t</span>: set <span class="math inline">\mathbf c^{n+1} = \mathbf c^n</span> and <span class="math inline">\Delta t</span> cancels.</li>
+<li>One Thomas solve per step, any <span class="math inline">f</span>, no Newton; order 1. The steady state is <strong>exact</strong> for every <span class="math inline">\Delta t</span> (<span class="math inline">\Delta t</span> cancels at a fixed point).</li>
 </ul>
 <aside class="notes">
 <p>The left-hand matrix is the same as for backward Euler on pure diffusion, so the Thomas call is the one from Implicit schemes and the method of lines. The reaction only enters the right-hand side, evaluated at the old values, so it can be anything: a Hill function, a two-species reaction, a lookup table. In the loop, the IMEX run to t = 5000 min reaches the steady state of the grid to rounding error, with a step of 1, 10 or even 50 minutes. That is a useful property (the long-time answer does not depend on the step), but it also means a large step can hide a wrong transient. IMEX stands for implicit-explicit; higher-order versions (IMEX Runge–Kutta, SBDF2) exist.</p>
@@ -826,28 +825,8 @@ Numerical analysis for biologists
 <ul>
 <li>The reaction Jacobian has eigenvalues <span class="math inline">-0.1 \pm 0.995i</span>: a weakly damped oscillator. Euler is stable on it only for <span class="math inline">\Delta t &lt; 0.2</span> (<em>Initial value problems and Euler’s method</em>).</li>
 <li>Long waves get almost no damping from implicit diffusion, so they grow by 4 % per step: the “pattern” is the <strong>time step</strong>.</li>
-<li><strong>Check:</strong> the pattern must not change when <span class="math inline">\Delta t</span> is halved, and <span class="math inline">|1 + \Delta t\lambda| \le 1</span> for the reaction eigenvalues.</li>
+<li><strong>Check:</strong> the pattern must not change when <span class="math inline">\Delta t</span> is halved, and <span class="math inline">|1 + \Delta t\lambda| \le 1</span> for the reaction eigenvalues. (For <span class="math inline">d = 20</span>: 48, 48, 47, 47 spots at <span class="math inline">\Delta t = 0.4, 0.2, 0.1, 0.05</span>.)</li>
 </ul>
-<table class="caption-top">
-<thead>
-<tr class="header">
-<th><span class="math inline">d = 20</span>, <span class="math inline">\Delta x = 1</span></th>
-<th><span class="math inline">\Delta t = 0.4</span></th>
-<th><span class="math inline">0.2</span></th>
-<th><span class="math inline">0.1</span></th>
-<th><span class="math inline">0.05</span></th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>spots at <span class="math inline">t = 200</span></td>
-<td>48</td>
-<td>48</td>
-<td>47</td>
-<td>47</td>
-</tr>
-</tbody>
-</table>
 <aside class="notes">
 <p>|1 + dt lambda|^2 = (1 - 0.1 dt)^2 + 0.99 dt^2 = 1 - 0.2 dt + dt^2, below 1 only for dt &lt; 0.2. The table shows the real pattern (d = 20) is robust: from dt = 0.4 to 0.05 the spot count changes by at most one, because the Turing modes grow much faster than the spurious oscillation. So the same too-large step is harmless in one parameter regime and creates a pattern in another. That is why the check is “refine and compare”, applied to every result you report, not just once. The general rule: a pattern whose wavelength or existence depends on dx or dt is a property of the method, not of the model.</p>
 <style type="text/css">

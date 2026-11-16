@@ -181,8 +181,7 @@ for (dt in c(1, 10, 50))                      # run to t = 5000 min, compare wit
 # [1] 1.076916e-14
 ```
 
-- One Thomas solve per step, **any** $f$, no Newton. Order 1 in time.
-- The steady state of IMEX is **exact** for every $\Delta t$: set $\mathbf c^{n+1} = \mathbf c^n$ and $\Delta t$ cancels.
+- One Thomas solve per step, any $f$, no Newton; order 1. The steady state is **exact** for every $\Delta t$ ($\Delta t$ cancels at a fixed point).
 
 ::: notes
 The left-hand matrix is the same as for backward Euler on pure diffusion, so the Thomas call is the one from Implicit schemes and the method of lines. The reaction only enters the right-hand side, evaluated at the old values, so it can be anything: a Hill function, a two-species reaction, a lookup table. In the loop, the IMEX run to t = 5000 min reaches the steady state of the grid to rounding error, with a step of 1, 10 or even 50 minutes. That is a useful property (the long-time answer does not depend on the step), but it also means a large step can hide a wrong transient. IMEX stands for implicit-explicit; higher-order versions (IMEX Runge–Kutta, SBDF2) exist.
@@ -378,11 +377,7 @@ for (dt in c(0.1, 0.2, 0.4))                  # Euler factor of the q = 0 mode
 
 - The reaction Jacobian has eigenvalues $-0.1 \pm 0.995i$: a weakly damped oscillator. Euler is stable on it only for $\Delta t < 0.2$ (*Initial value problems and Euler's method*).
 - Long waves get almost no damping from implicit diffusion, so they grow by 4 % per step: the "pattern" is the **time step**.
-- **Check:** the pattern must not change when $\Delta t$ is halved, and $|1 + \Delta t\lambda| \le 1$ for the reaction eigenvalues.
-
-| $d = 20$, $\Delta x = 1$ | $\Delta t = 0.4$ | $0.2$ | $0.1$ | $0.05$ |
-|---|---|---|---|---|
-| spots at $t = 200$ | 48 | 48 | 47 | 47 |
+- **Check:** the pattern must not change when $\Delta t$ is halved, and $|1 + \Delta t\lambda| \le 1$ for the reaction eigenvalues. (For $d = 20$: 48, 48, 47, 47 spots at $\Delta t = 0.4, 0.2, 0.1, 0.05$.)
 
 ::: notes
 |1 + dt lambda|^2 = (1 - 0.1 dt)^2 + 0.99 dt^2 = 1 - 0.2 dt + dt^2, below 1 only for dt < 0.2. The table shows the real pattern (d = 20) is robust: from dt = 0.4 to 0.05 the spot count changes by at most one, because the Turing modes grow much faster than the spurious oscillation. So the same too-large step is harmless in one parameter regime and creates a pattern in another. That is why the check is "refine and compare", applied to every result you report, not just once. The general rule: a pattern whose wavelength or existence depends on dx or dt is a property of the method, not of the model.
