@@ -1,0 +1,155 @@
+---
+title: "Quiz: initial value problems and Euler's method"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of ODE models, Euler's method, its error and its stability. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** A protein is made at a constant rate of 5 nM per hour and degraded with rate 0.25 per hour. Write the ODE for its concentration $P$ and find the steady state.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Rate in − rate out. The loss is proportional to the amount present.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$P' = 5 - 0.25\,P$ (nM per hour). Steady state where $P' = 0$: $P^* = 5/0.25 = 20$ nM.
+:::
+
+---
+
+**Q2.** What does an **initial value problem** consist of, and what does "solving" it mean?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Two ingredients: a rule for the slope, and a place to start.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+An ODE $y' = f(t, y)$ and a start value $y(t_0) = y_0$. Solving it means finding the function $y(t)$ that starts at $y_0$ and whose slope equals $f(t, y(t))$ at every time. Numerically, we compute approximations $y_n \approx y(t_n)$ on a grid of times.
+:::
+
+---
+
+**Q3.** Take one Euler step with $h = 0.5$ for $y' = -2y + 1$, $y(0) = 1$.
+
+::: {.callout-tip collapse="true" title="Hint"}
+$y_1 = y_0 + h\,f(t_0, y_0)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$f(0, 1) = -2 + 1 = -1$, so $y_1 = 1 + 0.5 \cdot (-1) = 0.5$. (The exact value is $y(0.5) = \tfrac12 + \tfrac12 e^{-1} = 0.684$.)
+:::
+
+---
+
+**Q4.** Where does Euler's formula come from, and what is dropped?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Taylor-expand $y(t + h)$ and use the ODE for $y'(t)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$y(t + h) = y(t) + h\,y'(t) + \tfrac{h^2}{2}y''(\xi)$ and $y'(t) = f(t, y(t))$. Euler keeps the first two terms and drops $\tfrac{h^2}{2}y''$, which is the local error of one step.
+:::
+
+---
+
+**Q5.** What is the difference between the **local** and the **global** error of Euler's method, and how does each depend on $h$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How many steps does it take to reach a fixed time $T$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The local error is the error of one step started on the exact solution, $O(h^2)$. The global error is the difference $y_n - y(t_n)$ after all steps from $t_0$. Reaching $T$ takes $T/h$ steps, and $T/h$ errors of size $Ch^2$ add up to $O(h)$. Euler is order 1.
+:::
+
+---
+
+**Q6.** An Euler run gives a growth curve with error $0.02$ at $t = 5$ h when $h = 0.1$ h. Roughly what error do you expect with $h = 0.025$ h? How many times more steps is that?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Order 1: the error is proportional to $h$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$h$ is divided by 4, so the error is about $0.02/4 = 0.005$, at 4 times the number of steps (200 instead of 50). Each additional correct digit costs 10 times the work.
+:::
+
+---
+
+**Q7.** You do not know the exact solution. A run with $h = 0.2$ gives $3.412$ and a run with $h = 0.1$ gives $3.437$. Estimate the error of the second run.
+
+::: {.callout-tip collapse="true" title="Hint"}
+For an order-1 method, error$(h) \approx Ch$ and error$(h/2) \approx Ch/2$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$y_h - y_{h/2} = 3.412 - 3.437 = -0.025 \approx$ the error of $y_{h/2}$. So the $h = 0.1$ answer is about $0.025$ too low, and the true value is near $3.462$. If $0.025$ matters for your question, use a smaller step.
+:::
+
+---
+
+**Q8.** A drug has elimination rate $k = 2$ per hour. For which step sizes $h$ does Euler on $C' = -kC$ decay? For which does it also stay positive? What do you see with $h = 1.5$ h?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Each step multiplies $C$ by $1 - kh$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+It decays for $|1 - 2h| < 1$, that is $h < 1$ h, and stays positive for $h \le 0.5$ h. With $h = 1.5$ h the factor is $1 - 3 = -2$: the "concentration" doubles in size and flips sign every step.
+:::
+
+---
+
+**Q9.** A logistic growth model ($r = 0.8$ per hour) simulated with Euler and $h = 3$ h shows a population that oscillates for ever between 0.77 and 1.43. Is this biology or numerics? How do you check?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Near the carrying capacity the logistic behaves like $y' = -r(N - K)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Numerics. Near $K$ the deviation is multiplied by $1 - rh = -1.4$ per step, so Euler is unstable for $h > 2/r = 2.5$ h; the nonlinearity then turns the growth into a 2-cycle. The logistic ODE itself approaches $K$ without oscillating. Check: halve the step (or more). The cycle disappears; a result that changes qualitatively with $h$ is an artefact.
+:::
+
+---
+
+**Q10.** In an Euler simulation of the SIR model, $S + I + R$ equals $N$ to 12 digits at every step. Does that mean the solution is accurate?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What do the three slopes add up to? What does an Euler step then add to $S + I + R$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. The three right-hand sides sum to zero, so every Euler step adds $h \cdot 0$ to the total, whatever the step size. The total is conserved even with $h = 4$ days, where the peak is 18 % too high. A conservation check catches coding errors (a wrong sign), not step-size error. To check accuracy, halve the step.
+:::
+
+---
+
+**Q11.** Write $x'' + 0.5\,x' + 4x = 0$ as a first-order system. How many start values are needed?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Introduce $y_1 = x$ and $y_2 = x'$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$y_1' = y_2$, $y_2' = -4y_1 - 0.5\,y_2$. Two start values: $x(0)$ and $x'(0)$.
+:::
+
+---
+
+**Q12.** Euler is used on the oscillator $x'' = -\omega^2 x$. Why does no step size give a solution that stays bounded for ever?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does one step do to $x^2 + (x'/\omega)^2$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Each Euler step multiplies the squared amplitude $x^2 + (x'/\omega)^2$ by exactly $1 + \omega^2 h^2$, which is larger than 1 for every $h > 0$. A smaller $h$ only makes the growth slower: the numerical orbit always spirals outwards, while the true orbit is a closed circle.
+:::

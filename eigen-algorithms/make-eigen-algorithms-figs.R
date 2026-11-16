@@ -109,7 +109,7 @@ fig("fig03-shifts.svg", expr = {
   lines(0:5, s, type = "o", pch = 17, col = oi["red"], lwd = 2.5)
   abline(h = 1e-12, lty = 3, col = "grey40")
   text(40, 1e-11, "deflate below 1e-12", adj = 1, cex = 1.1, col = "grey30")
-  legend("bottomleft", c("no shift: factor 0.42 per step",
+  legend("topright", c("no shift: factor 0.42 per step",
                          expression("shift " * mu == a[33] * ": digits triple per step")),
          col = oi[c("blue", "red")], pch = c(19, 17), lwd = 2, bty = "n", cex = 1.25)
 })

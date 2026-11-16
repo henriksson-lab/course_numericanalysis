@@ -1,0 +1,181 @@
+---
+title: "Quiz: random numbers and Monte Carlo"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of random numbers and Monte Carlo. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** You run `set.seed(42); runif(3)` in R and `np.random.default_rng(42).random(3)` in Python. Do you get the same three numbers? Is that a problem for reproducibility?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which generator does each language use by default?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. R uses the Mersenne Twister, numpy's `default_rng` uses PCG64 (and Rust's `StdRng` uses ChaCha12), so the same seed gives different streams (R 0.915, 0.937, 0.286; numpy 0.774, 0.439, 0.859). Reproducibility means the **same code, software and seed** give the same numbers; it does not extend across languages. Results from different languages should agree **within their Monte Carlo error bars**, not digit by digit.
+:::
+
+---
+
+**Q2.** A colleague's function `simulate_once()` starts with `set.seed(1)`. They call it 1000 times in a loop and average the results. What goes wrong?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does the generator produce right after `set.seed(1)`?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Every call restarts the stream at the same point, so all 1000 "replicates" use the same random numbers and give the **identical** result. The average is one simulation, and the sample sd is 0, so the standard error claims perfect precision. Set the seed **once**, at the top of the script.
+:::
+
+---
+
+**Q3.** What does this code print?
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- 0
+for (i in 1:9) {
+  cat(x, "")
+  x <- (5 * x + 1) %% 8
+}
+```
+
+### Python
+
+```python
+x = 0
+for i in range(9):
+    print(x, end=" ")
+    x = (5 * x + 1) % 8
+```
+
+### Rust
+
+```rust
+// rust/examples/monte_carlo_q3.rs  —  cargo run --example monte_carlo_q3
+// Q3: a tiny LCG, x_{n+1} = (5 x_n + 1) mod 8, seed 0.
+fn main() {
+    let mut x: u64 = 0;
+    for _ in 0..9 {
+        print!("{} ", x);
+        x = (5 * x + 1) % 8;
+    }
+    println!();
+}
+```
+
+:::
+
+::: {.callout-tip collapse="true" title="Hint"}
+Do the first few steps by hand: $5 \cdot 0 + 1 = 1$, $5 \cdot 1 + 1 = 6$, ...
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+`0 1 6 7 4 5 2 3 0`. The sequence visits all 8 values and then repeats (period 8): a full-period linear congruential generator. It is completely deterministic, and its last bit alternates 0, 1, 0, 1, which is one of the reasons tiny LCGs are bad generators.
+:::
+
+---
+
+**Q4.** A density on $[0, 1]$ is $f(x) = 2x$. Give a formula that turns a uniform number $U$ into a draw from $f$. What draw do you get for $U = 0.25$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Find the CDF $F(x)$, set $U = F(x)$ and solve for $x$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$F(x) = x^2$, so $X = F^{-1}(U) = \sqrt U$. For $U = 0.25$: $X = 0.5$. This is inverse-transform sampling. (Check: $P(X \le 0.5) = P(U \le 0.25) = 0.25 = F(0.5)$.)
+:::
+
+---
+
+**Q5.** A rejection sampler uses a uniform proposal and $M = 20$. About how many proposals do you need for 1000 accepted draws? What happens if $M$ is chosen **smaller** than $\max f$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The acceptance rate is $1/M$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+About $1000 \cdot 20 = 20\,000$ proposals (acceptance rate 5%). If $M < \max f$, the proposals near the peak are all accepted but should have been accepted **more** often than possible, so the peak is cut off and the samples come from the wrong distribution, without any error or warning. A large $M$ is only wasteful; a too small $M$ is wrong.
+:::
+
+---
+
+**Q6.** A Monte Carlo estimate with $N = 10^4$ draws has a standard error of 0.02. How many draws do you need for an SE of 0.002? How would the answer change for a 1-D trapezoid rule, whose error falls like $N^{-2}$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+SE $= s/\sqrt N$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+To make the SE 10 times smaller you need $10^2 = 100$ times more draws: $N = 10^6$. For the trapezoid rule, 10 times smaller error needs only $\sqrt{10} \approx 3.2$ times more points. Monte Carlo is slow; its strengths are a free error bar and an error rate that does not depend on the dimension.
+:::
+
+---
+
+**Q7.** Why does Monte Carlo beat a grid rule for a 10-dimensional integral but not for a 1-dimensional one?
+
+::: {.callout-tip collapse="true" title="Hint"}
+With $N$ points in $d$ dimensions, how many grid points are there per axis?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A grid with $N$ points has only $N^{1/d}$ points per axis, so a rule of order $p$ has error $\approx N^{-p/d}$. For $d = 1$ the trapezoid rule gives $N^{-2}$, far better than Monte Carlo's $N^{-1/2}$. For $d = 10$ the same rule gives $N^{-0.2}$ (and $10^6$ points are only 3–4 per axis), while Monte Carlo still gives $N^{-1/2}$. The rates break even at $d = 2p$, so $d = 4$ for the trapezoid rule. This is the curse of dimensionality.
+:::
+
+---
+
+**Q8.** You test whether ChIP-seq peaks are enriched in promoters by shuffling the peaks 1000 times. None of the 1000 shuffles has as many overlaps as the real data. What p-value do you report?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Is "0 out of 1000" the same as "probability 0"?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Not $p = 0$. Report $(k + 1)/(B + 1) = 1/1001 \approx 0.001$, or say $p < 0.001$. The data could still arise under the null with a probability below $1/1000$; 1000 shuffles cannot resolve it. For a precise small p-value you need about $100/p$ shuffles, or importance sampling.
+:::
+
+---
+
+**Q9.** Plain Monte Carlo with $10^5$ standard normal draws estimates $P(X > 5)$ as exactly 0 with standard error 0. What is wrong, and what is the fix?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$P(X > 5) = 2.9 \times 10^{-7}$. How many draws above 5 do you expect?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+You expect $10^5 \cdot 2.9\times10^{-7} = 0.03$ draws above 5, so you almost always see none, and both the estimate and its SE are 0: a confident wrong answer. The SE formula is only meaningful when there are enough hits (about 100 for 10% error). Fix: **importance sampling**, drawing from a proposal such as $N(5, 1)$ that puts half its draws above 5, and weighting each by $\phi(x)/\phi(x - 5)$.
+:::
+
+---
+
+**Q10.** Which of these integrals can be estimated by plain Monte Carlo with a trustworthy standard error: $\int_0^1 x^{-0.4}\,dx$ or $\int_0^1 x^{-0.6}\,dx$? Both are finite.
+
+::: {.callout-tip collapse="true" title="Hint"}
+The SE needs a finite variance, i.e. a finite $\int_0^1 f(x)^2\,dx$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\int_0^1 x^{-0.8}\,dx = 5$ is finite, but $\int_0^1 x^{-1.2}\,dx = \infty$. So $x^{-0.4}$ has finite variance and a reliable SE; $x^{-0.6}$ has **infinite variance**: its estimate converges, but slowly and in jumps, and the reported SE is usually too small. Check by plotting the running estimate and by repeating with several seeds.
+:::
+
+---
+
+**Q11.** An importance sampler reports an estimate with a small standard error, but the effective sample size is 40 out of 100 000 draws. Should you trust the estimate? What is the likely cause?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\text{ESS} = (\sum w)^2 / \sum w^2$. When is it small?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. An ESS of 40 means a handful of draws carry almost all the weight, so the estimate rests on a few points, and the SE (computed from the same few large weights) is unreliable. The usual cause is a proposal with **lighter tails** than the target, or one centred in the wrong place: the rare draws in the region the proposal neglects get enormous weights. Use a wider proposal (heavier tails) and check the ESS again.
+:::

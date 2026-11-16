@@ -1,0 +1,1259 @@
+---
+title: "Exercise: Fourier series and the FFT"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- compute a small **DFT** by hand, both as a matrix–vector product and with one even/odd **FFT** split, and write down the **trigonometric interpolant** it defines,
+- read `fft()` output correctly: the **normalisation**, which index holds which **frequency**, and how to get **amplitude**, **period** and **peak time** of a rhythm,
+- explain why the FFT costs $O(n\log n)$ and the matrix $O(n^2)$, and when a library FFT is slow,
+- predict from the sampling interval which rhythms are resolved and which are **aliased**, and to which period,
+- recognise **leakage** and reduce it with a **window**,
+- **filter** a noisy trace in frequency space, and see (and fix) what goes wrong at the edges,
+- use the **convolution theorem**, and tell circular from linear convolution.
+
+The running example is a simulated clock-controlled gene measured every 2 h for 48 h, plus a simulated luciferase trace. The by-hand part uses pen, paper and a calculator.
+
+## Background
+
+$n$ equispaced samples $x_0, \dots, x_{n-1}$, taken every $\Delta t$, over a record of length $T = n\Delta t$.
+
+**Facts used below:**
+
+1. **DFT.** $X_k = \sum_{j=0}^{n-1} x_j\, w^{jk}$ with $w = e^{-2\pi i/n}$, for $k = 0, \dots, n-1$. Here $e^{i\theta} = \cos\theta + i\sin\theta$, so $|e^{i\theta}| = 1$. $k$ counts **cycles per record**: period $T/k$, frequency $k/T$.
+2. **Inverse.** $x_j = \frac1n \sum_k X_k\, w^{-jk}$. As a matrix: $X = Fx$ with $F_{jk} = w^{jk}$, and $F^{-1} = \bar F^{T}/n$.
+3. **Real data.** $X_{n-k} = \overline{X_k}$: only $k = 0, \dots, n/2$ carry information.
+4. **Trigonometric interpolant** ($n$ even): $p(t) = a_0 + \sum_{k=1}^{n/2-1}\big[a_k\cos\tfrac{2\pi kt}{T} + b_k \sin\tfrac{2\pi kt}{T}\big] + a_{n/2}\cos\tfrac{\pi n t}{T}$ with $a_0 = X_0/n$, $a_k = 2\,\mathrm{Re}X_k/n$, $b_k = -2\,\mathrm{Im}X_k/n$, $a_{n/2} = X_{n/2}/n$. It passes through every sample.
+5. **Reading a rhythm.** For $x_j = A\cos(2\pi k t_j/T - \theta)$: $X_k = \tfrac{nA}{2}e^{-i\theta}$. Amplitude $A = 2|X_k|/n$ (for $0 < k < n/2$); the peak is at $t = \theta/(2\pi)\cdot T/k$ with $\theta = -\arg X_k$.
+6. **FFT.** With $E$, $O$ the DFTs of the even and odd samples (length $n/2$): $X_k = E_k + w^kO_k$ and $X_{k+n/2} = E_k - w^kO_k$ for $k < n/2$. Cost $n\log_2 n$ instead of $n^2$.
+7. **Nyquist.** Sampling every $\Delta t$ resolves frequencies up to $f_N = 1/(2\Delta t)$, i.e. periods down to $2\Delta t$. A frequency $f$ above $f_N$ gives the same samples as its **alias** $|f - m/\Delta t|$, for the whole number $m$ that brings it into $[0, f_N]$.
+8. **Convolution theorem.** For circular convolution $(h * y)_j = \sum_m h_m\,y_{(j-m) \bmod n}$: $\mathrm{DFT}(h*y)_k = H_kY_k$. For ordinary (linear) convolution, pad both with zeros to length at least $n_y + n_h - 1$ first.
+
+**Conventions differ between languages.** R's [`fft`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/fft.html) and numpy's [`np.fft.fft`](https://numpy.org/doc/stable/reference/generated/numpy.fft.fft.html) both compute $X_k$ exactly as in fact 1 (no $1/n$). R indexes from 1, so $X_k$ is `X[k + 1]`; Python and Rust index from 0, so $X_k$ is `X[k]`. R's inverse `fft(X, inverse = TRUE)` does **not** divide by $n$; numpy's [`np.fft.ifft`](https://numpy.org/doc/stable/reference/generated/numpy.fft.ifft.html) does. Rust's [`rustfft`](https://docs.rs/rustfft/latest/rustfft/) works in place on complex vectors and divides by nothing in either direction. [`scipy.fft`](https://docs.scipy.org/doc/scipy/reference/fft.html) has the same functions as `np.fft` (and `next_fast_len`).
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- c(7.81, 8.81, 9.05, 9.98, 9.40, 8.50, 8.15, 7.47, 6.87, 6.41, 7.15, 7.37,
+       7.81, 8.09, 9.64, 9.49, 9.29, 9.03, 8.25, 7.43, 6.98, 6.73, 6.72, 6.65)
+n <- length(x)                          # 24 samples, every 2 h, T = 48 h
+X <- fft(x)                             # unnormalised: X[1] = sum(x)
+Re(X[1]) / n                            # mean
+k <- 2                                  # 2 cycles per 48 h = 24-h period
+2 * Mod(X[k + 1]) / n                   # amplitude (R index k + 1)
+(-Arg(X[k + 1]) / (2 * pi) * 24) %% 24  # peak time (h)
+max(abs(Re(fft(X, inverse = TRUE)) / n - x))   # inverse: divide by n
+
+# Output:
+# [1] 8.045
+# [1] 1.464505
+# [1] 6.452646
+# [1] 3.552714e-15
+```
+
+### Python
+
+```python
+import numpy as np
+
+x = np.array([7.81, 8.81, 9.05, 9.98, 9.40, 8.50, 8.15, 7.47, 6.87, 6.41, 7.15, 7.37,
+              7.81, 8.09, 9.64, 9.49, 9.29, 9.03, 8.25, 7.43, 6.98, 6.73, 6.72, 6.65])
+n = len(x)                              # 24 samples, every 2 h, T = 48 h
+X = np.fft.fft(x)                       # unnormalised: X[0] = sum(x)
+print(X[0].real / n)                    # mean
+k = 2                                   # 2 cycles per 48 h = 24-h period
+print(2 * np.abs(X[k]) / n)             # amplitude (Python index k)
+print((-np.angle(X[k]) / (2 * np.pi) * 24) % 24)   # peak time (h)
+print(np.max(np.abs(np.fft.ifft(X).real - x)))      # ifft already divides by n
+
+# Output:
+# 8.045
+# 1.4645046555493249
+# 6.452646116071165
+# 3.552713678800501e-15
+```
+
+### Rust
+
+```rust
+// rust/examples/fourier_fft_background.rs  —  cargo run --example fourier_fft_background
+// The circadian gene: fft, amplitude, peak time and the inverse (rustfft).
+use rustfft::{num_complex::Complex, FftPlanner};
+
+fn main() {
+    let x = [7.81, 8.81, 9.05, 9.98, 9.40, 8.50, 8.15, 7.47, 6.87, 6.41, 7.15, 7.37,
+             7.81, 8.09, 9.64, 9.49, 9.29, 9.03, 8.25, 7.43, 6.98, 6.73, 6.72, 6.65];
+    let n = x.len();                     // 24 samples, every 2 h, T = 48 h
+    let mut planner = FftPlanner::<f64>::new();
+    // rustfft works in place on complex numbers: copy x into a complex buffer
+    let mut xc: Vec<Complex<f64>> = x.iter().map(|&v| Complex::new(v, 0.0)).collect();
+    planner.plan_fft_forward(n).process(&mut xc);   // unnormalised: xc[0] = sum(x)
+    println!("{}", xc[0].re / n as f64); // mean
+    let k = 2;                           // 2 cycles per 48 h = 24-h period
+    println!("{}", 2.0 * xc[k].norm() / n as f64);  // amplitude (index k, 0-based)
+    let peak = (-xc[k].arg() / (2.0 * std::f64::consts::PI) * 24.0).rem_euclid(24.0);
+    println!("{}", peak);                // peak time (h)
+    planner.plan_fft_inverse(n).process(&mut xc);   // inverse, also unnormalised
+    let err = (0..n).map(|j| (xc[j].re / n as f64 - x[j]).abs()).fold(0.0, f64::max);
+    println!("{:e}", err);
+}
+
+// Output:
+// 8.045
+// 1.464504655549325
+// 6.452646116071164
+// 3.552713678800501e-15
+```
+
+:::
+
+Rust prints numbers in its own format (e.g. `inf` rather than `Inf`); the values are the same unless the text says otherwise.
+
+## By hand
+
+**B1. A DFT of four samples.** A gene is measured every 6 h for one day ($n = 4$, $T = 24$ h): $x = (3, 1, 1, 3)$ at $t = 0, 6, 12, 18$ h.
+(a) Write down $F_4$ (use $w = e^{-2\pi i/4} = -i$) and compute $X = F_4x$.
+(b) Check facts 1 and 3: is $X_0$ the sum? Is $X_3 = \overline{X_1}$?
+(c) Compute $a_0, a_1, b_1, a_2$ and write the trigonometric interpolant $p(t)$. Check that $p(6) = 1$.
+(d) What are the amplitude of the 24-h rhythm and the time of its peak? Use fact 5, then check by finding the maximum of $p$.
+(e) Use fact 2 to recover $x_1$ from $X$.
+
+**B2. One FFT step.** Same $x = (3, 1, 1, 3)$.
+(a) Write down the even samples and the odd samples. Compute their 2-point DFTs $E$ and $O$ (for $n = 2$, $w = -1$, so the DFT of $(a, b)$ is $(a + b, a - b)$).
+(b) Combine them with fact 6 into $X_0, \dots, X_3$ and compare with B1.
+(c) Count complex multiplications: the matrix product for $n = 4$ needs $n^2 = 16$. How many does the FFT need for $n = 4$? (Count only multiplications by $w^k$ with $w^k \ne \pm 1$.)
+(d) Roughly how many operations do the matrix ($n^2$) and the FFT ($n\log_2 n$) need for $n = 2^{10}$ and $n = 2^{20}$? If a computer does $10^9$ per second, how long does each take for $n = 2^{20}$?
+
+**B3. Reading `fft` output.** A gene is sampled every 2 h for 48 h ($n = 24$). In R, `fft(x)[3]` is `0-18i` and `fft(x)[1]` is `192`.
+(a) Which $k$ is `fft(x)[3]`? What period? Which index holds it in Python?
+(b) What are the mean and the amplitude of this rhythm?
+(c) At what time does it peak?
+(d) What is `fft(x)[23]`? Which $k$ is that?
+(e) A second gene has `fft(x)[3]` equal to `-18+0i`. Same amplitude? When does it peak?
+
+**B4. Nyquist and aliasing.**
+(a) Sampling every 4 h: what is the Nyquist frequency, and the shortest period that is resolved?
+(b) For each true period, 24, 12, 8, 6, 4.8 and 4 h, say whether 4-h sampling resolves it. If not, compute the alias frequency (fact 7) and the period you would report.
+(c) Repeat (b) for 2-h sampling.
+(d) An 8-h rhythm sampled every 4 h (exactly at Nyquist): the samples are $\cos(2\pi(4j - p)/8)$ for a peak at time $p$. Write the samples for $p = 0$ and $p = 2$. What does this tell you about rhythms at exactly the Nyquist frequency?
+(e) A lab wants to detect 12-h rhythms. What is the largest sampling interval that is (in theory) enough? Why is that not a good design in practice?
+
+**B5. Convolution by hand.** $y = (1, 2, 3, 4)$, two-point average $h = (\tfrac12, \tfrac12, 0, 0)$.
+(a) Compute the circular convolution $(h * y)_j = \tfrac12(y_j + y_{j-1})$, with $y_{-1} = y_3$. Which entry is affected by wrap-around?
+(b) Compute $Y = F_4y$ and $H = F_4h$, multiply entrywise, and transform back with fact 2. Do you get (a)?
+(c) $|H_k|$ is the **gain** of the filter at frequency $k$. What does the two-point average do to $k = 1$ and to $k = 2$ (the Nyquist frequency)?
+(d) Write down the linear convolution of $y$ with $(\tfrac12, \tfrac12)$ (length 5). How long must you pad $y$ and $h$ so that the circular convolution gives it?
+
+**B6. Resolution and record length.** With a 48-h record, the DFT frequencies are $k/48$ per hour.
+(a) Which $k$ (not necessarily whole) do a 24-h and a 22-h rhythm have? Can a 48-h experiment tell them apart?
+(b) How long must the record be for the two to land on neighbouring bins, i.e. for $1/22 - 1/24 \ge 1/T$?
+(c) Does sampling every 1 h instead of every 2 h help? Does zero-padding the 48-h record to 480 h help?
+
+## In code
+
+**C1. The DFT as a matrix.**
+(a) Write `dft_matrix(n)` (fact 2) and check your answer to B1(a). Check that $\bar F^TF = nI$ for $n = 4$.
+(b) For $n = 256, 512, 1024, 2048$, compare $Fx$ with `fft(x)` (Python: `np.fft.fft`; Rust: `rustfft`) for a test signal: the largest difference, and the time of each. How does the time grow when $n$ doubles?
+(c) The difference grows with $n$. Which one is less accurate, and why might that be? (Hint: what is $2\pi jk/n$ for $j = k = 2047$?)
+
+**C2. Your own FFT.**
+(a) Write the recursive `my_fft(x)` from fact 6 for $n$ a power of 2, and check B2 and $n = 1024$ against the library.
+(b) Time `fft` for $n = 65536$, $65537$ (a prime) and [`nextn(65537)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/nextn.html) (Python: [`scipy.fft.next_fast_len`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.fft.next_fast_len.html)). Which language suffers from the prime length?
+
+**C3. Is the gene circadian?** Use the 48-h data from the Background.
+(a) Print the amplitude for $k = 0, \dots, 7$ with the period of each. Which period dominates?
+(b) Fit the **cosinor** model $x \approx c_0 + c_1\cos(2\pi t/24) + c_2\sin(2\pi t/24)$ by least squares ([`lm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html); Python [`np.linalg.lstsq`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.lstsq.html); Rust `nalgebra`). Compare the coefficients with $a_0, a_2, b_2$ from the FFT. Why are they equal?
+(c) Write `trig_interp` (fact 4), check that it passes through the data, and find its maximum on a fine grid. Compare with the largest data point and with the peak from fact 5. Which would you trust, and why?
+
+**C4. Aliasing in a sampling design.** A gene has a circadian component and a fast ultradian one: $x(t) = 8 + 1.5\cos(2\pi(t-6)/24) + \cos(2\pi t/4.8)$.
+(a) Sample it every 2 h and every 4 h over 48 h. For each design report the strongest $k \ge 1$, and the amplitude and peak time of the 24-h component. Which design gives the true values (1.5 and 6 h)? Explain with B4.
+(b) For an 8-h rhythm sampled every 4 h, compute the amplitude seen at $k = 6$ (use $|X_6|/n$: $k = n/2$) for peak times $p = 0, 1, 2$ h. Compare with B4(d).
+
+**C5. Leakage and the Hann window.** A free-running clock (constant darkness) has period 25.5 h. A luciferase recording covers 120 h, sampled every 30 min.
+(a) Compute the amplitude spectrum of $\cos(2\pi t/25.5)$ without a window and with the Hann window $w_j = \tfrac12 - \tfrac12\cos(2\pi j/n)$ (amplitude $= 2|X_k|/\sum_j w_j$ instead of $2|X_k|/n$). Print $k = 1, \dots, 8, 10, 20$.
+(b) Zero-pad the windowed signal to 10 times its length and locate the peak. What period do you estimate?
+(c) Add a weak 12-h rhythm of amplitude 0.05 and look at $k = 10$. Can you see it with and without the window? Compare with the leakage alone at $k = 10$.
+
+**C6. Smoothing a luciferase trace.** Simulate $\text{truth}(t) = 20 + 60e^{-t/40} + 30e^{-t/80}\cos(2\pi(t-4)/24)$ every 30 min for 120 h, plus normal noise with sd 6.
+(a) Write `lowpass(y, kmax)`: zero every coefficient with $|k| > k_\text{max}$ (both halves!) and transform back. For $k_\text{max} = 5, 10, 15, 20, 30, 60$ print the root-mean-square error against the truth, over the whole trace and over the first and last 5 h.
+(b) Repeat with a straight-line trend removed before filtering and added back afterwards.
+(c) Which $k_\text{max}$ would you choose? What goes wrong for small and for large $k_\text{max}$?
+
+**C7. The convolution theorem.**
+(a) Check B5(a)–(b) by computer.
+(b) Compute the linear convolution of B5(d) by zero-padding and compare with the built-in ([`convolve(y, rev(h), type = "open")`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/convolve.html); Python [`np.convolve`](https://numpy.org/doc/stable/reference/generated/numpy.convolve.html)).
+(c) The gain of a moving average of width $m = 8$ on $n = 240$ samples (30 min apart) is $|H_k|$. Print it for $k = 0, 5, 10, 15, 20, 30, 40, 45, 50, 60$. Which periods are removed completely? Is a moving average a good low-pass filter?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — DFT by hand (B1, B2, B5)"}
+Powers of $w = -i$: $w^0 = 1$, $w^1 = -i$, $w^2 = -1$, $w^3 = i$, $w^4 = 1$, so $F_{jk} = (-i)^{jk \bmod 4}$. Multiply out row by row; $i \cdot i = -1$. For the inverse use $w^{-1} = i$ and divide by 4. In B2, the 2-point DFTs need no multiplication at all, and the only twiddle factors for $n = 4$ are $w^0 = 1$ and $w^1 = -i$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — reading fft output (B3, C3)"}
+$k$ = index − 1 in R. Period $= T/k$. Amplitude $2|X_k|/n$; $|a + bi| = \sqrt{a^2+b^2}$. $\arg(-18i) = -\pi/2$, $\arg(-18) = \pi$. The peak time is $\theta/(2\pi)$ of a period, with $\theta = -\arg X_k$; add a period if it is negative. In R: [`Mod`, `Arg`, `Re`, `Im`, `Conj`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/complex.html); Python: `np.abs`, [`np.angle`](https://numpy.org/doc/stable/reference/generated/numpy.angle.html), `.real`, `.imag`, `.conj()`; Rust: `z.norm()`, `z.arg()`, `z.re`, `z.im`, `z.conj()` (from `rustfft::num_complex`).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — aliasing (B4, C4)"}
+Work in cycles per hour. Sampling every 4 h: $f_s = 1/\Delta t = 0.25$, $f_N = 0.125$. A 6-h rhythm has $f = 0.1667 > f_N$; subtract $f_s$: $|0.1667 - 0.25| = 0.0833$, i.e. period 12 h. If the result is still above $f_N$, subtract $f_s$ again.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — the DFT matrix and timing (C1, C2)"}
+R: [`outer`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/outer.html)`(j, j)` gives all products $jk$, and `exp(-2i * pi * outer(j, j) / n)` the matrix; [`system.time`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/system.time.html) times an expression. Python: `np.outer`, `time.perf_counter()`. Rust: `std::time::Instant`; plan once with [`FftPlanner`](https://docs.rs/rustfft/latest/rustfft/struct.FftPlanner.html), then `process` a `Vec<Complex<f64>>` in place. For the recursion, `x[seq(1, n, by = 2)]` in R and `x[0::2]` in Python are the even samples.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — windows and zero-padding (C5)"}
+Multiply the signal by the window **before** the FFT. R: pad with `c(w * y, rep(0, N - n))`; Python: `np.fft.fft(w * y, N)` pads for you; Rust: `Vec::resize(N, 0.0)`. In the padded transform, index $k$ means $k$ cycles per padded length ($N\Delta t$ = 1200 h).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — filtering (C6, C7)"}
+The signed frequency of each entry is `c(0:(n/2), -(n/2 - 1):-1)` in R and [`np.fft.fftfreq(n, d=1/n)`](https://numpy.org/doc/stable/reference/generated/numpy.fft.fftfreq.html) in Python; in Rust entry $k > n/2$ has frequency $n - k$. Take `Re()` / `.real` after the inverse. A straight-line trend: `fitted(lm(y ~ t))` in R, `np.polyval(np.polyfit(t, y, 1), t)` in Python. R's [`stats::filter`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/filter.html) computes moving averages directly.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution — by hand"}
+
+**B1.**
+(a) $F_4 = \begin{pmatrix} 1&1&1&1\\1&-i&-1&i\\1&-1&1&-1\\1&i&-1&-i\end{pmatrix}$.
+$X_0 = 3 + 1 + 1 + 3 = 8$. $X_1 = 3 + 1(-i) + 1(-1) + 3(i) = 2 + 2i$. $X_2 = 3 - 1 + 1 - 3 = 0$. $X_3 = 3 + 1(i) + 1(-1) + 3(-i) = 2 - 2i$.
+(b) $X_0 = 8 = \sum x_j$. $X_3 = 2 - 2i = \overline{X_1}$. Yes to both.
+(c) $a_0 = 8/4 = 2$, $a_1 = 2\cdot2/4 = 1$, $b_1 = -2\cdot 2/4 = -1$, $a_2 = 0/4 = 0$. So $p(t) = 2 + \cos\tfrac{2\pi t}{24} - \sin\tfrac{2\pi t}{24}$. $p(6) = 2 + \cos\tfrac{\pi}{2} - \sin\tfrac\pi2 = 2 + 0 - 1 = 1$. ✓ (Also $p(0) = 3$, $p(12) = 1$, $p(18) = 3$.)
+(d) $A = 2|X_1|/4 = 2\sqrt8/4 = \sqrt2 \approx 1.41$. $\arg X_1 = \pi/4$, so $\theta = -\pi/4$; peak at $-\tfrac18 \cdot 24 = -3$ h, i.e. at **21 h**. Check: $\cos s - \sin s = \sqrt2\cos(s + \pi/4)$ is largest at $s = -\pi/4$, i.e. $t = -3 \equiv 21$ h, where $p = 2 + \sqrt2 = 3.41$, above every sample. The interpolant peaks between the samples at 18 h and 0 h.
+(e) $x_1 = \tfrac14(X_0 + X_1 i + X_2 i^2 + X_3 i^3) = \tfrac14(8 + (2+2i)i + 0 + (2-2i)(-i)) = \tfrac14(8 + 2i - 2 - 2i - 2) = \tfrac14 \cdot 4 = 1$. ✓
+
+**B2.**
+(a) Even: $(x_0, x_2) = (3, 1)$, $E = (4, 2)$. Odd: $(x_1, x_3) = (1, 3)$, $O = (4, -2)$.
+(b) $w^0 = 1$, $w^1 = -i$. $X_0 = E_0 + O_0 = 8$; $X_1 = E_1 + (-i)O_1 = 2 + 2i$; $X_2 = E_0 - O_0 = 0$; $X_3 = E_1 - (-i)O_1 = 2 - 2i$. Same as B1.
+(c) One: $(-i)\cdot O_1$ (and multiplying by $-i$ is only a swap and a sign change). Against 16 for the matrix.
+(d) $n = 2^{10} = 1024$: $n^2 \approx 10^6$, $n\log_2 n \approx 10^4$. $n = 2^{20} \approx 10^6$: $n^2 \approx 1.1\times10^{12}$ (about 18 minutes at $10^9$/s), $n\log_2 n \approx 2.1\times10^7$ (0.02 s). The ratio $n/\log_2 n$ is about 50 000.
+
+**B3.**
+(a) Index 3 is $k = 2$: 2 cycles in 48 h, period **24 h**. Python: `X[2]`.
+(b) Mean $= 192/24 = 8$. Amplitude $= 2 \cdot 18/24 = 1.5$.
+(c) $\arg(-18i) = -\pi/2$, $\theta = \pi/2$: a quarter of a period after $t = 0$, i.e. **6 h**.
+(d) Index 23 is $k = 22 \equiv -2$: `fft(x)[23]` $= \overline{X_2} = $ `0+18i`.
+(e) $|-18| = 18$: same amplitude, 1.5. $\arg(-18) = \pi$, $\theta = -\pi$: half a period off, peak at $-12 \equiv$ **12 h**. A real negative coefficient is a cosine turned upside down.
+
+**B4.**
+(a) $f_N = 1/(2\cdot4) = 0.125$ per hour: periods down to **8 h**.
+(b) 24 h ($f = 0.0417$) and 12 h ($0.0833$): resolved. 8 h ($0.125$): exactly at Nyquist, see (d). 6 h ($0.1667$): alias $|0.1667 - 0.25| = 0.0833$, reported as **12 h**. 4.8 h ($0.2083$): alias $0.0417$, reported as **24 h** (the example from the lecture). 4 h ($0.25 = f_s$): alias **0**: sampled at the same phase every time, it looks like a constant shift of the mean.
+(c) With $\Delta t = 2$ h, $f_N = 0.25$ (periods down to 4 h): 24, 12, 8, 6 and 4.8 h are all resolved; 4 h sits exactly at Nyquist.
+(d) $p = 0$: $\cos(\pi j) = 1, -1, 1, -1, \ldots$: full amplitude. $p = 2$: $\cos(\pi j - \pi/2) = 0, 0, 0, \ldots$: invisible. At exactly the Nyquist frequency the amplitude you see is $|\cos(2\pi p/8)|$, between 0 and the truth, depending on phase. Sample **faster** than twice the frequency, not exactly twice.
+(e) In theory anything below 6 h (Nyquist for 12 h is $\Delta t < 6$ h). With 6-h sampling, a 12-h rhythm is at Nyquist (phase-dependent, (d)); slightly faster than 6 h, two or three samples per cycle with noise give a very poor estimate of amplitude and phase, and anything faster than 12 h is aliased. In practice sample at least 4–6 times per cycle of interest (2–3 h for 12-h rhythms).
+
+**B5.**
+(a) $(h * y)_0 = \tfrac12(y_0 + y_3) = 2.5$ (wrap-around), $(h*y)_1 = \tfrac12(2 + 1) = 1.5$, $(h*y)_2 = 2.5$, $(h*y)_3 = 3.5$. The first entry mixes the start with the **end**.
+(b) $Y = (10, -2+2i, -2, -2-2i)$, $H = (1, \tfrac12(1 - i), 0, \tfrac12(1+i))$. Products: $10$; $\tfrac12(1-i)(-2+2i) = \tfrac12(4i) = 2i$; $0$; $\tfrac12(1+i)(-2-2i) = -2i$. Inverse: $z_0 = \tfrac14(10 + 2i - 2i) = 2.5$; $z_1 = \tfrac14(10 + 2i\cdot i + 0 + (-2i)(-i)) = \tfrac14(10 - 2 - 2) = 1.5$; similarly $z_2 = 2.5$, $z_3 = 3.5$. Same as (a).
+(c) $|H_1| = \tfrac12\sqrt2 = 0.707$: the $k = 1$ wave keeps 71 % of its amplitude. $H_2 = 0$: the Nyquist wave $(+1, -1, +1, -1)$ averages to exactly zero.
+(d) $(0.5, 1.5, 2.5, 3.5, 2)$. Pad both to length $4 + 2 - 1 = 5$: then nothing wraps around.
+
+**B6.**
+(a) $k = 48/24 = 2$ and $k = 48/22 = 2.18$. They are less than one bin apart: both show up as a peak at $k = 2$ (the 22-h one with leakage). No.
+(b) $1/22 - 1/24 = 2/528 = 1/264$, so $T \ge 264$ h, 11 days.
+(c) Neither. Faster sampling raises the Nyquist frequency but keeps the frequency step $1/T$. Zero-padding interpolates the spectrum on a finer grid (it helps to locate a single peak, as in C5) but the peaks keep their width $\approx 1/T$, so two close peaks still merge.
+
+:::
+
+::: {.callout-note collapse="true" title="Solution — C1"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+dft_matrix <- function(n) {
+  j <- 0:(n - 1)
+  exp(-2i * pi * outer(j, j) / n)        # F[j+1, k+1] = w^(jk)
+}
+F4 <- dft_matrix(4)
+drop(round(F4 %*% c(3, 1, 1, 3), 12))    # check B1
+round(Re(Conj(t(F4)) %*% F4), 12)        # orthogonal columns: 4 I
+for (n in c(256, 512, 1024, 2048)) {
+  x <- sin(0.1 * (0:(n - 1))^2)          # any test signal
+  t_mat <- system.time(X1 <- dft_matrix(n) %*% x)[["elapsed"]]
+  t_fft <- system.time(for (r in 1:100) X2 <- fft(x))[["elapsed"]] / 100
+  cat(sprintf("n = %4d  max diff %.1e  matrix %.3f s  fft %.6f s\n",
+              n, max(Mod(X1 - X2)), t_mat, t_fft))
+}
+
+# Output:
+# [1] 8+0i 2+2i 0+0i 2-2i
+#      [,1] [,2] [,3] [,4]
+# [1,]    4    0    0    0
+# [2,]    0    4    0    0
+# [3,]    0    0    4    0
+# [4,]    0    0    0    4
+# n =  256  max diff 1.2e-12  matrix 0.010 s  fft 0.000020 s
+# n =  512  max diff 4.2e-12  matrix 0.047 s  fft 0.000030 s
+# n = 1024  max diff 1.2e-11  matrix 0.207 s  fft 0.000060 s
+# n = 2048  max diff 3.0e-11  matrix 0.469 s  fft 0.000110 s
+```
+
+### Python
+
+```python
+import time
+import numpy as np
+
+def dft_matrix(n):
+    j = np.arange(n)
+    return np.exp(-2j * np.pi * np.outer(j, j) / n)   # F[j, k] = w^(jk)
+
+F4 = dft_matrix(4)
+print(np.round(F4 @ np.array([3, 1, 1, 3]), 12) + 0)   # check B1
+print(np.round((F4.conj().T @ F4).real, 12) + 0)       # orthogonal columns: 4 I
+for n in [256, 512, 1024, 2048]:
+    x = np.sin(0.1 * np.arange(n)**2)                # any test signal
+    t0 = time.perf_counter(); X1 = dft_matrix(n) @ x; t_mat = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    for r in range(100):
+        X2 = np.fft.fft(x)
+    t_fft = (time.perf_counter() - t0) / 100
+    print(f"n = {n:4d}  max diff {np.max(np.abs(X1 - X2)):.1e}  "
+          f"matrix {t_mat:.3f} s  fft {t_fft:.6f} s")
+
+# Output:
+# [8.+0.j 2.+2.j 0.+0.j 2.-2.j]
+# [[4. 0. 0. 0.]
+#  [0. 4. 0. 0.]
+#  [0. 0. 4. 0.]
+#  [0. 0. 0. 4.]]
+# n =  256  max diff 1.2e-12  matrix 0.010 s  fft 0.000031 s
+# n =  512  max diff 4.1e-12  matrix 0.033 s  fft 0.000025 s
+# n = 1024  max diff 1.2e-11  matrix 0.095 s  fft 0.000034 s
+# n = 2048  max diff 3.1e-11  matrix 0.261 s  fft 0.000072 s
+```
+
+### Rust
+
+```rust
+// rust/examples/fourier_fft_c1.rs  —  cargo run --release --example fourier_fft_c1
+// C1: the DFT as an n x n matrix (hand-written, O(n^2)) against rustfft.
+use rustfft::{num_complex::Complex, FftPlanner};
+use std::f64::consts::PI;
+use std::time::Instant;
+
+// The DFT matrix F[j][k] = w^(jk), w = exp(-2 pi i / n)
+fn dft_matrix(n: usize) -> Vec<Vec<Complex<f64>>> {
+    (0..n).map(|j| (0..n).map(|k| {
+        Complex::from_polar(1.0, -2.0 * PI * ((j * k) % n) as f64 / n as f64)
+    }).collect()).collect()
+}
+
+fn matvec(f: &[Vec<Complex<f64>>], x: &[f64]) -> Vec<Complex<f64>> {
+    f.iter().map(|row| row.iter().zip(x).map(|(a, &b)| a * b).sum()).collect()
+}
+
+fn main() {
+    let f4 = dft_matrix(4);
+    let x4 = matvec(&f4, &[3.0, 1.0, 1.0, 3.0]);              // check B1
+    let s: Vec<String> = x4.iter()
+        .map(|z| format!("{}{:+}i", z.re.round() + 0.0, z.im.round() + 0.0)).collect();
+    println!("{}", s.join(" "));
+    for j in 0..4 {                                            // conj(F)^T F = 4 I
+        let row: Vec<f64> = (0..4).map(|k| {
+            let s: Complex<f64> = (0..4).map(|m| f4[m][j].conj() * f4[m][k]).sum();
+            s.re.round() + 0.0
+        }).collect();
+        println!("{:?}", row);
+    }
+    let mut planner = FftPlanner::<f64>::new();
+    for n in [256, 512, 1024, 2048] {
+        let x: Vec<f64> = (0..n).map(|j| (0.1 * (j * j) as f64).sin()).collect();
+        let t0 = Instant::now();
+        let x1 = matvec(&dft_matrix(n), &x);
+        let t_mat = t0.elapsed().as_secs_f64();
+        let fft = planner.plan_fft_forward(n);
+        let t0 = Instant::now();
+        let mut x2 = Vec::new();
+        for _ in 0..100 {
+            x2 = x.iter().map(|&v| Complex::new(v, 0.0)).collect();
+            fft.process(&mut x2);
+        }
+        let t_fft = t0.elapsed().as_secs_f64() / 100.0;
+        let diff = x1.iter().zip(&x2).map(|(a, b)| (a - b).norm()).fold(0.0, f64::max);
+        println!("n = {:4}  max diff {:.1e}  matrix {:.3} s  fft {:.6} s", n, diff, t_mat, t_fft);
+    }
+}
+
+// Output:
+// 8+0i 2+2i 0+0i 2-2i
+// [4.0, 0.0, 0.0, 0.0]
+// [0.0, 4.0, 0.0, 0.0]
+// [0.0, 0.0, 4.0, 0.0]
+// [0.0, 0.0, 0.0, 4.0]
+// n =  256  max diff 1.8e-14  matrix 0.003 s  fft 0.000001 s
+// n =  512  max diff 5.6e-14  matrix 0.013 s  fft 0.000002 s
+// n = 1024  max diff 1.0e-13  matrix 0.052 s  fft 0.000005 s
+// n = 2048  max diff 1.9e-13  matrix 0.208 s  fft 0.000010 s
+```
+
+:::
+
+(a) Matches B1, and $\bar F^TF = 4I$. (b) The matrix time grows by about 4 when $n$ doubles ($n^2$); the FFT by about 2 ($n\log n$). At $n = 2048$ the FFT is several thousand times faster. Your timings will differ; the growth factors will not. (c) The matrix is less accurate in R and Python: computing $e^{-2\pi i jk/n}$ with $jk$ up to $4\times10^6$ evaluates sine and cosine at arguments up to $2\pi \cdot 2047$, and the rounding error of a large argument (about $\varepsilon \cdot 13\,000$) carries into every entry. The Rust version reduces $jk \bmod n$ first, which removes most of it. The FFT uses only $w^k$ with $k < n$ and does far fewer operations, so it also makes fewer rounding errors.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C2"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+my_fft <- function(x) {
+  n <- length(x)
+  if (n == 1) return(x)
+  E <- my_fft(x[seq(1, n, by = 2)])     # samples 0, 2, 4, ...
+  O <- my_fft(x[seq(2, n, by = 2)])     # samples 1, 3, 5, ...
+  w <- exp(-2i * pi * (0:(n/2 - 1)) / n)
+  c(E + w * O, E - w * O)
+}
+my_fft(c(3, 1, 1, 3))                   # check B2
+x <- sin(0.1 * (0:1023)^2)
+max(Mod(my_fft(x) - fft(x)))
+for (n in c(65536, 65537, nextn(65537))) {
+  x <- sin(0.1 * (0:(n - 1))^2)
+  cat(sprintf("n = %d  fft %.3f s\n", n, system.time(fft(x))[["elapsed"]]))
+}
+
+# Output:
+# [1] 8+0i 2+2i 0+0i 2-2i
+# [1] 3.842847e-14
+# n = 65536  fft 0.002 s
+# n = 65537  fft 4.401 s
+# n = 65610  fft 0.003 s
+```
+
+### Python
+
+```python
+import time
+import numpy as np
+from scipy.fft import next_fast_len
+
+def my_fft(x):
+    n = len(x)
+    if n == 1:
+        return np.asarray(x, dtype=complex)
+    E = my_fft(x[0::2])                   # samples 0, 2, 4, ...
+    O = my_fft(x[1::2])                   # samples 1, 3, 5, ...
+    w = np.exp(-2j * np.pi * np.arange(n // 2) / n)
+    return np.concatenate([E + w * O, E - w * O])
+
+print(my_fft(np.array([3.0, 1, 1, 3])))   # check B2
+x = np.sin(0.1 * np.arange(1024)**2)
+print(np.max(np.abs(my_fft(x) - np.fft.fft(x))))
+for n in [65536, 65537, next_fast_len(65537)]:
+    x = np.sin(0.1 * np.arange(n)**2)
+    t0 = time.perf_counter(); np.fft.fft(x)
+    print(f"n = {n}  fft {time.perf_counter() - t0:.3f} s")
+
+# Output:
+# [8.+0.j 2.+2.j 0.+0.j 2.-2.j]
+# 2.929642751054232e-14
+# n = 65536  fft 0.005 s
+# n = 65537  fft 0.015 s
+# n = 65610  fft 0.003 s
+```
+
+### Rust
+
+```rust
+// rust/examples/fourier_fft_c2.rs  —  cargo run --release --example fourier_fft_c2
+// C2: a hand-written recursive FFT (powers of 2), and rustfft on awkward n.
+use rustfft::{num_complex::Complex, FftPlanner};
+use std::f64::consts::PI;
+use std::time::Instant;
+
+fn my_fft(x: &[Complex<f64>]) -> Vec<Complex<f64>> {
+    let n = x.len();
+    if n == 1 {
+        return x.to_vec();
+    }
+    let even: Vec<Complex<f64>> = x.iter().step_by(2).cloned().collect();          // 0, 2, 4, ...
+    let odd: Vec<Complex<f64>> = x.iter().skip(1).step_by(2).cloned().collect();   // 1, 3, 5, ...
+    let (e, o) = (my_fft(&even), my_fft(&odd));
+    let mut out = vec![Complex::new(0.0, 0.0); n];
+    for k in 0..n / 2 {
+        let wo = Complex::from_polar(1.0, -2.0 * PI * k as f64 / n as f64) * o[k];
+        out[k] = e[k] + wo;
+        out[k + n / 2] = e[k] - wo;
+    }
+    out
+}
+
+fn signal(n: usize) -> Vec<Complex<f64>> {
+    (0..n).map(|j| Complex::new((0.1 * (j as f64).powi(2)).sin(), 0.0)).collect()
+}
+
+fn main() {
+    let x4: Vec<Complex<f64>> = [3.0, 1.0, 1.0, 3.0].iter().map(|&v| Complex::new(v, 0.0)).collect();
+    let s: Vec<String> = my_fft(&x4).iter()
+        .map(|z| format!("{}{:+}i", z.re + 0.0, z.im + 0.0)).collect();
+    println!("{}", s.join(" "));                                   // check B2
+    let mut planner = FftPlanner::<f64>::new();
+    let x = signal(1024);
+    let mut lib = x.clone();
+    planner.plan_fft_forward(1024).process(&mut lib);
+    let diff = my_fft(&x).iter().zip(&lib).map(|(a, b)| (a - b).norm()).fold(0.0, f64::max);
+    println!("{:e}", diff);
+    for n in [65536, 65537, 65610] {                               // 65537 is prime
+        let mut x = signal(n);
+        let t0 = Instant::now();
+        planner.plan_fft_forward(n).process(&mut x);               // planning included
+        println!("n = {}  fft {:.3} s", n, t0.elapsed().as_secs_f64());
+    }
+}
+
+// Output:
+// 8+0i 1.9999999999999998+2i 0+0i 2-2i
+// 2.5864145986817697e-14
+// n = 65536  fft 0.004 s
+// n = 65537  fft 0.008 s
+// n = 65610  fft 0.002 s
+```
+
+:::
+
+R's `fft` is more than 1000 times slower for the prime length than for $2^{16}$, and fast again at `nextn(65537)` $= 65610 = 2\cdot 3^8\cdot 5$. numpy (pocketfft) and rustfft switch to Bluestein's algorithm for large primes, which keeps $O(n\log n)$; they are only a few times slower. (Rust prints the rounding error in one entry of B2 that R hides with its 7-digit default.)
+:::
+
+::: {.callout-note collapse="true" title="Solution — C3"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- c(7.81, 8.81, 9.05, 9.98, 9.40, 8.50, 8.15, 7.47, 6.87, 6.41, 7.15, 7.37,
+       7.81, 8.09, 9.64, 9.49, 9.29, 9.03, 8.25, 7.43, 6.98, 6.73, 6.72, 6.65)
+t <- seq(0, 46, by = 2); n <- length(x); T <- 48
+X <- fft(x)
+for (k in 0:7) {                        # (a) amplitude spectrum
+  a <- if (k == 0) Mod(X[1]) / n else 2 * Mod(X[k + 1]) / n
+  cat(sprintf("k = %d  period %5.1f h  amplitude %.3f\n", k, T / k, a))
+}
+# (b) cosinor: least squares with mean + 24-h cosine + 24-h sine
+fit <- lm(x ~ cos(2 * pi * t / 24) + sin(2 * pi * t / 24))
+round(unname(coef(fit)), 4)
+round(c(Re(X[1]) / n, 2 * Re(X[3]) / n, -2 * Im(X[3]) / n), 4)
+# (c) the interpolant, on a fine grid
+trig_interp <- function(x, T, tt) {
+  n <- length(x); X <- fft(x) / n
+  p <- Re(X[1]) + Re(X[n/2 + 1]) * cos(pi * n * tt / T)
+  for (k in 1:(n/2 - 1))
+    p <- p + 2 * Re(X[k + 1]) * cos(2 * pi * k * tt / T) -
+             2 * Im(X[k + 1]) * sin(2 * pi * k * tt / T)
+  p
+}
+max(abs(trig_interp(x, T, t) - x))      # passes through the data
+tt <- seq(0, 48, by = 0.01)
+p <- trig_interp(x, T, tt)
+c(max(p), tt[which.max(p)])             # highest point of the curve
+
+# Output:
+# k = 0  period   Inf h  amplitude 8.045
+# k = 1  period  48.0 h  amplitude 0.032
+# k = 2  period  24.0 h  amplitude 1.465
+# k = 3  period  16.0 h  amplitude 0.123
+# k = 4  period  12.0 h  amplitude 0.123
+# k = 5  period   9.6 h  amplitude 0.081
+# k = 6  period   8.0 h  amplitude 0.095
+# k = 7  period   6.9 h  amplitude 0.208
+# [1]  8.0450 -0.1731  1.4542
+# [1]  8.0450 -0.1731  1.4542
+# [1] 5.329071e-15
+# [1] 10.0408  6.4500
+```
+
+### Python
+
+```python
+import numpy as np
+
+x = np.array([7.81, 8.81, 9.05, 9.98, 9.40, 8.50, 8.15, 7.47, 6.87, 6.41, 7.15, 7.37,
+              7.81, 8.09, 9.64, 9.49, 9.29, 9.03, 8.25, 7.43, 6.98, 6.73, 6.72, 6.65])
+t = np.arange(0, 47, 2.0); n = len(x); T = 48
+X = np.fft.fft(x)
+for k in range(8):                        # (a) amplitude spectrum
+    a = abs(X[0]) / n if k == 0 else 2 * abs(X[k]) / n
+    period = T / k if k > 0 else np.inf
+    print(f"k = {k}  period {period:5.1f} h  amplitude {a:.3f}")
+# (b) cosinor: least squares with mean + 24-h cosine + 24-h sine
+A = np.column_stack([np.ones(n), np.cos(2 * np.pi * t / 24), np.sin(2 * np.pi * t / 24)])
+coef = np.linalg.lstsq(A, x, rcond=None)[0]
+print(np.round(coef, 4))
+print(np.round([X[0].real / n, 2 * X[2].real / n, -2 * X[2].imag / n], 4))
+# (c) the interpolant, on a fine grid
+def trig_interp(x, T, tt):
+    n = len(x); X = np.fft.fft(x) / n
+    p = X[0].real + X[n // 2].real * np.cos(np.pi * n * tt / T)
+    for k in range(1, n // 2):
+        p = p + 2 * X[k].real * np.cos(2 * np.pi * k * tt / T) \
+              - 2 * X[k].imag * np.sin(2 * np.pi * k * tt / T)
+    return p
+
+print(np.max(np.abs(trig_interp(x, T, t) - x)))     # passes through the data
+tt = np.linspace(0, 48, 4801)
+p = trig_interp(x, T, tt)
+print(np.round([p.max(), tt[np.argmax(p)]], 4))     # highest point of the curve
+
+# Output:
+# k = 0  period   inf h  amplitude 8.045
+# k = 1  period  48.0 h  amplitude 0.032
+# k = 2  period  24.0 h  amplitude 1.465
+# k = 3  period  16.0 h  amplitude 0.123
+# k = 4  period  12.0 h  amplitude 0.123
+# k = 5  period   9.6 h  amplitude 0.081
+# k = 6  period   8.0 h  amplitude 0.095
+# k = 7  period   6.9 h  amplitude 0.208
+# [ 8.045  -0.1731  1.4542]
+# [ 8.045  -0.1731  1.4542]
+# 8.881784197001252e-15
+# [10.0408  6.45  ]
+```
+
+### Rust
+
+```rust
+// rust/examples/fourier_fft_c3.rs  —  cargo run --example fourier_fft_c3
+// C3: amplitude spectrum, cosinor least squares (nalgebra) and the trig interpolant.
+use nalgebra::{DMatrix, DVector};
+use rustfft::{num_complex::Complex, FftPlanner};
+use std::f64::consts::PI;
+
+fn fft(x: &[f64]) -> Vec<Complex<f64>> {
+    let mut buf: Vec<Complex<f64>> = x.iter().map(|&v| Complex::new(v, 0.0)).collect();
+    FftPlanner::<f64>::new().plan_fft_forward(x.len()).process(&mut buf);
+    buf
+}
+
+fn trig_interp(x: &[f64], big_t: f64, tt: f64) -> f64 {
+    let n = x.len();
+    let xf: Vec<Complex<f64>> = fft(x).iter().map(|z| z / n as f64).collect();
+    let mut p = xf[0].re + xf[n / 2].re * (PI * n as f64 * tt / big_t).cos();
+    for k in 1..n / 2 {
+        let a = 2.0 * PI * k as f64 * tt / big_t;
+        p += 2.0 * xf[k].re * a.cos() - 2.0 * xf[k].im * a.sin();
+    }
+    p
+}
+
+fn main() {
+    let x = [7.81, 8.81, 9.05, 9.98, 9.40, 8.50, 8.15, 7.47, 6.87, 6.41, 7.15, 7.37,
+             7.81, 8.09, 9.64, 9.49, 9.29, 9.03, 8.25, 7.43, 6.98, 6.73, 6.72, 6.65];
+    let n = x.len();
+    let t: Vec<f64> = (0..n).map(|j| 2.0 * j as f64).collect();
+    let big_t = 48.0;
+    let xf = fft(&x);
+    for k in 0..8 {                                   // (a) amplitude spectrum
+        let a = if k == 0 { xf[0].norm() / n as f64 } else { 2.0 * xf[k].norm() / n as f64 };
+        println!("k = {}  period {:5.1} h  amplitude {:.3}", k, big_t / k as f64, a);
+    }
+    // (b) cosinor: least squares with mean + 24-h cosine + 24-h sine
+    let a = DMatrix::from_fn(n, 3, |i, j| match j {
+        0 => 1.0,
+        1 => (2.0 * PI * t[i] / 24.0).cos(),
+        _ => (2.0 * PI * t[i] / 24.0).sin(),
+    });
+    let coef = a.svd(true, true).solve(&DVector::from_column_slice(&x), 1e-12).unwrap();
+    println!("{:.4} {:.4} {:.4}", coef[0], coef[1], coef[2]);
+    println!("{:.4} {:.4} {:.4}", xf[0].re / n as f64, 2.0 * xf[2].re / n as f64,
+             -2.0 * xf[2].im / n as f64);
+    // (c) the interpolant, on a fine grid
+    let err = (0..n).map(|j| (trig_interp(&x, big_t, t[j]) - x[j]).abs()).fold(0.0, f64::max);
+    println!("{:e}", err);                            // passes through the data
+    let (mut pmax, mut tmax) = (f64::MIN, 0.0);
+    for i in 0..=4800 {
+        let tt = i as f64 * 0.01;
+        let p = trig_interp(&x, big_t, tt);
+        if p > pmax { pmax = p; tmax = tt; }
+    }
+    println!("{:.4} {:.4}", pmax, tmax);              // highest point of the curve
+}
+
+// Output:
+// k = 0  period   inf h  amplitude 8.045
+// k = 1  period  48.0 h  amplitude 0.032
+// k = 2  period  24.0 h  amplitude 1.465
+// k = 3  period  16.0 h  amplitude 0.123
+// k = 4  period  12.0 h  amplitude 0.123
+// k = 5  period   9.6 h  amplitude 0.081
+// k = 6  period   8.0 h  amplitude 0.095
+// k = 7  period   6.9 h  amplitude 0.208
+// 8.0450 -0.1731 1.4542
+// 8.0450 -0.1731 1.4542
+// 3.552713678800501e-15
+// 10.0408 6.4500
+```
+
+:::
+
+(a) $k = 2$ (24 h) dominates with amplitude 1.46; everything else is below 0.21 (noise). (b) The coefficients are identical: the columns $1$, $\cos(2\pi t/24)$, $\sin(2\pi t/24)$ are orthogonal on 24 equispaced points over two full periods, so the normal equations are diagonal and each least-squares coefficient is a single projection, which is what the DFT computes. (c) The interpolant reaches 10.04 at 6.45 h, slightly above the largest sample (9.98 at 6 h): it follows the noise. The cosinor (fact 5) gives amplitude 1.46 and peak 6.45 h from all 24 points together, a more reliable estimate than the single highest sample or the wiggly interpolant. The truth was 1.5 and 6 h.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C4"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+gene <- function(t) 8 + 1.5 * cos(2 * pi * (t - 6) / 24) + cos(2 * pi * t / 4.8)
+summary24 <- function(x, dt) {          # amplitude and peak time of the 24-h bin
+  n <- length(x); k <- round(n * dt / 24)
+  X <- fft(x)[k + 1]
+  c(amplitude = 2 * Mod(X) / n, peak = (-Arg(X) / (2 * pi) * 24) %% 24)
+}
+for (dt in c(2, 4)) {
+  x <- gene(seq(0, 48 - dt, by = dt))
+  amp <- 2 * Mod(fft(x)) / length(x)
+  kmax <- which.max(amp[2:(length(x) / 2)])
+  cat(sprintf("every %d h: strongest k = %d (period %.1f h); 24-h amplitude %.3f, peak %.2f h\n",
+              dt, kmax, 48 / kmax, summary24(x, dt)[1], summary24(x, dt)[2]))
+}
+# (c) an 8-h rhythm at the Nyquist frequency of the 4-h design
+for (p in c(0, 1, 2)) {
+  x <- cos(2 * pi * (seq(0, 44, by = 4) - p) / 8)
+  cat(sprintf("peak at %d h: amplitude seen %.3f\n", p, Mod(fft(x)[7]) / 12))
+}
+
+# Output:
+# every 2 h: strongest k = 2 (period 24.0 h); 24-h amplitude 1.500, peak 6.00 h
+# every 4 h: strongest k = 2 (period 24.0 h); 24-h amplitude 1.803, peak 3.75 h
+# peak at 0 h: amplitude seen 1.000
+# peak at 1 h: amplitude seen 0.707
+# peak at 2 h: amplitude seen 0.000
+```
+
+### Python
+
+```python
+import numpy as np
+
+def gene(t):
+    return 8 + 1.5 * np.cos(2 * np.pi * (t - 6) / 24) + np.cos(2 * np.pi * t / 4.8)
+
+def summary24(x, dt):                     # amplitude and peak time of the 24-h bin
+    n = len(x); k = round(n * dt / 24)
+    X = np.fft.fft(x)[k]
+    return 2 * abs(X) / n, (-np.angle(X) / (2 * np.pi) * 24) % 24
+
+for dt in [2, 4]:
+    x = gene(np.arange(0, 48, dt))
+    amp = 2 * np.abs(np.fft.fft(x)) / len(x)
+    kmax = np.argmax(amp[1:len(x) // 2]) + 1
+    a, peak = summary24(x, dt)
+    print(f"every {dt} h: strongest k = {kmax} (period {48 / kmax:.1f} h); "
+          f"24-h amplitude {a:.3f}, peak {peak:.2f} h")
+# (c) an 8-h rhythm at the Nyquist frequency of the 4-h design
+for p in [0, 1, 2]:
+    x = np.cos(2 * np.pi * (np.arange(0, 48, 4) - p) / 8)
+    print(f"peak at {p} h: amplitude seen {abs(np.fft.fft(x)[6]) / 12:.3f}")
+
+# Output:
+# every 2 h: strongest k = 2 (period 24.0 h); 24-h amplitude 1.500, peak 6.00 h
+# every 4 h: strongest k = 2 (period 24.0 h); 24-h amplitude 1.803, peak 3.75 h
+# peak at 0 h: amplitude seen 1.000
+# peak at 1 h: amplitude seen 0.707
+# peak at 2 h: amplitude seen 0.000
+```
+
+### Rust
+
+```rust
+// rust/examples/fourier_fft_c4.rs  —  cargo run --example fourier_fft_c4
+// C4: aliasing. The same gene sampled every 2 h and every 4 h; a rhythm at Nyquist.
+use rustfft::{num_complex::Complex, FftPlanner};
+use std::f64::consts::PI;
+
+fn fft(x: &[f64]) -> Vec<Complex<f64>> {
+    let mut buf: Vec<Complex<f64>> = x.iter().map(|&v| Complex::new(v, 0.0)).collect();
+    FftPlanner::<f64>::new().plan_fft_forward(x.len()).process(&mut buf);
+    buf
+}
+
+fn gene(t: f64) -> f64 {
+    8.0 + 1.5 * (2.0 * PI * (t - 6.0) / 24.0).cos() + (2.0 * PI * t / 4.8).cos()
+}
+
+fn main() {
+    for dt in [2usize, 4] {
+        let x: Vec<f64> = (0..48 / dt).map(|j| gene((j * dt) as f64)).collect();
+        let n = x.len();
+        let xf = fft(&x);
+        let amp: Vec<f64> = xf.iter().map(|z| 2.0 * z.norm() / n as f64).collect();
+        let kmax = (1..n / 2).max_by(|&a, &b| amp[a].partial_cmp(&amp[b]).unwrap()).unwrap();
+        let k24 = n * dt / 24;                          // the 24-h bin
+        let peak = (-xf[k24].arg() / (2.0 * PI) * 24.0).rem_euclid(24.0);
+        println!("every {} h: strongest k = {} (period {:.1} h); 24-h amplitude {:.3}, peak {:.2} h",
+                 dt, kmax, 48.0 / kmax as f64, amp[k24], peak);
+    }
+    // (c) an 8-h rhythm at the Nyquist frequency of the 4-h design
+    for p in [0.0, 1.0, 2.0] {
+        let x: Vec<f64> = (0..12).map(|j| (2.0 * PI * (4.0 * j as f64 - p) / 8.0).cos()).collect();
+        println!("peak at {} h: amplitude seen {:.3}", p, fft(&x)[6].norm() / 12.0);
+    }
+}
+
+// Output:
+// every 2 h: strongest k = 2 (period 24.0 h); 24-h amplitude 1.500, peak 6.00 h
+// every 4 h: strongest k = 2 (period 24.0 h); 24-h amplitude 1.803, peak 3.75 h
+// peak at 0 h: amplitude seen 1.000
+// peak at 1 h: amplitude seen 0.707
+// peak at 2 h: amplitude seen 0.000
+```
+
+:::
+
+(a) The 2-h design returns exactly amplitude 1.5 and peak 6 h: the 4.8-h rhythm lands on its own bin, $k = 10$. In the 4-h design the 4.8-h rhythm is aliased onto $k = 2$ (B4(b)) and adds to the circadian component: amplitude 1.80 instead of 1.5, peak 3.75 h instead of 6 h. Nothing in the 4-h data reveals the problem. (b) The amplitude seen is $|\cos(2\pi p/8)|$: 1, 0.707, 0, as in B4(d).
+:::
+
+::: {.callout-note collapse="true" title="Solution — C5"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t <- seq(0, 119.5, by = 0.5); n <- length(t)    # 5 days, every 30 min
+y <- cos(2 * pi * t / 25.5)                     # free-running, period 25.5 h
+w <- 0.5 - 0.5 * cos(2 * pi * (0:(n - 1)) / n)  # Hann window
+amp  <- 2 * Mod(fft(y)) / n
+ampw <- 2 * Mod(fft(w * y)) / sum(w)
+for (k in c(1:8, 10, 20))
+  cat(sprintf("k = %2d  no window %.3f  Hann %.3f\n", k, amp[k + 1], ampw[k + 1]))
+# (b) zero-padding to 10x the length: a finer grid of frequencies
+N <- 10 * n
+Yp <- fft(c(w * y, rep(0, N - n)))
+kp <- which.max(Mod(Yp[2:(N / 2)]))             # in cycles per 1200 h
+1200 / kp                                       # period estimate (h)
+# (c) add a weak 12-h rhythm (amplitude 0.05)
+y2 <- y + 0.05 * cos(2 * pi * t / 12)
+round(c(none = 2 * Mod(fft(y2))[11] / n, hann = 2 * Mod(fft(w * y2))[11] / sum(w)), 4)
+round(c(none = amp[11], hann = ampw[11]), 4)    # leakage alone at k = 10
+
+# Output:
+# k =  1  no window 0.066  Hann 0.005
+# k =  2  no window 0.086  Hann 0.015
+# k =  3  no window 0.139  Hann 0.078
+# k =  4  no window 0.350  Hann 0.717
+# k =  5  no window 0.874  Hann 0.945
+# k =  6  no window 0.207  Hann 0.291
+# k =  7  no window 0.121  Hann 0.026
+# k =  8  no window 0.087  Hann 0.008
+# k = 10  no window 0.057  Hann 0.002
+# k = 20  no window 0.023  Hann 0.000
+# [1] 25.53191
+#   none   hann
+# 0.0903 0.0490
+#   none   hann
+# 0.0571 0.0018
+```
+
+### Python
+
+```python
+import numpy as np
+
+t = np.arange(240) * 0.5; n = len(t)              # 5 days, every 30 min
+y = np.cos(2 * np.pi * t / 25.5)                  # free-running, period 25.5 h
+w = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n)   # Hann window
+amp = 2 * np.abs(np.fft.fft(y)) / n
+ampw = 2 * np.abs(np.fft.fft(w * y)) / w.sum()
+for k in [1, 2, 3, 4, 5, 6, 7, 8, 10, 20]:
+    print(f"k = {k:2d}  no window {amp[k]:.3f}  Hann {ampw[k]:.3f}")
+# (b) zero-padding to 10x the length: a finer grid of frequencies
+N = 10 * n
+Yp = np.fft.fft(w * y, N)                         # fft(x, N) pads with zeros
+kp = np.argmax(np.abs(Yp[1:N // 2])) + 1          # in cycles per 1200 h
+print(1200 / kp)                                  # period estimate (h)
+# (c) add a weak 12-h rhythm (amplitude 0.05)
+y2 = y + 0.05 * np.cos(2 * np.pi * t / 12)
+print(np.round([2 * abs(np.fft.fft(y2)[10]) / n, 2 * abs(np.fft.fft(w * y2)[10]) / w.sum()], 4))
+print(np.round([amp[10], ampw[10]], 4))           # leakage alone at k = 10
+
+# Output:
+# k =  1  no window 0.066  Hann 0.005
+# k =  2  no window 0.086  Hann 0.015
+# k =  3  no window 0.139  Hann 0.078
+# k =  4  no window 0.350  Hann 0.717
+# k =  5  no window 0.874  Hann 0.945
+# k =  6  no window 0.207  Hann 0.291
+# k =  7  no window 0.121  Hann 0.026
+# k =  8  no window 0.087  Hann 0.008
+# k = 10  no window 0.057  Hann 0.002
+# k = 20  no window 0.023  Hann 0.000
+# 25.53191489361702
+# [0.0903 0.049 ]
+# [0.0571 0.0018]
+```
+
+### Rust
+
+```rust
+// rust/examples/fourier_fft_c5.rs  —  cargo run --example fourier_fft_c5
+// C5: leakage of a 25.5-h rhythm, the Hann window, and zero-padding.
+use rustfft::{num_complex::Complex, FftPlanner};
+use std::f64::consts::PI;
+
+fn fft(x: &[f64]) -> Vec<Complex<f64>> {
+    let mut buf: Vec<Complex<f64>> = x.iter().map(|&v| Complex::new(v, 0.0)).collect();
+    FftPlanner::<f64>::new().plan_fft_forward(x.len()).process(&mut buf);
+    buf
+}
+
+fn main() {
+    let n = 240;                                       // 5 days, every 30 min
+    let t: Vec<f64> = (0..n).map(|j| 0.5 * j as f64).collect();
+    let y: Vec<f64> = t.iter().map(|&s| (2.0 * PI * s / 25.5).cos()).collect();
+    let w: Vec<f64> = (0..n).map(|j| 0.5 - 0.5 * (2.0 * PI * j as f64 / n as f64).cos()).collect();
+    let sw: f64 = w.iter().sum();
+    let wy: Vec<f64> = (0..n).map(|j| w[j] * y[j]).collect();
+    let amp: Vec<f64> = fft(&y).iter().map(|z| 2.0 * z.norm() / n as f64).collect();
+    let ampw: Vec<f64> = fft(&wy).iter().map(|z| 2.0 * z.norm() / sw).collect();
+    for k in [1, 2, 3, 4, 5, 6, 7, 8, 10, 20] {
+        println!("k = {:2}  no window {:.3}  Hann {:.3}", k, amp[k], ampw[k]);
+    }
+    // (b) zero-padding to 10x the length: a finer grid of frequencies
+    let big_n = 10 * n;
+    let mut padded = wy.clone();
+    padded.resize(big_n, 0.0);
+    let yp = fft(&padded);
+    let kp = (1..big_n / 2).max_by(|&a, &b| yp[a].norm().partial_cmp(&yp[b].norm()).unwrap()).unwrap();
+    println!("{}", 1200.0 / kp as f64);                // period estimate (h)
+    // (c) add a weak 12-h rhythm (amplitude 0.05)
+    let y2: Vec<f64> = (0..n).map(|j| y[j] + 0.05 * (2.0 * PI * t[j] / 12.0).cos()).collect();
+    let wy2: Vec<f64> = (0..n).map(|j| w[j] * y2[j]).collect();
+    println!("{:.4} {:.4}", 2.0 * fft(&y2)[10].norm() / n as f64, 2.0 * fft(&wy2)[10].norm() / sw);
+    println!("{:.4} {:.4}", amp[10], ampw[10]);        // leakage alone at k = 10
+}
+
+// Output:
+// k =  1  no window 0.066  Hann 0.005
+// k =  2  no window 0.086  Hann 0.015
+// k =  3  no window 0.139  Hann 0.078
+// k =  4  no window 0.350  Hann 0.717
+// k =  5  no window 0.874  Hann 0.945
+// k =  6  no window 0.207  Hann 0.291
+// k =  7  no window 0.121  Hann 0.026
+// k =  8  no window 0.087  Hann 0.008
+// k = 10  no window 0.057  Hann 0.002
+// k = 20  no window 0.023  Hann 0.000
+// 25.53191489361702
+// 0.0903 0.0490
+// 0.0571 0.0018
+```
+
+:::
+
+(a) Without a window the 25.5-h rhythm (4.7 cycles in 120 h) spreads over all $k$, still 0.023 at $k = 20$; the peak bin shows only 0.87 of the true amplitude 1. With the Hann window the leakage falls to 0.002 at $k = 10$ and below $10^{-3}$ further out; the peak is a little wider ($k = 4$ and $5$). (b) The padded spectrum peaks at 47 cycles per 1200 h: 25.53 h, close to the true 25.5 h (the grid step limits it). (c) Without the window, $k = 10$ shows 0.090, which is mostly leakage (0.057) mixed with the 12-h rhythm; you cannot read the weak rhythm's amplitude. With the window the leakage is 0.002 and $k = 10$ shows 0.049, close to the true 0.05.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C6"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+set.seed(3)
+t <- seq(0, 119.5, by = 0.5); n <- length(t)    # every 30 min for 5 days
+truth <- 20 + 60 * exp(-t / 40) + 30 * exp(-t / 80) * cos(2 * pi * (t - 4) / 24)
+y <- truth + rnorm(n, sd = 6)                   # PER2::LUC-like trace
+rms <- function(e) sqrt(mean(e^2))
+lowpass <- function(y, kmax) {
+  n <- length(y); Y <- fft(y)
+  k <- c(0:(n/2), -(n/2 - 1):-1)                # signed frequency of each entry
+  Y[abs(k) > kmax] <- 0
+  Re(fft(Y, inverse = TRUE)) / n
+}
+ends <- c(1:10, (n - 9):n)                      # first and last 5 h
+for (kmax in c(5, 10, 15, 20, 30, 60)) {
+  s <- lowpass(y, kmax)
+  d <- lowpass(y - fitted(lm(y ~ t)), kmax) + fitted(lm(y ~ t))
+  cat(sprintf("kmax %2d (periods >= %5.1f h): raw %.2f (ends %.2f)  detrended %.2f (ends %.2f)\n",
+              kmax, 120 / kmax, rms(s - truth), rms((s - truth)[ends]),
+              rms(d - truth), rms((d - truth)[ends])))
+}
+sprintf("noise: %.2f", rms(y - truth))
+
+# Output:
+# kmax  5 (periods >=  24.0 h): raw 7.81 (ends 23.25)  detrended 3.28 (ends 6.53)
+# kmax 10 (periods >=  12.0 h): raw 5.23 (ends 15.01)  detrended 2.33 (ends 3.20)
+# kmax 15 (periods >=   8.0 h): raw 4.55 (ends 12.99)  detrended 2.49 (ends 3.19)
+# kmax 20 (periods >=   6.0 h): raw 4.21 (ends 11.33)  detrended 2.63 (ends 3.14)
+# kmax 30 (periods >=   4.0 h): raw 4.03 (ends 9.45)  detrended 3.03 (ends 3.03)
+# kmax 60 (periods >=   2.0 h): raw 4.54 (ends 6.50)  detrended 4.21 (ends 3.04)
+# [1] "noise: 5.96"
+```
+
+### Python
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(3)
+t = np.arange(240) * 0.5; n = len(t)              # every 30 min for 5 days
+truth = 20 + 60 * np.exp(-t / 40) + 30 * np.exp(-t / 80) * np.cos(2 * np.pi * (t - 4) / 24)
+y = truth + rng.normal(0, 6, n)                   # PER2::LUC-like trace
+
+def rms(e):
+    return np.sqrt(np.mean(e**2))
+
+def lowpass(y, kmax):
+    n = len(y); Y = np.fft.fft(y)
+    k = np.fft.fftfreq(n, d=1 / n)                # signed frequency of each entry
+    Y[np.abs(k) > kmax] = 0
+    return np.fft.ifft(Y).real                    # ifft divides by n
+
+trend = np.polyval(np.polyfit(t, y, 1), t)        # straight-line fit
+ends = np.r_[0:10, n - 10:n]                      # first and last 5 h
+for kmax in [5, 10, 15, 20, 30, 60]:
+    s = lowpass(y, kmax)
+    d = lowpass(y - trend, kmax) + trend
+    print(f"kmax {kmax:2d} (periods >= {120 / kmax:5.1f} h): raw {rms(s - truth):.2f} "
+          f"(ends {rms((s - truth)[ends]):.2f})  detrended {rms(d - truth):.2f} "
+          f"(ends {rms((d - truth)[ends]):.2f})")
+print(f"noise: {rms(y - truth):.2f}")
+
+# Output:
+# kmax  5 (periods >=  24.0 h): raw 7.79 (ends 22.62)  detrended 3.22 (ends 5.80)
+# kmax 10 (periods >=  12.0 h): raw 5.11 (ends 15.57)  detrended 2.02 (ends 3.38)
+# kmax 15 (periods >=   8.0 h): raw 4.37 (ends 13.17)  detrended 2.13 (ends 2.93)
+# kmax 20 (periods >=   6.0 h): raw 4.08 (ends 11.92)  detrended 2.41 (ends 3.36)
+# kmax 30 (periods >=   4.0 h): raw 3.98 (ends 9.22)  detrended 2.97 (ends 3.08)
+# kmax 60 (periods >=   2.0 h): raw 4.61 (ends 7.21)  detrended 4.29 (ends 4.66)
+# noise: 6.09
+```
+
+### Rust
+
+```rust
+// rust/examples/fourier_fft_c6.rs  —  cargo run --example fourier_fft_c6
+// C6: smoothing a noisy bioluminescence trace by low-pass filtering, raw and detrended.
+// The random noise differs from R and Python, so the digits differ a little.
+use rand::{rngs::StdRng, SeedableRng};
+use rand_distr::{Distribution, Normal};
+use rustfft::{num_complex::Complex, FftPlanner};
+use std::f64::consts::PI;
+
+fn lowpass(y: &[f64], kmax: usize) -> Vec<f64> {
+    let n = y.len();
+    let mut planner = FftPlanner::<f64>::new();
+    let mut buf: Vec<Complex<f64>> = y.iter().map(|&v| Complex::new(v, 0.0)).collect();
+    planner.plan_fft_forward(n).process(&mut buf);
+    for k in 0..n {
+        let signed = if k <= n / 2 { k } else { n - k };   // |frequency| of entry k
+        if signed > kmax { buf[k] = Complex::new(0.0, 0.0); }
+    }
+    planner.plan_fft_inverse(n).process(&mut buf);         // unnormalised
+    buf.iter().map(|z| z.re / n as f64).collect()
+}
+
+fn rms(e: &[f64]) -> f64 {
+    (e.iter().map(|v| v * v).sum::<f64>() / e.len() as f64).sqrt()
+}
+
+fn main() {
+    let n = 240;                                          // every 30 min for 5 days
+    let t: Vec<f64> = (0..n).map(|j| 0.5 * j as f64).collect();
+    let truth: Vec<f64> = t.iter().map(|&s| 20.0 + 60.0 * (-s / 40.0).exp()
+        + 30.0 * (-s / 80.0).exp() * (2.0 * PI * (s - 4.0) / 24.0).cos()).collect();
+    let mut rng = StdRng::seed_from_u64(3);
+    let noise = Normal::new(0.0, 6.0).unwrap();
+    let y: Vec<f64> = truth.iter().map(|&v| v + noise.sample(&mut rng)).collect();
+    // straight-line fit by the textbook formulas for slope and intercept
+    let (tm, ym) = (t.iter().sum::<f64>() / n as f64, y.iter().sum::<f64>() / n as f64);
+    let slope = (0..n).map(|j| (t[j] - tm) * (y[j] - ym)).sum::<f64>()
+        / t.iter().map(|&s| (s - tm).powi(2)).sum::<f64>();
+    let trend: Vec<f64> = t.iter().map(|&s| ym + slope * (s - tm)).collect();
+    let ends: Vec<usize> = (0..10).chain(n - 10..n).collect();   // first and last 5 h
+    for kmax in [5, 10, 15, 20, 30, 60] {
+        let s = lowpass(&y, kmax);
+        let resid: Vec<f64> = (0..n).map(|j| y[j] - trend[j]).collect();
+        let d: Vec<f64> = lowpass(&resid, kmax).iter().zip(&trend).map(|(a, b)| a + b).collect();
+        let es: Vec<f64> = (0..n).map(|j| s[j] - truth[j]).collect();
+        let ed: Vec<f64> = (0..n).map(|j| d[j] - truth[j]).collect();
+        let pick = |e: &[f64]| ends.iter().map(|&j| e[j]).collect::<Vec<f64>>();
+        println!("kmax {:2} (periods >= {:5.1} h): raw {:.2} (ends {:.2})  detrended {:.2} (ends {:.2})",
+                 kmax, 120.0 / kmax as f64, rms(&es), rms(&pick(&es)), rms(&ed), rms(&pick(&ed)));
+    }
+    let e: Vec<f64> = (0..n).map(|j| y[j] - truth[j]).collect();
+    println!("noise: {:.2}", rms(&e));
+}
+
+// Output:
+// kmax  5 (periods >=  24.0 h): raw 7.80 (ends 22.89)  detrended 3.14 (ends 6.27)
+// kmax 10 (periods >=  12.0 h): raw 5.06 (ends 15.58)  detrended 1.84 (ends 2.54)
+// kmax 15 (periods >=   8.0 h): raw 4.43 (ends 13.70)  detrended 2.23 (ends 3.13)
+// kmax 20 (periods >=   6.0 h): raw 4.14 (ends 11.44)  detrended 2.49 (ends 2.47)
+// kmax 30 (periods >=   4.0 h): raw 3.94 (ends 9.40)  detrended 2.90 (ends 2.53)
+// kmax 60 (periods >=   2.0 h): raw 4.43 (ends 6.57)  detrended 4.08 (ends 3.03)
+// noise: 5.50
+```
+
+:::
+
+The three languages draw different random noise, so the digits differ; the pattern does not. (a) On the raw trace the error at the ends stays large (13 for $k_\text{max} = 15$, twice the noise): the start (about 95) and end (about 20) do not match, and the filter rings. (b) After removing a straight line the ends are as good as the middle, and the overall error halves. (c) Around $k_\text{max} = 10$–$15$ (periods down to 8–12 h): small $k_\text{max}$ removes part of the signal (the decay at the start is fast), large $k_\text{max}$ lets noise through (at $k_\text{max} = 60$ the error rises again). This is the same bias–noise trade-off as for smoothing splines.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C7"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# (a) B5 by computer
+y <- c(1, 2, 3, 4); h <- c(0.5, 0.5, 0, 0)
+Re(fft(fft(y) * fft(h), inverse = TRUE)) / 4    # circular convolution
+round(fft(h), 4)                                # gain of the 2-point average
+# (b) linear convolution by zero-padding to length 4 + 2 - 1 = 5
+Re(fft(fft(c(y, 0)) * fft(c(0.5, 0.5, 0, 0, 0)), inverse = TRUE)) / 5
+convolve(y, rev(c(0.5, 0.5)), type = "open")    # R's built-in, same thing
+# (c) the gain of a moving average of width m = 8 on n = 240 samples
+n <- 240; m <- 8
+h <- c(rep(1 / m, m), rep(0, n - m))
+H <- Mod(fft(h))
+for (k in c(0, 5, 10, 15, 20, 30, 40, 45, 50, 60))
+  cat(sprintf("k = %2d  period %5.1f h  gain %.3f\n", k, 120 / k, H[k + 1]))
+
+# Output:
+# [1] 2.5 1.5 2.5 3.5
+# [1] 1.0+0.0i 0.5-0.5i 0.0+0.0i 0.5+0.5i
+# [1] 0.5 1.5 2.5 3.5 2.0
+# [1] 0.5 1.5 2.5 3.5 2.0
+# k =  0  period   Inf h  gain 1.000
+# k =  5  period  24.0 h  gain 0.956
+# k = 10  period  12.0 h  gain 0.829
+# k = 15  period   8.0 h  gain 0.641
+# k = 20  period   6.0 h  gain 0.418
+# k = 30  period   4.0 h  gain 0.000
+# k = 40  period   3.0 h  gain 0.217
+# k = 45  period   2.7 h  gain 0.225
+# k = 50  period   2.4 h  gain 0.178
+# k = 60  period   2.0 h  gain 0.000
+```
+
+### Python
+
+```python
+import numpy as np
+
+# (a) B5 by computer
+y = np.array([1.0, 2, 3, 4]); h = np.array([0.5, 0.5, 0, 0])
+print(np.fft.ifft(np.fft.fft(y) * np.fft.fft(h)).real)   # circular convolution
+print(np.round(np.fft.fft(h), 4))                        # gain of the 2-point average
+# (b) linear convolution by zero-padding to length 4 + 2 - 1 = 5
+print(np.fft.ifft(np.fft.fft(y, 5) * np.fft.fft(h, 5)).real)
+print(np.convolve(y, [0.5, 0.5]))                        # numpy's built-in
+# (c) the gain of a moving average of width m = 8 on n = 240 samples
+n, m = 240, 8
+h = np.r_[np.full(m, 1 / m), np.zeros(n - m)]
+H = np.abs(np.fft.fft(h))
+for k in [0, 5, 10, 15, 20, 30, 40, 45, 50, 60]:
+    period = 120 / k if k > 0 else np.inf
+    print(f"k = {k:2d}  period {period:5.1f} h  gain {H[k]:.3f}")
+
+# Output:
+# [2.5 1.5 2.5 3.5]
+# [1. +0.j  0.5-0.5j 0. +0.j  0.5+0.5j]
+# [0.5 1.5 2.5 3.5 2. ]
+# [0.5 1.5 2.5 3.5 2. ]
+# k =  0  period   inf h  gain 1.000
+# k =  5  period  24.0 h  gain 0.956
+# k = 10  period  12.0 h  gain 0.829
+# k = 15  period   8.0 h  gain 0.641
+# k = 20  period   6.0 h  gain 0.418
+# k = 30  period   4.0 h  gain 0.000
+# k = 40  period   3.0 h  gain 0.217
+# k = 45  period   2.7 h  gain 0.225
+# k = 50  period   2.4 h  gain 0.178
+# k = 60  period   2.0 h  gain 0.000
+```
+
+### Rust
+
+```rust
+// rust/examples/fourier_fft_c7.rs  —  cargo run --example fourier_fft_c7
+// C7: the convolution theorem: circular vs linear (zero-padded) convolution, and the
+// gain of a moving-average filter.
+use rustfft::{num_complex::Complex, FftPlanner};
+
+fn fft(x: &[f64]) -> Vec<Complex<f64>> {
+    let mut buf: Vec<Complex<f64>> = x.iter().map(|&v| Complex::new(v, 0.0)).collect();
+    FftPlanner::<f64>::new().plan_fft_forward(x.len()).process(&mut buf);
+    buf
+}
+
+// circular convolution of two real vectors of the same length, via the FFT
+fn cconv(y: &[f64], h: &[f64]) -> Vec<f64> {
+    let n = y.len();
+    let mut prod: Vec<Complex<f64>> = fft(y).iter().zip(fft(h)).map(|(a, b)| a * b).collect();
+    FftPlanner::<f64>::new().plan_fft_inverse(n).process(&mut prod);
+    prod.iter().map(|z| z.re / n as f64).collect()
+}
+
+fn main() {
+    // (a) B5 by computer
+    let y = [1.0, 2.0, 3.0, 4.0];
+    let h = [0.5, 0.5, 0.0, 0.0];
+    println!("{:?}", cconv(&y, &h));                       // circular convolution
+    let s: Vec<String> = fft(&h).iter().map(|z| format!("{}{:+}i", z.re, z.im + 0.0)).collect();
+    println!("{}", s.join(" "));                           // gain of the 2-point average
+    // (b) linear convolution by zero-padding to length 4 + 2 - 1 = 5
+    println!("{:?}", cconv(&[1.0, 2.0, 3.0, 4.0, 0.0], &[0.5, 0.5, 0.0, 0.0, 0.0]));
+    // direct sum: (h * y)_j = sum_m h_m y_(j-m)
+    let hh = [0.5, 0.5];
+    let direct: Vec<f64> = (0..5).map(|j| (0..2).filter(|&m| j >= m && j - m < 4)
+        .map(|m| hh[m] * y[j - m]).sum()).collect();
+    println!("{:?}", direct);
+    // (c) the gain of a moving average of width m = 8 on n = 240 samples
+    let (n, m) = (240, 8);
+    let hb: Vec<f64> = (0..n).map(|j| if j < m { 1.0 / m as f64 } else { 0.0 }).collect();
+    let gain: Vec<f64> = fft(&hb).iter().map(|z| z.norm()).collect();
+    for k in [0, 5, 10, 15, 20, 30, 40, 45, 50, 60] {
+        println!("k = {:2}  period {:5.1} h  gain {:.3}", k, 120.0 / k as f64, gain[k]);
+    }
+}
+
+// Output:
+// [2.5, 1.5, 2.5, 3.5]
+// 1+0i 0.5-0.5i 0+0i 0.5+0.5i
+// [0.5000000000000002, 1.5000000000000004, 2.5, 3.5, 1.9999999999999996]
+// [0.5, 1.5, 2.5, 3.5, 2.0]
+// k =  0  period   inf h  gain 1.000
+// k =  5  period  24.0 h  gain 0.956
+// k = 10  period  12.0 h  gain 0.829
+// k = 15  period   8.0 h  gain 0.641
+// k = 20  period   6.0 h  gain 0.418
+// k = 30  period   4.0 h  gain 0.000
+// k = 40  period   3.0 h  gain 0.217
+// k = 45  period   2.7 h  gain 0.225
+// k = 50  period   2.4 h  gain 0.178
+// k = 60  period   2.0 h  gain 0.000
+```
+
+:::
+
+(a) and (b) agree with B5. (c) The moving average of width 8 (4 h) removes exactly the periods 4 h and 2 h ($k = 30, 60$: whole multiples of $n/m$), but **between** them it lets 20 % of the amplitude through (sidelobes at $k = 40$–$50$), and it already damps the 8-h band ($k = 15$) by a third. A box in time is a sinc in frequency: not a clean low-pass. Smoother kernels (Gaussian, Hann) have smaller sidelobes.
+:::
+
+## Where this leads
+
+- ***Numerical differentiation*** **(Part 7):** differentiating a sampled signal multiplies $X_k$ by $2\pi i k/T$, so it amplifies high-frequency noise; finite differences have the same problem, and smoothing first (C6) is a common remedy.
+- ***Numerical integration*** **(Part 7):** the trapezoid rule is extremely accurate for smooth periodic functions over a whole period, for the same reason trigonometric interpolation works well here.
+- ***The diffusion (heat) equation by finite differences*** **(Part 10):** each Fourier mode of a concentration profile decays at its own rate, and the stability limit of the explicit scheme is decided by the fastest (Nyquist) mode.
+- Deconvolution (the blur slide) is the ill-conditioned problem of ***The SVD, rank deficiency and regularisation*** in another basis: dividing by small $|H_k|$ is dividing by small singular values.

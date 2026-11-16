@@ -18,7 +18,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 13 | power-iteration | done | running | |
 | 14 | eigen-algorithms | running | | |
 | 15 | polynomial-interpolation | running | | |
-| 16 | splines | running | | |
+| 16 | splines | done | running | |
 | 17 | fourier-fft | running | | |
 | 18 | finite-differences | done | running | |
 | 19 | quadrature | running | | |
@@ -41,3 +41,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - structured-sparse: Thomas signature thomas(a,b,c,d) and morphogen-row example to be reused in Part 10. Rust sprs lacks sparse Cholesky/solve — dense/handwritten substitutes, stated.
 - power-iteration: Rayleigh quotient iteration included (slide + C7) — check overlap with eigen-algorithms in pass 2. Cell-state chain 'after Gupta et al. 2011' illustrative. Timing claim 17 s vs 0.3 s single run.
 - finite-differences: optim default BFGS gradient = central diff with ndeps=1e-3 — verify. Install: numDeriv.
+- splines: tradeSeq / Monocle use spline trends — from memory, verify.

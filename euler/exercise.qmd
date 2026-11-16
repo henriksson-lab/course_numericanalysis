@@ -1,0 +1,1035 @@
+---
+title: "Exercise: initial value problems and Euler's method"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- write an ODE model from **rate in − rate out**, and state it as an **initial value problem**,
+- read a **direction field** and find the equilibria of a one-variable ODE,
+- carry out **Euler steps** by hand, and write a short Euler function for one equation and for a **system**,
+- tell **local** from **global** error, and measure the **order** of a method on a log–log plot,
+- estimate the error **without** an exact solution by halving the step,
+- predict when Euler is **unstable** ($|1 - kh| > 1$) and recognise the symptoms: sign flips, spurious cycles, growing oscillations,
+- rewrite a **higher-order** ODE as a first-order system.
+
+The by-hand part uses pen, paper and a pocket calculator. The code part checks your hand answers and then works at sizes where only code works. All solvers here are hand-written; the library solvers come in the next unit.
+
+## Background
+
+An **initial value problem** (IVP) is an ODE together with a start value:
+$$y'(t) = f(t, y), \qquad y(t_0) = y_0.$$
+$y$ can be a number or a vector (a **system**).
+
+1. **Euler's method.** With step $h$ and $t_n = t_0 + nh$:
+   $$y_{n+1} = y_n + h\,f(t_n, y_n).$$
+   It comes from the Taylor step $y(t + h) = y(t) + h\,y'(t) + \tfrac{h^2}{2}y''(\xi)$ with the last term dropped. For a system, the same formula with vectors.
+2. **Local error** (one step, starting on the exact curve): $\approx \tfrac{h^2}{2}\,y''$, so $O(h^2)$. **Global error** at a fixed time $T$ (after $T/h$ steps): $O(h)$. Euler is **order 1**: halving $h$ halves the error, and the slope of $\log(\text{error})$ against $\log h$ is 1.
+3. **Step halving.** For an order-1 method, $y_h - y_{h/2}$ estimates the error of $y_{h/2}$. No exact solution needed.
+4. **Stability.** On $y' = -ky$ ($k > 0$) Euler gives $y_{n+1} = (1 - kh)\,y_n$. It decays only if $|1 - kh| < 1$, that is $h < 2/k$; for $1/k < h < 2/k$ it decays with sign flips. Near an equilibrium of a nonlinear ODE, the same rule holds with $k = -f'(y^*)$.
+5. **Higher order.** Write $x^{(m)} = g(t, x, x', \dots, x^{(m-1)})$ as a system with $y_1 = x$, $y_2 = x'$, …, $y_m = x^{(m-1)}$. It needs $m$ start values.
+
+The running examples:
+
+- **Logistic growth** $N' = rN(1 - N/K)$ with $K = 1.2$ (OD), $N_0 = 0.05$, $r = 0.8$ per hour. Exact solution $N(t) = K / \bigl(1 + (K/N_0 - 1)e^{-rt}\bigr)$.
+- **Drug clearance** $C' = -kC$, $k = 0.8$ per hour, $C_0 = 10$ mg/L. Exact $C(t) = C_0 e^{-kt}$.
+- **SIR epidemic** $S' = -\beta SI/N$, $I' = \beta SI/N - \gamma I$, $R' = \gamma I$ with $N = 10\,000$, $\beta = 0.3$ and $\gamma = 0.1$ per day, $(S, I, R)(0) = (9990, 10, 0)$. Exact peak $I_{\max} = S_0 + I_0 - \tfrac{N}{R_0}\bigl(1 + \ln\tfrac{R_0 S_0}{N}\bigr) = 3007.96$, with $R_0 = \beta/\gamma = 3$.
+- **24-hour oscillator** $x'' = -\omega^2 x$, $\omega = 2\pi/24$ per hour, $x(0) = 1$, $x'(0) = 0$. Exact $x(t) = \cos\omega t$, amplitude $\sqrt{x^2 + (x'/\omega)^2} = 1$ for all $t$.
+
+Euler by hand-written loop in each language (no library solver yet: R's [`deSolve::ode`](https://www.rdocumentation.org/packages/deSolve/topics/ode), Python's [`scipy.integrate.solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) and Rust's [`ode_solvers`](https://docs.rs/ode_solvers/latest/ode_solvers/) crate come in *Runge–Kutta and adaptive step size*):
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+K <- 1.2; N0 <- 0.05; r <- 0.8                 # OD units, per hour
+f <- function(t, N) r * N * (1 - N / K)        # logistic growth: f(t, y)
+exact <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
+
+euler <- function(f, t0, y0, h, n) {
+  t <- t0 + (0:n) * h
+  y <- numeric(n + 1); y[1] <- y0              # y[i] holds y_(i-1)
+  for (i in 1:n) y[i + 1] <- y[i] + h * f(t[i], y[i])
+  data.frame(t = t, y = y)
+}
+out <- euler(f, 0, N0, h = 1, n = 5)
+for (i in 1:6) cat(sprintf("%3.0f  %.5f  %.5f\n", out$t[i], out$y[i], exact(out$t[i])))
+
+# Output:
+#   0  0.05000  0.05000
+#   1  0.08833  0.10587
+#   2  0.15380  0.21263
+#   3  0.26107  0.38879
+#   4  0.42448  0.61935
+#   5  0.64395  0.84432
+```
+
+### Python
+
+```python
+import numpy as np
+
+K, N0, r = 1.2, 0.05, 0.8                      # OD units, per hour
+
+def f(t, N):                                   # logistic growth: f(t, y)
+    return r * N * (1 - N / K)
+
+def exact(t):
+    return K / (1 + (K / N0 - 1) * np.exp(-r * t))
+
+def euler(f, t0, y0, h, n):
+    t = t0 + np.arange(n + 1) * h
+    y = np.zeros(n + 1)
+    y[0] = y0                                  # y[i] holds y_i
+    for i in range(n):
+        y[i + 1] = y[i] + h * f(t[i], y[i])
+    return t, y
+
+t, y = euler(f, 0, N0, h=1, n=5)
+for ti, yi in zip(t, y):
+    print(f"{ti:3.0f}  {yi:.5f}  {exact(ti):.5f}")
+
+# Output:
+#   0  0.05000  0.05000
+#   1  0.08833  0.10587
+#   2  0.15380  0.21263
+#   3  0.26107  0.38879
+#   4  0.42448  0.61935
+#   5  0.64395  0.84432
+```
+
+### Rust
+
+```rust
+// rust/examples/euler_background.rs  —  cargo run --example euler_background
+// Background: a hand-written Euler method on the logistic growth curve.
+const K: f64 = 1.2; // OD units
+const N0: f64 = 0.05;
+const R: f64 = 0.8; // per hour
+
+fn f(_t: f64, n: f64) -> f64 {
+    R * n * (1.0 - n / K) // logistic growth: f(t, y); `_t` = argument not used
+}
+
+fn exact(t: f64) -> f64 {
+    K / (1.0 + (K / N0 - 1.0) * (-R * t).exp())
+}
+
+// returns (t, y) as two vectors; `impl Fn(f64, f64) -> f64` accepts any f(t, y)
+fn euler(f: impl Fn(f64, f64) -> f64, t0: f64, y0: f64, h: f64, n: usize) -> (Vec<f64>, Vec<f64>) {
+    let t: Vec<f64> = (0..=n).map(|i| t0 + i as f64 * h).collect();
+    let mut y = vec![0.0; n + 1];
+    y[0] = y0; // y[i] holds y_i
+    for i in 0..n {
+        y[i + 1] = y[i] + h * f(t[i], y[i]);
+    }
+    (t, y)
+}
+
+fn main() {
+    let (t, y) = euler(f, 0.0, N0, 1.0, 5);
+    for i in 0..t.len() {
+        println!("{:3.0}  {:.5}  {:.5}", t[i], y[i], exact(t[i]));
+    }
+}
+
+// Output:
+//   0  0.05000  0.05000
+//   1  0.08833  0.10587
+//   2  0.15380  0.21263
+//   3  0.26107  0.38879
+//   4  0.42448  0.61935
+//   5  0.64395  0.84432
+```
+
+:::
+
+Rust prints numbers in its own format (e.g. `-2.004e-1` rather than `-2.004e-01`); the values are the same.
+
+## By hand
+
+**B1. Rate in − rate out.** Write each model as an ODE with a start value, give the units of each term, and find the steady state(s) (where the right-hand side is 0).
+(a) A drug is infused at $u = 2$ mg/h into a blood volume of $V = 5$ L and cleared at rate $k = 0.8$ per hour. Start: $C(0) = 0$.
+(b) An mRNA is transcribed at $\alpha = 10$ molecules per minute; each molecule is degraded with rate $\delta = 0.2$ per minute. Start: $m(0) = 0$.
+(c) An oral dose of 100 mg sits in the gut ($A_g$) and is absorbed into the blood at rate $k_a = 1.5$ per hour; in the blood ($A_b$, in mg) it is cleared at rate $k = 0.8$ per hour. Write the system for $(A_g, A_b)$.
+(d) Draw the SIR flow diagram $S \to I \to R$ with the flow rates $\beta SI/N$ and $\gamma I$, and derive the three equations from it. Show that $S + I + R$ cannot change.
+
+**B2. A direction field by hand.** For $N' = 0.8\,N\,(1 - N/1.2)$:
+(a) Compute the slope at $N = 0, 0.3, 0.6, 0.9, 1.2, 1.5$. Why does the slope not depend on $t$?
+(b) Sketch the direction field for $0 \le t \le 6$, $0 \le N \le 1.6$, and sketch the solutions starting at $N_0 = 0.05$ and $N_0 = 1.5$.
+(c) Where is the solution from $0.05$ steepest? Which values of $N$ are equilibria?
+(d) Why can two solution curves never cross?
+
+**B3. Euler steps.** For the same logistic ODE with $N_0 = 0.05$:
+(a) Take two Euler steps with $h = 1$ h. Check against the lecture.
+(b) Take two Euler steps with $h = 0.5$ h, to reach $t = 1$.
+(c) The exact value is $N(1) = 0.10587$. Compare the errors at $t = 1$ of (a, first step) and (b). By what factor did the error shrink when $h$ was halved? What factor would you expect for very small $h$?
+
+**B4. Clearance and stability.** For $C' = -kC$, $k = 0.8$ per hour, $C_0 = 10$ mg/L:
+(a) Show that Euler gives $C_n = (1 - kh)^n C_0$.
+(b) Compute $1 - kh$ and $C_2$ (two steps) for $h = 0.5$, $1$, $2$ and $3$ h. Which are positive, which decay?
+(c) What is the largest $h$ for which Euler decays? The largest for which it also never changes sign? What happens at $h = 1.25$ h exactly?
+(d) A second drug in the same patient is cleared ten times faster, $k = 8$ per hour. If you simulate both drugs together with one step size, what is the largest stable $h$? (After a few hours the fast drug is gone, but the step-size limit stays: this is *stiffness*.)
+
+**B5. Local and global error on $y' = y$.** With $y(0) = 1$ the exact solution is $e^t$, and one Euler step gives $1 + h$.
+(a) Compute the local error $e^h - (1 + h)$ for $h = 0.1$ and $h = 0.01$. By what factor does it shrink? Compare with $h^2/2$.
+(b) Euler to $t = 1$ takes $1/h$ steps, each multiplying by $1 + h$: $y_{1/h} = (1 + h)^{1/h}$. Compute the global error $e - (1.1)^{10}$ and $e - (1.01)^{100}$ (use a calculator for the powers). By what factor does it shrink?
+(c) The global error is about $\tfrac{e}{2}h$. How many steps does Euler need for an error of $10^{-6}$ at $t = 1$?
+
+**B6. Reading the order.** Each row lists the global error at a fixed time for $h$, $h/2$, $h/4$:
+(a) $0.080$, $0.040$, $0.020$
+(b) $0.080$, $0.020$, $0.005$
+(c) $3.2\times10^{-3}$, $2.0\times10^{-4}$, $1.25\times10^{-5}$
+(d) A student's "order 2" method gives $0.080$, $0.041$, $0.0205$. What do you conclude?
+Give the order of each method.
+
+**B7. One SIR step.** With $\beta = 0.3$, $\gamma = 0.1$ per day, $N = 10\,000$ and $(S, I, R)(0) = (9990, 10, 0)$:
+(a) Take one Euler step with $h = 1$ day. Check that $S + I + R$ is still $10\,000$.
+(b) Early on, $S \approx N$, so $I' \approx (\beta - \gamma) I$. What is the doubling time of the epidemic?
+(c) At the peak of the epidemic $I' = 0$. Show that this happens when $S = N/R_0$. How many people are still susceptible at the peak?
+(d) Late in the epidemic, $S$ is small and $I' \approx -\gamma I$. What is the largest stable Euler step for this phase?
+
+**B8. Higher order to first order.**
+(a) Write $x'' = -\omega^2 x$ as a system for $(y_1, y_2) = (x, x')$. Take one Euler step with $h = 1$ h from $(1, 0)$, with $\omega = 2\pi/24 = 0.2618$ per hour ($\omega^2 = 0.06854$).
+(b) Compute the amplitude $\sqrt{y_1^2 + (y_2/\omega)^2}$ before and after the step. Show that for any $(y_1, y_2)$ one Euler step multiplies the squared amplitude by exactly $1 + \omega^2 h^2$.
+(c) The hair bundle of an inner-ear hair cell moves like a damped spring, $m x'' + c x' + \kappa x = 0$. Write it as a first-order system.
+(d) Write $x''' = x\,x'' - (x')^2$ as a first-order system. How many start values does it need?
+
+## In code
+
+**C1. Euler on the logistic curve.**
+(a) Use the Background `euler` to check your answers to B3 (a) and (b).
+(b) For $h = 1$, $0.5$, $0.1$ and $0.01$ h, run to $t = 10$ h. Print $N_n$ at $t = 5$, its error, and the largest error over the whole run. Plot the runs with $h = 1$ and $h = 0.1$ over the exact curve.
+(c) Compute the local error of one step from $t = 0$ for $h = 1, 0.5, 0.25, 0.1, 0.01$, and compare it with $\tfrac{h^2}{2}y''(0)$, where $y''(0) = r\,f(0, N_0)\,(1 - 2N_0/K)$ (differentiate $f$ along the solution).
+
+**C2. Measure the order, then do without the exact answer.**
+(a) For $h = 1, 1/2, \dots, 1/1024$ compute the error at $t = 5$. Print the errors and the ratios of successive errors, fit the slope of $\log_{10}|\text{error}|$ against $\log_{10} h$, and plot $|\text{error}|$ against $h$ on log–log axes.
+(b) Pretend you do not know the exact solution. For each pair $(h, h/2)$ compute $y_h - y_{h/2}$ and compare it with the true error of $y_{h/2}$.
+(c) From the smallest $h$, estimate $C$ in error $\approx Ch$. How many steps are needed for an error of $10^{-6}$ at $t = 5$? Run it and check.
+
+**C3. Instability.**
+(a) Drug clearance: take 10 Euler steps of size $h = 0.5$, $2$, $2.4$, $2.6$ and $3$ h. Print $1 - kh$, $C_{10}$ and the exact $C(10h)$. Which runs are stable? Which are accurate?
+(b) Logistic growth: take 100 Euler steps of size $h = 2$, $2.4$, $2.6$, $3$ and $1.5$ h and print the last four values. Which step sizes give the wrong long-term behaviour? Linearise $f$ at $N = K$ ($f'(K) = -r$) to explain the threshold.
+(c) What check would have told you, without knowing the true solution, that the $h = 3$ run is wrong?
+
+**C4. A system: the SIR epidemic.**
+(a) Write `euler_sys(f, t0, y0, h, n)` for a vector $y$ that stores one row per time point. Run SIR with $h = 1$ day for 160 days. Print the peak of $I$ and its day, and the largest deviation of $S + I + R$ from $N$. Plot $S$, $I$, $R$.
+(b) For $h = 4, 2, 1, 0.5, 0.25, 0.1, 0.01$ days, print the peak, its error against the exact peak, and the day of the peak. What is the order? Is $S + I + R$ a useful accuracy check?
+
+**C5. A second-order equation: the 24-hour oscillator.**
+(a) Write $x'' = -\omega^2 x$ as a system (B8) and run Euler for 10 days with $h = 1$, $0.1$ and $0.01$ h. Print the amplitude $\sqrt{x^2 + (x'/\omega)^2}$ at the end, and compare with the prediction $(1 + \omega^2h^2)^{n/2}$ from B8(b).
+(b) Plot the run with $h = 1$ h for 2 days in the $(x, x'/\omega)$ plane, together with the exact circle.
+(c) Using $\ln(1 + \omega^2h^2) \approx \omega^2 h^2$, find the largest $h$ for which the amplitude is less than 1 % too large after 10 days. How many steps is that? Check by running it.
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — models and equilibria (B1, B2)"}
+Each term is an amount per unit time. Something that leaves "at rate $k$" leaves as $k$ times the amount present. For a steady state set the right-hand side to 0 and solve. In a system, what leaves one compartment enters the next with the same expression.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — Euler by hand (B3, B7, B8)"}
+Write a table with columns $t_n$, $y_n$, $f(t_n, y_n)$, $y_{n+1} = y_n + h f$. Keep 5 significant digits. For a system, compute **all** slopes from the old values first, then update all components.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — stability (B4, C3)"}
+A geometric sequence $a^n$ shrinks if $|a| < 1$, grows if $|a| > 1$, and changes sign every step if $a < 0$. For a nonlinear model, look at a small deviation $N - K$ from the equilibrium: $f(N) \approx f'(K)\,(N - K)$, so the deviation behaves like $y' = -ky$ with $k = -f'(K)$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — order from errors (B5, B6, C2)"}
+If error $\approx Ch^p$, halving $h$ divides the error by $2^p$, and dividing $h$ by 10 divides it by $10^p$. The slope of $\log(\text{error})$ against $\log h$ is $p$: in R fit it with [`lm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html), in Python with [`np.polyfit`](https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html) (degree 1). Use [`tail(x, 1)`](https://stat.ethz.ch/R-manual/R-devel/library/utils/html/head.html) (Python: `y[-1]`) for the last value of a run.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — systems in code (C4, C5)"}
+Store the solution as a matrix with one row per time point and one column per variable. In R, `f` returns a vector made with `c()`; in Python, a numpy array, so that `Y[i] + h * f(...)` works element-wise. Find the peak with [`which.max`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/which.min.html) (Python: [`np.argmax`](https://numpy.org/doc/stable/reference/generated/numpy.argmax.html)); remember that R's row 1 is time $t_0$. Plot several columns at once with [`matplot`](https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/matplot.html) (Python: `plt.plot(t, Y)`).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — the amplitude (B8, C5)"}
+After one step, $y_1^{\text{new}} = y_1 + h y_2$ and $y_2^{\text{new}} = y_2 - h\omega^2 y_1$. Expand $(y_1^{\text{new}})^2 + (y_2^{\text{new}}/\omega)^2$; the cross terms cancel. After $n$ steps the amplitude is multiplied by $(1 + \omega^2 h^2)^{n/2}$; take logs to solve for $h$.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution — by hand"}
+
+**B1.**
+(a) $C' = u/V - kC = 0.4 - 0.8\,C$ (mg/L per hour), $C(0) = 0$. Steady state $C^* = 0.4/0.8 = 0.5$ mg/L.
+(b) $m' = \alpha - \delta m = 10 - 0.2\,m$ (molecules per minute), $m(0) = 0$. Steady state $m^* = \alpha/\delta = 50$ molecules.
+(c) $A_g' = -1.5\,A_g$, $A_b' = 1.5\,A_g - 0.8\,A_b$ (mg per hour), $(A_g, A_b)(0) = (100, 0)$. The only steady state is $(0, 0)$: everything is eventually cleared. The absorption term leaves the gut and enters the blood, so it appears with both signs.
+(d) $S' = -\beta SI/N$ (out of $S$), $I' = \beta SI/N - \gamma I$ (in from $S$, out to $R$), $R' = \gamma I$ (in from $I$). Adding: $(S + I + R)' = 0$. Every flow leaves one box and enters another, so the total stays $N$.
+
+**B2.**
+(a) Slopes $0$, $0.18$, $0.24$, $0.18$, $0$, $-0.30$ (for example $0.8 \cdot 0.6 \cdot (1 - 0.5) = 0.24$). The right-hand side contains no $t$: the growth rate depends only on the current density (an **autonomous** ODE), so the field looks the same in every column.
+(b) See the direction field slide: the curve from 0.05 is an S-shape rising to 1.2; the curve from 1.5 decreases towards 1.2.
+(c) Steepest where the slope is largest, at $N = K/2 = 0.6$ (slope 0.24 per hour), around $t = 4$ h. Equilibria: $N = 0$ and $N = K = 1.2$.
+(d) At a crossing point both curves would have the same $(t, N)$ and so the same slope, and from there on the ODE determines one single future. (For the ODEs in this course the solution through each point is unique.)
+
+**B3.**
+(a) $N_1 = 0.05 + 0.8 \cdot 0.05 \cdot 0.95833 = 0.08833$, $N_2 = 0.08833 + 0.8 \cdot 0.08833 \cdot 0.92639 = 0.15380$.
+(b) $f(0.05) = 0.038333$, so $N(0.5) \approx 0.05 + 0.5 \cdot 0.038333 = 0.069167$. $f(0.069167) = 0.8 \cdot 0.069167 \cdot 0.94236 = 0.052144$, so $N(1) \approx 0.069167 + 0.5 \cdot 0.052144 = 0.095239$.
+(c) Errors at $t = 1$: $0.08833 - 0.10587 = -0.01754$ with $h = 1$ and $0.09524 - 0.10587 = -0.01063$ with $h = 0.5$. A factor 1.65. For small $h$ expect a factor 2 (order 1); with $h = 1$ the step is too big for the asymptotic rule. (Note that with $h = 1$, after one step the global error equals the local error.)
+
+**B4.**
+(a) $C_{n+1} = C_n + h(-kC_n) = (1 - kh)C_n$; apply $n$ times.
+(b) $h = 0.5$: factor $0.6$, $C_2 = 3.6$ (exact $C(1) = 4.49$). $h = 1$: factor $0.2$, $C_2 = 0.4$ (exact $C(2) = 2.02$). $h = 2$: factor $-0.6$, $C_1 = -6$, $C_2 = 3.6$ (exact $C(4) = 0.41$). $h = 3$: factor $-1.4$, $C_1 = -14$, $C_2 = 19.6$ (exact $C(6) = 0.08$). The first three decay ($|1 - kh| < 1$); only $h = 0.5$ and $h = 1$ stay positive.
+(c) Decays for $h < 2/k = 2.5$ h; never changes sign for $h \le 1/k = 1.25$ h. At $h = 1.25$ h the factor is exactly 0: Euler says the drug is completely gone after one step.
+(d) $h < 2/8 = 0.25$ h. One fast rate sets the step for the whole simulation, even long after the fast drug has disappeared. *Stiffness and implicit methods* deals with this.
+
+**B5.**
+(a) $e^{0.1} - 1.1 = 0.0051709$, $e^{0.01} - 1.01 = 0.000050167$: a factor 103, about $100 = 10^2$. $h^2/2 = 0.005$ and $0.00005$: order 2 locally.
+(b) $1.1^{10} = 2.593742$, error $2.718282 - 2.593742 = 0.124539$. $1.01^{100} = 2.704814$, error $0.013468$. A factor 9.25, about $10 = 10^1$: order 1 globally. ($e\,h/2 = 0.136$ and $0.0136$.)
+(c) $\tfrac{e}{2}h = 10^{-6}$ gives $h = 7.4\times10^{-7}$: about 1.36 million steps for six digits of $e$.
+
+**B6.**
+(a) Ratio 2 per halving: order 1 (Euler). (b) Ratio 4: order 2. (c) Ratio 16: order 4 (classical Runge–Kutta, next unit). (d) Ratio about 2, not 4: the method behaves as order 1. Most likely a bug, for example a slope evaluated at the wrong point or time, which leaves an $O(h)$ error in each step.
+
+**B7.**
+(a) $\beta SI/N = 0.3 \cdot 9990 \cdot 10 / 10\,000 = 2.997$ and $\gamma I = 1$. $S_1 = 9990 - 2.997 = 9987.003$, $I_1 = 10 + 2.997 - 1 = 11.997$, $R_1 = 0 + 1 = 1$. Sum: $10\,000$.
+(b) $I' \approx 0.2\,I$: exponential growth with doubling time $\ln 2 / 0.2 = 3.47$ days.
+(c) $I' = I(\beta S/N - \gamma) = 0$ with $I > 0$ gives $S = \gamma N/\beta = N/R_0 = 3333$ people. (After the peak, each infected person infects fewer than one other.)
+(d) $h < 2/\gamma = 20$ days. Stability is not the problem for SIR at reasonable steps; accuracy is.
+
+**B8.**
+(a) $y_1' = y_2$, $y_2' = -\omega^2 y_1$. One step: $y_1 = 1 + 1 \cdot 0 = 1$, $y_2 = 0 - 1 \cdot 0.06854 \cdot 1 = -0.06854$.
+(b) Before: amplitude 1. After: $\sqrt{1 + (0.06854/0.2618)^2} = \sqrt{1.06854} = 1.0337$. In general, $(y_1 + hy_2)^2 + (y_2 - h\omega^2y_1)^2/\omega^2 = y_1^2 + 2hy_1y_2 + h^2y_2^2 + y_2^2/\omega^2 - 2hy_1y_2 + h^2\omega^2y_1^2 = (1 + \omega^2h^2)\,(y_1^2 + y_2^2/\omega^2)$. The amplitude grows by $\sqrt{1 + \omega^2h^2} > 1$ in **every** step, whatever $h$.
+(c) $y_1 = x$, $y_2 = x'$: $y_1' = y_2$, $y_2' = -(c\,y_2 + \kappa\,y_1)/m$.
+(d) $y_1 = x$, $y_2 = x'$, $y_3 = x''$: $y_1' = y_2$, $y_2' = y_3$, $y_3' = y_1 y_3 - y_2^2$. Three start values: $x(0)$, $x'(0)$, $x''(0)$.
+:::
+
+::: {.callout-note collapse="true" title="Solution — in code"}
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses f, exact and euler() from the Background
+# (a) check B3
+round(euler(f, 0, N0, h = 1, n = 3)$y, 5)
+round(euler(f, 0, N0, h = 0.5, n = 2)$y, 5)
+
+# (b) error at t = 5 and largest error on [0, 10]
+for (h in c(1, 0.5, 0.1, 0.01)) {
+  out <- euler(f, 0, N0, h, round(10 / h))
+  y5  <- out$y[abs(out$t - 5) < 1e-9]          # the value at t = 5
+  cat(sprintf("%5.2f  %.6f  %10.3e  %10.3e\n", h, y5, y5 - exact(5),
+              max(abs(out$y - exact(out$t)))))
+}
+out <- euler(f, 0, N0, 1, 10)
+curve(exact, 0, 10, lwd = 2, xlab = "t (h)", ylab = "OD")
+lines(out$t, out$y, type = "o", col = "red")
+lines(euler(f, 0, N0, 0.1, 100), col = "blue")
+
+# (c) local error of one step from t = 0
+d2 <- r * f(0, N0) * (1 - 2 * N0 / K)          # y''(0)
+for (h in c(1, 0.5, 0.25, 0.1, 0.01))
+  cat(sprintf("%5.2f  %10.3e  %10.3e\n", h, N0 + h * f(0, N0) - exact(h), h^2 / 2 * d2))
+
+# Output:
+# [1] 0.05000 0.08833 0.15380 0.26107
+# [1] 0.05000 0.06917 0.09524
+#  1.00  0.643947  -2.004e-01   2.004e-01
+#  0.50  0.750330  -9.399e-02   1.063e-01
+#  0.10  0.827288  -1.703e-02   2.194e-02
+#  0.01  0.842662  -1.660e-03   2.201e-03
+#  1.00  -1.754e-02   1.406e-02
+#  0.50  -3.927e-03   3.514e-03
+#  0.25  -9.286e-04   8.785e-04
+#  0.10  -1.437e-04   1.406e-04
+#  0.01  -1.409e-06   1.406e-06
+```
+
+### Python
+
+```python
+# uses np, f, exact and euler() from the Background
+import matplotlib.pyplot as plt
+# (a) check B3
+print(np.round(euler(f, 0, N0, h=1, n=3)[1], 5))
+print(np.round(euler(f, 0, N0, h=0.5, n=2)[1], 5))
+
+# (b) error at t = 5 and largest error on [0, 10]
+for h in [1, 0.5, 0.1, 0.01]:
+    t, y = euler(f, 0, N0, h, round(10 / h))
+    y5 = y[np.abs(t - 5) < 1e-9][0]            # the value at t = 5
+    print(f"{h:5.2f}  {y5:.6f}  {y5 - exact(5):10.3e}  {np.max(np.abs(y - exact(t))):10.3e}")
+tt = np.linspace(0, 10, 200)
+plt.plot(tt, exact(tt), lw=2, color="black")
+plt.plot(*euler(f, 0, N0, 1, 10), "o-", color="red")
+plt.plot(*euler(f, 0, N0, 0.1, 100), color="blue")
+plt.xlabel("t (h)"); plt.ylabel("OD")
+plt.show()
+
+# (c) local error of one step from t = 0
+d2 = r * f(0, N0) * (1 - 2 * N0 / K)           # y''(0)
+for h in [1, 0.5, 0.25, 0.1, 0.01]:
+    print(f"{h:5.2f}  {N0 + h * f(0, N0) - exact(h):10.3e}  {h**2 / 2 * d2:10.3e}")
+
+# Output:
+# [0.05    0.08833 0.1538  0.26107]
+# [0.05    0.06917 0.09524]
+#  1.00  0.643947  -2.004e-01   2.004e-01
+#  0.50  0.750330  -9.399e-02   1.063e-01
+#  0.10  0.827288  -1.703e-02   2.194e-02
+#  0.01  0.842662  -1.660e-03   2.201e-03
+#  1.00  -1.754e-02   1.406e-02
+#  0.50  -3.927e-03   3.514e-03
+#  0.25  -9.286e-04   8.785e-04
+#  0.10  -1.437e-04   1.406e-04
+#  0.01  -1.409e-06   1.406e-06
+```
+
+### Rust
+
+```rust
+// rust/examples/euler_c1.rs  —  cargo run --example euler_c1
+// C1: Euler on the logistic curve: check B3, errors for four step sizes, local error.
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const R: f64 = 0.8;
+
+fn f(_t: f64, n: f64) -> f64 {
+    R * n * (1.0 - n / K)
+}
+fn exact(t: f64) -> f64 {
+    K / (1.0 + (K / N0 - 1.0) * (-R * t).exp())
+}
+fn euler(f: impl Fn(f64, f64) -> f64, t0: f64, y0: f64, h: f64, n: usize) -> (Vec<f64>, Vec<f64>) {
+    let t: Vec<f64> = (0..=n).map(|i| t0 + i as f64 * h).collect();
+    let mut y = vec![0.0; n + 1];
+    y[0] = y0;
+    for i in 0..n {
+        y[i + 1] = y[i] + h * f(t[i], y[i]);
+    }
+    (t, y)
+}
+
+fn main() {
+    // (a) check B3
+    println!("{:.5?}", euler(f, 0.0, N0, 1.0, 3).1);
+    println!("{:.5?}", euler(f, 0.0, N0, 0.5, 2).1);
+
+    // (b) error at t = 5 and largest error on [0, 10]
+    for h in [1.0_f64, 0.5, 0.1, 0.01] {
+        let n = (10.0 / h).round() as usize;
+        let (t, y) = euler(f, 0.0, N0, h, n);
+        let i5 = t.iter().position(|&ti| (ti - 5.0).abs() < 1e-9).unwrap(); // index of t = 5
+        let maxerr = t.iter().zip(&y).map(|(&ti, &yi)| (yi - exact(ti)).abs()).fold(0.0, f64::max);
+        println!("{:5.2}  {:.6}  {:10.3e}  {:10.3e}", h, y[i5], y[i5] - exact(5.0), maxerr);
+    }
+    // No plotting here: write t and y to a file and plot in R or Python.
+
+    // (c) local error of one step from t = 0
+    let d2 = R * f(0.0, N0) * (1.0 - 2.0 * N0 / K); // y''(0)
+    for h in [1.0, 0.5, 0.25, 0.1, 0.01] {
+        println!("{:5.2}  {:10.3e}  {:10.3e}", h, N0 + h * f(0.0, N0) - exact(h), h * h / 2.0 * d2);
+    }
+}
+
+// Output:
+// [0.05000, 0.08833, 0.15380, 0.26107]
+// [0.05000, 0.06917, 0.09524]
+//  1.00  0.643947   -2.004e-1    2.004e-1
+//  0.50  0.750330   -9.399e-2    1.063e-1
+//  0.10  0.827288   -1.703e-2    2.194e-2
+//  0.01  0.842662   -1.660e-3    2.201e-3
+//  1.00   -1.754e-2    1.406e-2
+//  0.50   -3.927e-3    3.514e-3
+//  0.25   -9.286e-4    8.785e-4
+//  0.10   -1.437e-4    1.406e-4
+//  0.01   -1.409e-6    1.406e-6
+```
+
+:::
+
+(a) matches B3. (b) The error at $t = 5$ is roughly proportional to $h$ ($-0.20$, $-0.094$, $-0.017$, $-0.0017$), and so is the largest error over the run, which occurs in the steep part of the curve. (c) The local error shrinks by about 4 per halving and by 100 from $h = 0.1$ to $0.01$: order 2. For small $h$ the Taylor prediction $\tfrac{h^2}{2}y''(0)$ is accurate; for $h = 1$ it is off by 20 %, because $y''$ changes during the step. The sign is negative: the curve bends upwards, so the tangent step undershoots.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses f, exact and euler() from the Background
+# (a) error at t = 5 for h = 1, 1/2, ..., 1/1024
+h  <- 2^-(0:10)
+y5 <- sapply(h, function(h) tail(euler(f, 0, N0, h, 5 / h)$y, 1))
+err <- y5 - exact(5)
+signif(err, 3)
+round(err[-11] / err[-1], 3)                  # ratio when h is halved
+coef(lm(log10(abs(err)) ~ log10(h)))[2]       # slope on log-log axes
+plot(h, abs(err), log = "xy", type = "o", xlab = "h (hours)", ylab = "|error| at t = 5")
+
+# (b) step halving: y(h) - y(h/2) estimates the error of y(h/2)
+est <- y5[-11] - y5[-1]
+for (i in c(1, 4, 7, 10))
+  cat(sprintf("%.7f  %.4e  %.4e\n", h[i + 1], est[i], err[i + 1]))
+
+# (c) steps needed for an error of 1e-6
+C <- abs(err[11]) / h[11]
+n <- ceiling(5 / (1e-6 / C))
+cat(sprintf("C = %.4f   n = %d\n", C, n))
+yn <- tail(euler(f, 0, N0, 5 / n, n)$y, 1)
+cat(sprintf("error with n steps: %.4e\n", yn - exact(5)))
+
+# Output:
+#  [1] -0.200000 -0.094000 -0.044400 -0.021400 -0.010500 -0.005220 -0.002600
+#  [8] -0.001300 -0.000647 -0.000323 -0.000162
+#  [1] 2.132 2.119 2.069 2.036 2.018 2.009 2.005 2.002 2.001 2.001
+# log10(h)
+# 1.022953
+# 0.5000000  -1.0638e-01  -9.3992e-02
+# 0.0625000  -1.0910e-02  -1.0532e-02
+# 0.0078125  -1.3017e-03  -1.2957e-03
+# 0.0009766  -1.6173e-04  -1.6164e-04
+# C = 0.1655   n = 827595
+# error with n steps: -9.9971e-07
+```
+
+### Python
+
+```python
+# uses np, f, exact and euler() from the Background
+import matplotlib.pyplot as plt
+# (a) error at t = 5 for h = 1, 1/2, ..., 1/1024
+h = 2.0 ** -np.arange(11)
+y5 = np.array([euler(f, 0, N0, hi, round(5 / hi))[1][-1] for hi in h])
+err = y5 - exact(5)
+print(np.array2string(err, formatter={"float": lambda v: f"{v:.3g}"}))
+print(np.round(err[:-1] / err[1:], 3))         # ratio when h is halved
+print(np.polyfit(np.log10(h), np.log10(np.abs(err)), 1)[0])   # slope
+plt.loglog(h, np.abs(err), "o-")
+plt.xlabel("h (hours)"); plt.ylabel("|error| at t = 5")
+plt.show()
+
+# (b) step halving: y(h) - y(h/2) estimates the error of y(h/2)
+est = y5[:-1] - y5[1:]
+for i in [0, 3, 6, 9]:
+    print(f"{h[i + 1]:.7f}  {est[i]:.4e}  {err[i + 1]:.4e}")
+
+# (c) steps needed for an error of 1e-6
+C = abs(err[-1]) / h[-1]
+n = int(np.ceil(5 / (1e-6 / C)))
+print(f"C = {C:.4f}   n = {n}")
+yn = euler(f, 0, N0, 5 / n, n)[1][-1]
+print(f"error with n steps: {yn - exact(5):.4e}")
+
+# Output:
+# [-0.2 -0.094 -0.0444 -0.0214 -0.0105 -0.00522 -0.0026 -0.0013 -0.000647
+#  -0.000323 -0.000162]
+# [2.132 2.119 2.069 2.036 2.018 2.009 2.005 2.002 2.001 2.001]
+# 1.0229534698140366
+# 0.5000000  -1.0638e-01  -9.3992e-02
+# 0.0625000  -1.0910e-02  -1.0532e-02
+# 0.0078125  -1.3017e-03  -1.2957e-03
+# 0.0009766  -1.6173e-04  -1.6164e-04
+# C = 0.1655   n = 827595
+# error with n steps: -9.9971e-07
+```
+
+### Rust
+
+```rust
+// rust/examples/euler_c2.rs  —  cargo run --example euler_c2
+// C2: order of Euler on the logistic curve, step halving, steps for an error of 1e-6.
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const R: f64 = 0.8;
+
+fn f(_t: f64, n: f64) -> f64 {
+    R * n * (1.0 - n / K)
+}
+fn exact(t: f64) -> f64 {
+    K / (1.0 + (K / N0 - 1.0) * (-R * t).exp())
+}
+// only the final value is needed here, so no vectors are stored
+fn euler_last(f: impl Fn(f64, f64) -> f64, t0: f64, y0: f64, h: f64, n: usize) -> f64 {
+    let mut y = y0;
+    for i in 0..n {
+        y += h * f(t0 + i as f64 * h, y);
+    }
+    y
+}
+
+fn main() {
+    // (a) error at t = 5 for h = 1, 1/2, ..., 1/1024
+    let h: Vec<f64> = (0..=10).map(|k| 2f64.powi(-k)).collect();
+    let y5: Vec<f64> = h.iter().map(|&hi| euler_last(f, 0.0, N0, hi, (5.0 / hi).round() as usize)).collect();
+    let err: Vec<f64> = y5.iter().map(|y| y - exact(5.0)).collect();
+    let errs: Vec<String> = err.iter().map(|e| format!("{:.3e}", e)).collect();
+    println!("{}", errs.join(" "));
+    let ratios: Vec<String> = (0..10).map(|i| format!("{:.3}", err[i] / err[i + 1])).collect();
+    println!("{}", ratios.join(" ")); // ratio when h is halved
+    // least-squares slope of log10|err| against log10 h
+    let x: Vec<f64> = h.iter().map(|v| v.log10()).collect();
+    let z: Vec<f64> = err.iter().map(|v| v.abs().log10()).collect();
+    let (mx, mz) = (x.iter().sum::<f64>() / 11.0, z.iter().sum::<f64>() / 11.0);
+    let sxz: f64 = x.iter().zip(&z).map(|(a, b)| (a - mx) * (b - mz)).sum();
+    let sxx: f64 = x.iter().map(|a| (a - mx).powi(2)).sum();
+    println!("slope {:.6}", sxz / sxx);
+
+    // (b) step halving: y(h) - y(h/2) estimates the error of y(h/2)
+    for i in [0, 3, 6, 9] {
+        println!("{:.7}  {:.4e}  {:.4e}", h[i + 1], y5[i] - y5[i + 1], err[i + 1]);
+    }
+
+    // (c) steps needed for an error of 1e-6
+    let c = err[10].abs() / h[10];
+    let n = (5.0 / (1e-6 / c)).ceil() as usize;
+    println!("C = {:.4}   n = {}", c, n);
+    let yn = euler_last(f, 0.0, N0, 5.0 / n as f64, n);
+    println!("error with n steps: {:.4e}", yn - exact(5.0));
+}
+
+// Output:
+// -2.004e-1 -9.399e-2 -4.435e-2 -2.144e-2 -1.053e-2 -5.219e-3 -2.597e-3 -1.296e-3 -6.471e-4 -3.234e-4 -1.616e-4
+// 2.132 2.119 2.069 2.036 2.018 2.009 2.005 2.002 2.001 2.001
+// slope 1.022953
+// 0.5000000  -1.0638e-1  -9.3992e-2
+// 0.0625000  -1.0910e-2  -1.0532e-2
+// 0.0078125  -1.3017e-3  -1.2957e-3
+// 0.0009766  -1.6173e-4  -1.6164e-4
+// C = 0.1655   n = 827595
+// error with n steps: -9.9971e-7
+```
+
+:::
+
+The ratios approach $2 = 2^1$ and the fitted slope is 1.02: order 1. The step-halving estimate is poor for $h = 1$ (the error is not yet proportional to $h$) and excellent from $h \approx 0.06$ on, which is the regime you would actually use. Six correct digits at $t = 5$ need about 830 000 steps; in R this loop takes around a second, in Rust well under a second. That is the price of order 1, and the motivation for *Runge–Kutta and adaptive step size*.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses f, N0, r and euler() from the Background
+# (a) drug clearance C' = -kC, ten steps of each size
+k  <- 0.8
+fc <- function(t, C) -k * C
+for (h in c(0.5, 2, 2.4, 2.6, 3)) {
+  C10 <- tail(euler(fc, 0, 10, h, 10)$y, 1)
+  cat(sprintf("h = %.1f  factor %5.2f  C_10 = %10.3e  exact %9.3e\n",
+              h, 1 - k * h, C10, 10 * exp(-k * 10 * h)))
+}
+# (b) logistic growth, 100 steps: the last four values
+for (h in c(2, 2.4, 2.6, 3, 1.5)) {
+  last <- tail(euler(f, 0, N0, h, 100)$y, 4)
+  cat(sprintf("h = %.1f  rh = %.2f : %s\n", h, r * h, paste(sprintf("%.4f", last), collapse = " ")))
+}
+
+# Output:
+# h = 0.5  factor  0.60  C_10 =  6.047e-02  exact 1.832e-01
+# h = 2.0  factor -0.60  C_10 =  6.047e-02  exact 1.125e-06
+# h = 2.4  factor -0.92  C_10 =  4.344e+00  exact 4.587e-08
+# h = 2.6  factor -1.08  C_10 =  2.159e+01  exact 9.261e-09
+# h = 3.0  factor -1.40  C_10 =  2.893e+02  exact 3.775e-10
+# h = 2.0  rh = 1.60 : 1.2000 1.2000 1.2000 1.2000
+# h = 2.4  rh = 1.92 : 1.2000 1.2000 1.2000 1.2000
+# h = 2.6  rh = 2.08 : 1.0121 1.3417 1.0121 1.3417
+# h = 3.0  rh = 2.40 : 1.4317 0.7683 1.4317 0.7683
+# h = 1.5  rh = 1.20 : 1.2000 1.2000 1.2000 1.2000
+```
+
+### Python
+
+```python
+# uses np, f, N0, r and euler() from the Background
+# (a) drug clearance C' = -kC, ten steps of each size
+k = 0.8
+def fc(t, C):
+    return -k * C
+for h in [0.5, 2, 2.4, 2.6, 3]:
+    C10 = euler(fc, 0, 10, h, 10)[1][-1]
+    print(f"h = {h:.1f}  factor {1 - k * h:5.2f}  C_10 = {C10:10.3e}  exact {10 * np.exp(-k * 10 * h):9.3e}")
+# (b) logistic growth, 100 steps: the last four values
+for h in [2, 2.4, 2.6, 3, 1.5]:
+    last = euler(f, 0, N0, h, 100)[1][-4:]
+    print(f"h = {h:.1f}  rh = {r * h:.2f} :", " ".join(f"{v:.4f}" for v in last))
+
+# Output:
+# h = 0.5  factor  0.60  C_10 =  6.047e-02  exact 1.832e-01
+# h = 2.0  factor -0.60  C_10 =  6.047e-02  exact 1.125e-06
+# h = 2.4  factor -0.92  C_10 =  4.344e+00  exact 4.587e-08
+# h = 2.6  factor -1.08  C_10 =  2.159e+01  exact 9.261e-09
+# h = 3.0  factor -1.40  C_10 =  2.893e+02  exact 3.775e-10
+# h = 2.0  rh = 1.60 : 1.2000 1.2000 1.2000 1.2000
+# h = 2.4  rh = 1.92 : 1.2000 1.2000 1.2000 1.2000
+# h = 2.6  rh = 2.08 : 1.0121 1.3417 1.0121 1.3417
+# h = 3.0  rh = 2.40 : 1.4317 0.7683 1.4317 0.7683
+# h = 1.5  rh = 1.20 : 1.2000 1.2000 1.2000 1.2000
+```
+
+### Rust
+
+```rust
+// rust/examples/euler_c3.rs  —  cargo run --example euler_c3
+// C3: instability of Euler: drug clearance and logistic growth with large steps.
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const R: f64 = 0.8;
+
+fn f(_t: f64, n: f64) -> f64 {
+    R * n * (1.0 - n / K)
+}
+fn euler(f: impl Fn(f64, f64) -> f64, t0: f64, y0: f64, h: f64, n: usize) -> (Vec<f64>, Vec<f64>) {
+    let t: Vec<f64> = (0..=n).map(|i| t0 + i as f64 * h).collect();
+    let mut y = vec![0.0; n + 1];
+    y[0] = y0;
+    for i in 0..n {
+        y[i + 1] = y[i] + h * f(t[i], y[i]);
+    }
+    (t, y)
+}
+
+fn main() {
+    // (a) drug clearance C' = -kC, ten steps of each size
+    let k = 0.8;
+    let fc = |_t: f64, c: f64| -k * c; // a closure: a function that can use k
+    for h in [0.5, 2.0, 2.4, 2.6, 3.0] {
+        let c10 = euler(fc, 0.0, 10.0, h, 10).1[10];
+        println!("h = {:.1}  factor {:5.2}  C_10 = {:10.3e}  exact {:9.3e}",
+                 h, 1.0 - k * h, c10, 10.0 * (-k * 10.0 * h).exp());
+    }
+    // (b) logistic growth, 100 steps: the last four values
+    for h in [2.0, 2.4, 2.6, 3.0, 1.5] {
+        let y = euler(f, 0.0, N0, h, 100).1;
+        let last: Vec<String> = y[97..].iter().map(|v| format!("{:.4}", v)).collect();
+        println!("h = {:.1}  rh = {:.2} : {}", h, R * h, last.join(" "));
+    }
+}
+
+// Output:
+// h = 0.5  factor  0.60  C_10 =   6.047e-2  exact  1.832e-1
+// h = 2.0  factor -0.60  C_10 =   6.047e-2  exact  1.125e-6
+// h = 2.4  factor -0.92  C_10 =    4.344e0  exact  4.587e-8
+// h = 2.6  factor -1.08  C_10 =    2.159e1  exact  9.261e-9
+// h = 3.0  factor -1.40  C_10 =    2.893e2  exact 3.775e-10
+// h = 2.0  rh = 1.60 : 1.2000 1.2000 1.2000 1.2000
+// h = 2.4  rh = 1.92 : 1.2000 1.2000 1.2000 1.2000
+// h = 2.6  rh = 2.08 : 1.0121 1.3417 1.0121 1.3417
+// h = 3.0  rh = 2.40 : 1.4317 0.7683 1.4317 0.7683
+// h = 1.5  rh = 1.20 : 1.2000 1.2000 1.2000 1.2000
+```
+
+:::
+
+(a) $h = 0.5$, $2$ and $2.4$ decay ($|1 - kh| < 1$), $h = 2.6$ and $3$ grow. Stable is not the same as accurate: with $h = 0.5$ the result after 5 h is $0.060$ instead of $0.183$ (relative error 67 %), and $h = 2$ gives the same number at $t = 20$ h, where the true value is $10^{-6}$; with $h = 2.4$ the "concentration" after 24 h is still 4.3 mg/L and alternates in sign. (b) For $h \le 2.4$ the run settles at $K = 1.2$ (for $h = 2.4$, $rh = 1.92$, with slowly damped sign flips around $K$). For $h = 2.6$ and $3$, Euler settles into a 2-cycle around $K$. The deviation from $K$ is multiplied by $1 - rh$ per step, so the threshold is $rh = 2$, $h = 2.5$ h, as for the clearance equation. (c) Halve the step: with $h = 1.5$ the cycle is gone. A result that changes **qualitatively** when the step is halved is a numerical artefact.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+beta <- 0.3; gamma <- 0.1; N <- 10000        # per day; population size
+sir <- function(t, y) {
+  S <- y[1]; I <- y[2]
+  c(-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I)
+}
+euler_sys <- function(f, t0, y0, h, n) {     # one row per time point
+  Y <- matrix(0, n + 1, length(y0)); Y[1, ] <- y0
+  for (i in 1:n) Y[i + 1, ] <- Y[i, ] + h * f(t0 + (i - 1) * h, Y[i, ])
+  Y
+}
+y0 <- c(9990, 10, 0)
+
+# (a) one run with h = 1 day
+Y <- euler_sys(sir, 0, y0, h = 1, n = 160)
+cat(sprintf("peak %.3f on day %d\n", max(Y[, 2]), which.max(Y[, 2]) - 1))
+cat(sprintf("largest |S + I + R - N|: %.1e\n", max(abs(Y[, 1] + Y[, 2] + Y[, 3] - N))))
+matplot(0:160, Y, type = "l", lty = 1, lwd = 2, xlab = "day", ylab = "people")
+
+# (b) error in the peak for several step sizes
+R0   <- beta / gamma
+Imax <- y0[1] + y0[2] - N / R0 * (1 + log(R0 * y0[1] / N))
+cat(sprintf("exact peak %.3f\n", Imax))
+for (h in c(4, 2, 1, 0.5, 0.25, 0.1, 0.01)) {
+  Y <- euler_sys(sir, 0, y0, h, round(160 / h))
+  i <- which.max(Y[, 2])
+  cat(sprintf("%5.2f  %9.3f  %8.3f  %6.2f\n", h, Y[i, 2], Y[i, 2] - Imax, (i - 1) * h))
+}
+
+# Output:
+# peak 3127.315 on day 41
+# largest |S + I + R - N|: 5.5e-12
+# exact peak 3007.961
+#  4.00   3535.245   527.284   48.00
+#  2.00   3249.225   241.264   44.00
+#  1.00   3127.315   119.354   41.00
+#  0.50   3066.517    58.556   39.50
+#  0.25   3037.097    29.137   39.00
+#  0.10   3019.556    11.595   38.60
+#  0.01   3009.117     1.156   38.38
+```
+
+### Python
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+beta, gamma, N = 0.3, 0.1, 10000              # per day; population size
+
+def sir(t, y):
+    S, I = y[0], y[1]
+    return np.array([-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I])
+
+def euler_sys(f, t0, y0, h, n):               # one row per time point
+    Y = np.zeros((n + 1, len(y0)))
+    Y[0] = y0
+    for i in range(n):
+        Y[i + 1] = Y[i] + h * f(t0 + i * h, Y[i])
+    return Y
+
+y0 = np.array([9990.0, 10.0, 0.0])
+
+# (a) one run with h = 1 day
+Y = euler_sys(sir, 0, y0, h=1, n=160)
+print(f"peak {Y[:, 1].max():.3f} on day {Y[:, 1].argmax()}")
+print(f"largest |S + I + R - N|: {np.max(np.abs(Y[:, 0] + Y[:, 1] + Y[:, 2] - N)):.1e}")
+plt.plot(np.arange(161), Y)
+plt.xlabel("day"); plt.ylabel("people"); plt.legend(["S", "I", "R"])
+plt.show()
+
+# (b) error in the peak for several step sizes
+R0 = beta / gamma
+Imax = y0[0] + y0[1] - N / R0 * (1 + np.log(R0 * y0[0] / N))
+print(f"exact peak {Imax:.3f}")
+for h in [4, 2, 1, 0.5, 0.25, 0.1, 0.01]:
+    Y = euler_sys(sir, 0, y0, h, round(160 / h))
+    i = Y[:, 1].argmax()
+    print(f"{h:5.2f}  {Y[i, 1]:9.3f}  {Y[i, 1] - Imax:8.3f}  {i * h:6.2f}")
+
+# Output:
+# peak 3127.315 on day 41
+# largest |S + I + R - N|: 5.5e-12
+# exact peak 3007.961
+#  4.00   3535.245   527.284   48.00
+#  2.00   3249.225   241.264   44.00
+#  1.00   3127.315   119.354   41.00
+#  0.50   3066.517    58.556   39.50
+#  0.25   3037.097    29.137   39.00
+#  0.10   3019.556    11.595   38.60
+#  0.01   3009.117     1.156   38.38
+```
+
+### Rust
+
+```rust
+// rust/examples/euler_c4.rs  —  cargo run --example euler_c4
+// C4: the SIR epidemic with a hand-written vector Euler method.
+const BETA: f64 = 0.3; // per day
+const GAMMA: f64 = 0.1; // per day
+const N: f64 = 10000.0; // population size
+
+fn sir(_t: f64, y: &[f64]) -> Vec<f64> {
+    let (s, i) = (y[0], y[1]);
+    vec![-BETA * s * i / N, BETA * s * i / N - GAMMA * i, GAMMA * i]
+}
+
+// one Vec per time point; f takes the state as a slice &[f64]
+fn euler_sys(f: impl Fn(f64, &[f64]) -> Vec<f64>, t0: f64, y0: &[f64], h: f64, n: usize) -> Vec<Vec<f64>> {
+    let mut ys = vec![y0.to_vec()];
+    for i in 0..n {
+        let y = &ys[i];
+        let slope = f(t0 + i as f64 * h, y);
+        let next: Vec<f64> = y.iter().zip(&slope).map(|(yj, fj)| yj + h * fj).collect();
+        ys.push(next);
+    }
+    ys
+}
+
+// index and value of the largest I
+fn peak(ys: &[Vec<f64>]) -> (usize, f64) {
+    ys.iter().enumerate().map(|(i, y)| (i, y[1])).fold((0, f64::MIN), |a, b| if b.1 > a.1 { b } else { a })
+}
+
+fn main() {
+    let y0 = [9990.0, 10.0, 0.0];
+
+    // (a) one run with h = 1 day
+    let ys = euler_sys(sir, 0.0, &y0, 1.0, 160);
+    let (day, imax) = peak(&ys);
+    println!("peak {:.3} on day {}", imax, day);
+    let drift = ys.iter().map(|y| (y[0] + y[1] + y[2] - N).abs()).fold(0.0, f64::max);
+    println!("largest |S + I + R - N|: {:.1e}", drift);
+    // No plotting here: write the rows to a file and plot in R or Python.
+
+    // (b) error in the peak for several step sizes
+    let r0 = BETA / GAMMA;
+    let exact = y0[0] + y0[1] - N / r0 * (1.0 + (r0 * y0[0] / N).ln());
+    println!("exact peak {:.3}", exact);
+    for h in [4.0, 2.0, 1.0, 0.5, 0.25, 0.1, 0.01] {
+        let ys = euler_sys(sir, 0.0, &y0, h, (160.0 / h).round() as usize);
+        let (i, imax) = peak(&ys);
+        println!("{:5.2}  {:9.3}  {:8.3}  {:6.2}", h, imax, imax - exact, i as f64 * h);
+    }
+}
+
+// Output:
+// peak 3127.315 on day 41
+// largest |S + I + R - N|: 5.5e-12
+// exact peak 3007.961
+//  4.00   3535.245   527.284   48.00
+//  2.00   3249.225   241.264   44.00
+//  1.00   3127.315   119.354   41.00
+//  0.50   3066.517    58.556   39.50
+//  0.25   3037.097    29.137   39.00
+//  0.10   3019.556    11.595   38.60
+//  0.01   3009.117     1.156   38.38
+```
+
+:::
+
+(a) Euler with $h = 1$ day puts the peak at 3127 on day 41. $S + I + R$ stays equal to $N$ up to rounding ($10^{-12}$). (b) The error in the peak halves with $h$: order 1, from 527 people at $h = 4$ to about 1 person at $h = 0.01$. The day of the peak also converges (to 38.4 days). $S + I + R$ is conserved **exactly** by Euler for every $h$ (each Euler step adds $h$ times slopes that sum to zero), so it does not measure accuracy at all; it only catches mistakes in `sir` such as a wrong sign.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses euler_sys() from C4
+w   <- 2 * pi / 24                           # one cycle per 24 hours
+osc <- function(t, y) c(y[2], -w^2 * y[1])   # y = (x, x')
+
+# (a) amplitude after 10 days
+amp <- function(h) {
+  n <- round(240 / h)
+  Y <- euler_sys(osc, 0, c(1, 0), h, n)
+  sqrt(Y[n + 1, 1]^2 + (Y[n + 1, 2] / w)^2)
+}
+for (h in c(1, 0.1, 0.01))
+  cat(sprintf("h = %4.2f  amplitude %10.4f  predicted %10.4f\n",
+              h, amp(h), (1 + w^2 * h^2)^(240 / h / 2)))
+
+# (b) phase portrait, h = 1 hour for 2 days
+Y <- euler_sys(osc, 0, c(1, 0), 1, 48)
+plot(Y[, 1], Y[, 2] / w, type = "o", asp = 1, xlab = "x", ylab = "x' / w")
+th <- seq(0, 2 * pi, length.out = 200); lines(cos(th), sin(th), col = "blue")
+
+# (c) largest h with amplitude error below 1 % after 10 days
+hmax <- log(1.01) / (120 * w^2)
+cat(sprintf("h = %.5f hours, %d steps; amplitude %.5f\n", hmax, round(240 / hmax), amp(240 / round(240 / hmax))))
+
+# Output:
+# h = 1.00  amplitude  2849.9774  predicted  2849.9774
+# h = 0.10  amplitude     2.2755  predicted     2.2755
+# h = 0.01  amplitude     1.0857  predicted     1.0857
+# h = 0.00121 hours, 198377 steps; amplitude 1.01000
+```
+
+### Python
+
+```python
+# uses np, plt and euler_sys() from C4
+w = 2 * np.pi / 24                            # one cycle per 24 hours
+
+def osc(t, y):                                # y = (x, x')
+    return np.array([y[1], -w**2 * y[0]])
+
+# (a) amplitude after 10 days
+def amp(h):
+    n = round(240 / h)
+    Y = euler_sys(osc, 0, np.array([1.0, 0.0]), h, n)
+    return np.sqrt(Y[n, 0]**2 + (Y[n, 1] / w)**2)
+
+for h in [1, 0.1, 0.01]:
+    print(f"h = {h:4.2f}  amplitude {amp(h):10.4f}  predicted {(1 + w**2 * h**2)**(240 / h / 2):10.4f}")
+
+# (b) phase portrait, h = 1 hour for 2 days
+Y = euler_sys(osc, 0, np.array([1.0, 0.0]), 1, 48)
+th = np.linspace(0, 2 * np.pi, 200)
+plt.plot(Y[:, 0], Y[:, 1] / w, "o-")
+plt.plot(np.cos(th), np.sin(th), color="blue")
+plt.axis("equal"); plt.xlabel("x"); plt.ylabel("x' / w")
+plt.show()
+
+# (c) largest h with amplitude error below 1 % after 10 days
+hmax = np.log(1.01) / (120 * w**2)
+n = round(240 / hmax)
+print(f"h = {hmax:.5f} hours, {n} steps; amplitude {amp(240 / n):.5f}")
+
+# Output:
+# h = 1.00  amplitude  2849.9774  predicted  2849.9774
+# h = 0.10  amplitude     2.2755  predicted     2.2755
+# h = 0.01  amplitude     1.0857  predicted     1.0857
+# h = 0.00121 hours, 198377 steps; amplitude 1.01000
+```
+
+### Rust
+
+```rust
+// rust/examples/euler_c5.rs  —  cargo run --example euler_c5
+// C5: Euler on the 24-hour oscillator x'' = -w^2 x, written as a first-order system.
+use std::f64::consts::PI;
+
+fn euler_sys(f: impl Fn(f64, &[f64]) -> Vec<f64>, t0: f64, y0: &[f64], h: f64, n: usize) -> Vec<Vec<f64>> {
+    let mut ys = vec![y0.to_vec()];
+    for i in 0..n {
+        let y = &ys[i];
+        let slope = f(t0 + i as f64 * h, y);
+        let next: Vec<f64> = y.iter().zip(&slope).map(|(yj, fj)| yj + h * fj).collect();
+        ys.push(next);
+    }
+    ys
+}
+
+const W: f64 = 2.0 * PI / 24.0; // one cycle per 24 hours
+
+fn osc(_t: f64, y: &[f64]) -> Vec<f64> {
+    vec![y[1], -W * W * y[0]] // y = (x, x')
+}
+
+// (a) amplitude after 10 days
+fn amp(h: f64) -> f64 {
+    let n = (240.0 / h).round() as usize;
+    let ys = euler_sys(osc, 0.0, &[1.0, 0.0], h, n);
+    (ys[n][0].powi(2) + (ys[n][1] / W).powi(2)).sqrt()
+}
+
+fn main() {
+    for h in [1.0, 0.1, 0.01] {
+        let predicted = (1.0 + W * W * h * h).powf(240.0 / h / 2.0);
+        println!("h = {:4.2}  amplitude {:10.4}  predicted {:10.4}", h, amp(h), predicted);
+    }
+    // (b) phase portrait: write ys (h = 1, 48 steps) to a file and plot in R or Python.
+
+    // (c) largest h with amplitude error below 1 % after 10 days
+    let hmax = 1.01f64.ln() / (120.0 * W * W);
+    let n = (240.0 / hmax).round();
+    println!("h = {:.5} hours, {} steps; amplitude {:.5}", hmax, n, amp(240.0 / n));
+}
+
+// Output:
+// h = 1.00  amplitude  2849.9774  predicted  2849.9774
+// h = 0.10  amplitude     2.2755  predicted     2.2755
+// h = 0.01  amplitude     1.0857  predicted     1.0857
+// h = 0.00121 hours, 198377 steps; amplitude 1.01000
+```
+
+:::
+
+(a) The amplitude matches the prediction $(1 + \omega^2h^2)^{n/2}$ to all printed digits: 2850 for $h = 1$ h, 2.28 for $h = 0.1$ h, 1.086 for $h = 0.01$ h. (b) The orbit spirals outwards instead of closing (lecture figure). (c) $\tfrac{n}{2}\omega^2h^2 = \tfrac{240}{2h}\omega^2h^2 = 120\,\omega^2 h \le \ln 1.01$ gives $h \le 0.00121$ h, about 200 000 steps for 10 days, and the run confirms an amplitude of 1.0100. Euler is never stable on a pure oscillation; small steps only slow the growth down.
+:::
+
+## Where this leads
+
+- *Runge–Kutta and adaptive step size* (next unit): methods of order 2 and 4 from a few slope evaluations per step, and library solvers that choose the step size automatically from a tolerance: R's [`deSolve::ode`](https://www.rdocumentation.org/packages/deSolve/topics/ode), Python's [`scipy.integrate.solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html), Rust's `ode_solvers`. The SIR model and the logistic test problem return there.
+- *Stiffness and implicit methods*: the stability bound $h < 2/k$ when a model has very fast and very slow rates together (B4(d)), and methods without such a bound.
+- *Equilibria, stability and the phase plane*: equilibria, linearisation (as in C3(b)) and oscillations in the $(x, x')$ plane, for models where the ODE itself, not the method, decides whether solutions grow.
+- *Nonlinear least squares and ODE fitting* (Part 9): fitting $r$ and $K$, or $\beta$ and $\gamma$, to data, which needs an ODE solve inside every evaluation of the objective.

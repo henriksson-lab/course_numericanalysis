@@ -25,7 +25,7 @@ fn main() {
     println!("{:.5?}", euler(f, 0.0, N0, 0.5, 2).1);
 
     // (b) error at t = 5 and largest error on [0, 10]
-    for h in [1.0, 0.5, 0.1, 0.01] {
+    for h in [1.0_f64, 0.5, 0.1, 0.01] {
         let n = (10.0 / h).round() as usize;
         let (t, y) = euler(f, 0.0, N0, h, n);
         let i5 = t.iter().position(|&ti| (ti - 5.0).abs() < 1e-9).unwrap(); // index of t = 5

@@ -245,6 +245,40 @@ $$\frac{\partial N}{\partial r} = t\,N\Big(1 - \frac{N}{K}\Big),\qquad \frac{\pa
 (b) At the maximum $\hat\theta = (0.79542677, 1.20245707, 0.050760766)$, the exact gradient is almost zero. Compute the central-difference gradient with a fixed absolute step $10^{-3}$ (what `optim` uses by default), with a relative step $10^{-3}|\theta_j|$ and with $6\times10^{-6}|\theta_j|$. Which components are wrong, and why?
 (c) **Gradient check.** Introduce a bug in the exact gradient: drop the factor $t$ in $\partial N/\partial r$. Compare with the central-difference gradient. How would you spot the bug if you did not know where it was?
 
+## Explore {#explore}
+
+The demo below differentiates the plate-reader data of C4 (the same 61 values) in your browser, with one of three estimators of half-width $k$ samples ($h = k \cdot 10$ min): the **central** difference $(y_{i+k} - y_{i-k})/(2k\,\Delta t)$ ($k = 1$ is the difference of neighbours), the **local line** of C5 (least-squares slope over the $2k+1$ points) and **Richardson** $\tfrac{4D(h) - D(2h)}{3}$ of two central differences. Panel (a) shows the data, the points the estimator uses at the selected time and the slope it finds; click or drag in (a) or (b) to move the selected time. Panel (b) compares the estimated growth rate with the true $N'(t) = rN(1 - N/K)$, with the neighbour differences in grey. Panel (c) shows the rms error against $h$ for every $k$ from 1 to 12: the measured error (strong; the other two estimators faint), the noise model $\sigma\sqrt{\sum_j w_j^2}$ for the estimator's weights $w_j$ (dashed) and the truncation error, the same estimator applied to the exact OD values (dotted). The switch **exact OD** replaces the data by the noise-free curve. As in C4, the rms error is taken over the time points where the stencil fits, and the readout says how many are lost at each end.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="noisyderiv" data-method="central" data-k="1" data-t="4"></div>
+<script src="../demos/dist/noisyderiv.js"></script>
+```
+
+**E1. (neighbours: noise wins)** Click **neighbours**. Read the rms error, the predicted noise sd and the truncation rms, and the maximum growth rate. Then switch to **exact OD**. How much of the error of the neighbour differences is truncation? Where in panel (b) are the estimates least useful, relative to the growth rate itself?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+rms error $0.0203$ OD/h, noise sd $0.021$ (B6(a)), truncation rms $1.5\times10^{-4}$: the noise is more than 100 times the truncation error, so with exact OD values the same formula is almost perfect (rms $1.5\times10^{-4}$, the curve in (b) lies on the truth). With the measurements the maximum is $0.270$ at $4.00$ h, 13 % above the true $0.240$: the maximum of noisy estimates is biased **upwards**, because it picks the largest noise. The noise sd is the same everywhere, but in the first half hour the true rate is only $0.04$–$0.05$ OD/h and after 8 h below $0.035$ OD/h, so there the noise ($0.021$) is half the signal or more, and some estimates are even negative ($-0.033$ in the stationary phase).
+:::
+
+**E2. (the V with noise)** Stay with **central** on the plate-reader data and drag $k$ from 1 to 12. Follow the marker in panel (c), and the dashed and dotted lines. At which $k$ is the rms error smallest, and where do the noise model and the truncation cross? What happens to the peak in panel (b), and to the ends, at $k = 12$?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+The error falls from $0.0203$ ($k = 1$) to $0.0092$, $0.0065$ and a minimum of $0.0053$ at $k = 4$ (40 min), then rises again: $0.0058$, $0.0069$, …, $0.023$ at $k = 12$. The noise model falls like $1/h$ ($0.0053$ at $k = 4$, $0.0042$ at $k = 5$), the truncation rises like $h^2$ ($0.0025$ at $k = 4$, $0.0040$ at $k = 5$); they cross near $k = 5$, and the measured minimum sits just before the crossing, as in B4(c). At $k = 12$ the curve in (b) is smooth but too flat: the maximum is $0.201$ OD/h instead of $0.240$, and 12 points (2 h) are lost at each end, so the whole lag phase has no estimate. This is the V of *Convergence and cost* with the noise $\sigma$ in the place of $\varepsilon|N|$, and the best step is 40 minutes instead of $10^{-8}$.
+:::
+
+**E3. (use all the points)** Click **local line k = 4** and compare its rms error, noise sd and truncation rms with those of **central k = 4** (shown in the readout). Then vary $k$: which $k$ is best for the local line? Why does it have less noise at the same half-width?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+Local line, $k = 4$: rms $0.00405$, noise sd $0.0039$, truncation $0.0019$; central, $k = 4$: $0.00528$, $0.0053$, $0.0025$. The local line is better on both counts. $k = 4$ and $k = 5$ tie at $0.00405$ ($k = 6$: $0.0047$). The central difference uses only the two outermost of the 9 points in the window; the least-squares slope uses all of them (panel (a) highlights 8 points with non-zero weight), so it averages more noise: its noise sd is $\sigma / (\Delta t \sqrt{\sum j^2}) = 0.005 \cdot 6/\sqrt{60} = 0.0039$ instead of $\sigma/(\sqrt2\, h) = 0.0053$. Maximum $0.234$ at $4.33$ h, as in C5.
+:::
+
+**E4. (Richardson and noise)** Click **Richardson** and **exact OD** with $k = 1$. Compare its rms error with the central difference at the same $k$ (readout). How many digits does the extrapolation gain? Now switch back to the plate-reader data (or click **Richardson k = 1**). What happens, and why? Finally, find the $k$ at which Richardson does best on the measured data, and read off which time span it covers.
+
+::: {.callout-note collapse="true" title="Answer E4"}
+Exact OD: $1.0\times10^{-6}$ against $1.54\times10^{-4}$ for the central difference, a factor 150, about two digits gained; the dotted line in (c) is much steeper (slope 4 instead of 2). On the measured data the rms error **rises** to $0.0269$ (central: $0.0203$), and the maximum is $0.281$: the noise sd grows from $0.021$ to $0.029$, since the weights $\tfrac43$ and $-\tfrac13$ amplify the noise of both differences (B5(c)), and the truncation it removes was negligible anyway. Richardson is best at $k = 5$–$7$ (rms $0.0044$, $0.0043$, $0.0042$), no better than the local line at $k = 4$, and at $k = 7$ it needs 14 points on each side: estimates only from 2.33 h to 7.67 h. With noisy data, extrapolation spends its effort on the wrong error.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — Taylor series (B1, B2)"}
