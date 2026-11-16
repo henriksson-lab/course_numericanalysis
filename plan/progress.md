@@ -115,3 +115,21 @@ Workers (plan/audit-brief.md, reports in plan/audit/): R/Python re-run, figures,
 - audit parts5-6 done. Left: re-run fourier-fft/make-fourier-fft-figs.R on an idle machine (fig04 timings); fourier-fft demo numbers not re-checked.
 - audit part10b-11 done. Left: re-time reaction-diffusion and iterative-solvers timings on an idle machine (load ~250 during audit).
 - audit parts3-4 done. Left: re-measure lu timing figures (fig02/03) on idle machine; least-squares-qr demo drag untested (needs a browser).
+
+## Status at end of autonomous run
+
+All 37 units written (pass 1), cross-linked (pass 2) and audited (pass 3).
+Committed locally, NOT pushed (pushing waits for the course lead).
+
+Left for the course lead:
+1. Push to GitHub (`git push`).
+2. Fact-check the claims in plan/factcheck.md (needs web access).
+3. Re-time on an idle machine and regenerate timing figures: fourier-fft fig04,
+   lu fig02/fig03, plus timing numbers in reaction-diffusion and iterative-solvers
+   (machine load was 200+ during the audit).
+4. Try the demos by hand in a browser (drag interactions were not testable headless),
+   especially least-squares-qr (lsqfit) and gradient-methods (optrace race).
+5. Remove stray Chrome profile dir /big/henriksson/temp/claude-tmp/claude-1001/chr1
+   and any /tmp/tmp.* dirs created before the no-/tmp rule.
+6. Optional style decision: some units show code output interleaved as comments,
+   others as a trailing `# Output:` block — both are used consistently within a unit.
