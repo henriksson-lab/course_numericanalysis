@@ -38,6 +38,13 @@ f <- function(t, N) r * N * (1 - N / K)
 exact_from <- function(t, t0, n0) K / (1 + (K / n0 - 1) * exp(-r * (t - t0)))
 exact <- function(t) exact_from(t, 0, N0)
 
+labelbg <- function(x, y, lab, adj = 0, cex = 1.3, col = "black") {  # text on white
+  w <- strwidth(lab, cex = cex); hh <- strheight(lab, cex = cex)
+  x0 <- x - adj * w
+  rect(x0 - 0.1 * hh, y - 0.8 * hh, x0 + w + 0.1 * hh, y + 0.8 * hh, col = "white", border = NA)
+  text(x, y, lab, adj = adj, cex = cex, col = col)
+}
+
 ## ---- fig01: direction field --------------------------------------------------
 
 svg("fig01-direction-field.svg", width = 9, height = 5.5)
@@ -56,9 +63,9 @@ tt <- seq(0, 10, length.out = 300)
 for (n0 in c(0.01, 0.05, 0.2, 1.6)) lines(tt, exact_from(tt, 0, n0), lwd = 3,
                                           col = if (n0 == 0.05) oi["blue"] else oi["sky"])
 abline(h = c(0, K), lty = 2, col = oi["red"], lwd = 2)
-text(9.9, K + 0.07, "N = K = 1.2", adj = 1, cex = 1.3, col = oi["red"])
+labelbg(9.9, K + 0.08, "carrying capacity K = 1.2", adj = 1, col = oi["red"])
 points(0, N0, pch = 19, cex = 1.6, col = oi["blue"])
-text(0.25, N0 + 0.08, expression(N[0] == 0.05), adj = 0, cex = 1.3, col = oi["blue"])
+labelbg(0.3, N0 + 0.1, "N0 = 0.05", col = oi["blue"])
 dev.off()
 
 ## ---- fig02: Euler steps, local vs global error ------------------------------
@@ -106,7 +113,7 @@ dev.off()
 ## ---- fig04: local and global error vs h --------------------------------------
 
 svg("fig04-order.svg", width = 9, height = 5.5)
-par(mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
+par(mar = c(5, 6.5, 1, 1), mgp = c(4.5, 1, 0), cex.lab = 1.5, cex.axis = 1.3)
 h <- 2^-(0:10)
 glob <- sapply(h, function(h) abs(tail(euler(f, 0, N0, h, 5 / h)$y, 1) - exact(5)))
 loc  <- sapply(h, function(h) abs(N0 + h * f(0, N0) - exact(h)))
@@ -114,10 +121,10 @@ plot(h, glob, log = "xy", type = "o", pch = 19, lwd = 3, cex = 1.3, col = oi["re
      ylim = range(c(glob, loc)), xlab = "step size h (hours)", ylab = "error",
      axes = FALSE)
 lines(h, loc, type = "o", pch = 17, lwd = 3, cex = 1.3, col = oi["green"])
-axis(1, at = 10^(-3:0), labels = c("0.001", "0.01", "0.1", "1"))
+axis(1, at = 10^(-3:0), labels = c("0.001", "0.01", "0.1", "1"), mgp = c(3, 1, 0))
 axis(2, at = 10^(-9:0), labels = parse(text = paste0("10^", -9:0)), las = 1); box()
-text(0.004, 1.6e-3, "global error at t = 5 h:  slope 1", adj = 0, cex = 1.3, col = oi["red"])
-text(0.004, 1.2e-7, "local error, one step:  slope 2", adj = 0, cex = 1.3, col = oi["green"])
+text(0.0015, 6e-3, "global error at t = 5 h:  slope 1", adj = 0, cex = 1.3, col = oi["red"])
+text(0.008, 1.5e-8, "local error, one step:  slope 2", adj = 0, cex = 1.3, col = oi["green"])
 dev.off()
 
 ## ---- fig05: drug clearance, three step sizes ----------------------------------

@@ -1,0 +1,204 @@
+---
+title: "Quiz: power iteration and friends"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of power iteration, the Rayleigh quotient and inverse iteration. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** Power iteration repeats $\mathbf x \leftarrow A\mathbf x/\|A\mathbf x\|$. What does $\mathbf x$ converge to, and what two conditions are needed?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Write $\mathbf x_0 = c_1\mathbf v_1 + c_2\mathbf v_2 + \dots$ and multiply by $A$ $k$ times.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+To the eigenvector $\mathbf v_1$ of the eigenvalue of largest modulus. Needed: (1) that eigenvalue is **strictly** dominant, $|\lambda_1| > |\lambda_2|$; (2) the start has a component along it, $c_1 \ne 0$. For a nonnegative Leslie or Markov matrix with a nonnegative start, (2) holds automatically, and (1) holds unless the life cycle or chain is periodic.
+:::
+
+---
+
+**Q2.** For a three-age-class Leslie matrix, `eigen()` returns $\lambda_1 = 0.95$ and the first eigenvector $(-0.8, -0.5, -0.3)$. What do these tell a conservation biologist?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Eigenvectors come with arbitrary length and sign.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+In the long run the population **declines by 5 % per year**. The stable age distribution is the eigenvector rescaled to sum 1: $(0.8, 0.5, 0.3)/1.6 = (0.50, 0.31, 0.19)$, half of the animals in the youngest class. The minus signs mean nothing: any nonzero multiple of an eigenvector is an eigenvector.
+:::
+
+---
+
+**Q3.** A matrix has eigenvalues $2$, $-1.8$ and $0.5$. At what rate does power iteration converge, and roughly how many iterations does each decimal digit take? What would you see in the eigenvalue estimates?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Rate $|\lambda_2/\lambda_1|$; one digit takes $1/\log_{10}|\lambda_1/\lambda_2|$ steps.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Rate $1.8/2 = 0.9$; one digit takes $1/\log_{10}(1/0.9) \approx 22$ iterations, so about 220 for 10 digits. Because $\lambda_2$ is negative, the error **alternates in sign**: the estimates jump above and below $\lambda_1 = 2$ while closing in on it.
+:::
+
+---
+
+**Q4.** Why does power iteration normalise $\mathbf x$ every step? Does the normalisation change what it converges to?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How large is $A^k\mathbf x$ after 5000 steps if $\lambda_1 = 1.2$? If $\lambda_1 = 0.5$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$A^k\mathbf x$ grows or shrinks like $\lambda_1^k$, so without normalisation it overflows to `Inf` (then `NaN`) or underflows to 0. Normalising only rescales: the **direction**, which is what converges, is the same. Different norms (sum, 2-norm, max) give the same eigenvector with different scaling, and the eigenvalue estimate must be computed to match.
+:::
+
+---
+
+**Q5.** A biennial plant has $L = \begin{pmatrix} 0 & 4 \\ 0.25 & 0 \end{pmatrix}$. What do these lines print, and what is wrong?
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+L <- matrix(c(0, 4, 0.25, 0), 2, byrow = TRUE)
+for (steps in c(100, 101)) {
+  x <- c(1, 0)
+  for (k in 1:steps) { y <- drop(L %*% x); x <- y / sum(y) }
+  cat(steps, x, "\n")
+}
+```
+
+### Python
+
+```python
+import numpy as np
+
+L = np.array([[0, 4], [0.25, 0]])
+for steps in [100, 101]:
+    x = np.array([1.0, 0])
+    for k in range(steps):
+        y = L @ x
+        x = y / y.sum()
+    print(steps, x)
+```
+
+### Rust
+
+```rust
+// rust/examples/power_iteration_q5.rs  —  cargo run --example power_iteration_q5
+// Q5: power iteration on the biennial plant after 100 and 101 steps.
+use nalgebra::{DMatrix, DVector};
+
+fn main() {
+    let l = DMatrix::from_row_slice(2, 2, &[0.0, 4.0, 0.25, 0.0]);
+    for steps in [100, 101] {
+        let mut x = DVector::from_row_slice(&[1.0, 0.0]);
+        for _ in 0..steps {
+            let y = &l * &x;
+            x = &y / y.sum();
+        }
+        println!("{} {:?}", steps, x.as_slice());
+    }
+}
+```
+
+:::
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compute $L^2$, and the eigenvalues of $L$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+After 100 steps $\mathbf x = (1, 0)$, after 101 steps $(0, 1)$. $L^2 = I$ and the eigenvalues are $+1$ and $-1$: equal modulus, so nothing dominates and the iteration cycles with period 2 forever (rosette year, flowering year). A fixed number of iterations without a convergence check would return either answer. Check the residual $\|L\mathbf x - \lambda\mathbf x\|$, or look at `Mod(eigen(L)$values)`.
+:::
+
+---
+
+**Q6.** Why is the largest eigenvalue of a Markov transition matrix always exactly 1? What then sets how fast a simulation of the chain reaches its stationary distribution?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is $P$ times a vector of ones?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Each row of $P$ sums to 1, so $P\mathbf 1 = \mathbf 1$: 1 is an eigenvalue of $P$, and therefore of $P^T$ (same eigenvalues). No eigenvalue can be larger in modulus, because multiplying by $P$ cannot increase total probability. The rate is $|\lambda_2|$: the deviation from $\boldsymbol\pi$ shrinks by about $|\lambda_2|$ per step. Biologically, $|\lambda_2|$ sets the relaxation time of the population after a perturbation such as cell sorting.
+:::
+
+---
+
+**Q7.** A Markov chain simulation changes by at most $10^{-9}$ in its last step, and the changes have been shrinking by a factor 0.999 per step. Roughly how far is it from the stationary distribution?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The remaining error is the sum of all future changes: a geometric series.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+About $10^{-9}\cdot 0.999/(1 - 0.999) \approx 10^{-6}$, a thousand times the last change. A small change per step is not a small error when the rate is close to 1. Use a residual or a rate-corrected estimate to stop, or speed things up with inverse iteration and a shift just above 1.
+:::
+
+---
+
+**Q8.** For a **symmetric** matrix, the current vector $\mathbf x$ differs from the eigenvector by about $10^{-4}$. Roughly how accurate is the Rayleigh quotient $\mathbf x^TA\mathbf x/\mathbf x^T\mathbf x$ as an estimate of $\lambda_1$? And for a nonsymmetric matrix?
+
+::: {.callout-tip collapse="true" title="Hint"}
+For symmetric matrices the eigenvectors are orthogonal, and the first-order error term cancels.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Symmetric: error of order $(10^{-4})^2 = 10^{-8}$ (times $|\lambda_1 - \lambda_2|$), so the eigenvalue has about twice as many correct digits as the vector. Nonsymmetric (e.g. a Leslie matrix): only of order $10^{-4}$, no gain.
+:::
+
+---
+
+**Q9.** A matrix has eigenvalues $5$, $2$, $1.9$ and $0.1$. Which eigenvalue does inverse iteration find with shift $\sigma = 2.1$, and at what rate? Which shift would you use to find $0.1$ quickly?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The eigenvalues of $(A - \sigma I)^{-1}$ are $1/(\lambda_i - \sigma)$; the rate is (distance to the nearest) / (distance to the next nearest).
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\sigma = 2.1$ is nearest to $2$ (distance 0.1); next nearest is $1.9$ (distance 0.2). It finds $\lambda = 2$ at rate $0.1/0.2 = 0.5$: slow, because 2 and 1.9 are close. A shift closer to 2, such as 2.01, gives $0.01/0.11 = 0.09$. For $0.1$: $\sigma = 0$ (plain inverse iteration) gives rate $0.1/1.9 = 0.05$; $\sigma = 0.1$ minus a little does even better.
+:::
+
+---
+
+**Q10.** In inverse iteration the shift is exactly an eigenvalue, so $A - \sigma I$ is singular, or nearly so after rounding. Is the computed eigenvector then useless?
+
+::: {.callout-tip collapse="true" title="Hint"}
+In which direction is the huge, inaccurate solution $\mathbf y$ of $(A - \sigma I)\mathbf y = \mathbf x$ pointing?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. The solution is huge and its size is meaningless, but it points almost exactly along the eigenvector, because $(A - \sigma I)^{-1}$ magnifies that direction by far more than any other. After normalising, one step gives nearly full precision (the cell-state chain with $\sigma = 1 + 10^{-15}$: 14 digits). The only practical problem is that some solvers (R's `solve`) refuse an exactly singular matrix; nudge the shift slightly.
+:::
+
+---
+
+**Q11.** Inverse iteration on a $2000 \times 2000$ dense matrix takes 30 steps. Compare the work of calling `solve(A - sigma * I, x)` in every step with factoring once and reusing the factors.
+
+::: {.callout-tip collapse="true" title="Hint"}
+LU costs about $\tfrac23 n^3$; forward plus back substitution about $2n^2$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+`solve` every step: $30\cdot\tfrac23\cdot 2000^3 \approx 1.6\times10^{11}$ operations. Factor once: $\tfrac23\cdot 2000^3 \approx 5.3\times10^9$ plus $30\cdot 2\cdot 2000^2 = 2.4\times10^8$ for the solves, about 30 times less. (Rayleigh quotient iteration changes the shift every step and so must refactor every step; it makes up for it by needing only 2–3 steps.)
+:::
+
+---
+
+**Q12.** When would you write power iteration yourself instead of calling `eigen()`?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does `eigen()` compute, and what does it cost in time and memory?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+`eigen()` computes **all** eigenvalues with $O(n^3)$ work and $n^2$ memory: the right choice for any matrix you can hold dense (a 4 × 4 Leslie matrix, a 500-state chain). Power or inverse iteration is worth it when you need only **one** eigenpair of a **large or sparse** matrix, such as the growth rate of a size-structured model with thousands of classes, or the stationary distribution of a sparse chain with $10^6$ states, where each step is one cheap (sparse) matrix–vector product or solve. And it is already what you do when you simulate the model forward.
+:::
