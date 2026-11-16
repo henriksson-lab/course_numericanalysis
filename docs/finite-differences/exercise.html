@@ -802,6 +802,7 @@ window.Quarto = {
   <li><a href="#background" id="toc-background" class="nav-link" data-scroll-target="#background">Background</a></li>
   <li><a href="#by-hand" id="toc-by-hand" class="nav-link" data-scroll-target="#by-hand">By hand</a></li>
   <li><a href="#in-code" id="toc-in-code" class="nav-link" data-scroll-target="#in-code">In code</a></li>
+  <li><a href="#explore" id="toc-explore" class="nav-link" data-scroll-target="#explore">Explore</a></li>
   <li><a href="#hints" id="toc-hints" class="nav-link" data-scroll-target="#hints">Hints</a></li>
   <li><a href="#solutions" id="toc-solutions" class="nav-link" data-scroll-target="#solutions">Solutions</a></li>
   <li><a href="#where-this-leads" id="toc-where-this-leads" class="nav-link" data-scroll-target="#where-this-leads">Where this leads</a></li>
@@ -1082,10 +1083,85 @@ window.Quarto = {
 <p><strong>C5. Smooth first: a local straight-line fit.</strong> Fit a least-squares line to the <span class="math inline">\(2m+1\)</span> points around each <span class="math inline">\(t_i\)</span> and take its slope: <span class="math display">\[\widehat{N'}(t_i) = \frac{\sum_{j=-m}^{m} j\,y_{i+j}}{\Delta t \sum_{j=-m}^{m} j^2}.\]</span> Compute it for <span class="math inline">\(m = 1, \dots, 8\)</span> with its rms error. Which <span class="math inline">\(m\)</span> is best, and how does it compare with C4(b) at the same width? What is the maximum growth rate now?</p>
 <p><strong>C6. Gradient of a log-likelihood.</strong> Fit <span class="math inline">\(\theta = (r, K, N_0)\)</span> to the data of C4 with <span class="math inline">\(\ell(\theta) = -\sum_i (y_i - N(t_i;\theta))^2/(2\sigma^2)\)</span>, <span class="math inline">\(\sigma = 0.005\)</span>. The exact gradient is <span class="math inline">\(\partial\ell/\partial\theta_j = \sum_i \frac{y_i - N_i}{\sigma^2}\,\frac{\partial N_i}{\partial\theta_j}\)</span> with, writing <span class="math inline">\(E = e^{-rt}\)</span> and <span class="math inline">\(D = 1 + (K/N_0 - 1)E\)</span>, <span class="math display">\[\frac{\partial N}{\partial r} = t\,N\Big(1 - \frac{N}{K}\Big),\qquad \frac{\partial N}{\partial K} = \frac1D - \frac{KE}{N_0D^2},\qquad \frac{\partial N}{\partial N_0} = \frac{K^2E}{N_0^2D^2}.\]</span> (a) At <span class="math inline">\(\theta = (0.75, 1.15, 0.06)\)</span>, compute the relative error of the forward (<span class="math inline">\(h_j = 10^{-8}\max(|\theta_j|,1)\)</span>) and central (<span class="math inline">\(h_j = 6\times10^{-6}\max(|\theta_j|,1)\)</span>) gradients, and of the library gradient (R: <code>numDeriv::grad</code>; Python: <code>approx_fprime</code>). (b) At the maximum <span class="math inline">\(\hat\theta = (0.79542677, 1.20245707, 0.050760766)\)</span>, the exact gradient is almost zero. Compute the central-difference gradient with a fixed absolute step <span class="math inline">\(10^{-3}\)</span> (what <code>optim</code> uses by default), with a relative step <span class="math inline">\(10^{-3}|\theta_j|\)</span> and with <span class="math inline">\(6\times10^{-6}|\theta_j|\)</span>. Which components are wrong, and why? (c) <strong>Gradient check.</strong> Introduce a bug in the exact gradient: drop the factor <span class="math inline">\(t\)</span> in <span class="math inline">\(\partial N/\partial r\)</span>. Compare with the central-difference gradient. How would you spot the bug if you did not know where it was?</p>
 </section>
+<section id="explore" class="level2">
+<h2 class="anchored" data-anchor-id="explore">Explore</h2>
+<p>The demo below differentiates the plate-reader data of C4 (the same 61 values) in your browser, with one of three estimators of half-width <span class="math inline">\(k\)</span> samples (<span class="math inline">\(h = k \cdot 10\)</span> min): the <strong>central</strong> difference <span class="math inline">\((y_{i+k} - y_{i-k})/(2k\,\Delta t)\)</span> (<span class="math inline">\(k = 1\)</span> is the difference of neighbours), the <strong>local line</strong> of C5 (least-squares slope over the <span class="math inline">\(2k+1\)</span> points) and <strong>Richardson</strong> <span class="math inline">\(\tfrac{4D(h) - D(2h)}{3}\)</span> of two central differences. Panel (a) shows the data, the points the estimator uses at the selected time and the slope it finds; click or drag in (a) or (b) to move the selected time. Panel (b) compares the estimated growth rate with the true <span class="math inline">\(N'(t) = rN(1 - N/K)\)</span>, with the neighbour differences in grey. Panel (c) shows the rms error against <span class="math inline">\(h\)</span> for every <span class="math inline">\(k\)</span> from 1 to 12: the measured error (strong; the other two estimators faint), the noise model <span class="math inline">\(\sigma\sqrt{\sum_j w_j^2}\)</span> for the estimator’s weights <span class="math inline">\(w_j\)</span> (dashed) and the truncation error, the same estimator applied to the exact OD values (dotted). The switch <strong>exact OD</strong> replaces the data by the noise-free curve. As in C4, the rms error is taken over the time points where the stencil fits, and the readout says how many are lost at each end.</p>
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="noisyderiv" data-method="central" data-k="1" data-t="4"></div>
+<script src="../demos/dist/noisyderiv.js"></script>
+<p><strong>E1. (neighbours: noise wins)</strong> Click <strong>neighbours</strong>. Read the rms error, the predicted noise sd and the truncation rms, and the maximum growth rate. Then switch to <strong>exact OD</strong>. How much of the error of the neighbour differences is truncation? Where in panel (b) are the estimates least useful, relative to the growth rate itself?</p>
+<div class="callout callout-style-default callout-note callout-titled" title="Answer E1">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-1-contents" aria-controls="callout-1" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Answer E1
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-1" class="callout-1-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>rms error <span class="math inline">\(0.0203\)</span> OD/h, noise sd <span class="math inline">\(0.021\)</span> (B6(a)), truncation rms <span class="math inline">\(1.5\times10^{-4}\)</span>: the noise is more than 100 times the truncation error, so with exact OD values the same formula is almost perfect (rms <span class="math inline">\(1.5\times10^{-4}\)</span>, the curve in (b) lies on the truth). With the measurements the maximum is <span class="math inline">\(0.270\)</span> at <span class="math inline">\(4.00\)</span> h, 13 % above the true <span class="math inline">\(0.240\)</span>: the maximum of noisy estimates is biased <strong>upwards</strong>, because it picks the largest noise. The noise sd is the same everywhere, but in the first half hour the true rate is only <span class="math inline">\(0.04\)</span>–<span class="math inline">\(0.05\)</span> OD/h and after 8 h below <span class="math inline">\(0.035\)</span> OD/h, so there the noise (<span class="math inline">\(0.021\)</span>) is half the signal or more, and some estimates are even negative (<span class="math inline">\(-0.033\)</span> in the stationary phase).</p>
+</div>
+</div>
+</div>
+<p><strong>E2. (the V with noise)</strong> Stay with <strong>central</strong> on the plate-reader data and drag <span class="math inline">\(k\)</span> from 1 to 12. Follow the marker in panel (c), and the dashed and dotted lines. At which <span class="math inline">\(k\)</span> is the rms error smallest, and where do the noise model and the truncation cross? What happens to the peak in panel (b), and to the ends, at <span class="math inline">\(k = 12\)</span>?</p>
+<div class="callout callout-style-default callout-note callout-titled" title="Answer E2">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Answer E2
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-2" class="callout-2-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>The error falls from <span class="math inline">\(0.0203\)</span> (<span class="math inline">\(k = 1\)</span>) to <span class="math inline">\(0.0092\)</span>, <span class="math inline">\(0.0065\)</span> and a minimum of <span class="math inline">\(0.0053\)</span> at <span class="math inline">\(k = 4\)</span> (40 min), then rises again: <span class="math inline">\(0.0058\)</span>, <span class="math inline">\(0.0069\)</span>, …, <span class="math inline">\(0.023\)</span> at <span class="math inline">\(k = 12\)</span>. The noise model falls like <span class="math inline">\(1/h\)</span> (<span class="math inline">\(0.0053\)</span> at <span class="math inline">\(k = 4\)</span>, <span class="math inline">\(0.0042\)</span> at <span class="math inline">\(k = 5\)</span>), the truncation rises like <span class="math inline">\(h^2\)</span> (<span class="math inline">\(0.0025\)</span> at <span class="math inline">\(k = 4\)</span>, <span class="math inline">\(0.0040\)</span> at <span class="math inline">\(k = 5\)</span>); they cross near <span class="math inline">\(k = 5\)</span>, and the measured minimum sits just before the crossing, as in B4(c). At <span class="math inline">\(k = 12\)</span> the curve in (b) is smooth but too flat: the maximum is <span class="math inline">\(0.201\)</span> OD/h instead of <span class="math inline">\(0.240\)</span>, and 12 points (2 h) are lost at each end, so the whole lag phase has no estimate. This is the V of <em>Convergence and cost</em> with the noise <span class="math inline">\(\sigma\)</span> in the place of <span class="math inline">\(\varepsilon|N|\)</span>, and the best step is 40 minutes instead of <span class="math inline">\(10^{-8}\)</span>.</p>
+</div>
+</div>
+</div>
+<p><strong>E3. (use all the points)</strong> Click <strong>local line k = 4</strong> and compare its rms error, noise sd and truncation rms with those of <strong>central k = 4</strong> (shown in the readout). Then vary <span class="math inline">\(k\)</span>: which <span class="math inline">\(k\)</span> is best for the local line? Why does it have less noise at the same half-width?</p>
+<div class="callout callout-style-default callout-note callout-titled" title="Answer E3">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-3-contents" aria-controls="callout-3" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Answer E3
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-3" class="callout-3-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>Local line, <span class="math inline">\(k = 4\)</span>: rms <span class="math inline">\(0.00405\)</span>, noise sd <span class="math inline">\(0.0039\)</span>, truncation <span class="math inline">\(0.0019\)</span>; central, <span class="math inline">\(k = 4\)</span>: <span class="math inline">\(0.00528\)</span>, <span class="math inline">\(0.0053\)</span>, <span class="math inline">\(0.0025\)</span>. The local line is better on both counts. <span class="math inline">\(k = 4\)</span> and <span class="math inline">\(k = 5\)</span> tie at <span class="math inline">\(0.00405\)</span> (<span class="math inline">\(k = 6\)</span>: <span class="math inline">\(0.0047\)</span>). The central difference uses only the two outermost of the 9 points in the window; the least-squares slope uses all of them (panel (a) highlights 8 points with non-zero weight), so it averages more noise: its noise sd is <span class="math inline">\(\sigma / (\Delta t \sqrt{\sum j^2}) = 0.005 \cdot 6/\sqrt{60} = 0.0039\)</span> instead of <span class="math inline">\(\sigma/(\sqrt2\, h) = 0.0053\)</span>. Maximum <span class="math inline">\(0.234\)</span> at <span class="math inline">\(4.33\)</span> h, as in C5.</p>
+</div>
+</div>
+</div>
+<p><strong>E4. (Richardson and noise)</strong> Click <strong>Richardson</strong> and <strong>exact OD</strong> with <span class="math inline">\(k = 1\)</span>. Compare its rms error with the central difference at the same <span class="math inline">\(k\)</span> (readout). How many digits does the extrapolation gain? Now switch back to the plate-reader data (or click <strong>Richardson k = 1</strong>). What happens, and why? Finally, find the <span class="math inline">\(k\)</span> at which Richardson does best on the measured data, and read off which time span it covers.</p>
+<div class="callout callout-style-default callout-note callout-titled" title="Answer E4">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Answer E4
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>Exact OD: <span class="math inline">\(1.0\times10^{-6}\)</span> against <span class="math inline">\(1.54\times10^{-4}\)</span> for the central difference, a factor 150, about two digits gained; the dotted line in (c) is much steeper (slope 4 instead of 2). On the measured data the rms error <strong>rises</strong> to <span class="math inline">\(0.0269\)</span> (central: <span class="math inline">\(0.0203\)</span>), and the maximum is <span class="math inline">\(0.281\)</span>: the noise sd grows from <span class="math inline">\(0.021\)</span> to <span class="math inline">\(0.029\)</span>, since the weights <span class="math inline">\(\tfrac43\)</span> and <span class="math inline">\(-\tfrac13\)</span> amplify the noise of both differences (B5(c)), and the truncation it removes was negligible anyway. Richardson is best at <span class="math inline">\(k = 5\)</span>–<span class="math inline">\(7\)</span> (rms <span class="math inline">\(0.0044\)</span>, <span class="math inline">\(0.0043\)</span>, <span class="math inline">\(0.0042\)</span>), no better than the local line at <span class="math inline">\(k = 4\)</span>, and at <span class="math inline">\(k = 7\)</span> it needs 14 points on each side: estimates only from 2.33 h to 7.67 h. With noisy data, extrapolation spends its effort on the wrong error.</p>
+</div>
+</div>
+</div>
+</section>
 <section id="hints" class="level2">
 <h2 class="anchored" data-anchor-id="hints">Hints</h2>
 <div class="callout callout-style-default callout-tip callout-titled" title="Hint 1 — Taylor series (B1, B2)">
-<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-1-contents" aria-controls="callout-1" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-5-contents" aria-controls="callout-5" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
@@ -1094,14 +1170,14 @@ Hint 1 — Taylor series (B1, B2)
 </div>
 <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
-<div id="callout-1" class="callout-1-contents callout-collapse collapse">
+<div id="callout-5" class="callout-5-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
 <p>Write <span class="math inline">\(N(t \pm h) = N \pm hN' + \tfrac{h^2}{2}N'' \pm \tfrac{h^3}{6}N''' + \tfrac{h^4}{24}N'''' \pm \dots\)</span>. For a stencil, add <span class="math inline">\(w_j\)</span> times the row for each point and collect the coefficient of each derivative. For B2(a) the equations are <span class="math inline">\(w_{-1} + w_0 + w_1 = 0\)</span>, <span class="math inline">\(-w_{-1} + w_1 = 0\)</span>, <span class="math inline">\(\tfrac12 w_{-1} + \tfrac12 w_1 = 1\)</span>.</p>
 </div>
 </div>
 </div>
 <div class="callout callout-style-default callout-tip callout-titled" title="Hint 2 — minimising a + b (B4)">
-<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-6-contents" aria-controls="callout-6" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
@@ -1110,14 +1186,14 @@ Hint 2 — minimising a + b (B4)
 </div>
 <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
-<div id="callout-2" class="callout-2-contents callout-collapse collapse">
+<div id="callout-6" class="callout-6-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
 <p>Differentiate <span class="math inline">\(E(h)\)</span> and set it to zero: for <span class="math inline">\(ah^2 + b/h\)</span>, <span class="math inline">\(2ah = b/h^2\)</span>, so <span class="math inline">\(h^3 = b/(2a)\)</span>. For <span class="math inline">\(ch^2 + 4b/h^2\)</span>, <span class="math inline">\(2ch = 8b/h^3\)</span>, so <span class="math inline">\(h^4 = 4b/c\)</span>.</p>
 </div>
 </div>
 </div>
 <div class="callout callout-style-default callout-tip callout-titled" title="Hint 3 — noise (B6, C4)">
-<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-3-contents" aria-controls="callout-3" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-7-contents" aria-controls="callout-7" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
@@ -1126,14 +1202,14 @@ Hint 3 — noise (B6, C4)
 </div>
 <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
-<div id="callout-3" class="callout-3-contents callout-collapse collapse">
+<div id="callout-7" class="callout-7-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
 <p>If <span class="math inline">\(e_1\)</span> and <span class="math inline">\(e_2\)</span> are independent with sd <span class="math inline">\(\sigma\)</span>, then <span class="math inline">\(e_2 - e_1\)</span> has sd <span class="math inline">\(\sqrt2\,\sigma\)</span>. Dividing by a constant <span class="math inline">\(c\)</span> divides the sd by <span class="math inline">\(c\)</span>. In R, <code>y[i + k] - y[i - k]</code> with <code>i &lt;- (k + 1):(n - k)</code> takes all differences at once; in Python, <code>y[2*k:] - y[:-2*k]</code>.</p>
 </div>
 </div>
 </div>
 <div class="callout callout-style-default callout-tip callout-titled" title="Hint 4 — weights by a linear system (C2)">
-<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-8-contents" aria-controls="callout-8" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
@@ -1142,14 +1218,14 @@ Hint 4 — weights by a linear system (C2)
 </div>
 <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
-<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div id="callout-8" class="callout-8-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
 <p>Build the matrix with <a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/outer.html"><code>outer</code></a> (R) or a nested list comprehension (Python), row <span class="math inline">\(k\)</span> = <span class="math inline">\(s_j^k/k!\)</span>, and solve with <a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html"><code>solve</code></a> (R) or <a href="https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html"><code>np.linalg.solve</code></a> (Python); in Rust, <code>nalgebra</code>’s <code>DMatrix::lu().solve</code>. For a five-point stencil the error is <span class="math inline">\(O(h^4)\)</span>, so halving <span class="math inline">\(h\)</span> should divide it by 16.</p>
 </div>
 </div>
 </div>
 <div class="callout callout-style-default callout-tip callout-titled" title="Hint 5 — Richardson table (C3)">
-<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-5-contents" aria-controls="callout-5" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-9-contents" aria-controls="callout-9" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
@@ -1158,14 +1234,14 @@ Hint 5 — Richardson table (C3)
 </div>
 <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
-<div id="callout-5" class="callout-5-contents callout-collapse collapse">
+<div id="callout-9" class="callout-9-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
 <p>Fill column 1 in a loop over <span class="math inline">\(i\)</span>; then for each column <span class="math inline">\(j \ge 2\)</span>, loop over the rows <span class="math inline">\(i \ge j\)</span> and combine <code>A[i, j-1]</code> (the smaller step) with <code>A[i-1, j-1]</code>. Library equivalents: <a href="https://search.r-project.org/CRAN/refmans/numDeriv/html/grad.html"><code>numDeriv::grad</code></a> (R), <a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.differentiate.derivative.html"><code>scipy.differentiate.derivative</code></a> (Python).</p>
 </div>
 </div>
 </div>
 <div class="callout callout-style-default callout-tip callout-titled" title="Hint 6 — smoothing (C5)">
-<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-6-contents" aria-controls="callout-6" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-10-contents" aria-controls="callout-10" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
@@ -1174,14 +1250,14 @@ Hint 6 — smoothing (C5)
 </div>
 <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
-<div id="callout-6" class="callout-6-contents callout-collapse collapse">
+<div id="callout-10" class="callout-10-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
 <p>The formula is the slope of <a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html"><code>lm(y ~ t)</code></a> on the window, with the window centred so that <span class="math inline">\(\sum j = 0\)</span>. The library route, covered in <em>Splines</em>: <a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/smooth.spline.html"><code>smooth.spline</code></a> followed by <code>predict(fit, t, deriv = 1)</code> in R, <a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.make_smoothing_spline.html"><code>scipy.interpolate.make_smoothing_spline</code></a> followed by <code>.derivative()</code> in Python. <a href="https://numpy.org/doc/stable/reference/generated/numpy.gradient.html"><code>np.gradient</code></a> is the central difference of neighbours: it does <strong>not</strong> smooth.</p>
 </div>
 </div>
 </div>
 <div class="callout callout-style-default callout-tip callout-titled" title="Hint 7 — gradients (C6)">
-<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-7-contents" aria-controls="callout-7" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-11-contents" aria-controls="callout-11" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
@@ -1190,7 +1266,7 @@ Hint 7 — gradients (C6)
 </div>
 <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
-<div id="callout-7" class="callout-7-contents callout-collapse collapse">
+<div id="callout-11" class="callout-11-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
 <p>Loop over the parameters; build a vector <code>e</code> of zeros with <code>h[j]</code> in position <code>j</code>, and difference <code>f(x + e)</code> and <code>f(x - e)</code>. Compare with the exact gradient through the relative error <span class="math inline">\(|g_\text{fd} - g|/|g|\)</span>. R’s <a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/optim.html"><code>optim</code></a> documents <code>ndeps</code> and <code>parscale</code> under <em>Details</em>; Python’s <a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html"><code>scipy.optimize.minimize</code></a> takes <code>jac=</code> for an exact gradient.</p>
 </div>
@@ -1200,7 +1276,7 @@ Hint 7 — gradients (C6)
 <section id="solutions" class="level2">
 <h2 class="anchored" data-anchor-id="solutions">Solutions</h2>
 <div class="callout callout-style-default callout-note callout-titled" title="Solution">
-<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-8-contents" aria-controls="callout-8" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-12-contents" aria-controls="callout-12" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
@@ -1209,7 +1285,7 @@ Solution
 </div>
 <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
-<div id="callout-8" class="callout-8-contents callout-collapse collapse">
+<div id="callout-12" class="callout-12-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
 <p><strong>B1.</strong> (a) <span class="math inline">\(N(t-h) = N - hN' + \tfrac{h^2}{2}N'' - \dots\)</span>, so <span class="math inline">\(N(t) - N(t-h) = hN' - \tfrac{h^2}{2}N'' + \dots\)</span> and <span class="math inline">\(\dfrac{N(t) - N(t-h)}{h} = N' - \tfrac{h}{2}N'' + O(h^2)\)</span>. (b) <span class="math inline">\(\tfrac12\Big(\tfrac{N(t+h) - N(t)}{h} + \tfrac{N(t) - N(t-h)}{h}\Big) = \tfrac{N(t+h) - N(t-h)}{2h}\)</span>. The errors <span class="math inline">\(+\tfrac{h}{2}N''\)</span> and <span class="math inline">\(-\tfrac{h}{2}N''\)</span> cancel; the next terms, <span class="math inline">\(\pm\tfrac{h^2}{6}N'''\)</span>, have the <strong>same</strong> sign in both and survive: <span class="math inline">\(\tfrac{h^2}{6}N'''\)</span>. (c) Forward: <span class="math inline">\(\tfrac{0.2}{2}\cdot 0.059212 = 0.0059\)</span> (actual <span class="math inline">\(0.0056\)</span>; the <span class="math inline">\(h^2\)</span> term <span class="math inline">\(-0.00028\)</span> is not negligible at <span class="math inline">\(h = 0.2\)</span>). Central: <span class="math inline">\(\tfrac{0.04}{6}\cdot(-0.042270) = -2.82\times10^{-4}\)</span> (actual <span class="math inline">\(-2.82\times10^{-4}\)</span>). Second difference: <span class="math inline">\(\tfrac{0.04}{12}\cdot(-0.061704) = -2.06\times10^{-4}\)</span>.</p>
 <p><strong>B2.</strong> (a) <span class="math inline">\(N\)</span> terms: <span class="math inline">\(w_{-1} + w_0 + w_1 = 0\)</span>. <span class="math inline">\(hN'\)</span> terms: <span class="math inline">\(-w_{-1} + w_1 = 0\)</span>. <span class="math inline">\(h^2N''\)</span> terms: <span class="math inline">\(\tfrac12 w_{-1} + \tfrac12 w_1 = 1\)</span>. So <span class="math inline">\(w_{-1} = w_1 = 1\)</span>, <span class="math inline">\(w_0 = -2\)</span>: the <span class="math inline">\((1, -2, 1)\)</span> stencil. (b) <span class="math inline">\(N'(t) \approx \dfrac{3N(t) - 4N(t-h) + N(t-2h)}{2h}\)</span> (replace <span class="math inline">\(h\)</span> by <span class="math inline">\(-h\)</span> in <span class="math inline">\(\tfrac{-3N(t) + 4N(t+h) - N(t+2h)}{2h}\)</span>; the signs flip because the denominator <span class="math inline">\(2h\)</span> flips). (c) Apply the stencil to a constant function <span class="math inline">\(N \equiv 1\)</span>: every derivative is 0, so <span class="math inline">\(\sum_j w_j \cdot 1\)</span> must be 0. It is the first of the Taylor equations.</p>

@@ -70,7 +70,7 @@ const MLAB: Record<Method, string> = { central: "central", local: "local line", 
 /** Points lost at each end. */
 const reach = (m: Method, k: number): number => m === "richardson" ? 2 * k : k;
 
-/** Estimate N'(t_i) from data y with spacing k; NaN where the stencil does not fit. */
+/** Estimate N'(t_i) from data y with half-width k; NaN where the stencil does not fit. */
 function estimate(y: number[], m: Method, k: number, i: number): number {
   if (i - reach(m, k) < 0 || i + reach(m, k) >= NP) return NaN;
   const cen = (kk: number) => (y[i + kk] - y[i - kk]) / (2 * kk * DT);
@@ -180,7 +180,7 @@ function mount(host: HTMLElement): void {
   };
   const svgA = mk(WA, "OD data with the stencil at the selected time");
   const svgB = mk(WB, "Estimated and true growth rate");
-  const svgC = mk(WC, "rms error against spacing, log-log");
+  const svgC = mk(WC, "rms error against half-width, log-log");
   const ro = htmlEl("div", "qb-readout nd-read", "", host);
 
   const top = 36, bot = H - 50, L = 60;
@@ -300,7 +300,7 @@ function mount(host: HTMLElement): void {
     lgB(MLAB[m], top + 42, col);
     lgB("neighbours", top + 64, COL.raw, true);
 
-    // ---------- (c) rms error vs spacing ----------
+    // ---------- (c) rms error vs half-width ----------
     svgC.replaceChildren();
     txt(svgC, 8, 22, "(c) rms error against half-width", { class: "ttl" });
     for (let e = CY0; e <= CY1; e++) {

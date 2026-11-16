@@ -22,7 +22,7 @@ const STYLE = `
 [data-demo="${NAME}"].qb-demo { flex-direction: column; gap: .4em; }
 [data-demo="${NAME}"] .pi-row { display: flex; flex-wrap: wrap; gap: .35em 1.1em; align-items: center; width: 100%; }
 [data-demo="${NAME}"] .pi-group { display: flex; gap: .35em; align-items: center; flex-wrap: wrap; }
-[data-demo="${NAME}"] .pi-row .qb-slider { min-width: 260px; flex: 1 1 260px; max-width: 420px; grid-template-columns: auto 1fr 3.4em; }
+[data-demo="${NAME}"] .pi-row .qb-slider { min-width: 210px; flex: 1 1 210px; max-width: 360px; grid-template-columns: auto 1fr 3.4em; }
 [data-demo="${NAME}"] .pi-ent .qb-slider { min-width: 170px; flex: 1 1 170px; max-width: 260px; }
 [data-demo="${NAME}"] .pi-plots { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
 [data-demo="${NAME}"] .pi-plots svg { min-width: 0; height: auto; }
@@ -47,7 +47,7 @@ function injectStyle(): void {
 }
 
 // ---- the lecture's matrices ----
-interface Preset { id: string; label: string; A: Mat; x0: number[]; names: string[]; sigma: number; cols?: string[] }
+interface Preset { id: string; label: string; A: Mat; x0: number[]; names: string[]; sigma: number; sigmas: number[]; cols?: string[] }
 const fishL = (F: number[]): Mat => [F, [0.3, 0, 0, 0], [0, 0.6, 0, 0], [0, 0, 0.5, 0]];
 const P: Mat = [[0.80, 0.15, 0.05], [0.05, 0.90, 0.05], [0.05, 0.10, 0.85]];
 const T = (M: Mat): Mat => M[0].map((_, j) => M.map(r => r[j]));
@@ -55,15 +55,15 @@ const Pslow: Mat = P.map((r, i) => r.map((v, j) => (i === j ? 1 : 0) + 0.01 * (v
 const AGE = ["age 0", "age 1", "age 2", "age 3"], AGECOL = [OI.blue, OI.orange, OI.green, OI.purple];
 const CELL = ["S", "B", "L"], CELLCOL = [OI.red, OI.blue, OI.green];
 const PRESETS: Preset[] = [
-  { id: "plant", label: "plant (1.5, −0.5)", A: [[1, 1], [0.75, 0]], x0: [1, 0], names: ["class 1", "class 2"], sigma: 1.4 },
-  { id: "plantb1", label: "plant B1", A: [[0.6, 0.9], [0.8, 0]], x0: [0, 1], names: ["class 1", "class 2"], sigma: 1 },
-  { id: "biennial", label: "biennial", A: [[0, 4], [0.25, 0]], x0: [1, 0], names: ["rosettes", "flowering"], sigma: 0.5 },
-  { id: "early", label: "early flowering", A: [[0.4, 4], [0.25, 0]], x0: [1, 0], names: ["rosettes", "flowering"], sigma: 1 },
-  { id: "sym", label: "symmetric (6, 1)", A: [[5, 2], [2, 2]], x0: [1, 0], names: ["trait 1", "trait 2"], sigma: 5 },
-  { id: "fish", label: "fish", A: fishL([0, 1.5, 4, 5]), x0: [0, 1, 0, 0], names: AGE, sigma: 1.1, cols: AGECOL },
-  { id: "semel", label: "semelparous fish", A: fishL([0, 0, 0, 12]), x0: [0, 1, 0, 0], names: AGE, sigma: 1.1, cols: AGECOL },
-  { id: "cells", label: "cell states Pᵀ", A: T(P), x0: [1, 0, 0], names: CELL, sigma: 0.82, cols: CELLCOL },
-  { id: "slow", label: "slow cells", A: T(Pslow), x0: [1, 0, 0], names: CELL, sigma: 1.005, cols: CELLCOL },
+  { id: "plant", label: "plant (1.5, −0.5)", A: [[1, 1], [0.75, 0]], x0: [1, 0], names: ["class 1", "class 2"], sigma: 1.4, sigmas: [1.4, 0, -0.4, 0.5] },
+  { id: "plantb1", label: "plant B1", A: [[0.6, 0.9], [0.8, 0]], x0: [0, 1], names: ["class 1", "class 2"], sigma: 1, sigmas: [1, 0, -0.5] },
+  { id: "biennial", label: "biennial", A: [[0, 4], [0.25, 0]], x0: [1, 0], names: ["rosettes", "flowering"], sigma: 0.5, sigmas: [0.5, 1.2] },
+  { id: "early", label: "early flowering", A: [[0.4, 4], [0.25, 0]], x0: [1, 0], names: ["rosettes", "flowering"], sigma: 1, sigmas: [1, -0.8] },
+  { id: "sym", label: "symmetric (6, 1)", A: [[5, 2], [2, 2]], x0: [1, 0], names: ["trait 1", "trait 2"], sigma: 5, sigmas: [5, 1.2, 3.5] },
+  { id: "fish", label: "fish", A: fishL([0, 1.5, 4, 5]), x0: [0, 1, 0, 0], names: AGE, sigma: 1.1, sigmas: [1.1, -0.3, -0.7], cols: AGECOL },
+  { id: "semel", label: "semelparous fish", A: fishL([0, 0, 0, 12]), x0: [0, 1, 0, 0], names: AGE, sigma: 1.1, sigmas: [1.1, -1], cols: AGECOL },
+  { id: "cells", label: "cell states Pᵀ", A: T(P), x0: [1, 0, 0], names: CELL, sigma: 0.82, sigmas: [1, 0.82, 0.77, 0.9], cols: CELLCOL },
+  { id: "slow", label: "slow cells", A: T(Pslow), x0: [1, 0, 0], names: CELL, sigma: 1.005, sigmas: [1.005, 1], cols: CELLCOL },
 ];
 
 // ---- formatting ----
@@ -124,9 +124,7 @@ function mount(host: HTMLElement): void {
     { label: "inverse iteration", apply: () => { st.inv = true; update(); } },
   ]);
   const sS = slider(row2, "shift σ", -1.5, 6, 0.005, st.sigma, v => { st.sigma = v; update(); }, v => minus(v.toFixed(3)));
-  const sg = htmlEl("div", "pi-group", "", row2);
-  htmlEl("span", "", "start:", sg);
-  const startBox = htmlEl("span", "pi-group", "", sg);
+  const sigBox = htmlEl("div", "pi-group", "", row2);
 
   const row3 = htmlEl("div", "pi-row", "", host);
   const kS = slider(row3, "step k", 0, KMAX, 1, st.k, v => { stop(); st.k = v; draw(); });
@@ -135,7 +133,14 @@ function mount(host: HTMLElement): void {
   button(kg, "step +1", () => { stop(); setK(Math.min(KMAX, st.k + 1)); });
   button(kg, "+10", () => { stop(); setK(Math.min(KMAX, st.k + 10)); });
   const playB = button(kg, "play", () => { if (timer) stop(); else play(); });
-  button(kg, "reset", () => { stop(); loadPreset(start.preset, false); st.inv = start.inv; st.sigma = Number.isFinite(start.sigma) ? start.sigma : start.preset.sigma; sS.set(st.sigma); setK(start.k); });
+  const sg = htmlEl("div", "pi-group", "", row3);
+  htmlEl("span", "", "start:", sg);
+  const startBox = htmlEl("span", "pi-group", "", sg);
+  button(kg, "reset", () => {
+    stop(); st.inv = start.inv; loadPreset(start.preset, false);
+    st.sigma = Number.isFinite(start.sigma) ? start.sigma : start.preset.sigma; sS.set(st.sigma);
+    st.k = start.k; kS.set(st.k); update();
+  });
 
   const row4 = htmlEl("div", "pi-row pi-ent", "", host);
   const entS = ["a₁₁", "a₁₂", "a₂₁", "a₂₂"].map((lab, i) =>
@@ -152,6 +157,7 @@ function mount(host: HTMLElement): void {
   const ro = htmlEl("div", "qb-readout pi-read", "", host);
 
   let timer = 0;
+  let sigButtons: { vals: number[]; btns: HTMLButtonElement[] } = { vals: [], btns: [] };
   function stop(): void { if (timer) { clearInterval(timer); timer = 0; } playB.textContent = "play"; }
   function play(): void {
     if (st.k >= KMAX) setK(0);
@@ -163,6 +169,9 @@ function mount(host: HTMLElement): void {
   function loadPreset(p: Preset, keepK: boolean): void {
     st.A = p.A.map(r => [...r]); st.x0 = [...p.x0]; st.names = p.names; st.cols = p.cols;
     st.sigma = p.sigma; sS.set(st.sigma);
+    sigBox.replaceChildren();
+    const sb = presets(sigBox, p.sigmas.map(v => ({ label: "σ = " + minus(String(v)), apply: () => { st.sigma = v; sS.set(v); st.inv = true; update(); } })));
+    sigButtons = { vals: p.sigmas, btns: sb };
     pBtns.forEach((b, i) => b.classList.toggle("active", PRESETS[i] === p));
     if (!keepK) st.k = 0;
     buildStart();
@@ -188,6 +197,7 @@ function mount(host: HTMLElement): void {
     ex = run.xs.map(x => t ? vecErr(x, t.v) : NaN);
     el = run.lam.map(l => t ? Math.abs(l - t.lam) : NaN);
     mBtns.forEach((b, i) => b.classList.toggle("active", (i === 1) === st.inv));
+    sigButtons.btns.forEach((b, i) => b.classList.toggle("active", st.inv && Math.abs(sigButtons.vals[i] - st.sigma) < 1e-9));
     sS.input.closest("label")!.classList.toggle("pi-off", !st.inv);
     const two = st.A.length === 2;
     row4.style.display = two && editable ? "flex" : "none";
@@ -380,7 +390,7 @@ function mount(host: HTMLElement): void {
     svgEl("line", { x1: bx(k), x2: bx(k), y1: BT, y2: BB, stroke: COL.ink, "stroke-width": 1, "stroke-dasharray": "2 3" }, svgB);
     // legend
     const lg = (txt: string, row: number, c: string, dash = "") => {
-      const X = B1 - 300, Y = BT + 14 + row * 24;
+      const X = B0 + 16, Y = BB - 14 - (2 - row) * 24;
       svgEl("rect", { x: X - 6, y: Y - 18, width: 306, height: 24, fill: "#fff", "fill-opacity": 0.8 }, svgB);
       svgEl("line", { x1: X, x2: X + 26, y1: Y - 6, y2: Y - 6, stroke: c, "stroke-width": 3, "stroke-dasharray": dash }, svgB);
       const tx = svgEl("text", { x: X + 34, y: Y }, svgB); tx.style.fill = c === COL.pred ? "#444" : c; tx.textContent = txt;
@@ -419,7 +429,7 @@ function mount(host: HTMLElement): void {
       // measured rate over the last up to 5 steps with error above the rounding floor
       let j1 = k; while (j1 > 0 && !(ex[j1] > 1e-13)) j1--;
       const j0 = Math.max(0, j1 - 5);
-      if (j1 - j0 >= 2 && ex[j0] > 0) item("measured rate", sci((ex[j1] / ex[j0]) ** (1 / (j1 - j0)), 3));
+      if (an.rate < 1 && j1 - j0 >= 2 && ex[j0] > 0) item("measured rate", sci((ex[j1] / ex[j0]) ** (1 / (j1 - j0)), 3));
     }
     item("residual", k > 0 ? sci(run.res[k], 2) : "–");
     item("normalised by", run.useSum ? "the sum (proportions)" : "the 2-norm");
@@ -427,9 +437,8 @@ function mount(host: HTMLElement): void {
     if (st.inv && run.tiny) item("", "A − σI is singular to working precision: the solve is huge, but its direction is right", "pi-warn");
   }
 
-  buildStart();
-  pBtns.forEach((b, i) => b.classList.toggle("active", PRESETS[i] === start.preset));
-  update();
+  loadPreset(start.preset, true);
+  if (Number.isFinite(start.sigma)) { st.sigma = start.sigma; sS.set(st.sigma); update(); }
 }
 
 autoMount(NAME, mount);

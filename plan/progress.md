@@ -20,14 +20,15 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 15 | polynomial-interpolation | running | | |
 | 16 | splines | done | running | |
 | 17 | fourier-fft | running | | |
-| 18 | finite-differences | done | running | |
+| 18 | finite-differences | done | done | done |
 | 19 | quadrature | running | | |
 | 20 | monte-carlo | running | | |
 | 21 | euler | running | | |
 | 22 | runge-kutta | running | | |
 | 23 | stiffness | running | | |
 | 24 | phase-plane | running | | |
-| 25–37 | | queued | | |
+| 25 | gillespie | running | | |
+| 26–37 | | queued | | |
 
 ## Audit notes (pass 3)
 

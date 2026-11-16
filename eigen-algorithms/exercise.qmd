@@ -1,0 +1,1339 @@
+---
+title: "Exercise: how eigen() works, and big problems"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- do one step of the **QR algorithm** by hand and explain why it keeps the eigenvalues,
+- relate the speed of the QR algorithm to **ratios of eigenvalues**, recognise when it **stalls**, and show how a **shift** fixes that,
+- explain why a real nonsymmetric matrix can have **complex** eigenvalues and what they mean for a biological model,
+- show that eigenvalues of a **nonsymmetric** matrix can be very **sensitive**, and run the two checks: the condition number of the eigenvector matrix, and perturb-and-recompute,
+- write a short **Lanczos** iteration, see its Ritz values converge, and see **ghost** eigenvalues appear without reorthogonalisation,
+- compute the top principal components of a large **sparse** single-cell matrix **without** densifying or centring it, and check the result with **residuals**.
+
+The by-hand part needs pen, paper and a calculator for square roots. The code part checks your hand answers and then works at sizes where only code works. C6 and C7 build a 20 000 × 2 000 matrix: they need about 2 GB of memory and run for under a minute.
+
+## Background
+
+**Facts used below:**
+
+1. **Similarity.** If $A = QR$ with $Q$ orthogonal, then $RQ = Q^TAQ$ has the same eigenvalues as $A$. The **QR algorithm** repeats $A_k = Q_kR_k$, $A_{k+1} = R_kQ_k$.
+2. **Convergence.** For eigenvalues ordered $|\lambda_1| > |\lambda_2| > \dots$, the subdiagonal entry $a_{i+1,i}$ of $A_k$ shrinks like $|\lambda_{i+1}/\lambda_i|^k$. If two eigenvalues have the **same modulus** it does not shrink.
+3. **Shift.** $A_k - \mu I = Q_kR_k$, $A_{k+1} = R_kQ_k + \mu I$. The rate for the last entry becomes $|\lambda_n - \mu| / |\lambda_{n-1} - \mu|$. Shifts: $\mu = a_{nn}$ (Rayleigh), or the **Wilkinson** shift, the eigenvalue of the trailing 2 × 2 block $\begin{pmatrix} a & b \\ b & c \end{pmatrix}$ closer to $c$:
+   $$\mu = c - \frac{\operatorname{sign}(\delta)\, b^2}{|\delta| + \sqrt{\delta^2 + b^2}}, \qquad \delta = \frac{a - c}{2}, \quad \operatorname{sign}(0) = 1.$$
+   **Deflation:** once $|a_{n,n-1}|$ is below a tolerance, $a_{nn}$ is an eigenvalue; remove the last row and column.
+4. **2 × 2 eigenvalues.** $\lambda^2 - \operatorname{tr}(A)\lambda + \det(A) = 0$. A real matrix with $\operatorname{tr}^2 < 4\det$ has a complex pair $\lambda = a \pm bi$: in a linear ODE model, an oscillation with period $2\pi/b$ that grows ($a > 0$) or decays ($a < 0$).
+5. **Sensitivity.** Symmetric $A$: a perturbation $E$ moves each eigenvalue by at most $\|E\|$. Nonsymmetric $A = VDV^{-1}$: by up to $\kappa(V)\|E\|$. For a chain of $n$ compartments with one feedback of size $\varepsilon$, $(\lambda + 1)^n = \varepsilon$, so the eigenvalues move by $\varepsilon^{1/n}$.
+6. **Lanczos.** For symmetric $A$ and a unit start vector $\mathbf q_1$ ($\mathbf q_0 = \mathbf 0$, $\beta_0 = 0$):
+   $$\mathbf w = A\mathbf q_j - \beta_{j-1}\mathbf q_{j-1}, \quad \alpha_j = \mathbf q_j^T\mathbf w, \quad \mathbf w \leftarrow \mathbf w - \alpha_j\mathbf q_j, \quad \beta_j = \|\mathbf w\|, \quad \mathbf q_{j+1} = \mathbf w/\beta_j.$$
+   The **Ritz values** after $m$ steps are the eigenvalues of the tridiagonal $T_m$ with $\alpha_1, \dots, \alpha_m$ on the diagonal and $\beta_1, \dots, \beta_{m-1}$ beside it. In floating point the $\mathbf q_j$ lose orthogonality unless we **reorthogonalise**: $\mathbf w \leftarrow \mathbf w - Q_j(Q_j^T\mathbf w)$.
+7. **Implicit centring.** With column means $\boldsymbol\mu$ and $X_c = X - \mathbf 1\boldsymbol\mu^T$: $X_c\mathbf v = X\mathbf v - \mathbf 1(\boldsymbol\mu^T\mathbf v)$ and $X_c^T\mathbf w = X^T\mathbf w - \boldsymbol\mu(\mathbf 1^T\mathbf w)$. PCA needs the top eigenpairs of $X_c^TX_c$; $\sqrt{\lambda_i}$ are the singular values of $X_c$.
+
+The basic calls in each language. R's [`eigen`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html) does both kinds of matrix; numpy splits them into [`np.linalg.eigh`/`eigvalsh`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvalsh.html) (symmetric, **ascending** order) and [`np.linalg.eig`/`eigvals`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eig.html) (general); nalgebra has [`symmetric_eigen`](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.SymmetricEigen.html) (unsorted) and [`complex_eigenvalues`](https://docs.rs/nalgebra/latest/nalgebra/base/struct.Matrix.html#method.complex_eigenvalues) (values only: nalgebra has no eigenvectors for nonsymmetric matrices).
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+A <- matrix(c(4, 1, 0,
+              1, 3, 1,
+              0, 1, 2), 3)                      # symmetric 3 x 3
+eigen(A, symmetric = TRUE)$values
+# [1] 4.732051 3.000000 1.267949
+J <- rbind(c(-0.1, -1),                         # predator-prey Jacobian
+           c( 0.5,  0))
+eigen(J)$values
+# [1] -0.05+0.7053368i -0.05-0.7053368i
+f <- qr(A)                                      # one QR step: A1 = R Q
+round(qr.R(f) %*% qr.Q(f), 4)
+#        [,1]    [,2]    [,3]
+# [1,] 4.4118  0.6910  0.0000
+# [2,] 0.6910  3.1535 -0.5378
+# [3,] 0.0000 -0.5378  1.4348
+```
+
+### Python
+
+```python
+import numpy as np
+
+A = np.array([[4.0, 1, 0], [1, 3, 1], [0, 1, 2]])  # symmetric 3 x 3
+print(np.linalg.eigvalsh(A)[::-1])                 # eigvalsh sorts ascending
+# [4.73205081 3.         1.26794919]
+J = np.array([[-0.1, -1.0], [0.5, 0.0]])           # predator-prey Jacobian
+print(np.linalg.eigvals(J))
+# [-0.05+0.7053368j -0.05-0.7053368j]
+Q, R = np.linalg.qr(A)                             # one QR step: A1 = R Q
+print(np.round(R @ Q, 4))
+# [[ 4.4118  0.691   0.    ]
+#  [ 0.691   3.1535 -0.5378]
+#  [ 0.     -0.5378  1.4348]]
+```
+
+### Rust
+
+```rust
+// rust/examples/eigen_algorithms_background.rs  —  cargo run --example eigen_algorithms_background
+// Background: eigenvalues of a symmetric and a nonsymmetric matrix, and one QR step.
+use nalgebra::{Matrix2, Matrix3};
+
+fn main() {
+    let a = Matrix3::new(4.0, 1.0, 0.0,
+                         1.0, 3.0, 1.0,
+                         0.0, 1.0, 2.0);                 // symmetric 3 x 3
+    let mut ev: Vec<f64> = a.symmetric_eigen().eigenvalues.iter().cloned().collect();
+    ev.sort_by(|x, y| y.partial_cmp(x).unwrap());         // unsorted: sort decreasing
+    println!("{:.6?}", ev);
+    let j = Matrix2::new(-0.1, -1.0,
+                          0.5,  0.0);                     // predator-prey Jacobian
+    for z in j.complex_eigenvalues().iter() {
+        println!("{:.7} {:+.7}i", z.re, z.im);
+    }
+    let qr = a.qr();                                      // one QR step: A1 = R Q
+    let a1 = qr.r() * qr.q();
+    for i in 0..3 {
+        println!("{:8.4} {:8.4} {:8.4}", a1[(i, 0)], a1[(i, 1)], a1[(i, 2)]);
+    }
+}
+
+// Output:
+// [4.732051, 3.000000, 1.267949]
+// -0.0500000 +0.7053368i
+// -0.0500000 -0.7053368i
+//   4.4118   0.6910  -0.0000
+//   0.6910   3.1535   0.5378
+//   0.0000   0.5378   1.4348
+```
+
+:::
+
+The **signs** of $Q$, $R$ and eigenvectors are arbitrary and differ between R (LINPACK QR), numpy (LAPACK Householder QR) and nalgebra; that is why the off-diagonal entries above have different signs in Rust. Magnitudes and eigenvalues agree. Rust prints numbers in its own format (`1.2e-4` rather than `1.2e-04`).
+
+## By hand
+
+**B1. One QR step.** Let $A = \begin{pmatrix} 2 & 1 \\ 1 & 2 \end{pmatrix}$ (eigenvalues 3 and 1).
+(a) Compute $A = QR$ by Gram–Schmidt on the columns of $A$. Keep $\sqrt5$ as a symbol.
+(b) Compute $A_1 = RQ$. Check that the trace and the determinant did not change.
+(c) The off-diagonal entry went from 1 to $a_{21}^{(1)}$. Asymptotically it shrinks by $\lambda_2/\lambda_1$ per step. Roughly how many more steps until it is below $10^{-12}$?
+
+**B2. A QR step that does nothing.** A cell switches between two states every generation; $P = \begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$.
+(a) Find $Q$ and $R$ with $P = QR$ (hint: the columns of $P$ are already orthonormal). What is $RQ$?
+(b) What are the eigenvalues of $P$, and why does fact 2 predict (a)?
+(c) With shift $\mu = 0.5$, what are the eigenvalues of $P - \mu I$, and at what rate does the shifted algorithm converge? Which shift between 0 and 1 would you choose, and why?
+
+**B3. A complex pair.** The predator–prey Jacobian from the lecture is $J = \begin{pmatrix} -0.1 & -1 \\ 0.5 & 0 \end{pmatrix}$.
+(a) Compute its eigenvalues from fact 4.
+(b) What are the period of the oscillation and the factor by which the amplitude shrinks per period?
+(c) Check: the sum of the eigenvalues is the trace and the product is the determinant.
+(d) Why can the QR algorithm in real arithmetic never turn $J$ into a triangular matrix?
+
+**B4. Sensitive and insensitive eigenvalues.**
+(a) $N = \begin{pmatrix} -1 & \varepsilon \\ 1 & -1 \end{pmatrix}$ (two transit compartments with feedback $\varepsilon$). Compute its eigenvalues for $\varepsilon = 10^{-4}$, $10^{-10}$ and $10^{-16}$.
+(b) Do the same for the symmetric $S = \begin{pmatrix} -1 & \varepsilon \\ \varepsilon & -1 \end{pmatrix}$.
+(c) For the 10-compartment chain of the lecture, how far do the eigenvalues move for $\varepsilon = 10^{-10}$ and for $\varepsilon = 10^{-16}$ (rounding)? And for a chain of 20 compartments with $\varepsilon = 10^{-16}$?
+(d) A modeller reports "the slowest decay rate of this 20-compartment model is 0.84 per hour". What do you tell them?
+
+**B5. Two Lanczos steps.** $A = \begin{pmatrix} 4 & 1 & 0 \\ 1 & 3 & 1 \\ 0 & 1 & 2 \end{pmatrix}$ (eigenvalues $3 \pm \sqrt3 = 4.732, 1.268$ and $3$).
+(a) Run Lanczos from $\mathbf q_1 = \mathbf e_1 = (1, 0, 0)$: compute $\alpha_1, \beta_1, \mathbf q_2, \alpha_2, \beta_2, \mathbf q_3, \alpha_3$.
+(b) Give the Ritz values after 2 steps (the eigenvalues of $T_2$). Compare with the true largest and smallest eigenvalue. Which side are they on?
+(c) What is $T_3$, and why?
+(d) Repeat (b) from $\mathbf q_1 = \mathbf e_3$. Which eigenvalue is now approximated better?
+
+**B6. Cost and memory.** A double takes 8 bytes. The single-cell matrix of the lecture has 20 000 cells × 2 000 genes, 13 % non-zero; R's sparse format takes 12 bytes per non-zero.
+(a) How much memory do the dense and the sparse matrix take?
+(b) The same for 100 000 cells. How large is the 2 000 × 2 000 gene covariance matrix, and how large would a 100 000 × 100 000 cell–cell matrix be?
+(c) Dense `eigen` of a 2 000 × 2 000 symmetric matrix took 1.8 s. Estimate the time for 20 000 × 20 000.
+(d) One Lanczos step for PCA computes $X_c^T(X_c\mathbf v)$ implicitly. About how many floating-point operations is that, for the 20 000-cell matrix? How many steps fit in the work of a dense SVD of $X_c$ (about $4np^2$ operations for $n$ cells and $p$ genes)?
+
+## In code
+
+**C1. The QR algorithm.** For the 3 × 3 matrix $A$ of the Background, run 40 unshifted QR steps. Every 10 steps print $|a_{21}|$ and $|a_{32}|$ next to $(\lambda_2/\lambda_1)^k$ and $(\lambda_3/\lambda_2)^k$. At the end, compare the diagonal with the eigenvalues and check $A_k = \hat Q_k^TA\hat Q_k$ with $\hat Q_k = Q_1\cdots Q_k$. Finally check that $\hat Q_5$ is the $Q$ factor of $A^5$ (up to the signs of its columns). Python: [`np.linalg.qr`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.qr.html), [`np.linalg.matrix_power`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_power.html).
+
+**C2. Shifts and deflation.** Write `qr_eig(A, type)` that runs the shifted QR algorithm with deflation (tolerance $10^{-12}$, at most 500 steps) and returns the eigenvalues and the number of steps, for `type` = no shift, Rayleigh shift $a_{nn}$, and Wilkinson shift (fact 3). Run it on $A$ and on $B = \begin{pmatrix} 2 & 1 \\ 1 & 2 \end{pmatrix}$. Compare the step counts with B1(c). What does the Rayleigh shift return for $B$, and how would you notice that something went wrong?
+
+**C3. Complex eigenvalues.** Compute the eigenvalues of $J$ and the period. Then run 200 unshifted QR steps on $J$ and print $a_{21}$ and the diagonal after 50, 51 and 200 steps. Compute the eigenvalues of the final 2 × 2 matrix from its trace and determinant.
+
+**C4. Sensitivity.** Build the 10-compartment chain (fact 5).
+(a) For $\varepsilon = 10^{-14}, 10^{-12}, \dots, 10^{-2}$, put $\varepsilon$ in the top-right corner and print the largest $|\lambda + 1|$ next to $\varepsilon^{1/10}$. For comparison, put $\varepsilon$ symmetrically in entries (1, 3) and (3, 1) of the matrix $A$ from C1 and print the largest change in its eigenvalues.
+(b) For $\varepsilon = 10^{-10}$, compute the condition number of the eigenvector matrix (R: [`kappa`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kappa.html); Python: [`np.linalg.cond`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html); skip in Rust), and for $A$.
+(c) **Perturb and recompute:** add $10^{-12}$ times a matrix of standard normal numbers to the chain and look at how far the eigenvalues move from the circle of radius 0.1.
+
+**C5. Lanczos and its ghosts.** Use the diagonal test matrix of the lecture: eigenvalues 10, 9, 8 and 197 values evenly spaced in $[0, 5]$, applied as a function `Afun(v) = spec * v` (the matrix is never stored). Write `lanczos(Afun, n, m, reorth)` from fact 6, starting from $\mathbf q_1 = (1, \dots, 1)/\sqrt n$, and a function that returns the Ritz values after $m$ steps.
+(a) With reorthogonalisation, print the top three Ritz values after 5, 10, 20 and 60 steps.
+(b) Without reorthogonalisation, print the top eight Ritz values after 60 steps, and count the Ritz values above 7.5 in both runs.
+(c) Print $\max|Q^TQ - I|$ for both runs.
+
+**C6. PCA of 20 000 cells: full vs truncated.** Simulate the single-cell matrix with the function in the solution (10 cell types, Poisson counts, `log1p`, stored sparse; cells × genes).
+(a) Print the fraction of non-zeros and the memory of the sparse and of the dense matrix.
+(b) **Full routes:** centre a dense copy and compute all singular values (R: [`svd`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/svd.html); Python: `np.linalg.svd(..., compute_uv=False)`), and all eigenvalues of $X_c^TX_c$. Time both.
+(c) **Truncated route:** the top 10 singular values of $X_c$ without forming it: R [`irlba(X, nv = 10, center = mu)`](https://cran.r-project.org/package=irlba); Python [`scipy.sparse.linalg.svds`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.svds.html) on a [`LinearOperator`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html) that applies fact 7. Time it and compare the top singular values with (b). Rust has no truncated SVD in our crates; do only the covariance route there ([`sprs`](https://docs.rs/sprs/latest/sprs/) matrix, nalgebra `SymmetricEigen`), and C7 by hand.
+(d) Print singular values 9–13. Where is the gap?
+
+**C7. Matrix-free Lanczos for PCA.** Continue from C6. Write a function `Cv(v)` that returns $X_c^TX_c\mathbf v$ using fact 7, and run 40 Lanczos steps with full reorthogonalisation on it. Return the Ritz values and the **Ritz vectors** $\mathbf y_i = Q_m\mathbf s_i$ ($\mathbf s_i$ the eigenvectors of $T_m$).
+(a) Print $\sqrt{\theta_i}$ for the top 12 and compare with C6.
+(b) **The check:** print the relative residuals $\|C\mathbf y_i - \theta_i\mathbf y_i\|/\theta_i$ for the top 12. Which Ritz pairs can you trust?
+(c) R: compare with [`RSpectra::eigs_sym`](https://cran.r-project.org/package=RSpectra) on the same function. Python: [`scipy.sparse.linalg.eigsh`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html) on a `LinearOperator`.
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — Gram–Schmidt for a 2 × 2 (B1)"}
+$\mathbf q_1 = \mathbf a_1/\|\mathbf a_1\|$, $r_{11} = \|\mathbf a_1\|$. Then $r_{12} = \mathbf q_1^T\mathbf a_2$, $\mathbf v = \mathbf a_2 - r_{12}\mathbf q_1$, $r_{22} = \|\mathbf v\|$, $\mathbf q_2 = \mathbf v/r_{22}$. Every entry of $Q$ is a multiple of $1/\sqrt5$, which makes $RQ$ come out in simple fractions. For (c): from 0.6, how many factors of $1/3$ reach $10^{-12}$? Use $\log_{10}3 \approx 0.477$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — shifts (B2, C2)"}
+The eigenvalues of $P - \mu I$ are those of $P$ minus $\mu$. The rate is the ratio of the smaller to the larger modulus. For C2, compute the shift from the **current** $A_k$ at each step, and after a deflation the shift is taken from the smaller matrix. R: `A[-n, -n, drop = FALSE]` removes the last row and column; Python: `A[:-1, :-1]`; nalgebra: `a.view((0, 0), (n - 1, n - 1)).into_owned()`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — complex eigenvalues (B3, C3)"}
+$\operatorname{tr} J = -0.1$, $\det J = 0.5$; $\lambda = \tfrac12\left(\operatorname{tr} \pm \sqrt{\operatorname{tr}^2 - 4\det}\right)$. A negative number under the square root gives $\pm i\sqrt{4\det - \operatorname{tr}^2}$. The amplitude behaves like $e^{at}$ with $a$ the real part. In R, `sqrt` of a negative number is `NaN`: use `sqrt(as.complex(x))`; Python: `np.sqrt(complex(x))`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — the transit chain (B4, C4)"}
+For $N$: $(\lambda + 1)^2 = \varepsilon$, so $\lambda = -1 \pm \sqrt\varepsilon$. For $S$: $(\lambda + 1)^2 = \varepsilon^2$. For the long chain, $10^{-16/20} = 10^{-0.8}$. In code: R `diag(-1, n)` and `K[cbind(2:n, 1:(n - 1))] <- 1`; Python `-np.eye(n) + np.diag(np.ones(n - 1), -1)`; the distance $|\lambda + 1|$ is `Mod(ev + 1)` in R and `np.abs(ev + 1)` in Python. Use [`set.seed`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Random.html) / `np.random.default_rng(1)` for the perturbation.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — Lanczos (B5, C5, C7)"}
+Follow fact 6 line by line; in B5, $A\mathbf e_j$ is column $j$ of $A$. The Ritz values of a 2 × 2 symmetric $T$ are $\tfrac{a + c}{2} \pm \sqrt{\left(\tfrac{a - c}{2}\right)^2 + b^2}$. In code, store the $\mathbf q_j$ as the columns of an $n \times m$ matrix $Q$; reorthogonalisation is one line, `w <- w - Q[, 1:j] %*% crossprod(Q[, 1:j], w)` (Python: `w -= Q[:, :j+1] @ (Q[:, :j+1].T @ w)`). Build $T$ with the $\alpha$s on the diagonal and the $\beta$s on both neighbouring diagonals; R `eigen(T, symmetric = TRUE)`, Python `np.linalg.eigh(T)`, nalgebra `SymmetricEigen::new(t)`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — big sparse matrices (B6, C6, C7)"}
+Sparse matrices: R [`Matrix`](https://cran.r-project.org/package=Matrix) (`Matrix(x, sparse = TRUE)`, `nnzero`, `colMeans`, `crossprod(X, w)` for $X^T\mathbf w$); Python [`scipy.sparse.csr_matrix`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csr_matrix.html) (`X.nnz`, `X.mean(axis=0)`, `X.T @ w`); Rust `sprs::CsMat` built row by row (`CsMat::new(shape, indptr, indices, data)`) and looped over with `outer_iterator()`. Never call `as.matrix(X)` / `X.toarray()` except for the "full" comparison. Time with `system.time` (R), `time.perf_counter` (Python), `std::time::Instant` (Rust); in Rust build with `--release`.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $\|\mathbf a_1\| = \sqrt5$, $\mathbf q_1 = (2, 1)/\sqrt5$, $r_{11} = \sqrt5$. $r_{12} = (2 \cdot 1 + 1 \cdot 2)/\sqrt5 = 4/\sqrt5$. $\mathbf v = (1, 2) - \tfrac45(2, 1) = (-\tfrac35, \tfrac65)$, $r_{22} = \tfrac35\sqrt5 = 3/\sqrt5$, $\mathbf q_2 = (-1, 2)/\sqrt5$. So
+$$Q = \frac{1}{\sqrt5}\begin{pmatrix} 2 & -1 \\ 1 & 2 \end{pmatrix}, \qquad R = \begin{pmatrix} \sqrt5 & 4/\sqrt5 \\ 0 & 3/\sqrt5 \end{pmatrix}.$$
+(b) $RQ = \begin{pmatrix} 2 + \tfrac45 & -1 + \tfrac85 \\ \tfrac35 & \tfrac65 \end{pmatrix} = \begin{pmatrix} 2.8 & 0.6 \\ 0.6 & 1.2 \end{pmatrix}$. Trace $4$, determinant $3.36 - 0.36 = 3$, as for $A$ ($3 + 1$ and $3 \cdot 1$). The diagonal has moved towards 3 and 1.
+(c) $0.6 \cdot (1/3)^k < 10^{-12}$ needs $k \log_{10}3 > 12 + \log_{10}0.6 = 11.78$, so $k > 24.7$: about 25 more steps, 26 in all. C2 counts exactly 26 unshifted steps for $B$.
+
+**B2.**
+(a) $Q = P$, $R = I$ (or $Q = -P$, $R = -I$, which is what R returns). $RQ = P$: the iteration does not move.
+(b) $+1$ and $-1$: equal modulus, $|\lambda_2/\lambda_1| = 1$, so the subdiagonal shrinks by a factor 1 per step, i.e. not at all.
+(c) $P - 0.5I$ has eigenvalues $0.5$ and $-1.5$, ratio $1/3$: the off-diagonal shrinks by about 1/3 per step (the quiz shows $3.4\times10^{-5}$ after 10 steps). A shift close to an eigenvalue is best: $\mu = 0.9$ gives $0.1$ and $-1.9$, ratio $0.05$. With $\mu$ exactly 1, $P - I$ is singular and one step deflates.
+
+**B3.**
+(a) $\lambda^2 + 0.1\lambda + 0.5 = 0$: $\lambda = -0.05 \pm \tfrac12\sqrt{0.01 - 2} = -0.05 \pm i\sqrt{0.4975} = -0.05 \pm 0.7053i$.
+(b) Period $2\pi/0.7053 = 8.91$ time units. Per period the amplitude is multiplied by $e^{-0.05 \cdot 8.91} = e^{-0.445} = 0.64$.
+(c) $(-0.05 + 0.7053i) + (-0.05 - 0.7053i) = -0.1 = \operatorname{tr}J$; $0.05^2 + 0.7053^2 = 0.0025 + 0.4975 = 0.5 = \det J$.
+(d) Real orthogonal similarity transformations keep the matrix real, and a real triangular matrix has its (real) eigenvalues on the diagonal. Complex eigenvalues can only show up as a 2 × 2 real block. Also, by fact 2, the two eigenvalues have the same modulus $\sqrt{0.5}$, so nothing makes $a_{21}$ shrink.
+
+**B4.**
+(a) $\lambda = -1 \pm \sqrt\varepsilon$: $-1 \pm 0.01$, $-1 \pm 10^{-5}$, $-1 \pm 10^{-8}$. A change $\varepsilon$ in one entry moves the eigenvalues by $\sqrt\varepsilon$, far more than $\varepsilon$.
+(b) $\lambda = -1 \pm \varepsilon$: moved by exactly $\varepsilon$.
+(c) $10^{-10/10} = 0.1$; $10^{-16/10} = 10^{-1.6} = 0.025$. For 20 compartments: $10^{-16/20} = 10^{-0.8} = 0.16$. Even the rounding of the matrix entries makes the individual eigenvalues uncertain by 16 %.
+(d) That the number is not meaningful: all 20 eigenvalues are $-1$ in the exact model, and rounding alone spreads them over a circle of radius 0.16 around $-1$. Describe the dynamics instead (simulate the time course, or report the mean transit time $n/k = 20$ h), which are well conditioned.
+
+**B5.**
+(a) $A\mathbf e_1 = (4, 1, 0)$, $\alpha_1 = 4$, $\mathbf w = (0, 1, 0)$, $\beta_1 = 1$, $\mathbf q_2 = \mathbf e_2$. $A\mathbf e_2 - \beta_1\mathbf q_1 = (1, 3, 1) - (1, 0, 0) = (0, 3, 1)$, $\alpha_2 = 3$, $\mathbf w = (0, 0, 1)$, $\beta_2 = 1$, $\mathbf q_3 = \mathbf e_3$, $\alpha_3 = 2$.
+(b) $T_2 = \begin{pmatrix} 4 & 1 \\ 1 & 3 \end{pmatrix}$: $3.5 \pm \sqrt{0.25 + 1} = 3.5 \pm 1.118$, so $4.618$ and $2.382$. The largest Ritz value is **below** the largest eigenvalue 4.732, the smallest is **above** 1.268: Ritz values always lie inside the range of the eigenvalues and approach the ends from inside.
+(c) $T_3 = A$: $A$ is already tridiagonal and $Q_3 = I$, so after $n$ steps Lanczos has done a (trivial) tridiagonal reduction and the Ritz values are exact.
+(d) From $\mathbf e_3$: $\alpha_1 = 2$, $\beta_1 = 1$, $\mathbf q_2 = \mathbf e_2$, $\alpha_2 = 3$; $T_2 = \begin{pmatrix} 2 & 1 \\ 1 & 3 \end{pmatrix}$, Ritz values $2.5 \pm 1.118 = 3.618, 1.382$. Now the **smallest** eigenvalue (1.268) is approximated better. The start vector matters: it should not be close to orthogonal to the wanted eigenvectors (libraries start from a random vector).
+
+**B6.**
+(a) Dense: $2\times10^4 \cdot 2\times10^3 \cdot 8 = 3.2\times10^8$ bytes = 320 MB. Sparse: $0.13 \cdot 4\times10^7 = 5.2\times10^6$ non-zeros, times 12 bytes = 62 MB.
+(b) 100 000 cells: dense 1.6 GB, sparse 310 MB. Gene covariance: $2000^2 \cdot 8 = 32$ MB. Cell–cell: $10^{10} \cdot 8 = 80$ GB.
+(c) $10^3 \times 1.8$ s $= 1800$ s, half an hour (and 3.2 GB for the matrix alone).
+(d) $X\mathbf v$ and $X^T\mathbf w$ each take about $2\,\text{nnz} \approx 10^7$ operations, plus $O(n + p)$ for the centring: about $2\times10^7$ per step. The dense SVD: $4 \cdot 2\times10^4 \cdot (2\times10^3)^2 = 3.2\times10^{11}$, the work of about 15 000 Lanczos steps. We need 30–40.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+A <- matrix(c(4, 1, 0,  1, 3, 1,  0, 1, 2), 3)   # symmetric
+lam <- eigen(A)$values
+Ak <- A; Qk <- diag(3)
+for (k in 1:40) {
+  f <- qr(Ak)
+  Qk <- Qk %*% qr.Q(f)                 # accumulate Q1 Q2 ... Qk
+  Ak <- qr.R(f) %*% qr.Q(f)
+  if (k %% 10 == 0)
+    cat(sprintf("k = %2d  |a21| = %.2e  ratio^k = %.2e  |a32| = %.2e  ratio^k = %.2e\n",
+                k, abs(Ak[2, 1]), (lam[2] / lam[1])^k, abs(Ak[3, 2]), (lam[3] / lam[2])^k))
+}
+# k = 10  |a21| = 1.33e-02  ratio^k = 1.05e-02  |a32| = 2.31e-04  ratio^k = 1.82e-04
+# k = 20  |a21| = 1.39e-04  ratio^k = 1.10e-04  |a32| = 4.19e-08  ratio^k = 3.31e-08
+# k = 30  |a21| = 1.46e-06  ratio^k = 1.15e-06  |a32| = 7.63e-12  ratio^k = 6.02e-12
+# k = 40  |a21| = 1.53e-08  ratio^k = 1.21e-08  |a32| = 1.39e-15  ratio^k = 1.09e-15
+diag(Ak) - lam                         # eigenvalues on the diagonal
+# [1] -1.776357e-15 -1.332268e-15 -4.440892e-16
+max(abs(t(Qk) %*% A %*% Qk - Ak))      # A_k = Q^T A Q: similar to A
+# [1] 9.769963e-15
+# simultaneous iteration: Q1...Q5 against the Q of A^5 (up to signs)
+Ak <- A; Qk <- diag(3)
+for (k in 1:5) { f <- qr(Ak); Qk <- Qk %*% qr.Q(f); Ak <- qr.R(f) %*% qr.Q(f) }
+A5 <- A %*% A %*% A %*% A %*% A
+max(abs(abs(Qk) - abs(qr.Q(qr(A5)))))
+# [1] 5.551115e-16
+```
+
+### Python
+
+```python
+import numpy as np
+
+A = np.array([[4.0, 1, 0], [1, 3, 1], [0, 1, 2]])
+lam = np.linalg.eigvalsh(A)[::-1]
+Ak = A.copy(); Qk = np.eye(3)
+for k in range(1, 41):
+    Q, R = np.linalg.qr(Ak)
+    Qk = Qk @ Q                         # accumulate Q1 Q2 ... Qk
+    Ak = R @ Q
+    if k % 10 == 0:
+        print(f"k = {k:2d}  |a21| = {abs(Ak[1, 0]):.2e}  ratio^k = {(lam[1] / lam[0])**k:.2e}"
+              f"  |a32| = {abs(Ak[2, 1]):.2e}  ratio^k = {(lam[2] / lam[1])**k:.2e}")
+# k = 10  |a21| = 1.33e-02  ratio^k = 1.05e-02  |a32| = 2.31e-04  ratio^k = 1.82e-04
+# k = 20  |a21| = 1.39e-04  ratio^k = 1.10e-04  |a32| = 4.19e-08  ratio^k = 3.31e-08
+# k = 30  |a21| = 1.46e-06  ratio^k = 1.15e-06  |a32| = 7.63e-12  ratio^k = 6.02e-12
+# k = 40  |a21| = 1.53e-08  ratio^k = 1.21e-08  |a32| = 1.39e-15  ratio^k = 1.09e-15
+print(np.diag(Ak) - lam)                # eigenvalues on the diagonal
+# [-4.4408921e-15  4.4408921e-16  0.0000000e+00]
+print(np.max(np.abs(Qk.T @ A @ Qk - Ak)))  # A_k = Q^T A Q: similar to A
+# 9.769962616701378e-15
+# simultaneous iteration: Q1...Q5 against the Q of A^5 (up to signs)
+Ak = A.copy(); Qk = np.eye(3)
+for k in range(5):
+    Q, R = np.linalg.qr(Ak); Qk = Qk @ Q; Ak = R @ Q
+Q5, _ = np.linalg.qr(np.linalg.matrix_power(A, 5))
+print(np.max(np.abs(np.abs(Qk) - np.abs(Q5))))
+# 7.771561172376096e-16
+```
+
+### Rust
+
+```rust
+// rust/examples/eigen_algorithms_c1.rs  —  cargo run --example eigen_algorithms_c1
+// C1: the unshifted QR algorithm on a symmetric 3 x 3 matrix.
+use nalgebra::Matrix3;
+
+// scientific notation as R and Python print it: 1.33e-02 rather than Rust's 1.33e-2
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn main() {
+    let a = Matrix3::new(4.0, 1.0, 0.0,
+                         1.0, 3.0, 1.0,
+                         0.0, 1.0, 2.0);
+    let mut lam: Vec<f64> = a.symmetric_eigen().eigenvalues.iter().cloned().collect();
+    lam.sort_by(|x, y| y.partial_cmp(x).unwrap());
+    let mut ak = a;
+    let mut qk = Matrix3::<f64>::identity();
+    for k in 1..=40 {
+        let qr = ak.qr();
+        qk *= qr.q();                       // accumulate Q1 Q2 ... Qk
+        ak = qr.r() * qr.q();
+        if k % 10 == 0 {
+            println!("k = {:2}  |a21| = {}  ratio^k = {}  |a32| = {}  ratio^k = {}", k,
+                     sci(ak[(1, 0)].abs(), 2), sci((lam[1] / lam[0]).powi(k), 2),
+                     sci(ak[(2, 1)].abs(), 2), sci((lam[2] / lam[1]).powi(k), 2));
+        }
+    }
+    let d: Vec<String> = (0..3).map(|i| sci(ak[(i, i)] - lam[i], 6)).collect();
+    println!("{}", d.join(" "));            // eigenvalues on the diagonal
+    println!("{}", sci((qk.transpose() * a * qk - ak).amax(), 6)); // A_k = Q^T A Q
+    // simultaneous iteration: Q1...Q5 against the Q of A^5 (up to signs)
+    let (mut ak, mut qk) = (a, Matrix3::<f64>::identity());
+    for _ in 0..5 {
+        let qr = ak.qr();
+        qk *= qr.q();
+        ak = qr.r() * qr.q();
+    }
+    let q5 = (a * a * a * a * a).qr().q();
+    println!("{}", sci((qk.abs() - q5.abs()).amax(), 6));
+}
+
+// Output:
+// k = 10  |a21| = 1.33e-02  ratio^k = 1.05e-02  |a32| = 2.31e-04  ratio^k = 1.82e-04
+// k = 20  |a21| = 1.39e-04  ratio^k = 1.10e-04  |a32| = 4.19e-08  ratio^k = 3.31e-08
+// k = 30  |a21| = 1.46e-06  ratio^k = 1.15e-06  |a32| = 7.63e-12  ratio^k = 6.02e-12
+// k = 40  |a21| = 1.53e-08  ratio^k = 1.21e-08  |a32| = 1.39e-15  ratio^k = 1.09e-15
+// 2.842171e-14 8.437695e-15 -4.440892e-16
+// 4.618528e-14
+// 6.661338e-16
+```
+
+:::
+
+The subdiagonals follow the predicted rates up to a constant factor, in all three languages. The diagonal agrees with `eigen` to $10^{-14}$, and $\hat Q_k^TA\hat Q_k = A_k$ to rounding: the QR algorithm is a sequence of orthogonal similarity transforms. $\hat Q_5$ equals the $Q$ factor of $A^5$: the QR algorithm is simultaneous power iteration on the columns of the identity.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+shift_of <- function(A, type) {
+  n <- nrow(A)
+  if (type == "none") return(0)
+  if (type == "rayleigh") return(A[n, n])
+  a <- A[n - 1, n - 1]; b <- A[n, n - 1]; c <- A[n, n]   # Wilkinson
+  d <- (a - c) / 2
+  s <- if (d >= 0) 1 else -1
+  c - s * b^2 / (abs(d) + sqrt(d^2 + b^2))
+}
+qr_eig <- function(A, type = "rayleigh", tol = 1e-12, maxit = 500) {
+  lam <- c(); steps <- 0
+  while (nrow(A) > 1 && steps < maxit) {
+    n <- nrow(A)
+    mu <- shift_of(A, type)
+    f <- qr(A - mu * diag(n))
+    A <- qr.R(f) %*% qr.Q(f) + mu * diag(n)
+    steps <- steps + 1
+    if (abs(A[n, n - 1]) < tol) {              # deflate
+      lam <- c(A[n, n], lam)
+      A <- A[-n, -n, drop = FALSE]
+    }
+  }
+  list(values = c(diag(A), lam), steps = steps)
+}
+A <- matrix(c(4, 1, 0,  1, 3, 1,  0, 1, 2), 3)   # symmetric
+for (type in c("none", "rayleigh", "wilkinson")) {
+  r <- qr_eig(A, type)
+  cat(sprintf("%-9s steps = %3d  values = %s\n", type, r$steps,
+              paste(sprintf("%.10f", r$values), collapse = " ")))
+}
+# none      steps =  62  values = 4.7320508076 3.0000000000 1.2679491924
+# rayleigh  steps =   7  values = 4.7320508076 3.0000000000 1.2679491924
+# wilkinson steps =   4  values = 4.7320508076 3.0000000000 1.2679491924
+B <- matrix(c(2, 1, 1, 2), 2)
+for (type in c("none", "rayleigh", "wilkinson")) {
+  r <- qr_eig(B, type)
+  cat(sprintf("%-9s steps = %3d  values = %s\n", type, r$steps,
+              paste(sprintf("%.10f", r$values), collapse = " ")))
+}
+# none      steps =  26  values = 3.0000000000 1.0000000000
+# rayleigh  steps = 500  values = 2.0000000000 2.0000000000
+# wilkinson steps =   1  values = 3.0000000000 1.0000000000
+```
+
+### Python
+
+```python
+import numpy as np
+
+def shift_of(A, kind):
+    if kind == "none":
+        return 0.0
+    if kind == "rayleigh":
+        return A[-1, -1]
+    a, b, c = A[-2, -2], A[-1, -2], A[-1, -1]        # Wilkinson
+    d = (a - c) / 2
+    s = 1.0 if d >= 0 else -1.0
+    return c - s * b**2 / (abs(d) + np.sqrt(d**2 + b**2))
+
+def qr_eig(A, kind="rayleigh", tol=1e-12, maxit=500):
+    lam, steps = [], 0
+    while A.shape[0] > 1 and steps < maxit:
+        n = A.shape[0]
+        mu = shift_of(A, kind)
+        Q, R = np.linalg.qr(A - mu * np.eye(n))
+        A = R @ Q + mu * np.eye(n)
+        steps += 1
+        if abs(A[-1, -2]) < tol:                     # deflate
+            lam.insert(0, A[-1, -1])
+            A = A[:-1, :-1]
+    return list(np.diag(A)) + lam, steps
+
+A = np.array([[4.0, 1, 0], [1, 3, 1], [0, 1, 2]])
+B = np.array([[2.0, 1], [1, 2]])
+for M in (A, B):
+    for kind in ("none", "rayleigh", "wilkinson"):
+        vals, steps = qr_eig(M, kind)
+        print(f"{kind:<9} steps = {steps:3d}  values = " + " ".join(f"{v:.10f}" for v in vals))
+# none      steps =  62  values = 4.7320508076 3.0000000000 1.2679491924
+# rayleigh  steps =   7  values = 4.7320508076 3.0000000000 1.2679491924
+# wilkinson steps =   4  values = 4.7320508076 3.0000000000 1.2679491924
+# none      steps =  26  values = 3.0000000000 1.0000000000
+# rayleigh  steps = 500  values = 2.0000000000 2.0000000000
+# wilkinson steps =   1  values = 3.0000000000 1.0000000000
+```
+
+### Rust
+
+```rust
+// rust/examples/eigen_algorithms_c2.rs  —  cargo run --example eigen_algorithms_c2
+// C2: shifted QR algorithm with deflation; no shift, Rayleigh shift, Wilkinson shift.
+use nalgebra::DMatrix;
+
+fn shift_of(a: &DMatrix<f64>, kind: &str) -> f64 {
+    let n = a.nrows();
+    match kind {
+        "none" => 0.0,
+        "rayleigh" => a[(n - 1, n - 1)],
+        _ => {                                            // Wilkinson
+            let (p, b, c) = (a[(n - 2, n - 2)], a[(n - 1, n - 2)], a[(n - 1, n - 1)]);
+            let d = (p - c) / 2.0;
+            let s = if d >= 0.0 { 1.0 } else { -1.0 };
+            c - s * b * b / (d.abs() + (d * d + b * b).sqrt())
+        }
+    }
+}
+
+fn qr_eig(mut a: DMatrix<f64>, kind: &str, tol: f64, maxit: usize) -> (Vec<f64>, usize) {
+    let mut lam: Vec<f64> = Vec::new();
+    let mut steps = 0;
+    while a.nrows() > 1 && steps < maxit {
+        let n = a.nrows();
+        let mu = shift_of(&a, kind);
+        let eye = DMatrix::<f64>::identity(n, n);
+        let qr = (&a - &eye * mu).qr();
+        a = qr.r() * qr.q() + eye * mu;
+        steps += 1;
+        if a[(n - 1, n - 2)].abs() < tol {               // deflate
+            lam.insert(0, a[(n - 1, n - 1)]);
+            a = a.view((0, 0), (n - 1, n - 1)).into_owned();
+        }
+    }
+    let mut vals: Vec<f64> = a.diagonal().iter().cloned().collect();
+    vals.extend(lam);
+    (vals, steps)
+}
+
+fn main() {
+    let a = DMatrix::from_row_slice(3, 3, &[4.0, 1.0, 0.0, 1.0, 3.0, 1.0, 0.0, 1.0, 2.0]);
+    let b = DMatrix::from_row_slice(2, 2, &[2.0, 1.0, 1.0, 2.0]);
+    for m in [&a, &b] {
+        for kind in ["none", "rayleigh", "wilkinson"] {
+            let (vals, steps) = qr_eig(m.clone(), kind, 1e-12, 500);
+            let v: Vec<String> = vals.iter().map(|x| format!("{:.10}", x)).collect();
+            println!("{:<9} steps = {:3}  values = {}", kind, steps, v.join(" "));
+        }
+    }
+}
+
+// Output:
+// none      steps =  62  values = 4.7320508076 3.0000000000 1.2679491924
+// rayleigh  steps =   7  values = 4.7320508076 3.0000000000 1.2679491924
+// wilkinson steps =   4  values = 4.7320508076 3.0000000000 1.2679491924
+// none      steps =  26  values = 3.0000000000 1.0000000000
+// rayleigh  steps = 500  values = 2.0000000000 2.0000000000
+// wilkinson steps =   1  values = 3.0000000000 1.0000000000
+```
+
+:::
+
+For $A$: 62 steps unshifted, 7 with the Rayleigh shift, 4 with the Wilkinson shift. For $B$: 26 unshifted (as in B1(c)). The Rayleigh shift $\mu = a_{22} = 2$ makes $B - 2I = P$, the matrix of B2, and the iteration stalls: after 500 steps it returns the diagonal **2, 2**, a confident wrong answer. The check is the step count (it hit the maximum) or the off-diagonal entry that never became small. The Wilkinson shift is $\mu = 1$, an exact eigenvalue, and one step finishes. LAPACK uses Wilkinson-type shifts.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+J <- rbind(c(-0.1, -1),             # predator-prey Jacobian
+           c( 0.5,  0))
+ev <- eigen(J)$values
+ev
+# [1] -0.05+0.7053368i -0.05-0.7053368i
+2 * pi / Im(ev[1])                          # period of the oscillation
+# [1] 8.908064
+Jk <- J
+for (k in 1:200) {
+  f <- qr(Jk); Jk <- qr.R(f) %*% qr.Q(f)
+  if (k %in% c(50, 51, 200)) cat(sprintf("k = %3d  a21 = %8.4f  diag = %8.4f %8.4f\n",
+                                         k, Jk[2, 1], Jk[1, 1], Jk[2, 2]))
+}
+# k =  50  a21 =   0.5709  diag =  -0.2314   0.1314
+# k =  51  a21 =  -0.7523  diag =   0.2049  -0.3049
+# k = 200  a21 =   0.9803  diag =   0.0594  -0.1594
+tr <- sum(diag(Jk)); dt <- det(Jk)          # eigenvalues of the 2 x 2 block
+(tr + sqrt(as.complex(tr^2 - 4 * dt))) / 2
+# [1] -0.05+0.7053368i
+```
+
+### Python
+
+```python
+import numpy as np
+
+J = np.array([[-0.1, -1.0], [0.5, 0.0]])
+ev = np.linalg.eigvals(J)
+print(ev)
+# [-0.05+0.7053368j -0.05-0.7053368j]
+print(2 * np.pi / ev[0].imag)               # period of the oscillation
+# 8.908063943688271
+Jk = J.copy()
+for k in range(1, 201):
+    Q, R = np.linalg.qr(Jk); Jk = R @ Q
+    if k in (50, 51, 200):
+        print(f"k = {k:3d}  a21 = {Jk[1, 0]:8.4f}  diag = {Jk[0, 0]:8.4f} {Jk[1, 1]:8.4f}")
+# k =  50  a21 =   0.5709  diag =  -0.2314   0.1314
+# k =  51  a21 =  -0.7523  diag =   0.2049  -0.3049
+# k = 200  a21 =   0.9803  diag =   0.0594  -0.1594
+tr, dt = np.trace(Jk), np.linalg.det(Jk)    # eigenvalues of the 2 x 2 block
+print((tr + np.sqrt(complex(tr**2 - 4 * dt))) / 2)
+# (-0.0499999999999992+0.7053367989832916j)
+```
+
+### Rust
+
+```rust
+// rust/examples/eigen_algorithms_c3.rs  —  cargo run --example eigen_algorithms_c3
+// C3: complex eigenvalues of a real matrix; the real QR algorithm cannot triangularise it.
+use nalgebra::Matrix2;
+
+fn main() {
+    let j: Matrix2<f64> = Matrix2::new(-0.1, -1.0,
+                                    0.5,  0.0);
+    let ev = j.complex_eigenvalues();
+    for z in ev.iter() {
+        println!("{:.7} {:+.7}i", z.re, z.im);
+    }
+    println!("{:.6}", 2.0 * std::f64::consts::PI / ev[0].im.abs()); // period
+    let mut jk = j;
+    for k in 1..=200 {
+        let qr = jk.qr();
+        jk = qr.r() * qr.q();
+        if [50, 51, 200].contains(&k) {
+            println!("k = {:3}  a21 = {:8.4}  diag = {:8.4} {:8.4}",
+                     k, jk[(1, 0)], jk[(0, 0)], jk[(1, 1)]);
+        }
+    }
+    let (tr, dt) = (jk.trace(), jk.determinant());  // eigenvalues of the 2 x 2 block
+    let disc = tr * tr - 4.0 * dt;                   // negative: complex pair
+    println!("{:.7} {:+.7}i", tr / 2.0, (-disc).sqrt() / 2.0);
+}
+
+// Output:
+// -0.0500000 +0.7053368i
+// -0.0500000 -0.7053368i
+// 8.908064
+// k =  50  a21 =   0.5709  diag =  -0.2314   0.1314
+// k =  51  a21 =   0.7523  diag =   0.2049  -0.3049
+// k = 200  a21 =   0.9803  diag =   0.0594  -0.1594
+// -0.0500000 +0.7053368i
+```
+
+:::
+
+After 50, 51 and 200 steps the matrix is still a full 2 × 2 block that keeps changing: the QR algorithm never converges to triangular form on a complex pair. Its trace and determinant do not change, so its eigenvalues are always $-0.05 \pm 0.7053i$; that is how LAPACK reads off a complex pair from the real Schur form. (The sign of $a_{21}$ at step 51 differs in Rust: a different sign convention in QR.)
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+n <- 10
+chain <- diag(-1, n); chain[cbind(2:n, 1:(n - 1))] <- 1    # transit compartments
+A <- matrix(c(4, 1, 0,  1, 3, 1,  0, 1, 2), 3)             # symmetric
+for (e in 10^seq(-14, -2, by = 2)) {
+  K <- chain; K[1, n] <- e
+  S <- A; S[1, 3] <- S[3, 1] <- e
+  cat(sprintf("eps = %.0e  chain moved %.3e  (eps^(1/n) = %.3e)  symmetric moved %.3e\n",
+              e, max(Mod(eigen(K)$values + 1)), e^(1 / n),
+              max(abs(eigen(S)$values - eigen(A)$values))))
+}
+# eps = 1e-14  chain moved 3.981e-02  (eps^(1/n) = 3.981e-02)  symmetric moved 6.217e-15
+# eps = 1e-12  chain moved 6.310e-02  (eps^(1/n) = 6.310e-02)  symmetric moved 6.666e-13
+# eps = 1e-10  chain moved 1.000e-01  (eps^(1/n) = 1.000e-01)  symmetric moved 6.667e-11
+# eps = 1e-08  chain moved 1.585e-01  (eps^(1/n) = 1.585e-01)  symmetric moved 6.667e-09
+# eps = 1e-06  chain moved 2.512e-01  (eps^(1/n) = 2.512e-01)  symmetric moved 6.667e-07
+# eps = 1e-04  chain moved 3.981e-01  (eps^(1/n) = 3.981e-01)  symmetric moved 6.667e-05
+# eps = 1e-02  chain moved 6.310e-01  (eps^(1/n) = 6.310e-01)  symmetric moved 6.667e-03
+K <- chain; K[1, n] <- 1e-10
+kappa(eigen(K)$vectors)                  # condition number of the eigenvectors
+# [1] 1184131481
+kappa(eigen(A)$vectors)
+# [1] 1
+set.seed(1)                              # the check: perturb at 1e-12 and recompute
+Kp <- K + 1e-12 * matrix(rnorm(n^2), n)
+range(Mod(eigen(Kp)$values + 1))       # was exactly 0.1 for every eigenvalue
+# [1] 0.09994035 0.09995391
+```
+
+### Python
+
+```python
+import numpy as np
+
+n = 10
+chain = -np.eye(n) + np.diag(np.ones(n - 1), -1)          # transit compartments
+A = np.array([[4.0, 1, 0], [1, 3, 1], [0, 1, 2]])         # symmetric
+lamA = np.linalg.eigvalsh(A)
+for e in 10.0 ** np.arange(-14, -1, 2):
+    K = chain.copy(); K[0, n - 1] = e
+    S = A.copy(); S[0, 2] = S[2, 0] = e
+    print(f"eps = {e:.0e}  chain moved {np.max(np.abs(np.linalg.eigvals(K) + 1)):.3e}"
+          f"  (eps^(1/n) = {e**(1 / n):.3e})"
+          f"  symmetric moved {np.max(np.abs(np.linalg.eigvalsh(S) - lamA)):.3e}")
+# eps = 1e-14  chain moved 3.981e-02  (eps^(1/n) = 3.981e-02)  symmetric moved 7.994e-15
+# eps = 1e-12  chain moved 6.310e-02  (eps^(1/n) = 6.310e-02)  symmetric moved 6.675e-13
+# eps = 1e-10  chain moved 1.000e-01  (eps^(1/n) = 1.000e-01)  symmetric moved 6.667e-11
+# eps = 1e-08  chain moved 1.585e-01  (eps^(1/n) = 1.585e-01)  symmetric moved 6.667e-09
+# eps = 1e-06  chain moved 2.512e-01  (eps^(1/n) = 2.512e-01)  symmetric moved 6.667e-07
+# eps = 1e-04  chain moved 3.981e-01  (eps^(1/n) = 3.981e-01)  symmetric moved 6.667e-05
+# eps = 1e-02  chain moved 6.310e-01  (eps^(1/n) = 6.310e-01)  symmetric moved 6.667e-03
+K = chain.copy(); K[0, n - 1] = 1e-10
+print(np.linalg.cond(np.linalg.eig(K)[1]))   # condition number of the eigenvectors
+# 1000000020.6178452
+print(np.linalg.cond(np.linalg.eigh(A)[1]))
+# 1.0000000000000002
+rng = np.random.default_rng(1)                # the check: perturb at 1e-12 and recompute
+Kp = K + 1e-12 * rng.normal(size=(n, n))
+d = np.abs(np.linalg.eigvals(Kp) + 1)
+print(d.min(), d.max())                       # was exactly 0.1 for every eigenvalue
+# 0.10002838221133814 0.10003042080577229
+```
+
+### Rust
+
+```rust
+// rust/examples/eigen_algorithms_c4.rs  —  cargo run --example eigen_algorithms_c4
+// C4: sensitivity of eigenvalues. Transit-compartment chain (nonsymmetric, defective)
+// against a symmetric matrix. nalgebra has no eigenvectors for nonsymmetric matrices,
+// so the check here is "perturb and recompute".
+use nalgebra::{DMatrix, Matrix3};
+use rand::{rngs::StdRng, SeedableRng};
+use rand_distr::{Distribution, StandardNormal};
+
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn sorted_sym(a: Matrix3<f64>) -> Vec<f64> {
+    let mut v: Vec<f64> = a.symmetric_eigen().eigenvalues.iter().cloned().collect();
+    v.sort_by(|x, y| x.partial_cmp(y).unwrap());
+    v
+}
+
+// distances |lambda + 1| of all eigenvalues of k
+fn dist_from_minus1(k: &DMatrix<f64>) -> Vec<f64> {
+    k.complex_eigenvalues().iter().map(|z| ((z.re + 1.0).powi(2) + z.im.powi(2)).sqrt()).collect()
+}
+
+fn main() {
+    let n = 10;
+    let mut chain = DMatrix::<f64>::from_diagonal_element(n, n, -1.0);
+    for i in 1..n { chain[(i, i - 1)] = 1.0; }           // transit compartments
+    let a = Matrix3::new(4.0, 1.0, 0.0, 1.0, 3.0, 1.0, 0.0, 1.0, 2.0);
+    let lam_a = sorted_sym(a);
+    for p in (-14..=-2).step_by(2) {
+        let e = 10f64.powi(p);
+        let mut k = chain.clone();
+        k[(0, n - 1)] = e;
+        let mut s = a;
+        s[(0, 2)] = e; s[(2, 0)] = e;
+        let moved = dist_from_minus1(&k).into_iter().fold(0.0, f64::max);
+        let sym: f64 = sorted_sym(s).iter().zip(&lam_a).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max);
+        println!("eps = {}  chain moved {}  (eps^(1/n) = {})  symmetric moved {}",
+                 sci(e, 0), sci(moved, 3), sci(e.powf(1.0 / n as f64), 3), sci(sym, 3));
+    }
+    // the check: perturb at 1e-12 and recompute
+    let mut k = chain.clone();
+    k[(0, n - 1)] = 1e-10;
+    let mut rng = StdRng::seed_from_u64(1);
+    let kp = &k + DMatrix::from_fn(n, n, |_, _| {
+        let z: f64 = StandardNormal.sample(&mut rng);
+        1e-12 * z
+    });
+    let d = dist_from_minus1(&kp);
+    let (lo, hi) = (d.iter().cloned().fold(f64::INFINITY, f64::min), d.iter().cloned().fold(0.0, f64::max));
+    println!("{:.8} {:.8}", lo, hi);                    // was exactly 0.1 for every eigenvalue
+}
+
+// Output:
+// eps = 1e-14  chain moved 3.981e-02  (eps^(1/n) = 3.981e-02)  symmetric moved 6.661e-15
+// eps = 1e-12  chain moved 6.310e-02  (eps^(1/n) = 6.310e-02)  symmetric moved 6.684e-13
+// eps = 1e-10  chain moved 1.000e-01  (eps^(1/n) = 1.000e-01)  symmetric moved 6.667e-11
+// eps = 1e-08  chain moved 1.585e-01  (eps^(1/n) = 1.585e-01)  symmetric moved 6.667e-09
+// eps = 1e-06  chain moved 2.512e-01  (eps^(1/n) = 2.512e-01)  symmetric moved 6.667e-07
+// eps = 1e-04  chain moved 3.981e-01  (eps^(1/n) = 3.981e-01)  symmetric moved 6.667e-05
+// eps = 1e-02  chain moved 6.310e-01  (eps^(1/n) = 6.310e-01)  symmetric moved 6.667e-03
+// 0.10003059 0.10005766
+```
+
+:::
+
+The chain's eigenvalues move by exactly $\varepsilon^{1/10}$: $10^{-14}$ in the matrix gives 0.04 in the eigenvalues, a factor $4\times10^{12}$. The symmetric matrix moves by less than $\varepsilon$ every time. The eigenvector matrix of the chain has condition number about $10^9$ (R's `kappa` is an estimate, Python's `cond` exact; the eigenvectors are almost parallel), that of $A$ is 1. A random perturbation of size $10^{-12}$ moves the eigenvalues by about $5\times10^{-5}$ (the numbers differ between languages because the random numbers do): seven orders of magnitude more than the perturbation, so not more than about 5 digits of these eigenvalues mean anything.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+lanczos <- function(Afun, n, m, reorth = FALSE) {
+  Q <- matrix(0, n, m); alpha <- beta <- numeric(m)
+  q <- rep(1, n) / sqrt(n); q_old <- 0; b <- 0
+  for (j in 1:m) {
+    Q[, j] <- q
+    w <- Afun(q) - b * q_old
+    alpha[j] <- sum(w * q)
+    w <- w - alpha[j] * q
+    if (reorth) w <- w - Q[, 1:j] %*% crossprod(Q[, 1:j], w)   # full reorthogonalisation
+    b <- sqrt(sum(w^2)); beta[j] <- b
+    q_old <- q; q <- as.vector(w) / b
+  }
+  list(alpha = alpha, beta = beta, Q = Q)
+}
+ritz <- function(L, m) {                       # eigenvalues of the m x m tridiagonal T
+  T <- diag(L$alpha[1:m], m)
+  if (m > 1) T[cbind(2:m, 1:(m - 1))] <- T[cbind(1:(m - 1), 2:m)] <- L$beta[1:(m - 1)]
+  eigen(T, symmetric = TRUE, only.values = TRUE)$values
+}
+spec <- c(10, 9, 8, seq(0, 5, length.out = 197))   # 3 strong + 197 bulk
+Afun <- function(v) spec * v                       # A = diag(spec), never stored
+Lr <- lanczos(Afun, 200, 60, reorth = TRUE)
+Lp <- lanczos(Afun, 200, 60)
+for (m in c(5, 10, 20, 60)) cat("m =", m, " top Ritz values:", sprintf("%.6f", ritz(Lr, m)[1:3]), "\n")
+# m = 5  top Ritz values: 9.756289 7.024457 4.037090 
+# m = 10  top Ritz values: 9.999992 8.999718 7.998994 
+# m = 20  top Ritz values: 10.000000 9.000000 8.000000 
+# m = 60  top Ritz values: 10.000000 9.000000 8.000000 
+round(ritz(Lp, 60)[1:8], 6)
+# [1] 10.000000 10.000000 10.000000  9.000000  9.000000  8.000000  8.000000
+# [8]  4.999999
+round(ritz(Lr, 60)[1:8], 6)
+# [1] 10.000000  9.000000  8.000000  5.000000  4.974483  4.948750  4.921241
+# [8]  4.888677
+c(sum(ritz(Lp, 60) > 7.5), sum(ritz(Lr, 60) > 7.5))
+# [1] 7 3
+c(max(abs(crossprod(Lp$Q) - diag(60))), max(abs(crossprod(Lr$Q) - diag(60))))
+# [1] 6.835661e-01 6.661338e-16
+```
+
+### Python
+
+```python
+import numpy as np
+
+def lanczos(Afun, n, m, reorth=False):
+    Q = np.zeros((n, m)); alpha = np.zeros(m); beta = np.zeros(m)
+    q = np.ones(n) / np.sqrt(n); q_old = np.zeros(n); b = 0.0
+    for j in range(m):
+        Q[:, j] = q
+        w = Afun(q) - b * q_old
+        alpha[j] = w @ q
+        w = w - alpha[j] * q
+        if reorth:                                  # full reorthogonalisation
+            w = w - Q[:, :j + 1] @ (Q[:, :j + 1].T @ w)
+        b = np.linalg.norm(w); beta[j] = b
+        q_old = q; q = w / b
+    return alpha, beta, Q
+
+def ritz(alpha, beta, m):                           # eigenvalues of the m x m tridiagonal T
+    T = np.diag(alpha[:m]) + np.diag(beta[:m - 1], 1) + np.diag(beta[:m - 1], -1)
+    return np.linalg.eigvalsh(T)[::-1]
+
+spec = np.concatenate([[10, 9, 8], np.linspace(0, 5, 197)])  # 3 strong + 197 bulk
+Afun = lambda v: spec * v                                    # A = diag(spec), never stored
+ar, br, Qr = lanczos(Afun, 200, 60, reorth=True)
+ap, bp, Qp = lanczos(Afun, 200, 60)
+for m in (5, 10, 20, 60):
+    print(f"m = {m}  top Ritz values:", " ".join(f"{v:.6f}" for v in ritz(ar, br, m)[:3]))
+# m = 5  top Ritz values: 9.756289 7.024457 4.037090
+# m = 10  top Ritz values: 9.999992 8.999718 7.998994
+# m = 20  top Ritz values: 10.000000 9.000000 8.000000
+# m = 60  top Ritz values: 10.000000 9.000000 8.000000
+print(np.round(ritz(ap, bp, 60)[:8], 6))
+# [10.       10.       10.        9.        9.        8.        8.
+#   4.999999]
+print(np.round(ritz(ar, br, 60)[:8], 6))
+# [10.        9.        8.        5.        4.974483  4.94875   4.921241
+#   4.888677]
+print(np.sum(ritz(ap, bp, 60) > 7.5), np.sum(ritz(ar, br, 60) > 7.5))
+# 7 3
+print(np.max(np.abs(Qp.T @ Qp - np.eye(60))), np.max(np.abs(Qr.T @ Qr - np.eye(60))))
+# 0.6328385450179443 1.1102230246251565e-15
+```
+
+### Rust
+
+```rust
+// rust/examples/eigen_algorithms_c5.rs  —  cargo run --example eigen_algorithms_c5
+// C5: hand-written Lanczos, with and without full reorthogonalisation.
+use nalgebra::{DMatrix, DVector};
+
+struct Lanczos { alpha: Vec<f64>, beta: Vec<f64>, q: DMatrix<f64> }
+
+fn lanczos(afun: &dyn Fn(&DVector<f64>) -> DVector<f64>, n: usize, m: usize, reorth: bool) -> Lanczos {
+    let mut qm = DMatrix::<f64>::zeros(n, m);
+    let (mut alpha, mut beta) = (vec![0.0; m], vec![0.0; m]);
+    let mut q = DVector::from_element(n, 1.0 / (n as f64).sqrt());
+    let mut q_old = DVector::<f64>::zeros(n);
+    let mut b = 0.0;
+    for j in 0..m {
+        qm.set_column(j, &q);
+        let mut w = afun(&q) - &q_old * b;
+        alpha[j] = w.dot(&q);
+        w -= &q * alpha[j];
+        if reorth {                                   // full reorthogonalisation
+            let qj = qm.columns(0, j + 1);
+            w -= &qj * (qj.transpose() * &w);
+        }
+        b = w.norm();
+        beta[j] = b;
+        q_old = q;
+        q = w / b;
+    }
+    Lanczos { alpha, beta, q: qm }
+}
+
+fn ritz(l: &Lanczos, m: usize) -> Vec<f64> {          // eigenvalues of the m x m tridiagonal T
+    let t = DMatrix::from_fn(m, m, |i, j| {
+        if i == j { l.alpha[i] } else if i == j + 1 || j == i + 1 { l.beta[i.min(j)] } else { 0.0 }
+    });
+    let mut v: Vec<f64> = t.symmetric_eigen().eigenvalues.iter().cloned().collect();
+    v.sort_by(|x, y| y.partial_cmp(x).unwrap());
+    v
+}
+
+fn main() {
+    let mut spec = vec![10.0, 9.0, 8.0];                       // 3 strong + 197 bulk
+    spec.extend((0..197).map(|i| 5.0 * i as f64 / 196.0));
+    let s = DVector::from_vec(spec);
+    let afun = |v: &DVector<f64>| s.component_mul(v);           // A = diag(spec), never stored
+    let lr = lanczos(&afun, 200, 60, true);
+    let lp = lanczos(&afun, 200, 60, false);
+    for m in [5, 10, 20, 60] {
+        let r: Vec<String> = ritz(&lr, m)[..3].iter().map(|x| format!("{:.6}", x)).collect();
+        println!("m = {}  top Ritz values: {}", m, r.join(" "));
+    }
+    println!("{:.6?}", &ritz(&lp, 60)[..8]);
+    println!("{:.6?}", &ritz(&lr, 60)[..8]);
+    let count = |l: &Lanczos| ritz(l, 60).iter().filter(|&&x| x > 7.5).count();
+    println!("{} {}", count(&lp), count(&lr));
+    let orth = |l: &Lanczos| (l.q.transpose() * &l.q - DMatrix::<f64>::identity(60, 60)).amax();
+    println!("{:e} {:e}", orth(&lp), orth(&lr));
+}
+
+// Output:
+// m = 5  top Ritz values: 9.756289 7.024457 4.037090
+// m = 10  top Ritz values: 9.999992 8.999718 7.998994
+// m = 20  top Ritz values: 10.000000 9.000000 8.000000
+// m = 60  top Ritz values: 10.000000 9.000000 8.000000
+// [10.000000, 10.000000, 10.000000, 9.000000, 9.000000, 8.000000, 8.000000, 4.999999]
+// [10.000000, 9.000000, 8.000000, 5.000000, 4.974483, 4.948750, 4.921241, 4.888677]
+// 7 3
+// 5.398512441154881e-1 1.1102230246251565e-15
+```
+
+:::
+
+(a) The three outlying eigenvalues converge first, to 6 digits after 10–20 steps; the bulk (top value 5) converges much more slowly. (b) Without reorthogonalisation the converged eigenvalues come back as ghost copies: 10 three times, 9 and 8 twice. Seven Ritz values above 7.5, where there are three eigenvalues. (c) The plain $Q$ is far from orthonormal ($\max|Q^TQ - I| \approx 0.5$–$0.7$; the exact number depends on rounding and differs between languages), the reorthogonalised one is orthonormal to $10^{-15}$.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix); library(irlba)
+simulate_cells <- function(n_cells = 20000, n_genes = 2000, n_types = 10, seed = 1) {
+  set.seed(seed)
+  base <- rgamma(n_genes, shape = 0.3, rate = 2)              # mean count per gene
+  fold <- matrix(2^rnorm(n_genes * n_types), n_genes, n_types) # cell-type effects
+  type <- sample(n_types, n_cells, replace = TRUE)
+  lib  <- rlnorm(n_cells, 0, 0.3)                              # library size factor
+  lam  <- base * fold[, type] * rep(lib, each = n_genes)       # genes x cells
+  counts <- matrix(rpois(length(lam), lam), n_genes, n_cells)
+  list(X = Matrix(t(log1p(counts)), sparse = TRUE), type = type)  # cells x genes
+}
+sc <- simulate_cells()
+X <- sc$X
+mu <- colMeans(X)
+c(nnzero(X) / length(X), object.size(X) / 1e6, 8 * length(X) / 1e6)  # fraction, MB, MB
+# [1]   0.1296979  62.2645120 320.0000000
+# full route: dense, centred, all singular values
+t_full <- system.time({
+  Xc <- sweep(as.matrix(X), 2, mu)                 # 20000 x 2000 dense
+  d_full <- svd(Xc, nu = 0, nv = 0)$d
+})[["elapsed"]]
+# covariance route: 2000 x 2000, then eigen
+t_cov <- system.time({
+  e <- eigen(crossprod(Xc), symmetric = TRUE, only.values = TRUE)$values
+})[["elapsed"]]
+# truncated: top 10 only, X stays sparse, centring done implicitly
+set.seed(1)
+t_irlba <- system.time(r <- irlba(X, nv = 10, center = mu))[["elapsed"]]
+round(c(full = t_full, cov = t_cov, irlba = t_irlba), 2)
+#  full   cov irlba 
+# 11.20  2.37  0.90 
+round(rbind(full = d_full[1:5], cov = sqrt(e[1:5]), irlba = r$d[1:5]), 4)
+#           [,1]     [,2]     [,3]     [,4]     [,5]
+# full  335.2194 294.3642 275.4889 268.5457 259.6156
+# cov   335.2194 294.3642 275.4889 268.5457 259.6156
+# irlba 335.2194 294.3642 275.4889 268.5457 259.6156
+max(abs(r$d - d_full[1:10]) / d_full[1:10])
+# [1] 1.532666e-15
+round(d_full[9:13], 2)
+# [1] 223.61 218.43  72.44  72.41  72.05
+```
+
+### Python
+
+```python
+import time
+import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import LinearOperator, svds
+
+def simulate_cells(n_cells=20000, n_genes=2000, n_types=10, seed=1):
+    rng = np.random.default_rng(seed)
+    base = rng.gamma(0.3, 1 / 2, n_genes)                    # mean count per gene
+    fold = 2.0 ** rng.normal(size=(n_genes, n_types))         # cell-type effects
+    ctype = rng.integers(0, n_types, n_cells)
+    lib = rng.lognormal(0, 0.3, n_cells)                      # library size factor
+    lam = base[:, None] * fold[:, ctype] * lib[None, :]       # genes x cells
+    counts = rng.poisson(lam)
+    return sparse.csr_matrix(np.log1p(counts.T)), ctype       # cells x genes
+
+X, ctype = simulate_cells()
+n, p = X.shape
+mu = np.asarray(X.mean(axis=0)).ravel()
+mb = (X.data.nbytes + X.indices.nbytes + X.indptr.nbytes) / 1e6
+print(f"{X.nnz / (n * p):.4f} {mb:.1f} {8 * n * p / 1e6:.1f}")  # fraction, MB, MB
+# 0.1228 59.0 320.0
+# full route: dense, centred, all singular values
+t0 = time.perf_counter()
+Xc = X.toarray() - mu                                        # 20000 x 2000 dense
+d_full = np.linalg.svd(Xc, compute_uv=False)
+t_full = time.perf_counter() - t0
+# covariance route: 2000 x 2000, then eigh
+t0 = time.perf_counter()
+e = np.linalg.eigvalsh(Xc.T @ Xc)[::-1]
+t_cov = time.perf_counter() - t0
+# truncated: top 10 only, X stays sparse, centring done implicitly
+t0 = time.perf_counter()
+Xc_op = LinearOperator((n, p), dtype=float,
+                       matvec=lambda v: X @ v - mu @ v,                 # Xc v
+                       rmatvec=lambda w: X.T @ w - mu * w.sum())        # Xc^T w
+u, d, vt = svds(Xc_op, k=10, rng=np.random.default_rng(1))
+d = d[::-1]                                                  # svds sorts ascending
+t_svds = time.perf_counter() - t0
+print(f"full {t_full:.2f}  cov {t_cov:.2f}  svds {t_svds:.2f}")
+# full 9.06  cov 2.11  svds 0.51
+print(np.round(np.vstack([d_full[:5], np.sqrt(e[:5]), d[:5]]), 4))
+# [[328.148  289.7536 275.2746 266.5702 253.2972]
+#  [328.148  289.7536 275.2746 266.5702 253.2972]
+#  [328.148  289.7536 275.2746 266.5702 253.2972]]
+print(np.max(np.abs(d - d_full[:10]) / d_full[:10]))
+# 1.9617848638969074e-15
+print(np.round(d_full[8:13], 2))
+# [222.93 208.51  72.74  72.32  72.17]
+```
+
+### Rust
+
+```rust
+// rust/examples/eigen_algorithms_c6.rs  —  cargo run --release --example eigen_algorithms_c6
+// C6: PCA of a simulated 20 000-cell x 2 000-gene sparse matrix, "full" route:
+// form the 2000 x 2000 matrix Xc^T Xc from the sparse rows, then a dense
+// symmetric eigendecomposition (nalgebra). A dense SVD of the 20000 x 2000 matrix
+// in nalgebra (no LAPACK) is too slow to be worth waiting for.
+// The random numbers differ from R and Python, so the numbers differ too.
+use nalgebra::{DMatrix, SymmetricEigen};
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+use rand_distr::{Distribution, Gamma, LogNormal, Normal, Poisson};
+use sprs::CsMat;
+use std::time::Instant;
+
+fn simulate_cells(n_cells: usize, n_genes: usize, n_types: usize, seed: u64) -> (CsMat<f64>, Vec<usize>) {
+    let mut rng = StdRng::seed_from_u64(seed);
+    let gamma = Gamma::new(0.3, 0.5).unwrap();                  // mean count per gene
+    let base: Vec<f64> = (0..n_genes).map(|_| gamma.sample(&mut rng)).collect();
+    let normal = Normal::new(0.0, 1.0).unwrap();                // cell-type effects
+    let fold: Vec<f64> = (0..n_genes * n_types).map(|_| 2f64.powf(normal.sample(&mut rng))).collect();
+    let ctype: Vec<usize> = (0..n_cells).map(|_| rng.random_range(0..n_types)).collect();
+    let lognorm = LogNormal::new(0.0, 0.3).unwrap();            // library size factor
+    let lib: Vec<f64> = (0..n_cells).map(|_| lognorm.sample(&mut rng)).collect();
+    // build the cells x genes matrix row by row in CSR form, storing only non-zeros
+    let (mut indptr, mut indices, mut data) = (vec![0usize], Vec::new(), Vec::new());
+    for i in 0..n_cells {
+        for g in 0..n_genes {
+            let lam = base[g] * fold[g * n_types + ctype[i]] * lib[i];
+            let count: f64 = Poisson::new(lam).unwrap().sample(&mut rng);
+            if count > 0.0 {
+                indices.push(g);
+                data.push(count.ln_1p());
+            }
+        }
+        indptr.push(indices.len());
+    }
+    (CsMat::new((n_cells, n_genes), indptr, indices, data), ctype)
+}
+
+fn main() {
+    let (x, _ctype) = simulate_cells(20000, 2000, 10, 1);
+    let (n, p) = x.shape();
+    let mut mu = vec![0.0; p];                                   // column means
+    for row in x.outer_iterator() {
+        for (j, &v) in row.iter() { mu[j] += v / n as f64; }
+    }
+    let mb = (x.nnz() * (8 + 8) + (n + 1) * 8) as f64 / 1e6;
+    println!("{:.4} {:.1} {:.1}", x.nnz() as f64 / (n * p) as f64, mb, (8 * n * p) as f64 / 1e6);
+    // covariance route: Xc^T Xc = X^T X - n mu mu^T, X^T X summed over sparse rows
+    let t0 = Instant::now();
+    let mut c = DMatrix::<f64>::zeros(p, p);
+    for row in x.outer_iterator() {
+        let nz: Vec<(usize, f64)> = row.iter().map(|(j, &v)| (j, v)).collect();
+        for &(j, a) in &nz {
+            for &(k, b) in &nz { c[(j, k)] += a * b; }
+        }
+    }
+    for j in 0..p {
+        for k in 0..p { c[(j, k)] -= n as f64 * mu[j] * mu[k]; }
+    }
+    let t_form = t0.elapsed().as_secs_f64();
+    let t0 = Instant::now();
+    let mut e: Vec<f64> = SymmetricEigen::new(c).eigenvalues.iter().cloned().collect();
+    let t_eig = t0.elapsed().as_secs_f64();
+    e.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    println!("form C {:.2} s   eigen {:.2} s", t_form, t_eig);
+    let d: Vec<String> = e[..13].iter().map(|v| format!("{:.4}", v.sqrt())).collect();
+    println!("{}", d.join(" "));
+}
+
+// Output:
+// 0.1278 82.0 320.0
+// form C 4.76 s   eigen 10.49 s
+// 330.3412 281.2751 272.5744 261.8015 248.8473 247.8879 237.7900 231.7957 225.0999 215.6888 73.0783 72.2192 71.9143
+```
+
+:::
+
+All three routes give the same top singular values to 15 digits (R and Python; the three languages simulate different random numbers, so the values differ between languages but not between routes). The sparse matrix takes 60–80 MB instead of 320 MB (Rust stores 8-byte indices). The full SVD takes about 10 s, the covariance route 2–3 s (11 s in nalgebra, which does not use LAPACK), the truncated route 0.5–1 s, without ever making a dense copy. Singular values 1–10 are 200–340, then there is a gap to a cluster around 72: 10 cell types give about 10 directions of signal, the rest is noise. Times depend on your machine and on how many threads your BLAS uses.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(RSpectra)
+Cv <- function(v) {                               # Xc^T Xc v without forming Xc
+  w <- as.vector(X %*% v) - sum(mu * v)           # Xc v  = X v - 1 (mu . v)
+  as.vector(crossprod(X, w)) - mu * sum(w)        # Xc^T w = X^T w - mu (1 . w)
+}
+lanczos_eig <- function(Afun, n, m) {             # Lanczos with full reorthogonalisation
+  Q <- matrix(0, n, m); alpha <- beta <- numeric(m)
+  q <- rep(1, n) / sqrt(n); q_old <- 0; b <- 0
+  for (j in 1:m) {
+    Q[, j] <- q
+    w <- Afun(q) - b * q_old
+    alpha[j] <- sum(w * q)
+    w <- w - alpha[j] * q
+    w <- w - Q[, 1:j] %*% crossprod(Q[, 1:j], w)
+    b <- sqrt(sum(w^2)); beta[j] <- b
+    q_old <- q; q <- as.vector(w) / b
+  }
+  T <- diag(alpha, m)
+  T[cbind(2:m, 1:(m - 1))] <- T[cbind(1:(m - 1), 2:m)] <- beta[1:(m - 1)]
+  et <- eigen(T, symmetric = TRUE)
+  list(values = et$values, vectors = Q %*% et$vectors)   # Ritz values and vectors
+}
+t_l <- system.time(L <- lanczos_eig(Cv, ncol(X), 40))[["elapsed"]]
+round(sqrt(L$values[1:12]), 4)
+#  [1] 335.2194 294.3642 275.4889 268.5457 259.6156 251.4449 249.1353 236.9429
+#  [9] 223.6076 218.4260  72.4273  72.0305
+res <- sapply(1:12, function(i) {                 # the check: ||C y - theta y|| / theta
+  y <- L$vectors[, i]
+  sqrt(sum((Cv(y) - L$values[i] * y)^2)) / L$values[i]
+})
+signif(res, 2)
+#  [1] 6.6e-15 3.3e-15 4.6e-15 3.9e-15 4.6e-15 3.7e-15 3.7e-15 4.4e-15 4.0e-15
+# [10] 4.8e-15 9.4e-04 8.8e-03
+t_e <- system.time(e <- eigs_sym(function(v, args) Cv(v), k = 10, n = ncol(X)))[["elapsed"]]
+round(sqrt(e$values), 4)
+#  [1] 335.2194 294.3642 275.4889 268.5457 259.6156 251.4449 249.1353 236.9429
+#  [9] 223.6076 218.4260
+c(lanczos = t_l, eigs_sym = t_e, matvecs = e$nops)
+#  lanczos eigs_sym  matvecs 
+#    0.655    0.455   27.000 
+```
+
+### Python
+
+```python
+from scipy.sparse.linalg import LinearOperator, eigsh
+
+def Cv(v):                                        # Xc^T Xc v without forming Xc
+    w = X @ v - mu @ v                            # Xc v  = X v - 1 (mu . v)
+    return X.T @ w - mu * w.sum()                 # Xc^T w = X^T w - mu (1 . w)
+
+def lanczos_eig(Afun, n, m):                      # Lanczos with full reorthogonalisation
+    Q = np.zeros((n, m)); alpha = np.zeros(m); beta = np.zeros(m)
+    q = np.ones(n) / np.sqrt(n); q_old = np.zeros(n); b = 0.0
+    for j in range(m):
+        Q[:, j] = q
+        w = Afun(q) - b * q_old
+        alpha[j] = w @ q
+        w = w - alpha[j] * q
+        w = w - Q[:, :j + 1] @ (Q[:, :j + 1].T @ w)
+        b = np.linalg.norm(w); beta[j] = b
+        q_old = q; q = w / b
+    T = np.diag(alpha) + np.diag(beta[:m - 1], 1) + np.diag(beta[:m - 1], -1)
+    theta, S = np.linalg.eigh(T)
+    return theta[::-1], (Q @ S)[:, ::-1]          # Ritz values (decreasing) and vectors
+
+t0 = time.perf_counter()
+theta, Y = lanczos_eig(Cv, p, 40)
+t_l = time.perf_counter() - t0
+print(np.round(np.sqrt(theta[:12]), 4))
+# [328.148  289.7536 275.2746 266.5702 253.2972 253.1683 245.5307 238.0412
+#  222.9257 208.5121  72.7425  72.1954]
+res = [np.linalg.norm(Cv(Y[:, i]) - theta[i] * Y[:, i]) / theta[i] for i in range(12)]
+print(np.array2string(np.array(res), precision=1))   # the check: ||C y - theta y|| / theta
+# [5.1e-15 3.8e-15 3.8e-15 3.8e-15 3.5e-15 3.9e-15 3.9e-15 4.0e-15 4.2e-15
+#  4.8e-15 1.2e-03 5.6e-03]
+t0 = time.perf_counter()
+C_op = LinearOperator((p, p), matvec=Cv, dtype=float)
+ev = np.sort(eigsh(C_op, k=10, which="LA", v0=np.ones(p), return_eigenvectors=False))
+t_e = time.perf_counter() - t0
+print(np.round(np.sqrt(ev[::-1]), 4))
+# [328.148  289.7536 275.2746 266.5702 253.2972 253.1683 245.5307 238.0412
+#  222.9257 208.5121]
+print(f"lanczos {t_l:.2f}  eigsh {t_e:.2f}")
+# lanczos 0.53  eigsh 0.41
+```
+
+### Rust
+
+```rust
+// rust/examples/eigen_algorithms_c7.rs  —  cargo run --release --example eigen_algorithms_c7
+// C7: matrix-free Lanczos (full reorthogonalisation) for the top eigenpairs of
+// Xc^T Xc, with X sparse (sprs) and the centring done implicitly. Rust has no
+// counterpart to irlba / eigsh in our crate list, so Lanczos is hand-written.
+// The random numbers differ from R and Python, so the numbers differ too.
+use nalgebra::{DMatrix, DVector, SymmetricEigen};
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+use rand_distr::{Distribution, Gamma, LogNormal, Normal, Poisson};
+use sprs::CsMat;
+use std::time::Instant;
+
+fn simulate_cells(n_cells: usize, n_genes: usize, n_types: usize, seed: u64) -> (CsMat<f64>, Vec<usize>) {
+    let mut rng = StdRng::seed_from_u64(seed);
+    let gamma = Gamma::new(0.3, 0.5).unwrap();                  // mean count per gene
+    let base: Vec<f64> = (0..n_genes).map(|_| gamma.sample(&mut rng)).collect();
+    let normal = Normal::new(0.0, 1.0).unwrap();                // cell-type effects
+    let fold: Vec<f64> = (0..n_genes * n_types).map(|_| 2f64.powf(normal.sample(&mut rng))).collect();
+    let ctype: Vec<usize> = (0..n_cells).map(|_| rng.random_range(0..n_types)).collect();
+    let lognorm = LogNormal::new(0.0, 0.3).unwrap();            // library size factor
+    let lib: Vec<f64> = (0..n_cells).map(|_| lognorm.sample(&mut rng)).collect();
+    // build the cells x genes matrix row by row in CSR form, storing only non-zeros
+    let (mut indptr, mut indices, mut data) = (vec![0usize], Vec::new(), Vec::new());
+    for i in 0..n_cells {
+        for g in 0..n_genes {
+            let lam = base[g] * fold[g * n_types + ctype[i]] * lib[i];
+            let count: f64 = Poisson::new(lam).unwrap().sample(&mut rng);
+            if count > 0.0 {
+                indices.push(g);
+                data.push(count.ln_1p());
+            }
+        }
+        indptr.push(indices.len());
+    }
+    (CsMat::new((n_cells, n_genes), indptr, indices, data), ctype)
+}
+
+// Xc^T Xc v without forming Xc:  w = X v - 1 (mu . v),  out = X^T w - mu (1 . w)
+fn cv(x: &CsMat<f64>, mu: &DVector<f64>, v: &DVector<f64>) -> DVector<f64> {
+    let mv = mu.dot(v);
+    let w: Vec<f64> = x.outer_iterator()
+        .map(|row| row.iter().map(|(j, &a)| a * v[j]).sum::<f64>() - mv)
+        .collect();
+    let wsum: f64 = w.iter().sum();
+    let mut out = DVector::<f64>::zeros(v.len());
+    for (i, row) in x.outer_iterator().enumerate() {
+        for (j, &a) in row.iter() { out[j] += a * w[i]; }
+    }
+    out - mu * wsum
+}
+
+// Lanczos with full reorthogonalisation: Ritz values (decreasing) and vectors
+fn lanczos_eig(afun: &dyn Fn(&DVector<f64>) -> DVector<f64>, n: usize, m: usize) -> (Vec<f64>, DMatrix<f64>) {
+    let mut qm = DMatrix::<f64>::zeros(n, m);
+    let (mut alpha, mut beta) = (vec![0.0; m], vec![0.0; m]);
+    let mut q = DVector::from_element(n, 1.0 / (n as f64).sqrt());
+    let mut q_old = DVector::<f64>::zeros(n);
+    let mut b = 0.0;
+    for j in 0..m {
+        qm.set_column(j, &q);
+        let mut w = afun(&q) - &q_old * b;
+        alpha[j] = w.dot(&q);
+        w -= &q * alpha[j];
+        let qj = qm.columns(0, j + 1);
+        w -= &qj * (qj.transpose() * &w);
+        b = w.norm();
+        beta[j] = b;
+        q_old = q;
+        q = w / b;
+    }
+    let t = DMatrix::from_fn(m, m, |i, j| {
+        if i == j { alpha[i] } else if i == j + 1 || j == i + 1 { beta[i.min(j)] } else { 0.0 }
+    });
+    let eig = SymmetricEigen::new(t);
+    let mut idx: Vec<usize> = (0..m).collect();
+    idx.sort_by(|&a, &b| eig.eigenvalues[b].partial_cmp(&eig.eigenvalues[a]).unwrap());
+    let theta: Vec<f64> = idx.iter().map(|&i| eig.eigenvalues[i]).collect();
+    let s = DMatrix::from_fn(m, m, |r, c| eig.eigenvectors[(r, idx[c])]);
+    (theta, qm * s)
+}
+
+fn main() {
+    let (x, _ctype) = simulate_cells(20000, 2000, 10, 1);
+    let (n, p) = x.shape();
+    let mut mu = DVector::<f64>::zeros(p);
+    for row in x.outer_iterator() {
+        for (j, &v) in row.iter() { mu[j] += v / n as f64; }
+    }
+    let afun = |v: &DVector<f64>| cv(&x, &mu, v);
+    let t0 = Instant::now();
+    let (theta, y) = lanczos_eig(&afun, p, 40);
+    let t_l = t0.elapsed().as_secs_f64();
+    let d: Vec<String> = theta[..12].iter().map(|v| format!("{:.4}", v.sqrt())).collect();
+    println!("{}", d.join(" "));
+    let res: Vec<String> = (0..12).map(|i| {               // the check: ||C y - theta y|| / theta
+        let yi = y.column(i).into_owned();
+        format!("{:.1e}", (afun(&yi) - &yi * theta[i]).norm() / theta[i])
+    }).collect();
+    println!("{}", res.join(" "));
+    println!("lanczos {:.2} s", t_l);
+}
+
+// Output:
+// 330.3412 281.2751 272.5744 261.8015 248.8473 247.8879 237.7900 231.7957 225.0999 215.6888 73.0783 72.0774
+// 6.2e-15 3.3e-15 3.1e-15 3.9e-15 4.2e-15 3.4e-15 3.8e-15 4.4e-15 4.4e-15 4.2e-15 1.2e-4 1.9e-2
+// lanczos 0.66 s
+```
+
+:::
+
+(a) After 40 steps the top 10 Ritz values equal the singular values from C6 to all printed digits. (b) Their residuals are $\approx 5\times10^{-15}$: these are eigenpairs of $C$ to machine precision. Ritz values 11 and 12 are in the noise cluster and have residuals of $10^{-3}$–$10^{-2}$; they are not converged (compare 72.43 with the true 72.44 in R). The residual tells you this without knowing the answer. (c) The library (ARPACK, implicitly restarted Lanczos) gives the same values with fewer products, because it restarts and keeps only the useful part of the Krylov space.
+:::
+
+## Where this leads
+
+- ***Equilibria, stability and the phase plane* (Part 8):** the eigenvalues of a Jacobian (real, complex, sign of the real part) classify steady states; C3 and C4 are the numerical side of that.
+- ***Stiffness and implicit methods* (Part 8):** a widely spread set of Jacobian eigenvalues is what makes an ODE stiff.
+- ***Iterative linear solvers in depth* (Part 11):** conjugate gradients and GMRES use the same Krylov subspaces and the same Lanczos/Arnoldi recurrences to **solve** $A\mathbf x = \mathbf b$ for a large sparse $A$.
+- The statistics of PCA (how many components, scaling, interpretation) are in the sister course; the truncated SVD as the best low-rank approximation is in *The SVD, rank deficiency and regularisation* (Part 4).
