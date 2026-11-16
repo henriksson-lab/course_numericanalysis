@@ -1,24 +1,24 @@
 # Cross-references from `gillespie` (Stochastic simulation)
 
-- gillespie/lec.qmd:34 (notes, About this lecture) -> monte-carlo (SSA as a Monte Carlo method; standard errors)
-- gillespie/lec.qmd:39 (slide "Recap: the mRNA ODE") -> euler (mRNA model m' = alpha - delta m from slide "ODEs as models")
-- gillespie/lec.qmd:53 (notes, Recap) -> euler (there alpha = 10 per min, delta = 0.2 per min, steady state 50)
-- gillespie/lec.qmd:109 (notes, "The chemical master equation, in words") -> power-iteration (stationary distribution of a Markov chain as eigenvector for eigenvalue 1/0)
-- gillespie/lec.qmd:120 (notes, "Gillespie's idea") -> monte-carlo (inverse-transform sampling, exponential and discrete/base-composition example)
-- gillespie/lec.qmd:211 (notes, "Many cells") -> monte-carlo (Monte Carlo standard error sd/sqrt(N); streams differ between languages)
-- gillespie/lec.qmd:222 (notes, "Runs, mean and distribution") -> monte-carlo (testing on a known answer: binomial overlap count)
-- gillespie/lec.qmd:336 (slide "When the mean is not the ODE: extinction") -> euler (SIR running example N = 10 000, beta = 0.3, gamma = 0.1)
-- gillespie/lec.qmd:356 (notes, extinction) -> phase-plane (noise switching the toggle switch between stable states)
-- gillespie/lec.qmd:367 (notes, "Single outbreaks vs the ODE") -> nonlinear-least-squares (fitting an ODE to a stochastic outbreak; "Part 9")
-- gillespie/lec.qmd:408 (notes, tau-leaping) -> euler (tau-leaping is to the SSA what Euler is to the ODE)
-- gillespie/lec.qmd:433 (notes, Euler–Maruyama) -> euler (order 1 of Euler for ODEs)
-- gillespie/lec.qmd:458 (Summary, "Next") -> optimisation-1d (start of Part 9)
-- gillespie/lec.qmd:461 (notes, Summary) -> nonlinear-least-squares, monte-carlo
-- gillespie/exercise.qmd:135 (B7(c)) -> euler (SIR example starts with I = 10)
-- gillespie/exercise.qmd:921 (Solution C6) -> monte-carlo (rare-event problem)
-- gillespie/exercise.qmd:926 (Where this leads) -> optimisation-1d, nonlinear-least-squares (fitting rates / ODE parameters)
-- gillespie/exercise.qmd:927 (Where this leads) -> identifiability (burst size and frequency identifiable, not all four telegraph rates)
-- gillespie/exercise.qmd:928 (Where this leads) -> reaction-diffusion (stochastic reaction–diffusion with the SSA)
+- gillespie/lec.qmd:34 (notes, About this lecture) -> monte-carlo (SSA as a Monte Carlo method; standard errors) [ok]
+- gillespie/lec.qmd:39 (slide "Recap: the mRNA ODE") -> euler (mRNA model m' = alpha - delta m from slide "ODEs as models") [fixed: linked; slide now states euler writes m' = alpha - delta m with alpha = 10/min, delta = 0.2/min (steady state 50), here k = 10/h, delta = 1/h]
+- gillespie/lec.qmd:53 (notes, Recap) -> euler (there alpha = 10 per min, delta = 0.2 per min, steady state 50) [fixed: notes explain the renaming alpha -> k and the change of units]
+- gillespie/lec.qmd:109 (notes, "The chemical master equation, in words") -> power-iteration (stationary distribution of a Markov chain as eigenvector for eigenvalue 1/0) [fixed: power-iteration uses eigenvalue 1 of a transition matrix; notes now say so (eigenvalue 0 of the rate matrix)]
+- gillespie/lec.qmd:120 (notes, "Gillespie's idea") -> monte-carlo (inverse-transform sampling, exponential and discrete/base-composition example) [ok]
+- gillespie/lec.qmd:211 (notes, "Many cells") -> monte-carlo (Monte Carlo standard error sd/sqrt(N); streams differ between languages) [ok]
+- gillespie/lec.qmd:222 (notes, "Runs, mean and distribution") -> monte-carlo (testing on a known answer: binomial overlap count) [ok]
+- gillespie/lec.qmd:336 (slide "When the mean is not the ODE: extinction") -> euler (SIR running example N = 10 000, beta = 0.3, gamma = 0.1) [fixed: linked; N, beta, gamma match euler; I0 = 1 here vs 10 there is stated]
+- gillespie/lec.qmd:356 (notes, extinction) -> phase-plane (noise switching the toggle switch between stable states) [ok]
+- gillespie/lec.qmd:367 (notes, "Single outbreaks vs the ODE") -> nonlinear-least-squares (fitting an ODE to a stochastic outbreak; "Part 9") [fixed: Part 9 fits deterministic models only; wording no longer implies NLS treats outbreaks]
+- gillespie/lec.qmd:408 (notes, tau-leaping) -> euler (tau-leaping is to the SSA what Euler is to the ODE) [ok]
+- gillespie/lec.qmd:433 (notes, Euler–Maruyama) -> euler (order 1 of Euler for ODEs) [ok]
+- gillespie/lec.qmd:458 (Summary, "Next") -> optimisation-1d (start of Part 9) [fixed: linked]
+- gillespie/lec.qmd:461 (notes, Summary) -> nonlinear-least-squares, monte-carlo [ok]
+- gillespie/exercise.qmd:135 (B7(c)) -> euler (SIR example starts with I = 10) [fixed: linked; I = 10 matches euler]
+- gillespie/exercise.qmd:921 (Solution C6) -> monte-carlo (rare-event problem) [fixed: linked]
+- gillespie/exercise.qmd:926 (Where this leads) -> optimisation-1d, nonlinear-least-squares (fitting rates / ODE parameters) [fixed: linked]
+- gillespie/exercise.qmd:927 (Where this leads) -> identifiability (burst size and frequency identifiable, not all four telegraph rates) [fixed: linked; note: identifiability does not treat the telegraph model, sentence is a forward pointer to the topic]
+- gillespie/exercise.qmd:928 (Where this leads) -> reaction-diffusion (stochastic reaction–diffusion with the SSA) [fixed: linked; added that reaction-diffusion treats deterministic PDEs only]
 
 ## Running examples defined here
 

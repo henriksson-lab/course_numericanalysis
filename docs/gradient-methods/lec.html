@@ -225,15 +225,15 @@ Numerical analysis for biologists
 <h2>About this lecture</h2>
 <p>Fitting a model means finding the parameters that make a misfit (a sum of squares, a negative log-likelihood) as small as possible. With more than one parameter we need new tools.</p>
 <ul>
-<li>The <strong>gradient</strong> (the slopes in every direction) and the <strong>Hessian</strong> (the curvatures). Both are Jacobians, which you met in <em>Newton for systems of equations</em>.</li>
+<li>The <strong>gradient</strong> (the slopes in every direction) and the <strong>Hessian</strong> (the curvatures). Both are Jacobians, which you met in <a href="../newton-systems/lec.html"><em>Newton for systems of equations</em></a>.</li>
 <li><strong>Steepest descent</strong> with a <strong>backtracking line search</strong>, and why it <strong>zig-zags</strong> when the Hessian is badly conditioned.</li>
 <li><strong>Newton’s method</strong> for minimisation: fast near the minimum, unreliable far from it.</li>
 <li><strong>Quasi-Newton (BFGS, L-BFGS)</strong>: build the curvature from gradients. <strong>Nelder–Mead</strong>: no derivatives at all.</li>
 <li>What <code>optim</code> and <code>scipy.optimize.minimize</code> do, and why <strong>scaling</strong> and <strong>starting values</strong> matter. One slide on <strong>stochastic gradient descent</strong>.</li>
-<li>Biology: fitting a <strong>4-parameter logistic dose–response curve</strong> (EC50, Hill slope, top, bottom). We also explain the growth-curve failure from <em>Why numerical analysis?</em>.</li>
+<li>Biology: fitting a <strong>4-parameter logistic dose–response curve</strong> (EC50, Hill slope, top, bottom). We also explain the growth-curve failure from <a href="../intro/lec.html"><em>Why numerical analysis?</em></a>.</li>
 </ul>
 <aside class="notes">
-<p>This is the central unit of Part 9. Everything the students do when they call optim, nls or scipy.optimize.minimize happens here. The previous unit, Optimisation in one dimension, gave the one-variable picture: a minimum has f’ = 0 and f’’ &gt; 0, golden section and Brent need no derivatives, and a line search picks a step along a direction. Today we go to several variables. The new mathematics is small: the gradient and the Hessian are Jacobians, so the students already know how to compute and check them. The real content is the behaviour of the methods: which ones are slow, which ones fail, and how to tell.</p>
+<p>This is the central unit of Part 9. Everything the students do when they call optim, nls or scipy.optimize.minimize happens here. The previous unit, Optimisation in one dimension, gave the one-variable picture: a minimum has f’ = 0 and f’’ &gt; 0, golden section and Brent need no derivatives, and Newton x - f’/f’’ must check that f’’ &gt; 0 and that f decreases, shortening the step if not. That last check becomes today’s line search. Today we go to several variables. The new mathematics is small: the gradient and the Hessian are Jacobians, so the students already know how to compute and check them. The real content is the behaviour of the methods: which ones are slow, which ones fail, and how to tell.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -308,11 +308,11 @@ Numerical analysis for biologists
 </section>
 <section id="what-we-already-have" class="slide level2 smaller">
 <h2>What we already have</h2>
-<p>From <em>Optimisation in one dimension</em>:</p>
+<p>From <a href="../optimisation-1d/lec.html"><em>Optimisation in one dimension</em></a>:</p>
 <ul>
-<li>At a minimum of <span class="math inline">f(x)</span>: <span class="math inline">f'(x^*) = 0</span> and <span class="math inline">f''(x^*) &gt; 0</span>. A <strong>line search</strong> finds a good step along one direction.</li>
+<li>At a minimum of <span class="math inline">f(x)</span>: <span class="math inline">f'(x^*) = 0</span> and <span class="math inline">f''(x^*) &gt; 0</span>. Newton <span class="math inline">x - f'/f''</span> is fast, but only safe with checks: <span class="math inline">f'' &gt; 0</span>, and <span class="math inline">f</span> must <strong>decrease</strong> (else shorten the step).</li>
 </ul>
-<p>From <em>Newton for systems of equations</em>:</p>
+<p>From <a href="../newton-systems/lec.html"><em>Newton for systems of equations</em></a>:</p>
 <ul>
 <li>The <strong>Jacobian</strong> <span class="math inline">J</span> of <span class="math inline">\mathbf F: \mathbb R^n \to \mathbb R^m</span> has entries <span class="math inline">J_{ij} = \partial F_i / \partial x_j</span> (row = output, column = input).</li>
 <li>Newton for <span class="math inline">\mathbf F(\mathbf x) = \mathbf 0</span>: solve <span class="math inline">J\,\boldsymbol\delta = -\mathbf F</span>, set <span class="math inline">\mathbf x \leftarrow \mathbf x + \boldsymbol\delta</span>. Quadratic convergence near the root.</li>
@@ -320,7 +320,7 @@ Numerical analysis for biologists
 </ul>
 <p>Today: <strong>minimum of <span class="math inline">f(\mathbf x)</span></strong> = a point where all slopes are zero and the surface curves <strong>up</strong> in every direction.</p>
 <aside class="notes">
-<p>One slide of recap. Two facts carry over: the one-variable conditions for a minimum, and Newton’s method as “linearise, then solve a linear system”. The plan for the rest of the lecture is to write “all slopes zero” as a system of n equations, the gradient equal to zero, and to reuse the Jacobian machinery on it. The idea of a line search from the previous unit comes back as the safeguard that makes every method in this lecture work from a poor start.</p>
+<p>One slide of recap. Two facts carry over: the one-variable conditions for a minimum, and Newton’s method as “linearise, then solve a linear system”. The plan for the rest of the lecture is to write “all slopes zero” as a system of n equations, the gradient equal to zero, and to reuse the Jacobian machinery on it. The check from the previous unit, “if f does not decrease, shorten the step”, becomes the line search: the safeguard that makes every method in this lecture work from a poor start. Brent and golden section could also do the one-dimensional search along a direction, but an exact search is rarely worth its cost.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -404,7 +404,7 @@ Numerical analysis for biologists
 <li>Here: eigenvalues <span class="math inline">4 \pm \sqrt5 = 6.24,\ 1.76</span>, both positive. One positive, one negative: a <strong>saddle</strong>. Both negative: a maximum.</li>
 </ul>
 <aside class="notes">
-<p>The one-variable conditions f’ = 0, f’’ &gt; 0 become gradient = 0 and Hessian positive definite. The Hessian is symmetric because mixed partial derivatives do not depend on the order (for smooth f). For a 2 by 2 matrix: positive definite if and only if the determinant and the trace are both positive; here det = 11, trace = 8. The quadratic model is the one from the Taylor table in Why numerical analysis?, now with vectors: s^T H s is the curvature along the direction s, times the length squared. Eigenvectors of H are the directions of largest and smallest curvature, the axes of the elliptical contours.</p>
+<p>The one-variable conditions f’ = 0, f’’ &gt; 0 become gradient = 0 and Hessian positive definite. The Hessian is symmetric because mixed partial derivatives do not depend on the order (for smooth f). For a 2 by 2 matrix: positive definite if and only if the determinant and the trace are both positive; here det = 11, trace = 8. The quadratic model is the Optimisation row of the Taylor table (“Where Taylor comes back”) in Why numerical analysis?, now with vectors: s^T H s is the curvature along the direction s, times the length squared. Eigenvectors of H are the directions of largest and smallest curvature, the axes of the elliptical contours.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -432,7 +432,7 @@ Numerical analysis for biologists
 <span id="cb3-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 550.4608</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>All four eigenvalues positive: a true <strong>minimum</strong>.</li>
-<li>Curvature differs by a factor <strong>550</strong> between directions: the valley is long and narrow. This is the <strong>condition number</strong> <span class="math inline">\kappa(H)</span> from <em>Pivoting, norms and conditioning</em>.</li>
+<li>Curvature differs by a factor <strong>550</strong> between directions: the valley is long and narrow. This is the <strong>condition number</strong> <span class="math inline">\kappa(H)</span> from <a href="../pivoting-conditioning/lec.html"><em>Pivoting, norms and conditioning</em></a>.</li>
 </ul>
 <aside class="notes">
 <p>We get the Hessian as the finite-difference Jacobian of the analytic gradient: four extra gradient evaluations. This is exactly the finite-difference Jacobian of Newton for systems, applied to F = gradient. numDeriv::hessian(sse, p) also works and needs only sse, at more cost. The eigenvalues say: along EC50 and Hill (the large entries 3611 and 3701), the SSE is steep; along bottom and top, it is shallow, with curvature about 7 to 10. Part of this is units: a change of 1 µM in EC50 is a huge change, a change of 1 % in top is a small one. Condition number of a symmetric positive definite matrix = largest over smallest eigenvalue. We will see that kappa decides the speed of steepest descent, and in Identifiability and uncertainty of fitted parameters, the same Hessian gives the standard errors.</p>
@@ -497,7 +497,7 @@ Numerical analysis for biologists
 <li><code>isTRUE</code> also rejects a step that gives <code>NaN</code>. Never diverges; but <strong>3453 steps</strong>.</li>
 </ul>
 <aside class="notes">
-<p>The Armijo (sufficient decrease) condition asks for a decrease of at least a small fraction c of what the linear model predicts: alpha times the squared gradient length. Halving guarantees that some step is accepted, because for small enough alpha the linear model is accurate. This is the backtracking line search from Optimisation in one dimension, used here along the direction -g. Production codes also enforce a curvature condition (the Wolfe conditions) so that steps are not too short, and interpolate rather than halve. The stopping tolerance 1e-4 on the gradient length is about 1e-7 of its starting size; asking for much less runs into rounding, because a line search on f cannot see decreases below about eps times f (about 7e-14 here). A real code should also cap the number of halvings.</p>
+<p>The Armijo (sufficient decrease) condition asks for a decrease of at least a small fraction c of what the linear model predicts: alpha times the squared gradient length. Halving guarantees that some step is accepted, because for small enough alpha the linear model is accurate. It turns the check of Optimisation in one dimension (“f must decrease, otherwise shorten the step”) into a rule, used here along the direction -g. Production codes also enforce a curvature condition (the Wolfe conditions) so that steps are not too short, and interpolate rather than halve. The stopping tolerance 1e-4 on the gradient length is about 1e-7 of its starting size; asking for much less runs into rounding, because a line search on f cannot see decreases below about eps times f (about 7e-14 here). A real code should also cap the number of halvings.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -696,7 +696,7 @@ Numerical analysis for biologists
 </section>
 <section id="quasi-newton-learn-the-curvature-from-gradients" class="slide level2 smaller">
 <h2>Quasi-Newton: learn the curvature from gradients</h2>
-<p>The secant idea from <em>Newton and secant methods</em>: replace <span class="math inline">f''</span> by a slope of <span class="math inline">f'</span> between two points. In <span class="math inline">n</span> dimensions, with step <span class="math inline">\mathbf s_k = \mathbf x_{k+1} - \mathbf x_k</span> and gradient change <span class="math inline">\mathbf y_k = \nabla f_{k+1} - \nabla f_k</span>:</p>
+<p>The secant idea from <a href="../newton/lec.html"><em>Newton and secant methods</em></a>: replace <span class="math inline">f''</span> by a slope of <span class="math inline">f'</span> between two points. In <span class="math inline">n</span> dimensions, with step <span class="math inline">\mathbf s_k = \mathbf x_{k+1} - \mathbf x_k</span> and gradient change <span class="math inline">\mathbf y_k = \nabla f_{k+1} - \nabla f_k</span>:</p>
 <p><span class="math display">\textbf{secant condition:}\quad B_{k+1}\,\mathbf y_k = \mathbf s_k \qquad (B \approx H^{-1})</span></p>
 <p><strong>BFGS</strong> (Broyden, Fletcher, Goldfarb, Shanno, 1970) picks the update closest to <span class="math inline">B_k</span> that satisfies it:</p>
 <p><span class="math display">B_{k+1} = V^\mathsf{T} B_k V + \rho\, \mathbf s_k \mathbf s_k^\mathsf{T}, \qquad V = I - \rho\, \mathbf y_k \mathbf s_k^\mathsf{T}, \quad \rho = 1/(\mathbf y_k^\mathsf{T}\mathbf s_k)</span></p>
@@ -941,7 +941,7 @@ Numerical analysis for biologists
 </section>
 <section id="back-to-the-growth-curve" class="slide level2 smaller">
 <h2>Back to the growth curve</h2>
-<p><em>Why numerical analysis?</em>: logistic fit, time in <strong>minutes</strong>, start <span class="math inline">r = 0.5</span> (“per hour” by habit).</p>
+<p><a href="../intro/lec.html"><em>Why numerical analysis?</em></a>: logistic fit, time in <strong>minutes</strong>, start <span class="math inline">r = 0.5</span> (“per hour” by habit).</p>
 <div class="sourceCode" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">grad</span>(sse_min, <span class="fu">c</span>(<span class="at">r =</span> <span class="fl">0.5</span>, <span class="at">K =</span> <span class="dv">1</span>, <span class="at">N0 =</span> <span class="fl">0.05</span>))      <span class="co"># time in minutes</span></span>
 <span id="cb11-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.000 3.940 0.098</span></span>
 <span id="cb11-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">optim</span>(<span class="fu">c</span>(<span class="at">r =</span> <span class="fl">0.5</span>, <span class="at">K =</span> <span class="dv">1</span>, <span class="at">N0 =</span> <span class="fl">0.05</span>), sse_min, <span class="at">method =</span> <span class="st">"BFGS"</span>)<span class="sc">$</span>par</span>
@@ -951,7 +951,7 @@ Numerical analysis for biologists
 <span id="cb11-7"><a aria-hidden="true" tabindex="-1"></a><span class="co">#         r         K        N0</span></span>
 <span id="cb11-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.5241071 1.1913604 0.0165278</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
-<li>At <span class="math inline">r = 0.5</span>/min the model reaches <span class="math inline">K</span> within minutes, long before the first reading: <span class="math inline">\partial\,\mathrm{SSE}/\partial r \approx 4\times10^{-23}</span>. BFGS never moves <span class="math inline">r</span>; Nelder–Mead wanders on the plateau until its corner values agree.</li>
+<li>At <span class="math inline">r = 0.5</span>/min the model reaches <span class="math inline">K</span> within minutes, long before the first reading: <span class="math inline">\partial\,\mathrm{SSE}/\partial r \approx 4\times10^{-23}</span>. BFGS never moves <span class="math inline">r</span>; Nelder–Mead wanders on the plateau until its corner values agree (to <span class="math inline">r = 0.68</span>, SSE 2.23, as in the intro).</li>
 <li>In hours the natural guess is right, and <span class="math inline">\kappa</span> drops from <span class="math inline">1.2\times10^4</span> to <span class="math inline">1.0\times10^3</span>. <strong>Choose units so parameters are near 1.</strong></li>
 </ul>
 <aside class="notes">
@@ -1028,7 +1028,7 @@ Numerical analysis for biologists
 <li><strong>Units and scale</strong>: parameters near 1 (µM, hours, log EC50), or <code>parscale</code>.</li>
 <li><strong>Start from the data</strong>, and <strong>multistart</strong>: do the answers agree?</li>
 <li><strong>At the answer:</strong> gradient near 0 and Hessian eigenvalues all positive (a minimum, not a saddle or plateau). A huge <span class="math inline">\kappa</span> warns of poorly determined parameters.</li>
-<li><strong>Method:</strong> smooth with gradient → BFGS (L-BFGS for many parameters); noisy or non-smooth → Nelder–Mead; sum of squares → <em>Nonlinear least squares and ODE fitting</em>.</li>
+<li><strong>Method:</strong> smooth with gradient → BFGS (L-BFGS for many parameters); noisy or non-smooth → Nelder–Mead; sum of squares → <a href="../nonlinear-least-squares/lec.html"><em>Nonlinear least squares and ODE fitting</em></a>.</li>
 </ul>
 <aside class="notes">
 <p>A list to keep next to the keyboard. Each item caught one of today’s failures: the wrong gradient (exercise), the iteration limit (CG), the flat fits (nM start, growth curve), the bad conditioning (nM, minutes), the bad starts (Nelder-Mead multistart), and the saddle (Newton from EC50 = 10). The Hessian at the answer comes back in Identifiability and uncertainty of fitted parameters, where its inverse gives standard errors; a near-zero eigenvalue means a parameter combination the data do not determine.</p>
@@ -1053,7 +1053,7 @@ Numerical analysis for biologists
 <li><strong>BFGS</strong> builds <span class="math inline">H^{-1}</span> from gradient differences; <strong>L-BFGS</strong> stores only a few of them. <strong>Nelder–Mead</strong> uses only <span class="math inline">f</span>.</li>
 <li><code>optim</code> (default Nelder–Mead) and <code>minimize</code> (default BFGS) report “converged” when a stopping rule is met. Scale the parameters, start from the data, multistart, check.</li>
 </ul>
-<p><strong>Next:</strong> <em>Nonlinear least squares and ODE fitting</em>: Gauss–Newton and Levenberg–Marquardt use the structure of a sum of squares.</p>
+<p><strong>Next:</strong> <a href="../nonlinear-least-squares/lec.html"><em>Nonlinear least squares and ODE fitting</em></a>: Gauss–Newton and Levenberg–Marquardt use the structure of a sum of squares.</p>
 <aside class="notes">
 <p>Recap the three families: first-order (steepest descent, SGD), second-order (Newton), and in between (quasi-Newton), plus the derivative-free simplex. The SSE has special structure: its Hessian is approximately 2 J^T J, using only the model Jacobian we already computed for the gradient. That is Gauss-Newton, and adding mu I to it is Levenberg-Marquardt, the method behind nls and minpack.lm: the next unit.</p>
 <style type="text/css">

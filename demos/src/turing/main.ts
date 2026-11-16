@@ -545,7 +545,7 @@ function buildTuring(box: HTMLElement, ds: DOMStringMap): TabCtl {
     lg("exact", dl, COL.blue, "");
     lg("IMEX step on this grid", dl + 110, COL.red, "8 5");
     const bt = svgEl("text", { x: dl, y: 46, class: "sm" }, svgD);
-    bt.textContent = qa >= 0 ? `unstable band q = ${qa.toFixed(3)}–${qb.toFixed(3)}   (needs d > d_c = ${DC.toFixed(2)})` : `no unstable band: d < d_c = ${DC.toFixed(2)}`;
+    bt.textContent = qa >= 0 ? `unstable band q = ${qa.toFixed(3)}–${qb.toFixed(3)}  (d_c = ${DC.toFixed(2)})` : `no unstable band: d < d_c = ${DC.toFixed(2)}`;
   }
   function drawLog(): void { logEl.textContent = log.length ? log.slice(-7).join("\n") : "(a run is logged\n when it reaches\n t = " + st.tend + ")"; }
   function drawAll(): void {

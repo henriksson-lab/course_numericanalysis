@@ -1,29 +1,29 @@
 # Cross-references from `optimisation-1d` (Optimisation in one dimension)
 
-- optimisation-1d/lec.qmd:34 (notes, About this lecture) -> gradient-methods (next unit, several parameters); bisection-fixedpoint, newton (method twins: bisection/golden, secant/parabolic, Brent/Brent, Newton/Newton)
-- optimisation-1d/lec.qmd:37-47 (slide "Recap: an MLE as the root of the score") -> newton (zero-truncated Poisson MLE, score, Newton from the mean, uniroot)
-- optimisation-1d/lec.qmd:173 (notes, Why 0.618?) -> convergence-cost (linear convergence vocabulary)
-- optimisation-1d/lec.qmd:170 (Why 0.618?, last bullet) -> bisection-fixedpoint (bisection 0.30 digits per step)
-- optimisation-1d/lec.qmd:229 (notes, Parabolic interpolation) -> newton (secant method as twin)
-- optimisation-1d/lec.qmd:240-257 (slide "Brent's method") -> newton (uniroot / safeguarded Brent root finder)
-- optimisation-1d/lec.qmd:285 (notes, optimize in practice) -> newton (uniroot default tol, <<- counter from the Newton exercise C6)
-- optimisation-1d/lec.qmd:290-320 (slides "How precisely..." and "The flat bottom") -> floating-point (machine epsilon, gap between doubles), newton (score, expm1)
-- optimisation-1d/lec.qmd:329 (Newton for minimisation) -> newton (Newton on the score, 6 steps from the mean)
-- optimisation-1d/lec.qmd:334 (notes) -> identifiability (standard errors from curvature)
-- optimisation-1d/lec.qmd:370 (notes, When Newton heads uphill) -> gradient-methods (line search, safeguards)
-- optimisation-1d/lec.qmd:407 (notes, circadian period) -> least-squares-qr (lm.fit for the linear parameters), fourier-fft (periodogram)
-- optimisation-1d/lec.qmd:443 (notes, Grid first) -> fourier-fft (periodogram = grid scan), gradient-methods / nonlinear-least-squares (multistart, starting values)
-- optimisation-1d/lec.qmd:456 (notes, Checklist) -> constrained-lp (optimum on a boundary)
-- optimisation-1d/lec.qmd:467 (Summary, Next) -> gradient-methods
-- optimisation-1d/lec.qmd:470 (notes, Summary) -> gradient-methods (line search), nonlinear-least-squares (two-parameter decay fit), identifiability (curvature -> standard errors)
-- optimisation-1d/exercise.qmd:44 (Background, running examples) -> newton (zero-truncated Poisson data)
-- optimisation-1d/exercise.qmd:183 (C3(c)) -> newton (S'(lambda) formula)
-- optimisation-1d/exercise.qmd:196 (C6) -> convergence-cost (logistic OD curve K = 1.2, N0 = 0.05, r = 0.8), finite-differences (the 61 noisy OD values)
-- optimisation-1d/exercise.qmd:261 (Solution B4(e)) -> gradient-methods (line search)
-- optimisation-1d/exercise.qmd:1047 (Solution C6) -> finite-differences (3-parameter MLE r = 0.7954), gradient-methods
-- optimisation-1d/exercise.qmd:1053-1056 (Where this leads) -> gradient-methods, nonlinear-least-squares, identifiability, fourier-fft
-- optimisation-1d/exercise.qmd: Hint 6 (counting calls) -> newton (AtomicU64 counter as in Newton exercise C6)
-- optimisation-1d/quiz.qmd:142 (Q11) -> constrained-lp (optimum on a boundary)
+- optimisation-1d/lec.qmd:34 (notes, About this lecture) -> gradient-methods (next unit, several parameters); bisection-fixedpoint, newton (method twins: bisection/golden, secant/parabolic, Brent/Brent, Newton/Newton) [ok]
+- optimisation-1d/lec.qmd:37-47 (slide "Recap: an MLE as the root of the score") -> newton (zero-truncated Poisson MLE, score, Newton from the mean, uniroot) [fixed: linked; data 52/30/12/5/1, sum 173, lambda-hat 1.218, Newton 6 steps from mean, uniroot all match newton]
+- optimisation-1d/lec.qmd:173 (notes, Why 0.618?) -> convergence-cost (linear convergence vocabulary) [ok]
+- optimisation-1d/lec.qmd:170 (Why 0.618?, last bullet) -> bisection-fixedpoint (bisection 0.30 digits per step) [ok]
+- optimisation-1d/lec.qmd:229 (notes, Parabolic interpolation) -> newton (secant method as twin) [ok]
+- optimisation-1d/lec.qmd:240-257 (slide "Brent's method") -> newton (uniroot / safeguarded Brent root finder) [ok]
+- optimisation-1d/lec.qmd:285 (notes, optimize in practice) -> newton (uniroot default tol, <<- counter from the Newton exercise C6) [ok]
+- optimisation-1d/lec.qmd:290-320 (slides "How precisely..." and "The flat bottom") -> floating-point (machine epsilon, gap between doubles), newton (score, expm1) [ok]
+- optimisation-1d/lec.qmd:329 (Newton for minimisation) -> newton (Newton on the score, 6 steps from the mean) [fixed: linked]
+- optimisation-1d/lec.qmd:334 (notes) -> identifiability (standard errors from curvature) [ok]
+- optimisation-1d/lec.qmd:370 (notes, When Newton heads uphill) -> gradient-methods (line search, safeguards) [ok]
+- optimisation-1d/lec.qmd:407 (notes, circadian period) -> least-squares-qr (lm.fit for the linear parameters), fourier-fft (periodogram) [ok]
+- optimisation-1d/lec.qmd:443 (notes, Grid first) -> fourier-fft (periodogram = grid scan), gradient-methods / nonlinear-least-squares (multistart, starting values) [ok]
+- optimisation-1d/lec.qmd:456 (notes, Checklist) -> constrained-lp (optimum on a boundary) [ok]
+- optimisation-1d/lec.qmd:467 (Summary, Next) -> gradient-methods [fixed: linked]
+- optimisation-1d/lec.qmd:470 (notes, Summary) -> gradient-methods (line search), nonlinear-least-squares (two-parameter decay fit), identifiability (curvature -> standard errors) [fixed: nonlinear-least-squares has no decay-rate fit (it fits a 3-parameter PK curve and ODEs); wording changed in lec notes and exercise "Where this leads"]
+- optimisation-1d/exercise.qmd:44 (Background, running examples) -> newton (zero-truncated Poisson data) [fixed: linked]
+- optimisation-1d/exercise.qmd:183 (C3(c)) -> newton (S'(lambda) formula) [ok]
+- optimisation-1d/exercise.qmd:196 (C6) -> convergence-cost (logistic OD curve K = 1.2, N0 = 0.05, r = 0.8), finite-differences (the 61 noisy OD values) [fixed: linked both]
+- optimisation-1d/exercise.qmd:261 (Solution B4(e)) -> gradient-methods (line search) [fixed: linked]
+- optimisation-1d/exercise.qmd:1047 (Solution C6) -> finite-differences (3-parameter MLE r = 0.7954), gradient-methods [ok: r = 0.7954 matches finite-differences MLE]
+- optimisation-1d/exercise.qmd:1053-1056 (Where this leads) -> gradient-methods, nonlinear-least-squares, identifiability, fourier-fft [fixed: linked; NLS item reworded]
+- optimisation-1d/exercise.qmd: Hint 6 (counting calls) -> newton (AtomicU64 counter as in Newton exercise C6) [ok]
+- optimisation-1d/quiz.qmd:142 (Q11) -> constrained-lp (optimum on a boundary) [fixed: linked]
 
 ## Running examples defined here
 
@@ -42,3 +42,7 @@
 - **ZTP flat bottom**: nll(lhat) = 52.61033, nll'' = 56.9186; predicted indistinguishable band 2.03e-8;
   optimize(tol = 1e-15) error 6.86e-10 (R), 6.71e-10 (scipy bounded), 2.18e-9 (argmin BrentOpt).
 - **OD growth rate with K, N0 fixed** (data of finite-differences): r-hat = 0.800270322, SSE = 0.001232394, residual sd 0.00453.
+
+## Pass 2
+
+- The "Natural reuse in nonlinear-least-squares" of the mRNA decay example did not happen: NLS uses the PK model. Text in this unit no longer claims it.

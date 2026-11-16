@@ -284,8 +284,8 @@ Numerical analysis for biologists
 </table>
 <p>We have already met answers that break them:</p>
 <ul>
-<li><em>Gaussian elimination as LU</em>: a consumer’s diet came out as <span class="math inline">(0.55, -0.20, 0.65)</span>, a negative fraction of maize.</li>
-<li><em>The SVD, rank deficiency and regularisation</em>: least squares gave a CD8 T-cell proportion of <span class="math inline">-0.09</span>.</li>
+<li><a href="../lu/lec.html"><em>Gaussian elimination as LU</em></a>: a consumer’s diet came out as <span class="math inline">(0.55, -0.20, 0.65)</span>, a negative fraction of maize.</li>
+<li><a href="../svd/lec.html"><em>The SVD, rank deficiency and regularisation</em></a>: least squares gave a CD8 T-cell proportion of <span class="math inline">-0.09</span>.</li>
 </ul>
 <p>A constraint is <strong>active</strong> at a solution if it holds with equality there (<span class="math inline">c = 0</span>, <span class="math inline">v_\text{glc} = 10</span>). Inactive constraints do not change the answer.</p>
 <aside class="notes">
@@ -316,7 +316,7 @@ Numerical analysis for biologists
 <li>That is not a numerical error: the minimum of the SSE really is at <span class="math inline">c &lt; 0</span>. The model needs to be told that <span class="math inline">c \ge 0</span>.</li>
 </ul>
 <aside class="notes">
-<p>The data are synthetic: true A = 1, k = 0.5, c = 0, plus a fixed noise vector. Background-subtracted signals can go slightly negative, so this happens with real qPCR or fluorescence decay data too. The fitted half-life also depends on c (next slide), so this is not cosmetic. optim with BFGS is what <em>Gradient descent, Newton and quasi-Newton</em> used.</p>
+<p>The data are synthetic: true A = 1, k = 0.5, c = 0, plus a fixed noise vector. Background-subtracted signals can go slightly negative, so this happens with real qPCR or fluorescence decay data too. The fitted half-life also depends on c (next slide), so this is not cosmetic. optim with BFGS is what <em>Gradient descent, Newton and quasi-Newton</em> used. These are not the decay data of <em>Optimisation in one dimension</em> (there the fraction left, with A = 1 and no background, so one parameter); here three parameters, so that one of them can hit a bound.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -360,7 +360,7 @@ Numerical analysis for biologists
 <ul>
 <li>In <span class="math inline">A</span> and <span class="math inline">k</span> (free) the gradient is 0, as usual. In <span class="math inline">c</span> it is <strong>positive</strong>: the SSE would fall if <span class="math inline">c</span> could decrease, but the bound stops it.</li>
 <li>That number is the <strong>multiplier</strong> of the bound: how fast the SSE would fall per unit we relax <span class="math inline">c \ge 0</span>.</li>
-<li><strong>Check:</strong> after a bounded fit, list the parameters that sit at a bound. Their usual standard errors are meaningless (<em>Identifiability and uncertainty of fitted parameters</em>), and the result depends on the bound you chose.</li>
+<li><strong>Check:</strong> after a bounded fit, list the parameters that sit at a bound. The standard errors of <a href="../identifiability/lec.html"><em>Identifiability and uncertainty of fitted parameters</em></a> assume an interior minimum with zero gradient: for them they are meaningless, and the result depends on the bound you chose.</li>
 </ul>
 <aside class="notes">
 <p>“Converged” no longer means “gradient zero”. The condition at a bounded minimum is: gradient zero in every free parameter, and pointing outward (into the forbidden region) in every parameter held at a bound. A gradient pointing inward would mean the optimiser stopped too early. This is the simplest case of the KKT conditions, which we meet again with NNLS (<em>The SVD, rank deficiency and regularisation</em>) and in linear programming. The Hessian-based standard errors of the previous unit assume an interior minimum with zero gradient, so they do not apply to a parameter at its bound.</p>
@@ -380,7 +380,7 @@ Numerical analysis for biologists
 <h2>Fix 2: reparameterise</h2>
 <p>Optimise an unconstrained <span class="math inline">\theta</span> and map it into the allowed set:</p>
 <ul>
-<li><strong>Positive:</strong> <span class="math inline">c = e^{\theta}</span>, as for rate constants in <em>Nonlinear least squares and ODE fitting</em>.</li>
+<li><strong>Positive:</strong> <span class="math inline">c = e^{\theta}</span>, as for rate constants in <a href="../nonlinear-least-squares/lec.html"><em>Nonlinear least squares and ODE fitting</em></a>.</li>
 <li><strong>Proportions:</strong> <span class="math inline">p = \text{softmax}(\theta) = e^{\theta_i} / \sum_j e^{\theta_j}</span>, with <span class="math inline">\theta_1 = 0</span> fixed. Every <span class="math inline">p_i &gt; 0</span> and they sum to 1.</li>
 </ul>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a>sse_log <span class="ot">&lt;-</span> <span class="cf">function</span>(q) <span class="fu">sse</span>(<span class="fu">c</span>(q[<span class="dv">1</span>], q[<span class="dv">2</span>], <span class="fu">exp</span>(q[<span class="dv">3</span>])))      <span class="co"># c = exp(theta)</span></span>
@@ -526,11 +526,11 @@ x_1,\ x_2 &amp;\ge 0
 <li>Start at a corner: <span class="math inline">(0, 0)</span>, ATP 0.</li>
 <li>Along which edge does ATP increase? <span class="math inline">x_1</span>: +6 per unit. Go until a constraint stops you: proteome at <span class="math inline">x_1 = 3</span> (carbon would allow 6). Corner <span class="math inline">(3, 0)</span>, ATP 18.</li>
 <li>Along the proteome edge, <span class="math inline">x_2</span> up by 1 means <span class="math inline">x_1</span> down by <span class="math inline">\tfrac14</span>: ATP changes by <span class="math inline">3 - 6/4 = +1.5</span>. Go until carbon stops you: <span class="math inline">(2, 4)</span>, ATP 24.</li>
-<li>Along the carbon edge: <span class="math inline">x_2</span> up 1, <span class="math inline">x_1</span> down 1: <span class="math inline">3 - 6 = -3</span>. <strong>No improving edge: optimal.</strong></li>
+<li>Along the carbon edge: <span class="math inline">x_2</span> up 1, <span class="math inline">x_1</span> down 1: <span class="math inline">3 - 6 = -3</span> per unit <span class="math inline">x_2</span> (or <span class="math inline">-1</span> per unit of proteome freed). Back along the proteome edge: <span class="math inline">-1.5</span> per unit <span class="math inline">x_2</span> (<span class="math inline">-2</span> per unit of carbon freed). <strong>No improving edge: optimal.</strong></li>
 </ol>
 </div></div>
 <aside class="notes">
-<p>This is Dantzig’s simplex method (1947) without the tableau. Each step: from the current corner, look at the edges leaving it; the rate of change of the objective along an edge is the reduced cost. Pick an improving edge, walk along it until the first constraint becomes active (the ratio test), and you are at a new corner. Stop when no edge improves. Because the polygon is convex, a corner with no improving edge is the global optimum: there are no local optima in LP. In n dimensions the corners are found by solving n x n linear systems of active constraints, which is where LU factorisations come in; real solvers update the factorisation from step to step.</p>
+<p>This is Dantzig’s simplex method (1947) without the tableau. Each step: from the current corner, look at the edges leaving it; the rate of change of the objective along an edge is the reduced cost. Pick an improving edge, walk along it until the first constraint becomes active (the ratio test), and you are at a new corner. The rate depends on what we count per unit: the slide counts per unit of x2, the demo per unit of the constraint the move frees (its slack). Along the carbon edge x2 up 1 frees 3 units of proteome, so -3 per unit x2 is -1 per unit proteome; back along the proteome edge, -1.5 per unit x2 is -2 per unit carbon. The per-slack rates are minus the shadow prices (carbon 2, proteome 1), as lpSolve reports two slides on. Stop when no edge improves. Because the polygon is convex, a corner with no improving edge is the global optimum: there are no local optima in LP. In n dimensions the corners are found by solving n x n linear systems of active constraints, which is where LU factorisations come in; real solvers update the factorisation from step to step.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -549,7 +549,7 @@ x_1,\ x_2 &amp;\ge 0
 <li>With <span class="math inline">n</span> variables and <span class="math inline">m</span> constraints, a corner is where <span class="math inline">n</span> constraints are active: up to <span class="math inline">\binom{m}{n}</span> candidates.</li>
 <li><span class="math inline">\binom{4}{2} = 6</span> here, <span class="math inline">\binom{100}{50} \approx 10^{29}</span> for a modest problem. Checking every corner is hopeless.</li>
 <li>The simplex method visits only a short path of improving corners: in practice a small multiple of <span class="math inline">m</span> steps (in rare worst cases exponentially many).</li>
-<li><strong>Interior-point methods</strong> cut through the inside of the polytope with Newton steps (<em>Newton for systems of equations</em>) and are polynomial in the worst case.</li>
+<li><strong>Interior-point methods</strong> cut through the inside of the polytope with Newton steps (<a href="../newton-systems/lec.html"><em>Newton for systems of equations</em></a>) and are polynomial in the worst case.</li>
 <li>Modern solvers (<a href="https://highs.dev/">HiGHS</a>, GLPK, Gurobi) have both and pick one.</li>
 </ul>
 <aside class="notes">
@@ -625,7 +625,7 @@ x_1,\ x_2 &amp;\ge 0
 <div data-demo="lpgeom" data-preset="lecture" data-fba="0"></div>
 <script src="../demos/dist/lpgeom.js"></script>
 <aside class="notes">
-<p>The ATP LP of the last slides, solved live in the browser. Blue polygon: feasible set; coloured lines: the limits; dashed orange: level lines of ATP, the solid one the best level; the arrow is the gradient (6, 3), and it can be dragged. Click step three times: (0, 0) to (3, 0) at +6 per unit x1, to (2, 4) at +1.5 per unit x2, then both edges are negative, -2 and -1, which are minus the shadow prices of carbon and proteome in the readout. Drag the carbon slider to 7: ATP 26, the scan plot on the right has slope 2; drag it down to 3 and the readout shows a kink, 6 below and 2 above. Then drag the arrow until it is parallel to the proteome line (or click the tie preset): the whole red edge is optimal, and the walk stops at (3, 0) with an edge of rate 0. Click degenerate corner: three lines through (2, 4) and every price has two values. End with unbounded (the walk runs off up the line x1 = 3) and infeasible (no polygon at all). The exercise has a second tab with the FBA network: knock-outs, FVA ranges and the oxygen scan.</p>
+<p>The ATP LP of the last slides, solved live in the browser. Blue polygon: feasible set; coloured lines: the limits; dashed orange: level lines of ATP, the solid one the best level; the arrow is the gradient (6, 3), and it can be dragged. Click step three times: (0, 0) to (3, 0) at +6 per unit x1, to (2, 4) at +1.5 per unit x2, then both edges are negative, -2 and -1, which are minus the shadow prices of carbon and proteome in the readout. The demo counts per unit of the freed slack, the slide per unit x2: the carbon edge is -1 per unit proteome = -3 per unit x2, the proteome edge -2 per unit carbon = -1.5 per unit x2. Drag the carbon slider to 7: ATP 26, the scan plot on the right has slope 2; drag it down to 3 and the readout shows a kink, 6 below and 2 above. Then drag the arrow until it is parallel to the proteome line (or click the tie preset): the whole red edge is optimal, and the walk stops at (3, 0) with an edge of rate 0. Click degenerate corner: three lines through (2, 4) and every price has two values. End with unbounded (the walk runs off up the line x1 = 3) and infeasible (no polygon at all). The exercise has a second tab with the FBA network: knock-outs, FVA ranges and the oxygen scan.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -671,7 +671,7 @@ x_1,\ x_2 &amp;\ge 0
 <span id="cb7-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 6</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li><span class="math inline">\frac{d}{dt}(\text{concentrations}) = S\mathbf v</span>. <strong>Steady state</strong>: <span class="math inline">S\mathbf v = \mathbf 0</span>: every metabolite is made as fast as it is used.</li>
-<li>6 independent equations, 9 unknowns: a 3-dimensional <strong>null space</strong> of solutions, the same null space as in <em>Gaussian elimination as LU</em>.</li>
+<li>6 independent equations, 9 unknowns: elimination (as in <a href="../lu/lec.html"><em>Gaussian elimination as LU</em></a>) leaves 3 free fluxes, a 3-dimensional <strong>null space</strong> of solutions.</li>
 </ul>
 <aside class="notes">
 <p>Read one row: P (pyruvate) is made twice by GLY and twice by BYP2, used once by each of RES, FER and BIO. Steady state is the key assumption of FBA: intracellular metabolites turn over in seconds, growth takes an hour, so on the slow time scale the metabolite pools are constant. We do not know the kinetics (no rate laws, no parameters), only the stoichiometry, which is known from biochemistry. That is why FBA works on genome-scale models where kinetic models would need thousands of unknown parameters. Elimination of S v = 0 leaves 3 free fluxes (for example glucose uptake, the split between the two routes, and respiration); the bounds and the objective choose among them.</p>
@@ -728,7 +728,7 @@ x_1,\ x_2 &amp;\ge 0
 <ul>
 <li>GLY and the bypass can share the glucose in <strong>any</strong> ratio: each ranges over <span class="math inline">[0, 10]</span>.</li>
 <li>The solver’s GLY = 10 was one arbitrary corner.</li>
-<li>Like a non-identifiable parameter (<em>Identifiability and uncertainty of fitted parameters</em>): the objective cannot tell the routes apart. <strong>Report ranges</strong>, not one flux vector.</li>
+<li>Like a non-identifiable parameter (<a href="../identifiability/lec.html"><em>Identifiability and uncertainty of fitted parameters</em></a>): the objective cannot tell the routes apart. <strong>Report ranges</strong>, not one flux vector.</li>
 </ul>
 </div></div>
 <aside class="notes">
@@ -843,7 +843,7 @@ x_1,\ x_2 &amp;\ge 0
 <h2>Production tools</h2>
 <ul>
 <li><strong>COBRA Toolbox</strong> (MATLAB) and <strong>cobrapy</strong> (Python) are the standard: they read models in SBML, set bounds, run FBA, FVA, knock-out screens and parsimonious FBA, and call an LP solver (GLPK, HiGHS, Gurobi, CPLEX).</li>
-<li>Genome-scale models: <em>E. coli</em> iML1515 has 2712 reactions and 1877 metabolites; human Recon3D about 13 000 reactions. <span class="math inline">S</span> is <strong>sparse</strong> (<em>Structure: symmetric, banded, sparse</em>): a reaction touches a handful of metabolites.</li>
+<li>Genome-scale models: <em>E. coli</em> iML1515 has 2712 reactions and 1877 metabolites; human Recon3D about 13 000 reactions. <span class="math inline">S</span> is <strong>sparse</strong> (<a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a>): a reaction touches a handful of metabolites.</li>
 <li>The toy model is exactly what these tools do, at a size where you can check every number by hand.</li>
 </ul>
 <aside class="notes">
@@ -869,7 +869,7 @@ x_1,\ x_2 &amp;\ge 0
 <li><strong>LP</strong>: the optimum is at a <strong>corner</strong> of the feasible polytope; <strong>simplex</strong> walks along improving edges; solvers: <code>lpSolve::lp</code>, <code>scipy.optimize.linprog</code> (HiGHS), <code>minilp</code>. <strong>Check the status</strong>: tie, unbounded, infeasible.</li>
 <li><strong>FBA</strong>: maximise growth subject to <span class="math inline">S\mathbf v = \mathbf 0</span> and bounds. Optimal fluxes are often not unique (<strong>FVA</strong>), knock-outs are one LP each, shadow prices show which nutrient limits growth.</li>
 </ul>
-<p><strong>Next:</strong> Part 10, <em>The diffusion (heat) equation by finite differences</em>.</p>
+<p><strong>Next:</strong> Part 10, <a href="../diffusion-explicit/lec.html"><em>The diffusion (heat) equation by finite differences</em></a>.</p>
 <aside class="notes">
 <p>The two ideas that carry furthest: constraints change what “converged” means (gradient not zero at an active constraint), and multipliers measure how much each constraint costs. In FBA both become biology: the active bounds are the limiting nutrients, the multipliers their value to the cell. Part 10 moves from ordinary to partial differential equations.</p>
 <style type="text/css">

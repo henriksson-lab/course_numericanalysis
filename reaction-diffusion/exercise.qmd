@@ -266,6 +266,46 @@ Rust prints numbers in its own format (e.g. `1e-3` rather than `1e-03`); where i
 (b) Repeat with $\Delta t = 0.4$, $0.2$ and $0.05$.
 (c) Set $d = 5$ (no Turing instability, C6) and run to $t = 150$ with $\Delta t = 0.1$ and $0.4$. Explain the difference with the eigenvalues of $I + \Delta t\,J$ (B3(d)).
 
+## Explore {#explore}
+
+The demo below runs both models of this exercise in your browser. Tab **(a) Morphogen gradient** solves the synthesis–diffusion–degradation model ($L = 500$ µm, influx $j$ at $x = 0$, wall at $x = L$, time in minutes) by IMEX Euler on a 1 µm grid, starting from $c = 0$. It overlays the exact steady state (dashed), the reference profile $D = 100$, $k = 0.01$, $j = 1$ (grey), and marks $\lambda = \sqrt{D/k}$ where $c$ has fallen to $c(0)/e$. Two thresholds, $c = 0.3$ and $c = 0.1$, divide the embryo into three "fates" (the coloured bar). The readout gives where each threshold is crossed now, at steady state, and how far that is from the reference. Moving a slider continues from the current profile; **reset c = 0** starts again from an empty embryo. Tab **(b) Turing patterns** runs the Schnakenberg model of C7 ($a = 0.1$, $b = 0.9$, periodic $80 \times 80$ box) with the same IMEX–FFT step and the same `lcg` noise (seed 1), so it reproduces the numbers of C7 and C8. Right of the pattern is the dispersion relation: the exact growth rate (solid), the growth rate of the IMEX step on the chosen grid and time step (dashed), and the unstable band shaded. Each run stops at $t = 200$ and is logged under "runs so far"; the previous run stays visible for comparison. The spot counter is the `spots()` function of C7; when $\max u - \min u < 0.05$ it reports "uniform".
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="turing" data-tab="gradient"></div>
+<script src="../demos/dist/turing.js"></script>
+```
+
+**E1. (decay length and formation time)** In tab (a), press **▶ run** with the reference values and wait until the readout says that every point is within 1 % of the steady state. Note that time, $\lambda$, and the two threshold positions. Then set $D = 200$ and $k = 0.02$, press **reset c = 0** and run again (press **▶ run** if it is paused). What stays the same, what changes, and why (B1(e))?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Reference: $\lambda = 100$ µm, steady $c(0) = 1.0001$, thresholds at 120.5 µm ($c = 0.3$) and 230.7 µm ($c = 0.1$); every point is within 1 % of the steady state at $t = 721$ min, about seven lifetimes $1/k$. With $D = 200$, $k = 0.02$: $\lambda$ is still 100 µm (it depends only on $D/k$), so the profile has the same **shape**, and the formation time halves to 359 min (it scales like $1/k$). But $c(0) = j\lambda/D$ halves to 0.500 because the influx $j$ was not changed, so both thresholds move towards the source, to 51.1 and 161.1 µm (−69.4 and −69.7 µm). For an unchanged pattern the source would have to speed up too ($j = 2$): then everything, including the influx, is twice as fast, as in B1(e).
+:::
+
+**E2. (how robust is the French flag?)** Click **reference**, then change one thing at a time and click **jump to steady** each time: $j = 2$, $j = 0.5$, $D = 200$, $k = 0.005$. Read the shifts of the two boundaries. Which change moves both boundaries by the same distance, and what is that distance in terms of $\lambda$? Which change moves the posterior boundary much more than the anterior one?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+$j = 2$: $+69.5$ and $+70.7$ µm; $j = 0.5$: $-69.4$ and $-69.7$ µm. Changing the source multiplies the whole profile by a constant, and in $c_0 e^{-x/\lambda}$ a factor 2 is a shift of $\lambda\ln 2 = 69.3$ µm: every boundary moves by the same distance, whatever its threshold (the small differences come from the wall at $x = L$). A twofold change in source strength therefore moves the fates by 14 % of the 500 µm embryo: an SDD gradient read by fixed thresholds does not scale and is not robust to the dose. $D = 200$ ($\lambda = 141.4$ µm, $c(0) = 0.708$): the $c = 0.3$ boundary moves only $+1.6$ µm, the $c = 0.1$ boundary $+52.5$ µm, because a longer $\lambda$ also lowers $c(0)$ and the two effects nearly cancel close to the source. $k = 0.005$ (same $\lambda = 141.4$ µm, but $c(0) = 1.417$): $+101.7$ and $+178.7$ µm, the largest shifts.
+:::
+
+**E3. (the temperature step)** Click **reference**, then **posterior**, **anterior** and **whole embryo** under "warm half (k × 2)", with **jump to steady** each time. Note the two threshold positions. Which half sets the position of the boundaries? Turn on **log scale**: what does the profile look like where $k$ jumps?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+Posterior warm: 119.0 and 220.3 µm (−1.4 and −10.5 µm). Anterior warm: 60.7 and 138.9 µm (−59.8 and −91.9 µm). Whole embryo warm: 60.6 and 138.3 µm. So the anterior half, where the gradient is high, sets both boundaries almost entirely; warming the posterior half matters only near the wall. On the log scale the steady profile is a straight line of slope $-1/\lambda$ in each half, with a **kink** at $x = 250$ µm: $\lambda = 100$ µm in the cold half, $70.7$ µm in the warm half. The concentration and the flux are continuous there; only the slope of $\log c$ changes. These are the numbers of C4 (220.2, 138.9, 138.3 µm on the 1 µm grid; the demo uses the exact piecewise solution).
+:::
+
+**E4. (the Turing threshold)** In tab (b), click **spots d = 20** and let it run to $t = 200$. Note the spot count, the band and the fastest wavelength. Then set $d = 8.5$, $9$ and $10$ with the slider (each change starts a new run). Which $d$ give a pattern, and how does it compare with $d_c$ from B5(e)? How does the fastest wavelength relate to the spot spacing?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+$d = 20$: 47 spots at $t = 200$, $u$ from 0.201 to 3.060, the same as C7. The band is $q = 0.272$–$0.822$, the fastest wavelength 12.9: 47 spots in a box of $80 \times 80$ means one spot per $136$ units of area, a spacing of about 12, close to 12.9. $d = 8.5$: no unstable band ($d < d_c = 8.57$), and the run stays uniform. $d = 9$: a narrow band, growth rate only 0.019, and at $t = 200$ the pattern is still faint ($u$ from 0.940 to 1.064). $d = 10$: 53 spots, $u$ from 0.48 to 1.64, fastest wavelength 11.1. So patterns appear only above $d_c$, and just above it they grow slowly; with **stretch colours** you can watch the early, linear phase in which the fastest wavelength already shows.
+:::
+
+**E5. (pattern or artefact?)** With $d = 20$, run with grid $\Delta x = 2$, then $\Delta x = 0.5$ (this takes about half a minute), and with $\Delta t = 0.4$. Then click **d = 5, Δt = 0.4**, let it run, turn on **stretch colours**, and finally repeat with $\Delta t = 0.1$ and $0.2$. Which runs are artefacts? What do the dashed curve of the dispersion plot and the readout $|1 + \Delta t\lambda|$ tell you?
+
+::: {.callout-note collapse="true" title="Answer E5"}
+$d = 20$: $\Delta x = 1$ and $0.5$ give 47 and 46 spots, $\Delta t = 0.4$ gives 48: these agree, so the pattern is real. $\Delta x = 2$ gives **63** smaller, blocky spots: with about six grid points per wavelength the five-point Laplacian misjudges $q^2$ (the dashed curve moves away from the solid one at large $q$) and the grid changes the answer. $d = 5$, $\Delta t = 0.4$: no unstable band in theory, yet the run is not uniform: at $t = 200$, $u$ goes from 0.696 to 0.832 with mean 0.758 (the uniform state has $u = 1$), a large blob that also oscillates in time. The readout says $|1 + \Delta t\lambda| = 1.0392 > 1$: Euler on the reaction is unstable, and the dashed (IMEX) curve is **above zero** for $q$ below about 0.18, rate 0.096 at $q = 0$, where the exact curve is negative. With $\Delta t = 0.1$ the factor is 0.9950 and the run stays uniform; $\Delta t = 0.2$ is the borderline ($|1 + \Delta t\lambda| = 1.0000$) and also stays uniform. A "pattern" that depends on $\Delta x$ or $\Delta t$ is a property of the method.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — decay lengths (B1)"}
