@@ -32,7 +32,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 27 | gradient-methods | done | running | |
 | 28 | nonlinear-least-squares | done | running | |
 | 29 | identifiability | done | running | |
-| 30 | constrained-lp | done | running | |
+| 30 | constrained-lp | done | done | done |
 | 31 | diffusion-explicit | done | running | |
 | 32 | diffusion-implicit | running | | |
 | 33 | steady-state-2d | running | | |
@@ -70,3 +70,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - quadrature: from memory — bioequivalence 80–125 %, regulators accept sampled AUC, WinNonlin/PKNCA rules. Romberg recap assumes Richardson (4D(h/2)−D(h))/3 form — check vs finite-differences in pass 2.
 - gradient-methods: slides not screenshotted; densest 'What optim, minimize and argmin do', 'When Newton fails'. From memory: optim ndeps=1e-3 central; scipy forward diff step √ε·max(1,|x|); BFGS gtol 1e-5; McKinnon 1998. rust/examples/gradient_methods_shared/defs.rs included via include! (new pattern).
 - identifiability: pk(t, ka, ke, V, D=100) vs NLS unit's bateman() naming — reconcile in pass 2. From memory: Raue 2009, Gutenkunst 2007, DAISY, StructuralIdentifiability.jl. Slides not screenshotted.
+- constrained-lp demo: edge rate at optimum −2/−1 per freed variable vs lecture slide '−3 per unit x₂' — same edge, different unit; consider aligning slide wording.

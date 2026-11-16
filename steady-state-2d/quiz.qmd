@@ -1,0 +1,143 @@
+---
+title: "Quiz: steady state in two dimensions"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions on steady diffusion, the five-point Laplacian, grid ordering and Newton with uptake. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** What is the difference between the diffusion problems of the last two units and the steady-state problem of this unit? What information does a steady-state problem need, and what does it not need?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Set $\partial c/\partial t = 0$. What is left of the initial condition?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The steady state has $\partial c/\partial t = 0$, so $D\nabla^2c = r(c)$: a **boundary value problem** (Poisson; Laplace if $r = 0$). It needs boundary conditions (fixed value or no flux on every edge) and the uptake law, but **no initial condition** and no time step: one (linear or nonlinear) system instead of thousands of time steps.
+:::
+
+---
+
+**Q2.** A 1D chamber with constant oxygen uptake is solved with only 3 interior points, and the grid values agree with the exact solution to 15 digits. Does that show that the code is second-order accurate?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What shape is the exact solution, and what is the error term of the second difference?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. With constant uptake the exact solution is a **parabola**, and the second difference is exact for parabolas (its error term contains the fourth derivative, which is zero). Every correct code gets this right on any grid, so it cannot reveal the order. Use a test with a non-polynomial exact solution (linear uptake, cosh) or a manufactured field, and check that the error falls 4× per halving of $h$.
+:::
+
+---
+
+**Q3.** On a 2D grid with $n_x = 79$, $n_y = 39$ interior points, numbered with $x$ running fastest, where in the vector are the four neighbours of unknown $k$? Why is the matrix not tridiagonal?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$k = i + (j - 1)\,n_x$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$x$-neighbours at $k \pm 1$, $y$-neighbours at $k \pm n_x = k \pm 79$ (missing where the point is next to an edge). The $y$-coupling puts non-zeros 79 places from the diagonal, so the matrix is banded with bandwidth $n_x$ (block tridiagonal), not tridiagonal.
+:::
+
+---
+
+**Q4.** Which Kronecker formula gives the five-point Laplacian when $x$ runs fastest, and which when $y$ runs fastest? Why does a mix-up never give an error message?
+
+::: {.callout-tip collapse="true" title="Hint"}
+In $A \otimes B$, the right factor acts on the index that runs fastest.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$x$ fastest: $I_{n_y}\otimes T_{n_x} + T_{n_y}\otimes I_{n_x}$. $y$ fastest: $T_{n_x}\otimes I_{n_y} + I_{n_x}\otimes T_{n_y}$ (times $D/h^2$). Both are $n_xn_y \times n_xn_y$, so all sizes match and every solve runs. The result is simply the solution of a different problem.
+:::
+
+---
+
+**Q5.** R: `as.vector(C)`. numpy: `C.ravel()`. For a grid stored as `C[i, j]` with shape $(n_x, n_y)$, which index runs fastest in each? How do you make numpy behave like R?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Column-major vs row-major.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+R stores matrices column by column (column-major): `as.vector(C)` runs over $i$ ($x$) first. numpy is row-major by default: `C.ravel()` runs over $j$ ($y$) first. Use `C.ravel(order="F")` and `c.reshape((nx, ny), order="F")` to get R's order (or use the other Kronecker formula, consistently). For plotting, matplotlib's `imshow(C)` puts rows vertically: use `imshow(C.T, origin="lower")`.
+:::
+
+---
+
+**Q6.** A student tests the assembly of her 2D matrix on a square $40 \times 40$ grid with the field $\sin(\pi x/L)\sin(\pi y/L)$, and everything checks out. Why might an ordering bug still be there? How should she test?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What happens to the two Kronecker formulas when $n_x = n_y$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+For $n_x = n_y$ (and equal spacing) the two Kronecker formulas give the **same** matrix, and a field symmetric in $x$ and $y$ looks the same after swapping. The bug is invisible until the grid becomes a rectangle. Test on a grid with $n_x \ne n_y$, with a field that differs in $x$ and $y$ (e.g. $\sin(\pi x/L_x)\sin(2\pi y/L_y)$), and check that the error is small and falls 4× per halving of $h$. Also check bounds: with pure uptake no value may exceed the boundary value.
+:::
+
+---
+
+**Q7.** Why does `solve(A, b)` on the chamber matrix become much faster after `A <- forceSymmetric(A)`? What is fill-in doing here?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which factorisation does each call use, and with which ordering?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+On a general sparse matrix, `solve` uses sparse LU; on a matrix marked symmetric it uses sparse **Cholesky** (CHOLMOD) with a **fill-reducing ordering**. In natural order, elimination fills the whole band of width $n_x$ (16 million non-zeros at $h = 12.5$ µm); reordered, 1.5 million. Fewer non-zeros means less memory and less work: about 0.16 s instead of seconds. Python's `spsolve` also reorders (COLAMD) by default.
+:::
+
+---
+
+**Q8.** Constant oxygen uptake gives a negative oxygen level in the centre of a dense culture. Is that a numerical error? What is the fix?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Would a finer grid change the sign?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No: the grid solution is accurate; the **model** is wrong. It lets cells consume at full rate even when no oxygen is left. Michaelis–Menten uptake $R_0c/(K_m + c)$ slows down as $c \to 0$, keeps $c \ge 0$, and makes the problem nonlinear (Newton). Check `min(c) >= 0` on every concentration you compute.
+:::
+
+---
+
+**Q9.** For $\mathbf F(\mathbf c) = A\mathbf c + r(\mathbf c) - \mathbf b$ with Michaelis–Menten uptake, what is the Jacobian, and why does it have the same sparsity pattern as $A$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+On which unknowns does the uptake at point $k$ depend?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$J = A + \operatorname{diag}\bigl(R_0K_m/(K_m + c_k)^2\bigr)$. The uptake at point $k$ depends only on $c_k$, so its derivative appears only on the diagonal, which is already non-zero in $A$. $J$ is also symmetric positive definite, so each Newton step is a sparse Cholesky solve (or CG) of the same kind as the linear problem.
+:::
+
+---
+
+**Q10.** Newton converges quadratically to a residual of $10^{-12}$, but the oxygen field has a minimum of $-27.6$ µM. What happened, and what two checks would have caught it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Is $c/(K_m + c)$ positive or negative for $c = -27.6$, $K_m = 1$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Newton found a **spurious root**: for $c < -K_m$, $c/(K_m + c) > 0$, so the equations are satisfied by a field with negative oxygen that is "consumed". The first step from an air-saturated start jumps to the (negative) constant-uptake answer and Newton settles there. A small residual only says that a root was found, not which one. Checks: `min(c) >= 0` after the solve (and in every step), and the maximum principle (values between 0 and the boundary value). Fix: clip negative values to 0 after each step, or start from $c = 0$.
+:::
+
+---
+
+**Q11.** A diffusion model of a mother-machine trench shows that glucose at the closed end stays above 97 % of the channel value in rich medium. Does that prove that cells at the closed end grow as fast as those at the open end?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is not in the model?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. It shows only that **glucose diffusion**, with these parameters, does not limit growth. Other factors (mechanical constraints on packed cells, other nutrients, waste products, oxygen) are not in the model, so it can rule out one explanation but cannot confirm growth. Yang et al. concluded that mechanics, not nutrient supply, limits growth in such trenches: the model is consistent with that, but could not have found it.
+:::

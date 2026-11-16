@@ -157,6 +157,65 @@ fn main() {
 
 **C6. Early extinction of an epidemic.** SIR with $N = 10\,000$, $\beta = 0.3$, $\gamma = 0.1$ per day. Simulate only the **order** of events (no times needed): infection with probability $a_1/(a_1 + a_2)$, $a_1 = \beta S I/N$, $a_2 = \gamma I$. Stop when $I = 0$ (extinct) or $I = 100$ (established). With 10 000 runs each, estimate the extinction probability for $I_0 = 1, 2, 3$ with its SE, and compare with $(1/3)^{I_0}$ from B7.
 
+## Explore {#explore}
+
+The demo below runs Gillespie's algorithm in your browser for the two genes of this exercise, both with an ODE mean of 10 mRNA (time in hours): the **constitutive** gene ($k = 10$, $\delta = 1$) and the **bursty** telegraph gene ($k_\text{on}$, $k_\text{off} = 9\,k_\text{on}$, $k_m = 100$, $\delta = 1$; the promoter is on 10 % of the time for every $k_\text{on}$, so the mean stays 10 while the burst size $k_m/k_\text{off}$ changes). The tab **One cell** follows a single cell from $m = 0$: panel (a) shows $m(t)$ as a step function (promoter-on periods shaded green) with the ODE mean dashed; **Step** fires one reaction, and panel (b) shows how it was drawn: the waiting time $\tau = -\ln(u_1)/a_0$ read off the exponential distribution function, and the reaction picked where $u_2 a_0$ falls on the stacked bar of propensities. **Run** animates, **Reset** replays the same cell, **New cell** draws another one. The tab **Many cells** simulates $N$ cells to time $T$ and compares (c) the histogram of counts with the exact distribution and (d) the Fano factor with the exact curve. The **tau-leaping** box (constitutive gene only) replaces each reaction by a leap of $\tau$ hours with Poisson numbers of reactions.
+
+The demo has its own seeded generator, so its numbers differ from those of R, Python and Rust; compare statistics, not single cells.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="ssa" data-model="const" data-tab="cell"></div>
+<script src="../demos/dist/ssa.js"></script>
+```
+
+**E1. (one reaction at a time)** With the **constitutive** gene, click **Step** four times. For each step write down $a_0$, $u_1$, $\tau$, $u_2 a_0$ and the reaction, and check one $\tau$ and one choice by hand as in B2. Why is the first reaction certainly *make*? Then click **Run** (or keep stepping) to the end of the 20 h window: how many reactions were needed, and how does the cell compare with the ODE?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Step 1: $a = (10, 0)$, $a_0 = 10$, $u_1 = 0.777$, $\tau = -\ln(0.777)/10 = 0.0252$ h (1.5 min); $u_2 a_0 = 1.88 < 10$: make, $m = 1$. Step 2: $a_0 = 11$, $u_1 = 0.956$, $\tau = 0.0041$ h (15 s); $u_2 a_0 = 10.11 \ge 10$: degrade, $m = 0$. Step 3: $a_0 = 10$, $\tau = 0.0566$ h; $u_2 a_0 = 9.72$: make. Step 4: $a_0 = 11$, $\tau = 0.0518$ h; $u_2 a_0 = 9.995$, just below 10: make, $m = 2$. At $m = 0$ the degradation propensity $\delta m$ is 0, so its piece of the bar has length 0 and cannot be hit. The 20 h take 447 reactions (about $a_0 = 20$ per hour once $m \approx 10$). The cell rises with the ODE curve and then wanders between 3 and 22 around 10; the steps are random and unequal, with no step size to choose.
+:::
+
+**E2. (a burst, step by step)** Switch to **bursty (telegraph)** (the default $k_\text{on} = 0.5$). Step once: which reaction is possible, and what is the mean waiting time? Keep stepping (about 40 steps) until the promoter switches off. What is $a_0$ while the promoter is on, how long are the waiting times, how long was the promoter on, and how many mRNA did the burst make? Which reaction fired at the end, and where on the bar did $u_2 a_0$ fall? Then **Run** to 20 h and describe the trajectory.
+
+::: {.callout-note collapse="true" title="Answer E2"}
+From $g = 0$, $m = 0$ only switching on has a non-zero propensity: $a_0 = k_\text{on} = 0.5$ per hour, mean wait 2 h; here $\tau = 0.504$ h (30 min). While on, $a_0 = 4.5 + 100 + m$, from 104.5 up to 136.5 per hour: waiting times of seconds (mean about 30 s), and almost every step is *make*. On step 40 the promoter switched off at $t = 0.777$ h, after 0.27 h (16 min) on; the burst made 35 mRNA and $m = 32$ (3 had decayed). The *off* piece (4.5 of 136.5) is a thin sliver at the left of the bar, and $u_2 a_0 = 3.21$ fell into it. After that $a_0 = 0.5 + m$: only decays, minutes apart, until the next burst. Over 20 h: 11 bursts of very different sizes (2 to 35 mRNA), $m$ up to 47, and a silent stretch from 4.8 h to 7.4 h with only 0 or 1 molecules. The ODE mean is the same smooth curve to 10 as for the constitutive gene; no single cell looks like it.
+:::
+
+**E3. (same mean, different distribution)** Open **Many cells** ($N = 1000$, $T = 30$ h). Read the mean ± SE, the variance, the Fano factor and the fraction of cells with no mRNA for the **bursty** gene, then for the **constitutive** gene, and compare each with the exact value. Then click $T = 1$ for both: does the mean still match, and against what?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+Bursty: mean $10.36 \pm 0.41$ (exact 10), variance 165.6 (160), Fano 15.98 (16), 17.4 % of cells with 0 mRNA (exact 20.3 %). Constitutive: mean $9.95 \pm 0.10$, variance 9.63 (10), Fano 0.97 (1), no cell with 0 (exact $e^{-10} = 4.5\times10^{-5}$). Both means agree with 10 within 1 SE, but the bursty histogram has a peak at 0 and a tail beyond 60, while the constitutive one is the narrow Poisson(10). Note the SE: with the same $N$ it is 4 times larger for the bursty gene, since $\sqrt{160/1000} = 0.40$. At $T = 1$ h: constitutive $6.18 \pm 0.08$ against the ODE value $10(1 - e^{-1}) = 6.32$ (1.7 SE); bursty $4.85 \pm 0.31$ against 5.42 (1.8 SE), with 65 % of cells still at 0 because many promoters have not fired yet. For linear propensities the ODE gives the exact mean at every time, so both agree within the Monte Carlo error.
+:::
+
+**E4. (burstiness at a fixed mean)** Stay in **Many cells** with the bursty gene ($N = 1000$, $T = 30$). Click $k_\text{on} = 1$ and $5$, and drag $k_\text{on}$ to 20 and to 0.2. For each, note the burst size $k_m/k_\text{off}$, the mean and the Fano factor, and watch the dots in panel (d). Which limit is the constitutive gene? Finally, at $k_\text{on} = 0.5$, set $N = 100$ and $N = 5000$: how do the mean's SE and the Fano factor change?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+| $k_\text{on}$ | burst size | mean ± SE | Fano (exact) |
+|---|---|---|---|
+| 0.2 | 56 | $9.84 \pm 0.56$ | 31.5 (31.0) |
+| 0.5 | 22 | $10.36 \pm 0.41$ | 16.0 (16.0) |
+| 1 | 11 | $10.69 \pm 0.32$ | 9.45 (9.18, as in B4(d)) |
+| 5 | 2.2 | $9.91 \pm 0.16$ | 2.62 (2.76) |
+| 20 | 0.56 | $10.08 \pm 0.12$ | 1.43 (1.45) |
+
+The mean stays at 10 within about 2 SE every time, while the Fano factor drops from 31 to 1.4 with the burst size, and the dots follow the exact curve. Fast switching with small bursts approaches the constitutive gene ($F \to 1$): the promoter averages out. The more bursty the gene, the more cells it takes to measure the mean: at $k_\text{on} = 0.5$, $N = 100$ gives $11.49 \pm 1.29$ and Fano 14.5, $N = 5000$ gives $9.85 \pm 0.18$ and Fano 16.2. The SE shrinks as $1/\sqrt N$; the Fano factor itself is uncertain by about $F\sqrt{2/N}$ (Hint 3).
+:::
+
+**E5. (tau-leaping goes wrong)** Back on **One cell** with the **constitutive** gene, tick **tau-leaping** and set $\tau = 1.5$ h. Step through the 20 h, and click **New cell** until a count goes negative (red). What does panel (b) show for that leap? Then in **Many cells** set $N = 2000$ and $T = 10$, and read the variance and the fraction of runs that went negative for $\tau = 0.1, 0.5, 1, 1.5$. Compare with the lecture's table and with the tau-leap theory $2k/(\delta(2 - \delta\tau))$.
+
+::: {.callout-note collapse="true" title="Answer E5"}
+The trajectory jumps by 10 to 20 molecules from one leap to the next instead of wandering around 10: with $\delta\tau = 1.5$ a leap removes on average 1.5 times the molecules present, so it overshoots, as Euler's method does for $\delta h > 1$. The fifth cell (**New cell** four times) goes negative twice; at $t = 7.5$ h: $m = 22$, make Poisson(15) = 18, degrade Poisson(33) = 41, so $22 + 18 - 41 = -1$, clipped to 0. With 2000 cells at $T = 10$ h:
+
+| $\tau$ | variance (theory) | runs negative |
+|---|---|---|
+| 0.1 | 10.2 (10.5) | 0.3 % |
+| 0.5 | 13.1 (13.3) | 1.6 % |
+| 1 | 19.0 (20.0) | 8.8 % |
+| 1.5 | 33.2 (39.8) | 32.3 % |
+
+close to the lecture (9.9 ... 33.7; 0.1 % ... 32 %). The mean stays near 10 (Fano 3.3 at $\tau = 1.5$): the error is in the spread. The theory assumes no clipping; clipping the negative runs makes the variance at $\tau = 1.5$ smaller than 40. At $T = 30$ h with $\tau = 1.5$, 68 % of runs go negative: more leaps, more chances. The exact SSA (untick the box) gives variance 10.1 and no negatives.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — propensities and the master equation (B1, B3)"}

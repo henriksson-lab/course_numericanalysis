@@ -36,6 +36,8 @@ const STYLE = `
 .reveal [data-demo="${NAME}"].qb-demo { font-size: 19px; }
 .reveal [data-demo="${NAME}"] .qb-readout { font-size: 18px; padding: .25em .6em; }
 .reveal [data-demo="${NAME}"] .fd-row .qb-slider { flex: 1 1 520px; }
+.reveal [data-demo="${NAME}"].qb-demo .qb-btn { font-size: .95em; padding: .15em .55em; }
+.reveal [data-demo="${NAME}"].qb-demo .qb-slider output { font-size: 19px; font-weight: 600; }
 `;
 
 function injectStyle(): void {

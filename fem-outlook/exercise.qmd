@@ -1,0 +1,792 @@
+---
+title: "Exercise: beyond rectangles: finite elements and flow"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+This is an optional further-reading exercise. By the end of it you should be able to:
+
+- write a piecewise linear function as a sum of **hat functions**, and evaluate and integrate it,
+- compute the 2 × 2 **element matrices** for $-(D u')' + k u = f$ and **assemble** them into the tridiagonal system,
+- show that on a uniform mesh the finite element matrix is the **finite-difference** matrix, and on a non-uniform mesh it is the non-uniform difference formula,
+- solve a 1D finite element problem on a **graded mesh** and see why putting nodes where the solution changes pays off,
+- recognise the **failure** (negative concentrations from elements that are too long) and the checks that detect it.
+
+The by-hand part uses pen, paper and a pocket calculator. The code part runs the same 15-line solver on meshes of up to 200 elements.
+
+## Background
+
+**The model.** A hydrogel slab, $L = 1000$ µm thick, sits on a glass bottom with cells embedded in it. A drug in the medium above diffuses in ($D = 100$ µm²/s) and the cells take it up ($k = 0.04$ s⁻¹). The steady concentration (relative to the bath) solves
+$$-(D\,u')' + k\,u = f, \qquad u(0) = 1, \qquad u'(L) = 0,$$
+with $f = 0$. The exact solution is $u(x) = \cosh\big((L-x)/\lambda\big)/\cosh(L/\lambda)$, $\lambda = \sqrt{D/k} = 50$ µm.
+
+**Facts used below:**
+
+1. **Hat functions.** On nodes $x_0 < x_1 < \dots < x_N$ (any spacing), $\varphi_j$ is 1 at $x_j$, 0 at all other nodes and linear in between. $u_h(x) = \sum_j u_j\varphi_j(x)$ is the piecewise linear function through the points $(x_j, u_j)$; its integral is exactly the trapezoid sum.
+2. **Weak form.** Multiply by $\varphi_i$, integrate, integrate by parts. The boundary term is the flux and vanishes at a no-flux end (natural boundary condition: nothing to do). At $x = 0$ the value is known, so there is no equation for $u_0$. Result: $K\mathbf u = \mathbf b$ with $K_{ij} = \int D\varphi_i'\varphi_j' + k\varphi_i\varphi_j\,dx$, $b_i = \int f\varphi_i\,dx$.
+3. **Element matrices** for an element of length $h_e$ (constant $D$, $k$, $f$ on it):
+   $$\frac{D}{h_e}\begin{pmatrix} 1 & -1\\ -1 & 1\end{pmatrix} + \frac{k h_e}{6}\begin{pmatrix} 2 & 1\\ 1 & 2\end{pmatrix}, \qquad \frac{f h_e}{2}\begin{pmatrix}1\\1\end{pmatrix}.$$
+   **Lumped** version: replace the uptake block by $\frac{k h_e}{2}\begin{pmatrix}1&0\\0&1\end{pmatrix}$.
+4. **Assembly.** Add the block of element $e$ into rows and columns $e, e+1$. Then move the column of the known $u_0$ to the right-hand side and drop row 0. The result is tridiagonal and symmetric: solve with the **Thomas algorithm** (from *Structure: symmetric, banded, sparse*).
+5. **Graded mesh.** $x_i = L\,(i/N)^2$ puts short elements near $x = 0$ (first one $L/N^2$) and long ones at depth.
+
+The solver in each language. R and Rust use the Thomas algorithm; Python uses [`scipy.linalg.solve_banded`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_banded.html), which takes the three diagonals in a 3-row array. `D`, `k` and `f` may be single numbers or one value per element.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+thomas <- function(a, b, c, d) {             # Structure: symmetric, banded, sparse
+  n <- length(d)
+  for (i in 2:n) { w <- a[i] / b[i - 1]; b[i] <- b[i] - w * c[i - 1]; d[i] <- d[i] - w * d[i - 1] }
+  x <- numeric(n); x[n] <- d[n] / b[n]
+  for (i in (n - 1):1) x[i] <- (d[i] - c[i] * x[i + 1]) / b[i]
+  x
+}
+assemble <- function(x, D, k, f = 0, lumped = FALSE) {
+  n <- length(x); h <- diff(x)
+  D <- rep_len(D, n - 1); k <- rep_len(k, n - 1); f <- rep_len(f, n - 1)
+  wd <- if (lumped) 1 / 2 else 1 / 3         # weight of k h on the diagonal
+  wo <- if (lumped) 0 else 1 / 6             # ... and off the diagonal
+  di <- numeric(n); off <- numeric(n - 1); b <- numeric(n)
+  for (e in 1:(n - 1)) {                     # element e: nodes e and e + 1
+    kd <- D[e] / h[e] + k[e] * h[e] * wd
+    ko <- -D[e] / h[e] + k[e] * h[e] * wo
+    di[e:(e + 1)] <- di[e:(e + 1)] + kd
+    off[e] <- off[e] + ko
+    b[e:(e + 1)] <- b[e:(e + 1)] + f[e] * h[e] / 2
+  }
+  list(di = di, off = off, b = b)
+}
+fem1d <- function(x, D, k, f = 0, u0 = 1, lumped = FALSE) {
+  S <- assemble(x, D, k, f, lumped); off <- S$off
+  rhs <- S$b[-1]; rhs[1] <- rhs[1] - off[1] * u0   # u(x[1]) = u0 is known
+  c(u0, thomas(off, S$di[-1], c(off[-1], 0), rhs))
+}
+
+L <- 1000; D <- 100; k <- 0.04; lam <- sqrt(D / k)
+exact <- function(x) cosh((L - x) / lam) / cosh(L / lam)
+x <- seq(0, L, length.out = 11)
+u <- fem1d(x, D, k)
+data.frame(x = x[1:5], fem = round(u[1:5], 4), exact = round(exact(x[1:5]), 4))
+#     x    fem  exact
+# 1   0 1.0000 1.0000
+# 2 100 0.0718 0.1353
+# 3 200 0.0052 0.0183
+# 4 300 0.0004 0.0025
+# 5 400 0.0000 0.0003
+max(abs(u - exact(x)))
+# [1] 0.06353851
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import solve_banded
+
+def assemble(x, D, k, f=0.0, lumped=False):
+    n = len(x); h = np.diff(x)
+    D, k, f = (np.broadcast_to(v, n - 1) for v in (D, k, f))
+    wd, wo = (1 / 2, 0.0) if lumped else (1 / 3, 1 / 6)
+    di = np.zeros(n); off = np.zeros(n - 1); b = np.zeros(n)
+    for e in range(n - 1):                    # element e: nodes e and e + 1
+        kd = D[e] / h[e] + k[e] * h[e] * wd
+        ko = -D[e] / h[e] + k[e] * h[e] * wo
+        di[e:e + 2] += kd
+        off[e] += ko
+        b[e:e + 2] += f[e] * h[e] / 2
+    return di, off, b
+
+def fem1d(x, D, k, f=0.0, u0=1.0, lumped=False):
+    di, off, b = assemble(x, D, k, f, lumped)
+    rhs = b[1:].copy(); rhs[0] -= off[0] * u0  # u(x[0]) = u0 is known
+    m = len(rhs)
+    ab = np.zeros((3, m))                      # banded storage for solve_banded
+    ab[0, 1:] = off[1:]                        # above the diagonal
+    ab[1] = di[1:]                             # diagonal
+    ab[2, :-1] = off[1:]                       # below the diagonal
+    return np.concatenate([[u0], solve_banded((1, 1), ab, rhs)])
+
+L, D, k = 1000.0, 100.0, 0.04
+lam = np.sqrt(D / k)
+exact = lambda x: np.cosh((L - x) / lam) / np.cosh(L / lam)
+x = np.linspace(0, L, 11)
+u = fem1d(x, D, k)
+print("    x    fem  exact")
+#     x    fem  exact
+for i in range(5):
+    print(f"{x[i]:5.0f} {u[i]:6.4f} {exact(x[i]):6.4f}")
+#     0 1.0000 1.0000
+#   100 0.0718 0.1353
+#   200 0.0052 0.0183
+#   300 0.0004 0.0025
+#   400 0.0000 0.0003
+print(np.max(np.abs(u - exact(x))))
+# 0.06353851351212188
+```
+
+### Rust
+
+```rust
+// rust/examples/fem_outlook_background.rs  —  cargo run --example fem_outlook_background
+// Background: a 1D finite element solver for -(D u')' + k u = f with linear
+// elements on any mesh, hand-written (assembly loop + Thomas algorithm).
+// Model: drug diffusing into a 1 mm hydrogel slab with uptake by cells.
+
+// Thomas algorithm (Structure: symmetric, banded, sparse); a[0] and c[n-1] unused
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// Assemble the tridiagonal matrix (diagonal, off-diagonal) and load vector.
+/// d, k, f hold one value per element.
+fn assemble(x: &[f64], d: &[f64], k: &[f64], f: &[f64], lumped: bool) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    let n = x.len();
+    let (wd, wo) = if lumped { (0.5, 0.0) } else { (1.0 / 3.0, 1.0 / 6.0) };
+    let (mut di, mut off, mut b) = (vec![0.0; n], vec![0.0; n - 1], vec![0.0; n]);
+    for e in 0..n - 1 {                         // element e: nodes e and e + 1
+        let h = x[e + 1] - x[e];
+        let kd = d[e] / h + k[e] * h * wd;
+        let ko = -d[e] / h + k[e] * h * wo;
+        di[e] += kd;
+        di[e + 1] += kd;
+        off[e] += ko;
+        b[e] += f[e] * h / 2.0;
+        b[e + 1] += f[e] * h / 2.0;
+    }
+    (di, off, b)
+}
+
+/// Solve with u(x[0]) = u0 and no flux at the last node.
+fn fem1d(x: &[f64], d: &[f64], k: &[f64], f: &[f64], u0: f64, lumped: bool) -> Vec<f64> {
+    let (di, off, b) = assemble(x, d, k, f, lumped);
+    let mut rhs = b[1..].to_vec();
+    rhs[0] -= off[0] * u0;                     // move the known u0 to the right
+    let mut c = off[1..].to_vec();
+    c.push(0.0);
+    let mut u = vec![u0];
+    u.extend(thomas(&off, &di[1..], &c, &rhs));
+    u
+}
+
+fn main() {
+    let (l, dd, k) = (1000.0, 100.0, 0.04);
+    let lam = f64::sqrt(dd / k);
+    let exact = |x: f64| ((l - x) / lam).cosh() / (l / lam).cosh();
+    let n = 10;                                // elements
+    let x: Vec<f64> = (0..=n).map(|i| l * i as f64 / n as f64).collect();
+    let u = fem1d(&x, &vec![dd; n], &vec![k; n], &vec![0.0; n], 1.0, false);
+    println!("    x    fem  exact");
+    for i in 0..5 {
+        println!("{:5.0} {:6.4} {:6.4}", x[i], u[i], exact(x[i]));
+    }
+    let err = x.iter().zip(&u).map(|(xi, ui)| (ui - exact(*xi)).abs()).fold(0.0, f64::max);
+    println!("{}", err);
+}
+
+// Output:
+//     x    fem  exact
+//     0 1.0000 1.0000
+//   100 0.0718 0.1353
+//   200 0.0052 0.0183
+//   300 0.0004 0.0025
+//   400 0.0000 0.0003
+// 0.06353851351212188
+```
+
+:::
+
+The uniform mesh with 10 elements has one node inside the 50 µm layer, and gets the drug at 100 µm wrong by a factor of 2.
+
+## By hand
+
+**B1. Hat functions.** Take the nodes $x = 0, 1, 3, 4$ (a non-uniform mesh).
+(a) Write $\varphi_1(x)$ (the hat at $x_1 = 1$) as a formula on each element.
+(b) With nodal values $u = (1, 0.5, 0.2, 0.1)$, evaluate $u_h(0.5)$ and $u_h(2)$.
+(c) What is the slope $u_h'$ on each element?
+(d) Compute $\int_0^4 u_h\,dx$.
+
+**B2. Assemble by hand.** Take $D = 1$, $k = 0$ (pure diffusion, $-u'' = f$).
+(a) Uniform mesh $0, 1, 2, 3$ ($h = 1$). Write the three element matrices and assemble the full 4 × 4 matrix $K$. Compare its interior rows with the second difference $(-1, 2, -1)/h^2$.
+(b) Two elements of lengths $h_1$ and $h_2$ meeting at node 1, constant $f$. Write the assembled equation of row 1. Show that dividing it by $(h_1 + h_2)/2$ gives the non-uniform difference formula
+$$-\frac{2}{h_1 + h_2}\left(\frac{u_2 - u_1}{h_2} - \frac{u_1 - u_0}{h_1}\right) = f.$$
+(c) Check (b) with $u = x^2$ (so $f = -u'' = -2$) on nodes $0, 1, 3$.
+
+**B3. Elements that are too long.** A thinner slab, $L = 500$ µm, with the same $D = 100$ µm²/s and $k = 0.04$ s⁻¹, cut into 2 elements of $h = 250$ µm. $u_0 = 1$, no flux at 500 µm.
+(a) Compute the diagonal entry $D/h + kh/3$ and the off-diagonal entry $-D/h + kh/6$ of each element matrix. What sign has the off-diagonal?
+(b) Assemble the 2 × 2 system for $u_1, u_2$ (row 1 gets contributions from both elements) and solve it.
+(c) The exact values are $u(250) = 0.0067$ and $u(500) = 0.00009$. What is wrong with your answer?
+(d) For which $h$ is the off-diagonal entry negative? Express the limit in terms of $\lambda$.
+(e) Repeat (b) with the lumped matrix. Is the answer positive? Is it accurate?
+
+## In code
+
+**C1. The same matrix as finite differences.** Use `assemble` from the Background.
+(a) For 5 uniform elements on $[0, 500]$ µm with $D = 100$ and $k = 0$, print the diagonal and off-diagonal times $h/D$. Compare with B2(a).
+(b) Now with $k = 0.04$: print the diagonal and off-diagonal of the consistent and the lumped matrix, and of the finite-difference matrix $\frac{D}{h}(-1, 2, -1) + k h$ on the diagonal, with the no-flux last row (from the ghost point) divided by 2 to match. Which one is the finite-difference matrix?
+(c) Solve the 1 mm slab with 10 uniform elements, consistent and lumped. Which has the smaller maximum nodal error?
+
+**C2. Refine where the solution changes.** For $N = 5, 10, 20, 40, 80, 160$ elements, solve the slab on the uniform mesh and on the graded mesh $x_i = L(i/N)^2$. Print the maximum nodal error of each and their ratio; plot both against $N$ on log–log axes and read off the order. Then compute the amount of drug in the gel, $\int_0^L u_h\,dx$ (in µm × bath concentration), for $N = 10$ on both meshes, and compare with the exact $\lambda\tanh(L/\lambda)$.
+
+**C3. Failure, and a two-layer gel.**
+(a) For $N = 2, 4, 6, 8, 10$ uniform elements, print $h/\lambda$, the smallest $u_j$ for the consistent and for the lumped matrix. Compare with B3(d).
+(b) Now the top 100 µm of the gel is a cell-free coating ($k = 0$ there), cells only below. Give each element the $k$ of its midpoint. The exact drug level at the interface is $u(100) = 1/\big(1 + (100/\lambda)\tanh(900/\lambda)\big)$. Compare the FEM value at $x = 100$ (interpolated if there is no node there) for $N = 50, 49, 100, 99, 200, 199$ uniform elements. Which meshes have a node at the interface, and what does that do to the error and its order?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — hats and integrals (B1)"}
+On an element $[x_j, x_{j+1}]$ only $\varphi_j$ and $\varphi_{j+1}$ are non-zero, so $u_h$ is the straight line between $(x_j, u_j)$ and $(x_{j+1}, u_{j+1})$. The integral of a straight line over an element is its length times the mean of the end values (the trapezoid rule of *Numerical integration*, here exact).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — assembly (B2, B3)"}
+Write each element matrix in its own 2 × 2, then add: node $i$ gets the bottom-right entry of element $i$ (on its left) and the top-left entry of element $i+1$ (on its right). The last node belongs to one element only. In B3, row 1 has $-$(off-diagonal)$\times u_0$ moved to the right-hand side, with $u_0 = 1$. Useful values: $D/h = 0.4$, $kh/3 = 10/3$, $kh/6 = 5/3$, $kh/2 = 5$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — the solver (C1–C3)"}
+The Thomas convention is the one from *Implicit schemes and the method of lines*: all four vectors of length $m$, `a[1]` and `c[m]` unused. Python's [`solve_banded((1, 1), ab, rhs)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_banded.html) wants the superdiagonal in row 0 (first entry unused), the diagonal in row 1 and the subdiagonal in row 2 (last entry unused). For the slab use [`cosh`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Hyperbolic.html) and `tanh` (Python: [`np.cosh`](https://numpy.org/doc/stable/reference/generated/numpy.cosh.html)).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — order and interpolation (C2, C3)"}
+If the error is $\approx C N^{-p}$, then $p = \log_2(e_N/e_{2N})$. Plot with [`matplot(..., log = "xy")`](https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/matplot.html) (Python: [`plt.loglog`](https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.loglog.html)). To read $u_h$ between nodes use [`approx`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/approxfun.html) (Python: [`np.interp`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html)): linear interpolation is exactly $u_h$. A per-element vector: the midpoints are `head(x, -1) + diff(x) / 2` (Python: `x[:-1] + np.diff(x) / 2`). Test "is there a node at 100" with a tolerance, not `==` (*How computers store numbers*).
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution — by hand"}
+
+**B1.**
+(a) $\varphi_1(x) = x$ on $[0, 1]$, $\varphi_1(x) = (3 - x)/2$ on $[1, 3]$, and $0$ on $[3, 4]$.
+(b) $u_h(0.5) = (1 + 0.5)/2 = 0.75$. $u_h(2) = 0.5\,\varphi_1(2) + 0.2\,\varphi_2(2) = 0.5 \cdot 0.5 + 0.2 \cdot 0.5 = 0.35$.
+(c) $-0.5$ on $[0, 1]$, $(0.2 - 0.5)/2 = -0.15$ on $[1, 3]$, $-0.1$ on $[3, 4]$. The slope jumps at the nodes: $u_h$ has no second derivative there, which is why the weak form (only first derivatives) is needed.
+(d) $1 \cdot 0.75 + 2 \cdot 0.35 + 1 \cdot 0.15 = 1.6$.
+
+**B2.**
+(a) Each element gives $\begin{pmatrix}1 & -1\\-1 & 1\end{pmatrix}$. Assembled:
+$$K = \begin{pmatrix} 1 & -1 & 0 & 0\\ -1 & 2 & -1 & 0\\ 0 & -1 & 2 & -1\\ 0 & 0 & -1 & 1\end{pmatrix}.$$
+The interior rows are $(-1, 2, -1)$, the second difference times $h^2 = 1$ (in general $K = \frac{1}{h}\times$ the difference matrix $\times h^2$, so a factor $h$ apart, with $b_i = fh$ on the right). The end rows have half weight: the no-flux row of a ghost-point scheme divided by 2.
+(b) Row 1 collects $\frac{1}{h_1}(-u_0 + u_1)$ from element 1 and $\frac{1}{h_2}(u_1 - u_2)$ from element 2, and $b_1 = f h_1/2 + f h_2/2$:
+$$-\frac{u_0}{h_1} + \Big(\frac{1}{h_1} + \frac{1}{h_2}\Big)u_1 - \frac{u_2}{h_2} = f\,\frac{h_1 + h_2}{2}.$$
+The left side is $-\big(\frac{u_2 - u_1}{h_2} - \frac{u_1 - u_0}{h_1}\big)$; divide by $(h_1 + h_2)/2$. So in 1D the finite element method on any mesh gives the non-uniform finite-difference formula: the difference of two slopes divided by the distance between the midpoints.
+(c) $h_1 = 1$, $h_2 = 2$, $u = (0, 1, 9)$: left side $-0 + 1.5 \cdot 1 - 9/2 = -3$; right side $-2 \cdot 3/2 = -3$. Exact, as it should be for a quadratic.
+
+**B3.**
+(a) Diagonal $0.4 + 10/3 = 3.733$; off-diagonal $-0.4 + 5/3 = +1.267$. **Positive**: uptake (the $kh/6$ term) outweighs diffusion ($D/h$).
+(b) Row 1: $2 \cdot 3.733\,u_1 + 1.267\,u_2 = -1.267 \cdot u_0 = -1.267$. Row 2: $1.267\,u_1 + 3.733\,u_2 = 0$. From row 2, $u_2 = -0.3393\,u_1$; then $(7.467 - 0.430)\,u_1 = -1.267$, so $u_1 = -0.180$ and $u_2 = 0.0611$.
+(c) A **negative concentration** at 250 µm, and a value at the bottom 700 times too high. The answer is not just inaccurate but impossible, and a code would return it without complaint.
+(d) $-D/h + kh/6 < 0 \iff h^2 < 6D/k \iff h < \sqrt6\,\lambda = 122$ µm.
+(e) Diagonal $0.4 + 5 = 5.4$, off-diagonal $-0.4$. Row 1: $10.8\,u_1 - 0.4\,u_2 = 0.4$; row 2: $-0.4\,u_1 + 5.4\,u_2 = 0$. So $u_2 = u_1/13.5$, $u_1 = 0.4/10.77 = 0.0371$, $u_2 = 0.0028$. Positive, but still 5 times too high at 250 µm. Lumping fixes the sign, not the resolution.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C1"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- seq(0, 500, by = 100); h <- 100              # 5 elements
+S0 <- assemble(x, D = 100, k = 0)
+S0$di * h / 100                                   # K scaled by h / D
+# [1] 1 2 2 2 2 1
+S0$off * h / 100
+# [1] -1 -1 -1 -1 -1
+S1 <- assemble(x, D = 100, k = 0.04)
+SL <- assemble(x, D = 100, k = 0.04, lumped = TRUE)
+fd_di  <- 100 / h * c(1, 2, 2, 2, 2, 1) + 0.04 * h * c(1/2, 1, 1, 1, 1, 1/2)
+fd_off <- rep(-100 / h, 5)
+S1$di; SL$di; fd_di
+# [1] 2.333333 4.666667 4.666667 4.666667 4.666667 2.333333
+# [1] 3 6 6 6 6 3
+# [1] 3 6 6 6 6 3
+S1$off; SL$off
+# [1] -0.3333333 -0.3333333 -0.3333333 -0.3333333 -0.3333333
+# [1] -1 -1 -1 -1 -1
+isTRUE(all.equal(SL$di, fd_di)) && isTRUE(all.equal(SL$off, fd_off))
+# [1] TRUE
+xu <- seq(0, L, length.out = 11)
+cat(sprintf("consistent %.4f  lumped %.4f\n", max(abs(fem1d(xu, D, k) - exact(xu))),
+            max(abs(fem1d(xu, D, k, lumped = TRUE) - exact(xu)))))
+# consistent 0.0635  lumped 0.0362
+```
+
+### Python
+
+```python
+x = np.arange(0, 501, 100.0); h = 100             # 5 elements
+di0, off0, _ = assemble(x, 100, 0)
+print(di0 * h / 100)                               # K scaled by h / D
+# [1. 2. 2. 2. 2. 1.]
+print(off0 * h / 100)
+# [-1. -1. -1. -1. -1.]
+di1, off1, _ = assemble(x, 100, 0.04)
+diL, offL, _ = assemble(x, 100, 0.04, lumped=True)
+fd_di = 100 / h * np.array([1, 2, 2, 2, 2, 1]) + 0.04 * h * np.array([1/2, 1, 1, 1, 1, 1/2])
+fd_off = np.full(5, -100 / h)
+print(di1); print(diL); print(fd_di)
+# [2.33333333 4.66666667 4.66666667 4.66666667 4.66666667 2.33333333]
+# [3. 6. 6. 6. 6. 3.]
+# [3. 6. 6. 6. 6. 3.]
+print(off1); print(offL)
+# [-0.33333333 -0.33333333 -0.33333333 -0.33333333 -0.33333333]
+# [-1. -1. -1. -1. -1.]
+print(np.allclose(diL, fd_di) and np.allclose(offL, fd_off))
+# True
+xu = np.linspace(0, L, 11)
+print(f"consistent {np.max(np.abs(fem1d(xu, D, k) - exact(xu))):.4f}  "
+      f"lumped {np.max(np.abs(fem1d(xu, D, k, lumped=True) - exact(xu))):.4f}")
+# consistent 0.0635  lumped 0.0362
+```
+
+### Rust
+
+```rust
+// rust/examples/fem_outlook_c1.rs  —  cargo run --example fem_outlook_c1
+// C1: the FEM matrix against the finite-difference matrix, and consistent vs lumped uptake.
+
+// Thomas algorithm (Structure: symmetric, banded, sparse); a[0] and c[n-1] unused
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// Assemble the tridiagonal matrix (diagonal, off-diagonal) and load vector.
+/// d, k, f hold one value per element.
+fn assemble(x: &[f64], d: &[f64], k: &[f64], f: &[f64], lumped: bool) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    let n = x.len();
+    let (wd, wo) = if lumped { (0.5, 0.0) } else { (1.0 / 3.0, 1.0 / 6.0) };
+    let (mut di, mut off, mut b) = (vec![0.0; n], vec![0.0; n - 1], vec![0.0; n]);
+    for e in 0..n - 1 {                         // element e: nodes e and e + 1
+        let h = x[e + 1] - x[e];
+        let kd = d[e] / h + k[e] * h * wd;
+        let ko = -d[e] / h + k[e] * h * wo;
+        di[e] += kd;
+        di[e + 1] += kd;
+        off[e] += ko;
+        b[e] += f[e] * h / 2.0;
+        b[e + 1] += f[e] * h / 2.0;
+    }
+    (di, off, b)
+}
+
+/// Solve with u(x[0]) = u0 and no flux at the last node.
+fn fem1d(x: &[f64], d: &[f64], k: &[f64], f: &[f64], u0: f64, lumped: bool) -> Vec<f64> {
+    let (di, off, b) = assemble(x, d, k, f, lumped);
+    let mut rhs = b[1..].to_vec();
+    rhs[0] -= off[0] * u0;                     // move the known u0 to the right
+    let mut c = off[1..].to_vec();
+    c.push(0.0);
+    let mut u = vec![u0];
+    u.extend(thomas(&off, &di[1..], &c, &rhs));
+    u
+}
+fn main() {
+    let x: Vec<f64> = (0..=5).map(|i| 100.0 * i as f64).collect();   // 5 elements, h = 100
+    let h = 100.0;
+    let (di0, off0, _) = assemble(&x, &[100.0; 5], &[0.0; 5], &[0.0; 5], false);
+    println!("{:?}", di0.iter().map(|v| v * h / 100.0).collect::<Vec<_>>());
+    println!("{:?}", off0.iter().map(|v| v * h / 100.0).collect::<Vec<_>>());
+    let (di1, off1, _) = assemble(&x, &[100.0; 5], &[0.04; 5], &[0.0; 5], false);
+    let (dil, offl, _) = assemble(&x, &[100.0; 5], &[0.04; 5], &[0.0; 5], true);
+    let w = [1.0, 2.0, 2.0, 2.0, 2.0, 1.0];
+    let fd_di: Vec<f64> = w.iter().map(|wi| 100.0 / h * wi + 0.04 * h * wi / 2.0).collect();
+    println!("{:?}", di1);
+    println!("{:?}", dil);
+    println!("{:?}", fd_di);
+    println!("{:?}", off1);
+    println!("{:?}", offl);
+    let same = dil.iter().zip(&fd_di).all(|(a, b)| (a - b).abs() < 1e-12)
+        && offl.iter().all(|o| (o + 100.0 / h).abs() < 1e-12);
+    println!("{}", same);
+
+    let (l, dd, k) = (1000.0, 100.0, 0.04);
+    let lam = f64::sqrt(dd / k);
+    let exact = |x: f64| ((l - x) / lam).cosh() / (l / lam).cosh();
+    let xu: Vec<f64> = (0..=10).map(|i| 100.0 * i as f64).collect();
+    let maxerr = |u: &[f64]| xu.iter().zip(u).map(|(xi, ui)| (ui - exact(*xi)).abs()).fold(0.0, f64::max);
+    let uc = fem1d(&xu, &[dd; 10], &[k; 10], &[0.0; 10], 1.0, false);
+    let ul = fem1d(&xu, &[dd; 10], &[k; 10], &[0.0; 10], 1.0, true);
+    println!("consistent {:.4}  lumped {:.4}", maxerr(&uc), maxerr(&ul));
+}
+
+// Output:
+// [1.0, 2.0, 2.0, 2.0, 2.0, 1.0]
+// [-1.0, -1.0, -1.0, -1.0, -1.0]
+// [2.333333333333333, 4.666666666666666, 4.666666666666666, 4.666666666666666, 4.666666666666666, 2.333333333333333]
+// [3.0, 6.0, 6.0, 6.0, 6.0, 3.0]
+// [3.0, 6.0, 6.0, 6.0, 6.0, 3.0]
+// [-0.33333333333333337, -0.33333333333333337, -0.33333333333333337, -0.33333333333333337, -0.33333333333333337]
+// [-1.0, -1.0, -1.0, -1.0, -1.0]
+// true
+// consistent 0.0635  lumped 0.0362
+```
+
+:::
+
+(a) $(1, 2, 2, 2, 2, 1)$ and $-1$: the B2(a) pattern. (b) The **lumped** matrix (diagonal 6, off-diagonal $-1$; last row 3) is exactly the finite-difference matrix times $h$. The consistent matrix has diagonal $2 + 2kh/3 = 4.67$ and off-diagonal $-1 + kh/6 = -0.33$ (in units of $D/h = 1$): part of the uptake sits on the neighbours. (c) On this coarse mesh the lumped (finite-difference) version is more accurate (0.036 against 0.064). Neither is good: both meshes are too coarse for a 50 µm layer, and the "better" matrix is not a substitute for more nodes where they are needed.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C2"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+cat("  N   uniform    graded  ratio\n")
+#   N   uniform    graded  ratio
+Ns <- c(5, 10, 20, 40, 80, 160); errs <- NULL
+for (N in Ns) {
+  xu <- seq(0, L, length.out = N + 1); xg <- L * (0:N / N)^2
+  eu <- max(abs(fem1d(xu, D, k) - exact(xu)))
+  eg <- max(abs(fem1d(xg, D, k) - exact(xg)))
+  errs <- rbind(errs, c(eu, eg))
+  cat(sprintf("%3d  %.2e  %.2e  %.2f\n", N, eu, eg, eu / eg))
+}
+#   5  1.52e-01  4.08e-02  3.73
+#  10  6.35e-02  1.39e-02  4.58
+#  20  1.69e-02  3.47e-03  4.86
+#  40  3.92e-03  8.72e-04  4.50
+#  80  9.64e-04  2.19e-04  4.41
+# 160  2.40e-04  5.47e-05  4.39
+log2(errs[5, ] / errs[6, ])                       # observed order
+# [1] 2.006221 2.000021
+matplot(Ns, errs, log = "xy", type = "o", pch = c(19, 17), lty = 1,
+        xlab = "elements N", ylab = "max nodal error")
+amount <- function(x, u) sum(diff(x) * (head(u, -1) + tail(u, -1)) / 2)
+xg <- L * (0:10 / 10)^2; xu <- seq(0, L, length.out = 11)
+c(amount(xu, fem1d(xu, D, k)), amount(xg, fem1d(xg, D, k)), lam * tanh(L / lam))
+# [1] 57.73503 50.82499 50.00000
+```
+
+### Python
+
+```python
+import matplotlib.pyplot as plt
+
+print("  N   uniform    graded  ratio")
+#   N   uniform    graded  ratio
+Ns = [5, 10, 20, 40, 80, 160]; errs = []
+for N in Ns:
+    xu = np.linspace(0, L, N + 1); xg = L * (np.arange(N + 1) / N)**2
+    eu = np.max(np.abs(fem1d(xu, D, k) - exact(xu)))
+    eg = np.max(np.abs(fem1d(xg, D, k) - exact(xg)))
+    errs.append([eu, eg])
+    print(f"{N:3d}  {eu:.2e}  {eg:.2e}  {eu / eg:.2f}")
+#   5  1.52e-01  4.08e-02  3.73
+#  10  6.35e-02  1.39e-02  4.58
+#  20  1.69e-02  3.47e-03  4.86
+#  40  3.92e-03  8.72e-04  4.50
+#  80  9.64e-04  2.19e-04  4.41
+# 160  2.40e-04  5.47e-05  4.39
+errs = np.array(errs)
+print(np.log2(errs[4] / errs[5]))                  # observed order
+# [2.0062213  2.00002147]
+plt.loglog(Ns, errs, "o-"); plt.xlabel("elements N"); plt.ylabel("max nodal error")
+plt.legend(["uniform", "graded"]); plt.show()
+amount = lambda x, u: np.sum(np.diff(x) * (u[:-1] + u[1:]) / 2)
+xg = L * (np.arange(11) / 10)**2; xu = np.linspace(0, L, 11)
+print(amount(xu, fem1d(xu, D, k)), amount(xg, fem1d(xg, D, k)), lam * np.tanh(L / lam))
+# 57.73502691896257 50.824990564107345 50.0
+```
+
+### Rust
+
+```rust
+// rust/examples/fem_outlook_c2.rs  —  cargo run --example fem_outlook_c2
+// C2: uniform vs graded mesh for the hydrogel slab; error table and order.
+
+// Thomas algorithm (Structure: symmetric, banded, sparse); a[0] and c[n-1] unused
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// Assemble the tridiagonal matrix (diagonal, off-diagonal) and load vector.
+/// d, k, f hold one value per element.
+fn assemble(x: &[f64], d: &[f64], k: &[f64], f: &[f64], lumped: bool) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    let n = x.len();
+    let (wd, wo) = if lumped { (0.5, 0.0) } else { (1.0 / 3.0, 1.0 / 6.0) };
+    let (mut di, mut off, mut b) = (vec![0.0; n], vec![0.0; n - 1], vec![0.0; n]);
+    for e in 0..n - 1 {                         // element e: nodes e and e + 1
+        let h = x[e + 1] - x[e];
+        let kd = d[e] / h + k[e] * h * wd;
+        let ko = -d[e] / h + k[e] * h * wo;
+        di[e] += kd;
+        di[e + 1] += kd;
+        off[e] += ko;
+        b[e] += f[e] * h / 2.0;
+        b[e + 1] += f[e] * h / 2.0;
+    }
+    (di, off, b)
+}
+
+/// Solve with u(x[0]) = u0 and no flux at the last node.
+fn fem1d(x: &[f64], d: &[f64], k: &[f64], f: &[f64], u0: f64, lumped: bool) -> Vec<f64> {
+    let (di, off, b) = assemble(x, d, k, f, lumped);
+    let mut rhs = b[1..].to_vec();
+    rhs[0] -= off[0] * u0;                     // move the known u0 to the right
+    let mut c = off[1..].to_vec();
+    c.push(0.0);
+    let mut u = vec![u0];
+    u.extend(thomas(&off, &di[1..], &c, &rhs));
+    u
+}
+fn main() {
+    let (l, dd, k) = (1000.0, 100.0, 0.04);
+    let lam = f64::sqrt(dd / k);
+    let exact = |x: f64| ((l - x) / lam).cosh() / (l / lam).cosh();
+    let solve = |x: &[f64]| {
+        let n = x.len() - 1;
+        fem1d(x, &vec![dd; n], &vec![k; n], &vec![0.0; n], 1.0, false)
+    };
+    let maxerr = |x: &[f64], u: &[f64]| x.iter().zip(u).map(|(xi, ui)| (ui - exact(*xi)).abs()).fold(0.0, f64::max);
+    let uniform = |n: usize| (0..=n).map(|i| l * i as f64 / n as f64).collect::<Vec<f64>>();
+    let graded = |n: usize| (0..=n).map(|i| l * (i as f64 / n as f64).powi(2)).collect::<Vec<f64>>();
+    println!("  N   uniform    graded  ratio");
+    let mut errs = Vec::new();
+    for n in [5, 10, 20, 40, 80, 160] {
+        let (xu, xg) = (uniform(n), graded(n));
+        let (eu, eg) = (maxerr(&xu, &solve(&xu)), maxerr(&xg, &solve(&xg)));
+        errs.push((eu, eg));
+        println!("{:3}  {:.2e}  {:.2e}  {:.2}", n, eu, eg, eu / eg);
+    }
+    println!("{} {}", (errs[4].0 / errs[5].0).log2(), (errs[4].1 / errs[5].1).log2());
+    // amount of drug in the gel per unit area: trapezoid rule is exact for u_h
+    let amount = |x: &[f64], u: &[f64]| (0..x.len() - 1).map(|i| (x[i + 1] - x[i]) * (u[i] + u[i + 1]) / 2.0).sum::<f64>();
+    let (xu, xg) = (uniform(10), graded(10));
+    println!("{} {} {}", amount(&xu, &solve(&xu)), amount(&xg, &solve(&xg)), lam * (l / lam).tanh());
+}
+
+// Output:
+//   N   uniform    graded  ratio
+//   5  1.52e-1  4.08e-2  3.73
+//  10  6.35e-2  1.39e-2  4.58
+//  20  1.69e-2  3.47e-3  4.86
+//  40  3.92e-3  8.72e-4  4.50
+//  80  9.64e-4  2.19e-4  4.41
+// 160  2.40e-4  5.47e-5  4.39
+// 2.0062212959890737 2.0000214714075186
+// 57.73502691896257 50.82499056410734 50
+```
+
+:::
+
+Both meshes are **second order** (observed $p = 2.006$ and $2.000$); the graded mesh is about 4.5 times more accurate at every $N$, so the graded mesh with 10 elements (0.0139) beats the uniform one with 20 (0.0169). With 10 uniform elements the amount of drug in the gel is 57.7 instead of 50 (15 % too high: the straight line from 1 to 0.07 over the first 100 µm lies far above the true curve); on the graded mesh it is 50.8. Grading costs nothing: the same number of unknowns and the same tridiagonal solve. This is the 1D version of what mesh generators and adaptive refinement do in 2D and 3D.
+:::
+
+::: {.callout-note collapse="true" title="Solution — C3"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+for (N in c(2, 4, 6, 8, 10)) {
+  xu <- seq(0, L, length.out = N + 1)
+  cat(sprintf("N = %2d  h/lambda = %4.1f  min u = %9.2e  lumped min = %.2e\n", N, L / N / lam,
+              min(fem1d(xu, D, k)), min(fem1d(xu, D, k, lumped = TRUE))))
+}
+# N =  2  h/lambda = 10.0  min u = -2.55e-01  lumped min = 1.92e-04
+# N =  4  h/lambda =  5.0  min u = -1.75e-01  lumped min = 3.78e-06
+# N =  6  h/lambda =  3.3  min u = -9.13e-02  lumped min = 4.08e-07
+# N =  8  h/lambda =  2.5  min u = -6.76e-03  lumped min = 1.05e-07
+# N = 10  h/lambda =  2.0  min u =  7.28e-12  lumped min = 4.42e-08
+cc <- 100                                          # cell-free top layer, k = 0
+kk <- function(x) ifelse(head(x, -1) + diff(x) / 2 < cc, 0, k)   # k per element
+uc <- 1 / (1 + cc / lam * tanh((L - cc) / lam))
+uc
+# [1] 0.3333333
+for (N in c(50, 49, 100, 99, 200, 199)) {
+  x <- seq(0, L, length.out = N + 1); u <- fem1d(x, D, kk(x))
+  u100 <- approx(x, u, xout = cc)$y
+  cat(sprintf("N = %3d  node at 100: %-5s  u(100) = %.4f  error = %9.2e\n",
+              N, any(abs(x - cc) < 1e-9), u100, u100 - uc))
+}
+# N =  50  node at 100: TRUE   u(100) = 0.3319  error = -1.47e-03
+# N =  49  node at 100: FALSE  u(100) = 0.3408  error =  7.46e-03
+# N = 100  node at 100: TRUE   u(100) = 0.3330  error = -3.70e-04
+# N =  99  node at 100: FALSE  u(100) = 0.3374  error =  4.09e-03
+# N = 200  node at 100: TRUE   u(100) = 0.3332  error = -9.25e-05
+# N = 199  node at 100: FALSE  u(100) = 0.3355  error =  2.13e-03
+```
+
+### Python
+
+```python
+for N in [2, 4, 6, 8, 10]:
+    xu = np.linspace(0, L, N + 1)
+    print(f"N = {N:2d}  h/lambda = {L / N / lam:4.1f}  min u = {fem1d(xu, D, k).min():9.2e}"
+          f"  lumped min = {fem1d(xu, D, k, lumped=True).min():.2e}")
+# N =  2  h/lambda = 10.0  min u = -2.55e-01  lumped min = 1.92e-04
+# N =  4  h/lambda =  5.0  min u = -1.75e-01  lumped min = 3.78e-06
+# N =  6  h/lambda =  3.3  min u = -9.13e-02  lumped min = 4.08e-07
+# N =  8  h/lambda =  2.5  min u = -6.76e-03  lumped min = 1.05e-07
+# N = 10  h/lambda =  2.0  min u =  7.28e-12  lumped min = 4.42e-08
+c = 100.0
+kk = lambda x: np.where(x[:-1] + np.diff(x) / 2 < c, 0.0, k)   # k per element
+uc = 1 / (1 + c / lam * np.tanh((L - c) / lam))
+print(uc)
+# 0.3333333333333334
+for N in [50, 49, 100, 99, 200, 199]:
+    x = np.linspace(0, L, N + 1); u = fem1d(x, D, kk(x))
+    u100 = np.interp(100, x, u)
+    print(f"N = {N:3d}  node at 100: {str(bool(np.any(np.abs(x - 100) < 1e-9))):5s}"
+          f"  u(100) = {u100:.4f}  error = {u100 - uc:9.2e}")
+# N =  50  node at 100: True   u(100) = 0.3319  error = -1.47e-03
+# N =  49  node at 100: False  u(100) = 0.3408  error =  7.46e-03
+# N = 100  node at 100: True   u(100) = 0.3330  error = -3.70e-04
+# N =  99  node at 100: False  u(100) = 0.3374  error =  4.09e-03
+# N = 200  node at 100: True   u(100) = 0.3332  error = -9.25e-05
+# N = 199  node at 100: False  u(100) = 0.3355  error =  2.13e-03
+```
+
+### Rust
+
+```rust
+// rust/examples/fem_outlook_c3.rs  —  cargo run --example fem_outlook_c3
+// C3: too-long elements give negative concentrations; a two-layer gel with and
+// without a node at the layer interface.
+
+// Thomas algorithm (Structure: symmetric, banded, sparse); a[0] and c[n-1] unused
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// Assemble the tridiagonal matrix (diagonal, off-diagonal) and load vector.
+/// d, k, f hold one value per element.
+fn assemble(x: &[f64], d: &[f64], k: &[f64], f: &[f64], lumped: bool) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    let n = x.len();
+    let (wd, wo) = if lumped { (0.5, 0.0) } else { (1.0 / 3.0, 1.0 / 6.0) };
+    let (mut di, mut off, mut b) = (vec![0.0; n], vec![0.0; n - 1], vec![0.0; n]);
+    for e in 0..n - 1 {                         // element e: nodes e and e + 1
+        let h = x[e + 1] - x[e];
+        let kd = d[e] / h + k[e] * h * wd;
+        let ko = -d[e] / h + k[e] * h * wo;
+        di[e] += kd;
+        di[e + 1] += kd;
+        off[e] += ko;
+        b[e] += f[e] * h / 2.0;
+        b[e + 1] += f[e] * h / 2.0;
+    }
+    (di, off, b)
+}
+
+/// Solve with u(x[0]) = u0 and no flux at the last node.
+fn fem1d(x: &[f64], d: &[f64], k: &[f64], f: &[f64], u0: f64, lumped: bool) -> Vec<f64> {
+    let (di, off, b) = assemble(x, d, k, f, lumped);
+    let mut rhs = b[1..].to_vec();
+    rhs[0] -= off[0] * u0;                     // move the known u0 to the right
+    let mut c = off[1..].to_vec();
+    c.push(0.0);
+    let mut u = vec![u0];
+    u.extend(thomas(&off, &di[1..], &c, &rhs));
+    u
+}
+fn main() {
+    let (l, dd, k) = (1000.0, 100.0, 0.04);
+    let lam = f64::sqrt(dd / k);
+    let uniform = |n: usize| (0..=n).map(|i| l * i as f64 / n as f64).collect::<Vec<f64>>();
+    let minval = |u: &[f64]| u.iter().cloned().fold(f64::INFINITY, f64::min);
+    for n in [2, 4, 6, 8, 10] {
+        let x = uniform(n);
+        let u = fem1d(&x, &vec![dd; n], &vec![k; n], &vec![0.0; n], 1.0, false);
+        let ul = fem1d(&x, &vec![dd; n], &vec![k; n], &vec![0.0; n], 1.0, true);
+        println!("N = {:2}  h/lambda = {:4.1}  min u = {:9.2e}  lumped min = {:.2e}",
+                 n, l / n as f64 / lam, minval(&u), minval(&ul));
+    }
+    // cell-free top layer (k = 0) of thickness c, cells below
+    let c = 100.0;
+    let uc = 1.0 / (1.0 + c / lam * ((l - c) / lam).tanh());
+    println!("{}", uc);
+    for n in [50, 49, 100, 99, 200, 199] {
+        let x = uniform(n);
+        let kk: Vec<f64> = (0..n).map(|e| if (x[e] + x[e + 1]) / 2.0 < c { 0.0 } else { k }).collect();
+        let u = fem1d(&x, &vec![dd; n], &kk, &vec![0.0; n], 1.0, false);
+        let e = x.iter().position(|&xi| xi >= c).unwrap();   // linear interpolation at x = c
+        let u100 = if (x[e] - c).abs() < 1e-9 { u[e] }
+                   else { u[e - 1] + (u[e] - u[e - 1]) * (c - x[e - 1]) / (x[e] - x[e - 1]) };
+        let node = x.iter().any(|&xi| (xi - c).abs() < 1e-9);
+        println!("N = {:3}  node at 100: {:5}  u(100) = {:.4}  error = {:9.2e}", n, node, u100, u100 - uc);
+    }
+}
+
+// Output:
+// N =  2  h/lambda = 10.0  min u =  -2.55e-1  lumped min = 1.92e-4
+// N =  4  h/lambda =  5.0  min u =  -1.75e-1  lumped min = 3.78e-6
+// N =  6  h/lambda =  3.3  min u =  -9.13e-2  lumped min = 4.08e-7
+// N =  8  h/lambda =  2.5  min u =  -6.76e-3  lumped min = 1.05e-7
+// N = 10  h/lambda =  2.0  min u =  7.28e-12  lumped min = 4.42e-8
+// 0.3333333333333334
+// N =  50  node at 100: true   u(100) = 0.3319  error =  -1.47e-3
+// N =  49  node at 100: false  u(100) = 0.3408  error =   7.46e-3
+// N = 100  node at 100: true   u(100) = 0.3330  error =  -3.70e-4
+// N =  99  node at 100: false  u(100) = 0.3374  error =   4.09e-3
+// N = 200  node at 100: true   u(100) = 0.3332  error =  -9.25e-5
+// N = 199  node at 100: false  u(100) = 0.3355  error =   2.13e-3
+```
+
+:::
+
+(a) The consistent matrix gives negative minima for $h/\lambda = 10, 5, 3.3, 2.5$, all above $\sqrt6 \approx 2.45$ (B3(d)); at $h/\lambda = 2$ every value is positive. The lumped (finite-difference) matrix stays positive at every $h$. The check that finds this in your own work: look at the minimum and maximum of the solution (a concentration must stay between its boundary values here, the maximum principle) and refine.
+(b) The exact interface value is $1/3$: the coating is a straight-line drop from 1 to $u(100)$, and the gel below takes up the drug as if it were an infinitely deep slab. With a node at the interface the error falls by 4 per doubling (second order: $1.5\cdot10^{-3}$, $3.7\cdot10^{-4}$, $9.3\cdot10^{-5}$). Without one, it only halves (first order: $7.5\cdot10^{-3}$, $4.1\cdot10^{-3}$, $2.1\cdot10^{-3}$), because the element that straddles the interface has the wrong $k$ on part of its length, and $u'$ has a kink inside it that a straight line cannot follow. Rule: put mesh nodes (in 2D, mesh edges) on material interfaces. Mesh generators do this when the interface is part of the geometry you draw.
+:::
+
+## Where this leads
+
+- *Steady state in two dimensions* (Part 10): the same steady problem on a 2D rectangle with the five-point stencil. A 2D finite element code replaces the loop over intervals by a loop over triangles with 3 × 3 element matrices; the resulting sparse matrix is solved with the same sparse direct solvers.
+- *Iterative linear solvers in depth* (Part 11): for 3D meshes with millions of nodes the sparse system is solved iteratively (conjugate gradients works because $K$ is symmetric positive definite), with preconditioning.
+- *Flow plus diffusion* (Part 10) took the Poiseuille profile as given. A Stokes solver (COMSOL, FEniCS, Firedrake, scikit-fem) computes the flow in any geometry; that velocity field can then be fed into the advection–diffusion equation on the same mesh.

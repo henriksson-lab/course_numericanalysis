@@ -29,7 +29,10 @@ const STYLE = `
 [data-demo="${NAME}"].qb-demo { flex-direction: column; gap: .4em; }
 [data-demo="${NAME}"] .sa-row { display: flex; flex-wrap: wrap; gap: .35em 1.2em; align-items: center; width: 100%; }
 [data-demo="${NAME}"] .sa-group { display: flex; gap: .35em; align-items: center; flex-wrap: wrap; }
-[data-demo="${NAME}"] .sa-row .qb-slider { min-width: 250px; flex: 0 1 330px; grid-template-columns: auto 1fr 3em; }
+[data-demo="${NAME}"] .sa-row .qb-slider { min-width: 200px; flex: 0 1 280px; grid-template-columns: auto 1fr 3em; }
+[data-demo="${NAME}"] .sa-nowrap { flex-wrap: nowrap; white-space: nowrap; }
+[data-demo="${NAME}"] .sa-nowrap .qb-slider { flex: 0 0 230px; min-width: 0; }
+[data-demo="${NAME}"] .sa-nowrap > * { flex-shrink: 0; }
 [data-demo="${NAME}"] .sa-plots { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
 [data-demo="${NAME}"] .sa-plots svg { min-width: 0; height: auto; }
 [data-demo="${NAME}"] svg text { font-size: 18px; }
@@ -106,12 +109,12 @@ function mount(host: HTMLElement): void {
   });
 
   const row2 = htmlEl("div", "sa-row", "", host);
-  const konG = htmlEl("div", "sa-group", "", row2);
+  const konG = htmlEl("div", "sa-group sa-nowrap", "", row2);
   const konS = slider(konG, "k_on", Math.log10(KON0), Math.log10(KON1), 0.01, Math.log10(st.kon),
     v => { st.kon = 10 ** v; changed(); }, v => fk(10 ** v));
   const konInfo = htmlEl("span", "", "", konG);
   presets(konG, [0.5, 1, 5].map(k => ({ label: String(k), apply: () => { st.kon = k; konS.set(Math.log10(k)); changed(); } })));
-  const tauG = htmlEl("div", "sa-group", "", row2);
+  const tauG = htmlEl("div", "sa-group sa-nowrap", "", row2);
   const tauBox = checkbox(tauG, "tau-leaping", st.tauOn, v => { st.tauOn = v; changed(); });
   const tauS = slider(tauG, "τ (h)", 0.05, 1.5, 0.05, st.tau, v => { st.tau = v; changed(); });
 
@@ -171,7 +174,6 @@ function mount(host: HTMLElement): void {
     tauS.input.parentElement!.classList.toggle("off", !st.tauOn);
     const koff = M.OFF_PER_ON * st.kon;
     konInfo.textContent = `k_off = ${fk(koff)}, burst ${fk(M.KM / koff)}`;
-    tauBox.parentElement!.lastChild!.textContent = st.kind === "tele" ? " tau-leaping (constitutive only)" : " tau-leaping";
   }
 
   function changed(): void {
@@ -188,7 +190,7 @@ function mount(host: HTMLElement): void {
   let raf = 0, lastTs = 0;
 
   function resetCell(): void {
-    R = rng(seed * 1009 + st.cell + 1);
+    R = rng(seed * 1009 + st.cell + 8);
     path = [{ t: 0, m: 0, g: 0, raw: 0 }];
     tNow = 0; pending = null; last = null; nNeg = 0;
     ode = M.odeMean(model(), tEnd);
@@ -377,13 +379,13 @@ function mount(host: HTMLElement): void {
     const cdf = Array.from({ length: 81 }, (_, i) => tauMax * i / 80).map(t => `${sx(t).toFixed(1)},${sy(1 - Math.exp(-a0 * t)).toFixed(1)}`).join(" ");
     svgEl("polyline", { points: cdf, fill: "none", stroke: COL.const, "stroke-width": 3 }, svgB);
     txt(cx1, cyB + 20, "waiting time τ", { "text-anchor": "end", class: "sm" });
-    txt(cx0 + 4, cyT + 2, "1 − e^(−a₀τ)", { class: "sm" });
+    txt(cx1, sy(0.3), "P(wait ≤ τ) = 1 − e^(−a₀τ)", { "text-anchor": "end", class: "sm" });
     if (s) {
       const yv = sy(1 - s.u1);
       svgEl("line", { x1: cx0, x2: sx(s.tau), y1: yv, y2: yv, stroke: COL.tele, "stroke-width": 2.5 }, svgB);
       svgEl("line", { x1: sx(s.tau), x2: sx(s.tau), y1: yv, y2: cyB, stroke: COL.tele, "stroke-width": 2.5 }, svgB);
       svgEl("path", { d: `M${sx(s.tau) - 6},${cyB - 10} L${sx(s.tau) + 6},${cyB - 10} L${sx(s.tau)},${cyB} Z`, fill: COL.tele }, svgB);
-      txt(14, 202, `τ = −ln(u₁)/a₀ = ${fx(s.tau, 4)} h = ${fx(s.tau * 60, 1)} min`, {}, COL.tele);
+      txt(14, 202, `τ = −ln(u₁)/a₀ = ${fx(s.tau, 4)} h = ${s.tau * 60 >= 1 ? fx(s.tau * 60, 1) + " min" : fx(s.tau * 3600, 0) + " s"}`, {}, COL.tele);
     } else txt(14, 202, `mean waiting time 1/a₀ = ${fx(60 / a0, 1)} min`, { class: "sm" });
     // --- which? ---
     txt(14, 236, s ? `which?  u₂ = ${fx(s.u2, 3)},  u₂·a₀ = ${f3(s.u2 * a0)}` : "which?  reaction j with probability a_j/a₀", { "font-weight": 600 });
@@ -517,7 +519,7 @@ function mount(host: HTMLElement): void {
     if (md.kind === "tele" && !hist.some(h => Math.abs(h.kon - st.kon) < 1e-9)) hist.push({ kon: st.kon, F: S.fano });
     svgD.replaceChildren();
     const curve = getCurve(st.T);
-    const Ld = 56, Rd = WD - 76, xc = WD - 34;
+    const Ld = 56, Rd = WD - 92, xc = WD - 34;
     const dx = scale(Math.log10(KON0), Math.log10(KON1), Ld, Rd);
     const Fmax = Math.max(35, ...hist.map(h => h.F), S.fano) * 1.05;
     const dy = scale(0, Fmax, bot, top);
@@ -542,7 +544,7 @@ function mount(host: HTMLElement): void {
     t1.style.fill = COL.tele; t1.textContent = "telegraph, exact";
     const t2 = svgEl("text", { x: Rd, y: top + 46, "text-anchor": "end", class: "sm" }, svgD);
     t2.textContent = "dots: simulated";
-    const t3 = svgEl("text", { x: Rd, y: dy(1) - 8, "text-anchor": "end" }, svgD);
+    const t3 = svgEl("text", { x: Ld + 8, y: dy(1) - 8 }, svgD);
     t3.style.fill = COL.const; t3.textContent = "Poisson, F = 1";
 
     // ---------- readout ----------

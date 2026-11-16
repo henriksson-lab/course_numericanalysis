@@ -1,0 +1,1237 @@
+---
+title: "Exercise: steady state in two dimensions"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- write a steady diffusion problem with uptake as a **boundary value problem**, discretise it in 1D, and solve the tridiagonal system by hand and in code, with fixed-value and **no-flux** (ghost point) boundaries,
+- check a BVP solver against an **exact solution** and by **grid refinement** (slope 2),
+- number the points of a 2D grid as one vector, and say where a point's four neighbours are in that vector,
+- assemble the **five-point Laplacian** with **Kronecker products** (or from triplets), put the boundary values into the right-hand side, and test the matrix with a **manufactured field**,
+- recognise the **row-major vs column-major** ordering bug and the check that exposes it,
+- solve a problem with **Michaelis–Menten uptake** by **Newton**, with Jacobian = Laplacian + a diagonal, and detect a physically impossible root,
+- judge whether a diffusion model answers the biological question that was asked.
+
+The by-hand part needs pen, paper and a calculator. The code part uses the same equations at sizes where only code works. Two biological settings: the **oxygen chamber** of the lecture (2D) and the dead-end **trenches of a mother machine** (1D).
+
+## Background
+
+**Facts used below:**
+
+1. **Steady state.** With $\partial c/\partial t = 0$, diffusion with uptake $r(c)$ becomes the boundary value problem $D\,\nabla^2 c = r(c)$, with $\nabla^2 c = \partial^2 c/\partial x^2 + \partial^2 c/\partial y^2$. Constant $r$: **Poisson** equation; $r = 0$: **Laplace** equation. Only boundary conditions, no initial condition.
+2. **1D grid.** $x_i = i\,h$, $i = 0, \dots, N$. Interior equation:
+   $$\frac{D}{h^2}\bigl(-c_{i-1} + 2c_i - c_{i+1}\bigr) + r(c_i) = 0.$$
+   A known boundary value $c_0$ moves to the right-hand side: $+\frac{D}{h^2}c_0$ in the first equation.
+3. **No flux** at a closed end $x_N$: ghost point $c_{N+1} = c_{N-1}$, so the last equation is $\frac{D}{h^2}\bigl(-2c_{N-1} + 2c_N\bigr) + r(c_N) = 0$, and $c_N$ is an unknown.
+4. **Second difference** has error $O(h^2)$, and is **exact for parabolas**: with constant uptake the grid solution equals the exact one at the grid points.
+5. **2D grid** with the same $h$ in $x$ and $y$: five-point stencil $\frac{D}{h^2}\bigl(4c_{i,j} - c_{i-1,j} - c_{i+1,j} - c_{i,j-1} - c_{i,j+1}\bigr) + r(c_{i,j}) = 0$. Numbering with $x$ running fastest: $k = i + (j-1)\,n_x$ (1-based), neighbours at $k \pm 1$ and $k \pm n_x$.
+6. **Kronecker product**: $A \otimes B$ replaces each $a_{pq}$ by the block $a_{pq}B$. With $T_n = \text{tridiag}(-1, 2, -1)$ of size $n$ and $x$ running fastest:
+   $$A = \frac{D}{h^2}\bigl(I_{n_y}\otimes T_{n_x} + T_{n_y}\otimes I_{n_x}\bigr).$$
+   With $y$ running fastest the factors swap: $T_{n_x}\otimes I_{n_y} + I_{n_x}\otimes T_{n_y}$.
+7. **Storage order.** R stores matrices column by column, so `as.vector(C)` of an $n_x \times n_y$ matrix `C[i, j]` puts $x$ fastest. numpy's `C.ravel()` and `C.reshape(...)` are **row-major** by default ($y$ fastest); `order="F"` gives R's order. In this exercise every language uses $x$ fastest.
+8. **Michaelis–Menten uptake** $r(c) = R_0\,c/(K_m + c)$, $r'(c) = R_0K_m/(K_m + c)^2$. Newton for $\mathbf F(\mathbf c) = A\mathbf c + r(\mathbf c) - \mathbf b = \mathbf 0$: solve $J\boldsymbol\delta = -\mathbf F$ with $J = A + \operatorname{diag}(r'(c_k))$, then $\mathbf c \leftarrow \mathbf c + \boldsymbol\delta$.
+
+**Numbers.** Oxygen: $D = 2000$ µm²/s ($2\times10^{-9}$ m²/s), $c_0 = 200$ µM, chamber $4000 \times 2000$ µm, $R_0 = 0.5$ µM/s per $10^5$ cells/cm² (an order-of-magnitude assumption: 50 amol/s per cell under a 100 µm lid), $K_m = 1$ µM, hypoxic below 10 µM. Mother machine: trench $L = 25$ µm, glucose $D = 600$ µm²/s, uptake by the packed cells $V_{\max} = 0.6$ mM/s and $K_m = 5$ µM $= 0.005$ mM (both order-of-magnitude assumptions, see C2), rich medium 0.2 % glucose $= 11.1$ mM.
+
+The basic tools in each language: the 2D matrix for a $3 \times 2$ grid ($D = h = 1$), and flattening a grid with $x$ fastest. R: [`Matrix::bandSparse`](https://rdrr.io/cran/Matrix/man/bandSparse.html), [`kronecker`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kronecker.html), [`Diagonal`](https://rdrr.io/cran/Matrix/man/Diagonal.html). Python: [`scipy.sparse.diags`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.diags.html), [`scipy.sparse.kron`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.kron.html), [`scipy.sparse.identity`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.identity.html). Rust: `sprs::TriMat` triplets with the index written out.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+lap1 <- function(n) bandSparse(n, k = -1:1,          # tridiag(-1, 2, -1)
+  diagonals = list(rep(-1, n - 1), rep(2, n), rep(-1, n - 1)))
+nx <- 3; ny <- 2
+A <- kronecker(Diagonal(ny), lap1(nx)) + kronecker(lap1(ny), Diagonal(nx))
+as.matrix(A)
+#      [,1] [,2] [,3] [,4] [,5] [,6]
+# [1,]    4   -1    0   -1    0    0
+# [2,]   -1    4   -1    0   -1    0
+# [3,]    0   -1    4    0    0   -1
+# [4,]   -1    0    0    4   -1    0
+# [5,]    0   -1    0   -1    4   -1
+# [6,]    0    0   -1    0   -1    4
+C <- matrix(1:6, nrow = nx, ncol = ny)   # C[i, j] = value at (x_i, y_j)
+as.vector(C)                             # column-major: x runs fastest
+# [1] 1 2 3 4 5 6
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy import sparse
+
+def lap1(n):                                    # tridiag(-1, 2, -1)
+    return sparse.diags([-np.ones(n - 1), 2 * np.ones(n), -np.ones(n - 1)],
+                        [-1, 0, 1], format="csr")
+
+nx, ny = 3, 2
+A = sparse.kron(sparse.identity(ny), lap1(nx)) + sparse.kron(lap1(ny), sparse.identity(nx))
+print(A.toarray())
+# [[ 4. -1.  0. -1.  0.  0.]
+#  [-1.  4. -1.  0. -1.  0.]
+#  [ 0. -1.  4.  0.  0. -1.]
+#  [-1.  0.  0.  4. -1.  0.]
+#  [ 0. -1.  0. -1.  4. -1.]
+#  [ 0.  0. -1.  0. -1.  4.]]
+C = np.arange(1, 7).reshape((nx, ny), order="F")  # C[i, j] = value at (x_i, y_j)
+print(C.ravel(order="F"))                         # x runs fastest, as in R
+# [1 2 3 4 5 6]
+print(C.ravel())                                  # numpy default: y runs fastest
+# [1 4 2 5 3 6]
+```
+
+### Rust
+
+```rust
+// rust/examples/steady_state_2d_background.rs  —  cargo run --example steady_state_2d_background
+// Background: the 2D five-point matrix for a 3 x 2 grid, built from triplets.
+// Unknown k = i + nx * j (0-based), so x (index i) runs fastest, as in R.
+use sprs::{CsMat, TriMat};
+
+fn laplacian_2d(nx: usize, ny: usize) -> CsMat<f64> {
+    let idx = |i: usize, j: usize| i + nx * j;
+    let mut t = TriMat::new((nx * ny, nx * ny));
+    for j in 0..ny {
+        for i in 0..nx {
+            let k = idx(i, j);
+            t.add_triplet(k, k, 4.0);
+            if i > 0 { t.add_triplet(k, idx(i - 1, j), -1.0); }      // x-neighbours
+            if i + 1 < nx { t.add_triplet(k, idx(i + 1, j), -1.0); }
+            if j > 0 { t.add_triplet(k, idx(i, j - 1), -1.0); }      // y-neighbours
+            if j + 1 < ny { t.add_triplet(k, idx(i, j + 1), -1.0); }
+        }
+    }
+    t.to_csr()
+}
+
+fn main() {
+    let (nx, ny) = (3, 2);
+    let a = laplacian_2d(nx, ny);
+    let dense = a.to_dense();
+    for r in dense.rows() {
+        println!("{:?}", r.iter().map(|v| *v as i32).collect::<Vec<_>>());
+    }
+    // a grid value c[i][j] at (x_i, y_j) goes to position i + nx * j
+    let c = [[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]];          // c[i][j]
+    let mut v = vec![0.0; nx * ny];
+    for j in 0..ny { for i in 0..nx { v[i + nx * j] = c[i][j]; } }
+    println!("{:?}", v);
+}
+
+// Output:
+// [4, -1, 0, -1, 0, 0]
+// [-1, 4, -1, 0, -1, 0]
+// [0, -1, 4, 0, 0, -1]
+// [-1, 0, 0, 4, -1, 0]
+// [0, -1, 0, -1, 4, -1]
+// [0, 0, -1, 0, -1, 4]
+// [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+```
+
+:::
+
+`sprs` stores and multiplies sparse matrices but has **no direct (LU or Cholesky) solver**. The Rust solutions use the Thomas algorithm in 1D and a hand-written **conjugate gradient** (CG) in 2D; CG works here because every matrix in this exercise is symmetric positive definite. It is introduced in *Structure: symmetric, banded, sparse* and treated fully in *Iterative linear solvers in depth*.
+
+## By hand
+
+**B1. A 1D oxygen profile.** A long chamber, width $L = 2000$ µm, open on both long sides ($c = 200$ µM there), cells at half confluence: $R_0 = 0.25$ µM/s. Use $N = 4$ ($h = 500$ µm), so $D/h^2 = 0.008$ per s.
+(a) Write the three equations for $c_1, c_2, c_3$ with the known values moved to the right-hand side, and solve them (use the symmetry $c_1 = c_3$).
+(b) The exact solution is $c(y) = c_0 - R_0\,y(L - y)/(2D)$. Compare at the grid points. Why is the agreement exact?
+(c) At which $R_0$ does the centre reach 0? Which cell density is that? What does the model predict above it, and why is that wrong?
+
+**B2. The mother machine trench with constant uptake.** A trench of length $L = 25$ µm, open at $x = 0$ to the feeding channel ($c = c_0$), closed at $x = L$. Constant uptake $V_{\max} = 0.6$ mM/s, $D = 600$ µm²/s. Use $N = 2$ ($h = 12.5$ µm, $D/h^2 = 3.84$ per s): unknowns $c_1$ (middle) and $c_2$ (closed end).
+(a) Write the two equations, using the ghost point $c_3 = c_1$ for the closed end.
+(b) Solve them for $c_1 - c_0$ and $c_2 - c_0$.
+(c) Check against the exact solution $c(x) = c_0 - \frac{V_{\max}}{D}\bigl(Lx - x^2/2\bigr)$.
+(d) Below which channel concentration $c_0$ would the closed end run out under this model? Convert to % glucose (180 g/mol) and compare with the 0.2 % of a rich medium.
+(e) How long could a trench be before its closed end runs out at $c_0 = 11.1$ mM?
+
+**B3. Numbering a grid.** A grid with $n_x = 4$, $n_y = 3$ interior points, numbered with $x$ running fastest, $k = i + (j-1)n_x$ (1-based).
+(a) Which $k$ belong to $(i, j) = (2, 3)$ and $(3, 1)$?
+(b) Which $(i, j)$ is $k = 7$? Give a general formula for $i$ and $j$ from $k$.
+(c) A Python user keeps the grid in a numpy array of shape $(n_x, n_y)$ and flattens it with the default `ravel()`. At which (0-based) position does the value of point $(i, j) = (2, 3)$ (1-based) land? Which point does the R-numbered matrix think lives at that position?
+(d) In each numbering, how far apart in the vector are $x$-neighbours, and $y$-neighbours?
+
+**B4. The matrix of a small grid.** Take $n_x = 3$, $n_y = 2$, $D = h = 1$, and $c = 1$ on all edges.
+(a) Write the $6 \times 6$ matrix $A$, numbering as in B3.
+(b) Mark the diagonal blocks and the off-diagonal blocks. Which are copies of $T_3 + 2I$ and which of $-I$?
+(c) Write the right-hand side $\mathbf b$ (count each point's neighbours on the edge).
+(d) Show that $\mathbf c = (1, 1, 1, 1, 1, 1)$ solves $A\mathbf c = \mathbf b$. Why must that be so physically, and why is it a useful test of code?
+
+**B5. Kronecker products by hand.** $T_2 = \begin{pmatrix} 2 & -1 \\ -1 & 2\end{pmatrix}$.
+(a) Write $I_2 \otimes T_2$ and $T_2 \otimes I_2$, and their sum.
+(b) The sum is $h^2/D$ times the matrix for a $2\times2$ interior grid. Solve the Poisson problem with $c_0 = 200$ µM on all edges, $R_0 = 0.5$ µM/s, $D = 2000$ µm²/s, $h = 500$ µm (all four unknowns are equal by symmetry).
+(c) For a $2 \times 2$ grid, does the order of the Kronecker factors matter? For a $3 \times 2$ grid?
+
+**B6. Newton with a spurious root.** The coarsest possible 1D chamber: $L = 2000$ µm, $N = 2$, so one unknown $c$ at the centre ($h = 1000$ µm, $D/h^2 = 0.002$ per s), $c_0 = 200$ µM, Michaelis–Menten uptake with $R_0 = 1$ µM/s, $K_m = 1$ µM. The equation is
+$$F(c) = 0.002\,(2c - 400) + \frac{c}{1 + c} = 0.004\,(c - 200) + \frac{c}{1 + c} = 0.$$
+(a) Compute $F'(c)$.
+(b) Do two Newton steps from $c = 200$ (air-saturated start).
+(c) Do two Newton steps from $c = 0$.
+(d) The two runs converge to $-54.66$ and $3.66$. Check that both are roots. Which is the oxygen level, and why does the other one exist?
+
+**B7. The Jacobian.** For the $2\times2$ grid of B5 with Michaelis–Menten uptake:
+(a) Write $J(\mathbf c)$ for a general $\mathbf c = (c_1, c_2, c_3, c_4)$.
+(b) Why does uptake add only to the diagonal? Which entries of $J$ would change if a cell's uptake also depended on its neighbours' oxygen?
+(c) Explain why $J$ is symmetric positive definite whenever $A$ is.
+
+**B8. Fill-in and cost.** In natural order (B3), Cholesky of the 2D matrix fills the whole band between the diagonal and distance $n_x$.
+(a) Estimate nnz($L$) $\approx N n_x$ for the oxygen chamber with $h = 50$ µm and $h = 12.5$ µm ($N$ = number of unknowns), and compare with the lecture table.
+(b) A banded Cholesky costs about $N n_x^2$ operations. Estimate it for $h = 12.5$ µm.
+(c) A 3D tissue block of $100 \times 100 \times 100$ points, numbered the same way: what is the bandwidth, nnz($L$) and the memory at 8 bytes per number? What do you conclude?
+
+## In code
+
+**C1. A 1D BVP with an exact solution.** Before trusting a solver, test it. Take the trench of B2 ($L = 25$ µm, $D = 600$ µm²/s, open end $c_0 = 1$, closed end by a ghost point) with **linear** uptake $r = kc$, $k = 6$ per s. The exact solution is $c(x) = c_0\cosh\bigl((L - x)/\lambda\bigr)/\cosh(L/\lambda)$, $\lambda = \sqrt{D/k} = 10$ µm.
+(a) Write `trench_matrix(N, h, D)` that returns the $N \times N$ matrix of fact 3 (without uptake).
+(b) For $N = 10, 20, 40, 80, 160$, add $k$ to the diagonal, solve, and compute the maximum error. By what factor does it fall per halving of $h$?
+(c) Compare the value at the closed end with the exact one.
+
+**C2. Do cells at the closed end starve?** Mother-machine trenches are dead ends: nutrient reaches the cells at the closed end only by diffusion through the medium between the cells in front of them [B1, B2]. Use Michaelis–Menten uptake with $V_{\max} = 0.6$ mM/s and $K_m = 0.005$ mM, $D = 600$ µm²/s, $N = 100$.
+(a) Write `trench_mm(c0, ...)` that solves the problem with Newton (the Jacobian is tridiagonal), starting from $c = c_0$ everywhere, clipping negative values to 0, and checking that no value is negative at the end.
+(b) Solve for $c_0 = 11.1$ (0.2 % glucose), $1$, $0.3$, $0.1$ and $0.02$ mM. For each, report the number of Newton steps, the concentration at the closed end, and the length of trench where $c < K_m$ ("starved").
+(c) Compare with your threshold from B2(d).
+
+The uptake numbers are an order-of-magnitude estimate, not taken from [B1]: an *E. coli* cell of about 1 µm³ with 0.3 pg dry mass, doubling once per hour on glucose with a yield of 0.5 g dry mass per g glucose, takes up about $6\times10^{-19}$ mol/s, or 0.6 mM/s per volume of packed cells. $K_m$ of glucose uptake is a few µM.
+
+**C3. Does the model answer the right question?** The cells in the trench are packed tightly, so the effective diffusion coefficient is lower than in free medium (by how much is uncertain).
+(a) With $c_0 = 11.1$ mM, compute the concentration at the closed end for $D = 600$, $60$ and $6$ µm²/s, and the trench length $L_{\max} = \sqrt{2Dc_0/V_{\max}}$ at which constant uptake would exhaust the nutrient.
+(b) Yang et al. [B1] analysed what limits growth in PDMS mother-machine trenches and concluded that it was **not** nutrient supply along the trench but mechanical constraints on the cells. Is your model consistent with this? What would it take, in $D$ or in trench length, for nutrients to become limiting?
+(c) Which question can this model answer, and which can it not? Write three or four sentences.
+
+**C4. Assemble the 2D matrix.**
+(a) Write `lap2d(nx, ny, h, D)` (Kronecker products; in Rust, triplets) and `edge_rhs(nx, ny, h, D, c0)`, which builds $\mathbf b$ from a grid-shaped array as on the lecture slide. Check B4: print $\mathbf b$ and solve for the $3 \times 2$ grid.
+(b) Build the oxygen chamber matrix for $h = 50$ µm. Check its size, non-zeros (compare with the count $5N$ minus the missing edge neighbours) and symmetry.
+(c) **Manufactured field.** $U(x, y) = \sin(\pi x/L_x)\sin(2\pi y/L_y)$ is zero on all edges and $-D\nabla^2U = D\pi^2(1/L_x^2 + 4/L_y^2)\,U$. Compute the relative error of $A\mathbf U$ for $h = 100, 50, 25$ µm. Is it second order?
+
+**C5. The ordering bug.** Deliberately mix the two orders and see whether your checks catch it. R: build the matrix with the Kronecker factors in the order that belongs to $y$ running fastest, but keep `as.vector` for the vectors. Python: keep the $x$-fastest matrix but flatten with numpy's default `ravel()` (no `order="F"`). Rust: keep the matrix, but index the vectors with `j + ny * i`.
+(a) Run the C4(c) check and solve the constant-uptake problem ($R_0 = 0.5$ µM/s), with the correct and with the mixed order. Print the check error and the maximum of $c$.
+(b) Repeat the mixed version on a **square** chamber, $2000 \times 2000$ µm. What do you see, and what is the lesson?
+
+**C6. Oxygen under the lid, with Michaelis–Menten uptake.** Use $h = 50$ µm, $K_m = 1$ µM.
+(a) Write `oxygen_mm(R0, clip)` that runs Newton from $c = 200$ µM everywhere, with or without clipping negative values to zero, and stops when $\|\mathbf F\| < 10^{-8}$.
+(b) Without clipping, at $2\times10^5$ cells/cm² ($R_0 = 1$): how many steps, and what is the smallest value? Is it a valid answer?
+(c) With clipping, for 1, 2 and $3\times10^5$ cells/cm²: Newton steps, smallest $c$, and the fraction of the chamber below 10 µM. Plot the last field (R: [`image`](https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/image.html); Python: `plt.imshow(C.T, origin="lower")`, note the transpose).
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — 1D equations and boundaries (B1, B2, C1)"}
+Write the stencil at each interior point; any $c_0$ that appears is a number and goes to the right-hand side with a plus sign. For the closed end, write the ordinary stencil at $x_N$ and replace $c_{N+1}$ by $c_{N-1}$. Divide each equation by $D/h^2$ first; then the right-hand side contains $R_0h^2/D$ (B1: $62.5/2$; B2: $0.6/3.84 = 0.15625$). In code: R [`bandSparse`](https://rdrr.io/cran/Matrix/man/bandSparse.html) takes the sub-diagonal first in `diagonals`, so its last entry is the $-2$ of the ghost-point row; Python [`scipy.sparse.diags`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.diags.html) likewise; solve with [`Matrix::solve`](https://rdrr.io/cran/Matrix/man/solve-methods.html) or [`scipy.sparse.linalg.spsolve`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.spsolve.html); in Rust use the Thomas algorithm from *Structure: symmetric, banded, sparse*.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — numbering and Kronecker products (B3–B5, C4, C5)"}
+Draw the grid with $i$ to the right and $j$ upwards and write $k$ in each point, as in the lecture figure. From $k$ (1-based): $i = (k - 1) \bmod n_x + 1$, $j = \lfloor (k-1)/n_x \rfloor + 1$. For numpy's row-major order on shape $(n_x, n_y)$, the 0-based position is $i\,n_y + j$ with 0-based $i, j$. In $A\otimes B$, the factor on the **right** ($B$) acts on the index that runs fastest. Check sizes: $I_{n_y}\otimes T_{n_x}$ and $T_{n_y}\otimes I_{n_x}$ are both $n_xn_y \times n_xn_y$, and so are the swapped versions, so a wrong order never gives a size error.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — Newton with uptake (B6, B7, C2, C6)"}
+$\frac{d}{dc}\frac{c}{K_m + c} = \frac{K_m}{(K_m + c)^2}$. In B6, $F'(c) = 0.004 + 1/(1+c)^2$. Each uptake term $r(c_k)$ depends only on $c_k$, so its derivative lands on the diagonal of $J$. In code: R `J <- A + Diagonal(x = dr)`, Python `J = A + sparse.diags(dr)`; in Rust add the diagonal to a copy of the triplets, then solve with Thomas (1D) or CG (2D). Stop on the residual $\|\mathbf F\|$, and clip with `pmax(c, 0)` / `np.maximum(c, 0)` / `.max(0.0)`. After the loop, check `min(c) >= 0`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — fill-in estimates (B8)"}
+Unknowns: $n_x = L_x/h - 1$, $n_y = L_y/h - 1$, $N = n_xn_y$. For a 3D block numbered with $x$ fastest, then $y$, then $z$, the neighbour in $z$ is $n_xn_y$ away: that is the bandwidth. Memory: nnz × 8 bytes (plus indices).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — manufactured field and ordering (C4, C5)"}
+Evaluate $U$ at the interior points as a grid-shaped array `U[i, j]` (R `outer(sin(pi * x / Lx), sin(2 * pi * y / Ly))`; Python `np.outer(...)`), flatten it with the same order as $\mathbf b$, multiply by $A$, and compare with the exact values flattened the same way. Use $\max|\cdot|$ relative to $\max|-D\nabla^2U|$. For C5 also look at $\max c$: with pure uptake and $c = 200$ on the edges, no value can exceed 200 (maximum principle).
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) Divide by $D/h^2 = 0.008$: $R_0h^2/D = 0.25/0.008 = 31.25$.
+$$2c_1 - c_2 = 200 - 31.25 = 168.75,\quad -c_1 + 2c_2 - c_3 = -31.25,\quad -c_2 + 2c_3 = 168.75.$$
+With $c_1 = c_3$: $-2c_1 + 2c_2 = -31.25$, add to twice the first: $c_2 = 337.5 - 200 = 137.5$; then $c_1 = (168.75 + 137.5)/2 = 153.125$. So $\mathbf c = (153.125,\ 137.5,\ 153.125)$ µM.
+(b) $c(500) = 200 - 0.25\cdot500\cdot1500/4000 = 153.125$, $c(1000) = 200 - 0.25\cdot10^6/4000 = 137.5$. Exact, because the solution is a parabola and the second difference of a parabola is exactly its second derivative (the Taylor error term contains $c''''= 0$).
+(c) The centre value is $c_0 - R_0L^2/(8D)$; it is 0 for $R_0 = 8Dc_0/L^2 = 8\cdot2000\cdot200/(4\times10^6) = 0.8$ µM/s, i.e. $1.6\times10^5$ cells/cm². Above it the model gives negative oxygen in the middle: it assumes cells consume at the full rate whatever the oxygen level, which is impossible once oxygen runs out. Michaelis–Menten uptake fixes this (C6).
+
+**B2.**
+(a) With $s = D/h^2 = 3.84$: $s(-c_0 + 2c_1 - c_2) = -0.6$ and $s(-c_1 + 2c_2 - c_3) = s(-2c_1 + 2c_2) = -0.6$.
+(b) Divide by $s$: $0.6/3.84 = 0.15625$. Second equation: $c_2 = c_1 - 0.078125$. First: $2c_1 - c_1 + 0.078125 = c_0 - 0.15625$, so $c_1 = c_0 - 0.234375$ and $c_2 = c_0 - 0.3125$ mM.
+(c) $V_{\max}/D = 0.001$ mM/µm². $x = 12.5$: $0.001\,(312.5 - 78.125) = 0.234375$. $x = 25$: $0.001\,(625 - 312.5) = 0.3125$. Exact again: a parabola, and the ghost point is also exact for it (the parabola is symmetric about $x = L$).
+(d) The closed end runs out when $c_0 < V_{\max}L^2/(2D) = 0.3125$ mM. That is $0.3125\times10^{-3}$ mol/L $\times$ 180 g/mol $= 0.056$ g/L $= 0.0056$ % glucose, 36 times below 0.2 %. In rich medium the drop along the trench is only 3 %.
+(e) $L_{\max} = \sqrt{2Dc_0/V_{\max}} = \sqrt{2\cdot600\cdot11.1/0.6} = 149$ µm, six times the trench length.
+
+**B3.**
+(a) $(2, 3)$: $k = 2 + 2\cdot4 = 10$. $(3, 1)$: $k = 3$.
+(b) $k = 7$: $j = \lfloor 6/4\rfloor + 1 = 2$, $i = 6 \bmod 4 + 1 = 3$, so $(3, 2)$. General: $i = (k-1) \bmod n_x + 1$, $j = \lfloor (k-1)/n_x\rfloor + 1$.
+(c) 0-based $(1, 2)$, row-major position $1\cdot n_y + 2 = 5$ (0-based), i.e. the 6th entry. In the $x$-fastest numbering the 6th entry is $k = 6$, the point $(2, 2)$. So the matrix treats the oxygen at $(2,3)$ as if it were at $(2,2)$; every value is moved, and nothing complains.
+(d) $x$ fastest: $x$-neighbours $\pm1$, $y$-neighbours $\pm n_x = \pm4$. $y$ fastest: $x$-neighbours $\pm n_y = \pm3$, $y$-neighbours $\pm1$.
+
+**B4.**
+(a)
+$$A = \begin{pmatrix} 4 & -1 & 0 & -1 & 0 & 0\\ -1 & 4 & -1 & 0 & -1 & 0\\ 0 & -1 & 4 & 0 & 0 & -1\\ -1 & 0 & 0 & 4 & -1 & 0\\ 0 & -1 & 0 & -1 & 4 & -1\\ 0 & 0 & -1 & 0 & -1 & 4\end{pmatrix}$$
+(b) The two $3\times3$ diagonal blocks are $T_3 + 2I = \text{tridiag}(-1, 4, -1)$ (one $y$-row each, coupled in $x$); the two off-diagonal blocks are $-I_3$ (the coupling to the same $x$ in the other row).
+(c) Corner points ($k = 1, 3, 4, 6$) have two edge neighbours, the middle points ($k = 2, 5$) one: $\mathbf b = (2, 1, 2, 2, 1, 2)$.
+(d) Row sums of $A$: $4 - 2 = 2$ for corners, $4 - 3 = 1$ for middle points, exactly $\mathbf b$. Physically: with the same concentration on every edge and no sources or sinks, nothing flows, so the steady state is that constant. A solver that does not return a constant here has a bug in $A$ or $\mathbf b$ (C4(a)).
+
+**B5.**
+(a)
+$$I_2\otimes T_2 = \begin{pmatrix} 2&-1&0&0\\-1&2&0&0\\0&0&2&-1\\0&0&-1&2\end{pmatrix},\quad T_2\otimes I_2 = \begin{pmatrix} 2&0&-1&0\\0&2&0&-1\\-1&0&2&0\\0&-1&0&2\end{pmatrix},\quad \text{sum} = \begin{pmatrix} 4&-1&-1&0\\-1&4&0&-1\\-1&0&4&-1\\0&-1&-1&4\end{pmatrix}.$$
+(b) Each point has two interior neighbours and two edge neighbours. With all four equal: $\frac{D}{h^2}(4c - 2c) = \frac{D}{h^2}\,2c_0 - R_0$, so $c = c_0 - R_0h^2/(2D) = 200 - 0.5\cdot250\,000/4000 = 168.75$ µM.
+(c) For $n_x = n_y$ the two orders give the **same** matrix (both terms are present, only their order in the sum changes), so it cannot matter. For $3 \times 2$, $I_2\otimes T_3 + T_2\otimes I_3$ and $T_3\otimes I_2 + I_3\otimes T_2$ are different $6\times6$ matrices (C5).
+
+**B6.**
+(a) $F'(c) = 0.004 + 1/(1+c)^2$.
+(b) $c = 200$: $F = 0 + 200/201 = 0.99502$, $F' = 0.004 + 1/201^2 = 0.0040248$, so $c_1 = 200 - 247.23 = -47.23$. Then $F(-47.23) = 0.004\cdot(-247.23) + (-47.23)/(-46.23) = -0.98891 + 1.02164 = 0.03273$, $F' = 0.004 + 1/46.23^2 = 0.004468$, $c_2 = -47.23 - 7.33 = -54.55$. (Then $-54.659$.)
+(c) $c = 0$: $F = -0.8$, $F' = 1.004$, $c_1 = 0.7968$. $F(0.7968) = -0.79681 + 0.44345 = -0.35336$, $F' = 0.004 + 1/1.7968^2 = 0.31374$, $c_2 = 0.7968 + 1.1263 = 1.9231$. (Then 3.034, 3.580, 3.658, 3.659.)
+(d) $F(3.659) = 0.004\cdot(-196.341) + 3.659/4.659 = -0.78536 + 0.78536 \approx 0$; $F(-54.659) = -1.01864 + 54.659/53.659 = -1.01864 + 1.01864 \approx 0$. The oxygen level is 3.66 µM: positive, and below the hypoxia threshold of 10 µM, because the uptake ($\approx 0.79$ µM/s) almost matches what diffusion can deliver. The negative root exists because the formula $c/(K_m + c)$ is defined for $c < -K_m$ too, where it is positive: "negative oxygen" is consumed. The first Newton step from 200 sees almost no dependence of uptake on $c$ ($F'$ is nearly the constant 0.004), so it jumps to the constant-uptake answer $-50$, near the spurious root. Exactly what happens in 2D (lecture, C6).
+
+**B7.**
+(a) With $s = D/h^2$ and $d_k = R_0K_m/(K_m + c_k)^2$:
+$$J = \begin{pmatrix} 4s + d_1 & -s & -s & 0\\ -s & 4s + d_2 & 0 & -s\\ -s & 0 & 4s + d_3 & -s\\ 0 & -s & -s & 4s + d_4\end{pmatrix}.$$
+(b) $\partial r(c_k)/\partial c_m = 0$ for $m \ne k$: uptake at a point depends only on the oxygen at that point. If uptake also depended on the neighbours' oxygen, the entries $(k, m)$ for neighbours $m$ would change, which are already non-zero, so the sparsity pattern would still be that of $A$.
+(c) $J = A + \operatorname{diag}(d)$ with $d_k > 0$. Symmetric because both terms are. For any $\mathbf v \ne \mathbf 0$, $\mathbf v^TJ\mathbf v = \mathbf v^TA\mathbf v + \sum_k d_kv_k^2 > 0$, since the first term is already positive. So Cholesky (`solve` on a symmetric sparse matrix) and CG both work at every Newton step.
+
+**B8.**
+(a) $h = 50$: $N = 3081$, $n_x = 79$, nnz($L$) $\approx 243\,000$ (table: 240 317). $h = 12.5$: $N = 50\,721$, $n_x = 319$, nnz($L$) $\approx 1.62\times10^7$ (table: 16 129 277). About 130 MB of values.
+(b) $50\,721 \times 319^2 \approx 5.2\times10^9$ operations: a few seconds. With reordering the lecture's solve took 0.16 s.
+(c) $N = 10^6$, bandwidth $n_xn_y = 10^4$, nnz($L$) $\approx 10^{10}$, 80 GB; cost $N(n_xn_y)^2 = 10^{14}$ operations. Reordering helps (to roughly $N^{4/3}$ non-zeros in 3D) but 3D problems of this size are usually solved iteratively (*Iterative linear solvers in depth*).
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+trench_matrix <- function(N, h, D) {        # unknowns c_1 .. c_N; c_N at the wall
+  A <- bandSparse(N, k = -1:1,
+         diagonals = list(c(rep(-1, N - 2), -2), rep(2, N), rep(-1, N - 1)))
+  D / h^2 * A                               # last row: ghost point c_{N+1} = c_{N-1}
+}
+L <- 25; D <- 600; k <- 6; c0 <- 1          # µm, µm^2/s, 1/s, relative units
+lam <- sqrt(D / k)                          # 10 µm
+errs <- c()
+for (N in c(10, 20, 40, 80, 160)) {
+  h <- L / N; x <- h * (1:N)
+  A <- trench_matrix(N, h, D) + Diagonal(N, k)
+  b <- numeric(N); b[1] <- D / h^2 * c0     # the open end x_0 = 0 is known
+  cn <- as.vector(solve(A, b))
+  errs <- c(errs, max(abs(cn - c0 * cosh((L - x) / lam) / cosh(L / lam))))
+}
+print(errs)
+print(errs[-length(errs)] / errs[-1])       # ratio per halving of h
+print(cn[N]); print(c0 / cosh(L / lam))     # closed end: grid vs exact
+
+# [1] 1.122146e-03 2.815726e-04 7.045838e-05 1.761868e-05 4.404994e-06
+# [1] 3.985282 3.996297 3.999073 3.999706
+# [1] 0.1630753
+# [1] 0.1630712
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
+
+def trench_matrix(N, h, D):                 # unknowns c_1 .. c_N; c_N at the wall
+    lower = -np.ones(N - 1); lower[-1] = -2 # ghost point c_{N+1} = c_{N-1}
+    A = sparse.diags([lower, 2 * np.ones(N), -np.ones(N - 1)], [-1, 0, 1], format="csc")
+    return D / h**2 * A
+
+L, D, k, c0 = 25.0, 600.0, 6.0, 1.0         # µm, µm^2/s, 1/s, relative units
+lam = np.sqrt(D / k)                        # 10 µm
+errs = []
+for N in [10, 20, 40, 80, 160]:
+    h = L / N; x = h * np.arange(1, N + 1)
+    A = trench_matrix(N, h, D) + k * sparse.identity(N, format="csc")
+    b = np.zeros(N); b[0] = D / h**2 * c0   # the open end x_0 = 0 is known
+    cn = spsolve(A, b)
+    errs.append(np.max(np.abs(cn - c0 * np.cosh((L - x) / lam) / np.cosh(L / lam))))
+errs = np.array(errs)
+print(errs)
+print(errs[:-1] / errs[1:])                 # ratio per halving of h
+print(cn[-1], c0 / np.cosh(L / lam))        # closed end: grid vs exact
+
+# [1.12214629e-03 2.81572584e-04 7.04583781e-05 1.76186791e-05
+#  4.40499367e-06]
+# [3.98528248 3.9962967  3.99907267 3.99970589]
+# 0.1630753234713629 0.16307123192997783
+```
+
+### Rust
+
+```rust
+// rust/examples/steady_state_2d_c1.rs  —  cargo run --example steady_state_2d_c1
+// C1: a 1D boundary value problem in a dead-end trench (open end c = c0,
+// closed end no flux by a ghost point), linear uptake k c, solved with the
+// Thomas algorithm and compared with the exact cosh solution.
+
+// Thomas algorithm (as in Structure: symmetric, banded, sparse):
+// a = sub-diagonal (a[0] unused), b = diagonal, c = super-diagonal (c[n-1] unused)
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = b.len();
+    let (mut bb, mut dd) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / bb[i - 1];
+        bb[i] -= w * c[i - 1];
+        dd[i] -= w * dd[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = dd[n - 1] / bb[n - 1];
+    for i in (0..n - 1).rev() { x[i] = (dd[i] - c[i] * x[i + 1]) / bb[i]; }
+    x
+}
+
+fn main() {
+    let (l, d, k, c0): (f64, f64, f64, f64) = (25.0, 600.0, 6.0, 1.0);   // µm, µm^2/s, 1/s, relative
+    let lam = (d / k).sqrt();                          // 10 µm
+    let mut errs = Vec::new();
+    let mut last = 0.0;
+    for n in [10usize, 20, 40, 80, 160] {
+        let h = l / n as f64;
+        let s = d / (h * h);
+        let mut a = vec![-s; n];
+        a[n - 1] = -2.0 * s;                           // ghost point c_{N+1} = c_{N-1}
+        let b = vec![2.0 * s + k; n];
+        let c = vec![-s; n];
+        let mut rhs = vec![0.0; n];
+        rhs[0] = s * c0;                               // the open end is known
+        let cn = thomas(&a, &b, &c, &rhs);
+        let err = (0..n).map(|i| {
+            let x = h * (i + 1) as f64;
+            (cn[i] - c0 * ((l - x) / lam).cosh() / (l / lam).cosh()).abs()
+        }).fold(0.0, f64::max);
+        errs.push(err);
+        last = cn[n - 1];
+    }
+    println!("{:?}", errs.iter().map(|e| format!("{:.6e}", e)).collect::<Vec<_>>());
+    println!("{:?}", errs.windows(2).map(|w| format!("{:.6}", w[0] / w[1])).collect::<Vec<_>>());
+    println!("{} {}", last, c0 / (l / lam).cosh());    // closed end: grid vs exact
+}
+
+// Output:
+// ["1.122146e-3", "2.815726e-4", "7.045838e-5", "1.761868e-5", "4.404994e-6"]
+// ["3.985282", "3.996297", "3.999073", "3.999706"]
+// 0.16307532347135442 0.16307123192997783
+```
+
+:::
+
+The error falls by a factor 4 per halving of $h$: second order, including the ghost-point row. At the closed end the grid value agrees with $c_0/\cosh(2.5) = 0.16307$ to 4 digits at $N = 160$. This is the test that the constant-uptake problem of B2 could not give (it is exact for any $h$). The three languages print the same errors.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+trench_matrix <- function(N, h, D) {
+  A <- bandSparse(N, k = -1:1,
+         diagonals = list(c(rep(-1, N - 2), -2), rep(2, N), rep(-1, N - 1)))
+  D / h^2 * A
+}
+trench_mm <- function(c0, L = 25, D = 600, Vmax = 0.6, Km = 0.005, N = 100) {
+  h <- L / N; A <- trench_matrix(N, h, D)
+  b <- numeric(N); b[1] <- D / h^2 * c0
+  cv <- rep(c0, N)                                   # start: trench = channel
+  for (it in 0:50) {
+    F <- as.vector(A %*% cv) + Vmax * cv / (Km + cv) - b
+    if (sqrt(sum(F^2)) < 1e-10 * (1 + max(abs(b)))) break
+    J <- A + Diagonal(x = Vmax * Km / (Km + cv)^2)   # tridiagonal
+    cv <- pmax(cv + as.vector(solve(J, -F)), 0)      # clip: no negative glucose
+  }
+  if (min(cv) < 0) stop("negative concentration")
+  list(c = cv, x = h * (1:N), it = it)
+}
+for (c0 in c(11.1, 1, 0.3, 0.1, 0.02)) {
+  r <- trench_mm(c0)
+  starved <- mean(r$c < 0.005) * 25                  # µm of trench with c < Km
+  cat(sprintf("c0 = %5.2f mM: %d steps, closed end %.4g mM, starved %4.1f um\n",
+              c0, r$it, r$c[100], starved))
+}
+
+# c0 = 11.10 mM: 1 steps, closed end 10.79 mM, starved  0.0 um
+# c0 =  1.00 mM: 2 steps, closed end 0.6896 mM, starved  0.0 um
+# c0 =  0.30 mM: 6 steps, closed end 0.02105 mM, starved  0.0 um
+# c0 =  0.10 mM: 7 steps, closed end 8.794e-05 mM, starved 11.5 um
+# c0 =  0.02 mM: 6 steps, closed end 1.537e-06 mM, starved 20.5 um
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
+
+def trench_matrix(N, h, D):
+    lower = -np.ones(N - 1); lower[-1] = -2
+    A = sparse.diags([lower, 2 * np.ones(N), -np.ones(N - 1)], [-1, 0, 1], format="csc")
+    return D / h**2 * A
+
+def trench_mm(c0, L=25.0, D=600.0, Vmax=0.6, Km=0.005, N=100):
+    h = L / N; A = trench_matrix(N, h, D)
+    b = np.zeros(N); b[0] = D / h**2 * c0
+    c = np.full(N, c0)                                  # start: trench = channel
+    for it in range(51):
+        F = A @ c + Vmax * c / (Km + c) - b
+        if np.linalg.norm(F) < 1e-10 * (1 + np.max(np.abs(b))):
+            break
+        J = A + sparse.diags(Vmax * Km / (Km + c)**2, format="csc")  # tridiagonal
+        c = np.maximum(c + spsolve(J, -F), 0)          # clip: no negative glucose
+    if c.min() < 0:
+        raise ValueError("negative concentration")
+    return c, h * np.arange(1, N + 1), it
+
+for c0 in [11.1, 1, 0.3, 0.1, 0.02]:
+    c, x, it = trench_mm(c0)
+    starved = np.mean(c < 0.005) * 25                   # µm of trench with c < Km
+    print(f"c0 = {c0:5.2f} mM: {it} steps, closed end {c[-1]:.4g} mM, starved {starved:4.1f} um")
+
+# c0 = 11.10 mM: 1 steps, closed end 10.79 mM, starved  0.0 um
+# c0 =  1.00 mM: 2 steps, closed end 0.6896 mM, starved  0.0 um
+# c0 =  0.30 mM: 6 steps, closed end 0.02105 mM, starved  0.0 um
+# c0 =  0.10 mM: 7 steps, closed end 8.794e-05 mM, starved 11.5 um
+# c0 =  0.02 mM: 6 steps, closed end 1.537e-06 mM, starved 20.5 um
+```
+
+### Rust
+
+```rust
+// rust/examples/steady_state_2d_c2.rs  —  cargo run --example steady_state_2d_c2
+// C2: nutrient (glucose) in a dead-end mother-machine trench with
+// Michaelis-Menten uptake, solved by Newton. The Jacobian is tridiagonal,
+// so each Newton step is one Thomas solve.
+
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = b.len();
+    let (mut bb, mut dd) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / bb[i - 1];
+        bb[i] -= w * c[i - 1];
+        dd[i] -= w * dd[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = dd[n - 1] / bb[n - 1];
+    for i in (0..n - 1).rev() { x[i] = (dd[i] - c[i] * x[i + 1]) / bb[i]; }
+    x
+}
+
+// returns (concentrations at x_1..x_N, Newton steps)
+fn trench_mm(c0: f64, l: f64, d: f64, vmax: f64, km: f64, n: usize) -> (Vec<f64>, usize) {
+    let h = l / n as f64;
+    let s = d / (h * h);
+    let mut a = vec![-s; n];
+    a[n - 1] = -2.0 * s;                                 // ghost point at the closed end
+    let sup = vec![-s; n];
+    let mut c = vec![c0; n];                             // start: trench = channel
+    let mut it = 0;
+    loop {
+        // residual F = A c + r(c) - b; the known c0 at x_0 is the b part
+        let f: Vec<f64> = (0..n).map(|i| {
+            let left = if i == 0 { c0 } else { c[i - 1] };
+            let right = if i + 1 < n { c[i + 1] } else { c[i - 1] };   // ghost point
+            s * (-left + 2.0 * c[i] - right) + vmax * c[i] / (km + c[i])
+        }).collect();
+        let norm = f.iter().map(|v| v * v).sum::<f64>().sqrt();
+        if norm < 1e-10 * (1.0 + s * c0) || it == 50 { break; }
+        let diag: Vec<f64> = c.iter().map(|ci| 2.0 * s + vmax * km / ((km + ci) * (km + ci))).collect();
+        let minus_f: Vec<f64> = f.iter().map(|v| -v).collect();
+        let delta = thomas(&a, &diag, &sup, &minus_f);
+        for i in 0..n { c[i] = (c[i] + delta[i]).max(0.0); }  // clip: no negative glucose
+        it += 1;
+    }
+    (c, it)
+}
+
+fn main() {
+    for c0 in [11.1, 1.0, 0.3, 0.1, 0.02] {
+        let (c, it) = trench_mm(c0, 25.0, 600.0, 0.6, 0.005, 100);
+        let starved = c.iter().filter(|&&v| v < 0.005).count() as f64 / 100.0 * 25.0;
+        println!("c0 = {:5.2} mM: {} steps, closed end {:.4e} mM, starved {:4.1} um",
+                 c0, it, c[99], starved);
+    }
+}
+
+// Output:
+// c0 = 11.10 mM: 1 steps, closed end 1.0788e1 mM, starved  0.0 um
+// c0 =  1.00 mM: 2 steps, closed end 6.8961e-1 mM, starved  0.0 um
+// c0 =  0.30 mM: 6 steps, closed end 2.1049e-2 mM, starved  0.0 um
+// c0 =  0.10 mM: 7 steps, closed end 8.7940e-5 mM, starved 11.5 um
+// c0 =  0.02 mM: 6 steps, closed end 1.5366e-6 mM, starved 20.5 um
+```
+
+:::
+
+(Rust prints the closed-end values in scientific notation; the digits agree.) In rich medium (0.2 % glucose) the concentration at the closed end is 10.79 mM, 97 % of the channel value, and Newton converges in one step because uptake is practically constant at concentrations 2000 times $K_m$. The closed end only starves when the channel concentration drops to about 0.1 mM, near the B2(d) threshold of 0.31 mM (at 0.3 mM the end is at 0.021 mM, still above $K_m$, because Michaelis–Menten uptake slows down as $c$ falls). At 0.1 mM the deepest 11.5 µm of the trench are below $K_m$. With clipping, Newton needs at most 7 steps; without it, the dilute cases can converge to negative concentrations as in B6.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# trench_mm() from C2
+for (D in c(600, 60, 6)) {
+  r <- trench_mm(11.1, D = D)
+  cat(sprintf("D = %3d um^2/s: closed end %.3f mM, Lmax = %.0f um\n",
+              D, r$c[100], sqrt(2 * D * 11.1 / 0.6)))
+}
+
+# D = 600 um^2/s: closed end 10.788 mM, Lmax = 149 um
+# D =  60 um^2/s: closed end 7.977 mM, Lmax = 47 um
+# D =   6 um^2/s: closed end 0.000 mM, Lmax = 15 um
+```
+
+### Python
+
+```python
+# imports and trench_mm() from C2
+for D in [600, 60, 6]:
+    c, x, it = trench_mm(11.1, D=D)
+    print(f"D = {D:3d} um^2/s: closed end {c[-1]:.3f} mM, Lmax = {np.sqrt(2 * D * 11.1 / 0.6):.0f} um")
+
+# D = 600 um^2/s: closed end 10.788 mM, Lmax = 149 um
+# D =  60 um^2/s: closed end 7.977 mM, Lmax = 47 um
+# D =   6 um^2/s: closed end 0.000 mM, Lmax = 15 um
+```
+
+### Rust
+
+```rust
+// rust/examples/steady_state_2d_c3.rs  —  cargo run --example steady_state_2d_c3
+// C3: is glucose limiting at the closed end of a mother-machine trench in rich
+// medium (0.2 % glucose = 11.1 mM)? Vary the effective diffusion coefficient.
+// thomas and trench_mm are the same as in steady_state_2d_c2.rs.
+
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = b.len();
+    let (mut bb, mut dd) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / bb[i - 1];
+        bb[i] -= w * c[i - 1];
+        dd[i] -= w * dd[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = dd[n - 1] / bb[n - 1];
+    for i in (0..n - 1).rev() { x[i] = (dd[i] - c[i] * x[i + 1]) / bb[i]; }
+    x
+}
+
+// returns (concentrations at x_1..x_N, Newton steps)
+fn trench_mm(c0: f64, l: f64, d: f64, vmax: f64, km: f64, n: usize) -> (Vec<f64>, usize) {
+    let h = l / n as f64;
+    let s = d / (h * h);
+    let mut a = vec![-s; n];
+    a[n - 1] = -2.0 * s;                                 // ghost point at the closed end
+    let sup = vec![-s; n];
+    let mut c = vec![c0; n];                             // start: trench = channel
+    let mut it = 0;
+    loop {
+        // residual F = A c + r(c) - b; the known c0 at x_0 is the b part
+        let f: Vec<f64> = (0..n).map(|i| {
+            let left = if i == 0 { c0 } else { c[i - 1] };
+            let right = if i + 1 < n { c[i + 1] } else { c[i - 1] };   // ghost point
+            s * (-left + 2.0 * c[i] - right) + vmax * c[i] / (km + c[i])
+        }).collect();
+        let norm = f.iter().map(|v| v * v).sum::<f64>().sqrt();
+        if norm < 1e-10 * (1.0 + s * c0) || it == 50 { break; }
+        let diag: Vec<f64> = c.iter().map(|ci| 2.0 * s + vmax * km / ((km + ci) * (km + ci))).collect();
+        let minus_f: Vec<f64> = f.iter().map(|v| -v).collect();
+        let delta = thomas(&a, &diag, &sup, &minus_f);
+        for i in 0..n { c[i] = (c[i] + delta[i]).max(0.0); }  // clip: no negative glucose
+        it += 1;
+    }
+    (c, it)
+}
+
+fn main() {
+    for d in [600.0_f64, 60.0, 6.0] {
+        let (c, _) = trench_mm(11.1, 25.0, d, 0.6, 0.005, 100);
+        println!("D = {:3} um^2/s: closed end {:.3} mM, Lmax = {:.0} um",
+                 d, c[99], (2.0 * d * 11.1 / 0.6).sqrt());
+    }
+}
+
+// Output:
+// D = 600 um^2/s: closed end 10.788 mM, Lmax = 149 um
+// D =  60 um^2/s: closed end 7.977 mM, Lmax = 47 um
+// D =   6 um^2/s: closed end 0.000 mM, Lmax = 15 um
+```
+
+:::
+
+(a) Even with $D$ reduced tenfold, the closed end still has 8 mM. Only a hundredfold reduction (6 µm²/s) starves it, and $L_{\max}$ shows why: it falls below the 25 µm trench length only then.
+(b) Consistent: the model says glucose diffusion along a 25 µm trench cannot limit growth in rich medium unless diffusion through the packed cells were about 100 times slower than in water, or the trench several times longer. That matches the conclusion of [B1] that nutrient supply was not the limiting factor. (We have read only the abstract of [B1]; check the paper for what exactly was measured.)
+(c) The model answers: "can diffusion of a nutrient with these parameters supply the closed end?" It cannot answer "why do the cells grow slowly?", because it contains no mechanics (pressure, cells pushing against each other and the walls), no other nutrients or waste products, and no feedback from growth on uptake. A model can rule out an explanation within its assumptions; it cannot point to an explanation that it does not contain. Rule-of-thumb check before building any model: write down the alternatives it cannot represent.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+lap1 <- function(n) bandSparse(n, k = -1:1,
+  diagonals = list(rep(-1, n - 1), rep(2, n), rep(-1, n - 1)))
+lap2d <- function(nx, ny, h, D)            # x runs fastest (column-major)
+  D / h^2 * (kronecker(Diagonal(ny), lap1(nx)) + kronecker(lap1(ny), Diagonal(nx)))
+edge_rhs <- function(nx, ny, h, D, c0) {   # boundary values -> right-hand side
+  B <- matrix(0, nx, ny)
+  B[1, ] <- B[1, ] + c0; B[nx, ] <- B[nx, ] + c0
+  B[, 1] <- B[, 1] + c0; B[, ny] <- B[, ny] + c0
+  D / h^2 * as.vector(B)
+}
+# (a) 3 x 2 grid, h = D = 1, c = 1 on all edges
+b <- edge_rhs(3, 2, 1, 1, 1); print(b)
+print(as.vector(solve(lap2d(3, 2, 1, 1), b)))
+# (b) the chamber
+D <- 2000; Lx <- 4000; Ly <- 2000
+h <- 50; nx <- Lx / h - 1; ny <- Ly / h - 1
+A <- lap2d(nx, ny, h, D)
+print(c(dim(A), nnzero(A))); print(isSymmetric(A))
+# (c) manufactured field, three grids
+for (h in c(100, 50, 25)) {
+  nx <- Lx / h - 1; ny <- Ly / h - 1; x <- h * (1:nx); y <- h * (1:ny)
+  U <- outer(sin(pi * x / Lx), sin(2 * pi * y / Ly))
+  AU <- D * pi^2 * (1 / Lx^2 + 4 / Ly^2) * U
+  e <- max(abs(as.vector(lap2d(nx, ny, h, D) %*% as.vector(U)) - as.vector(AU))) / max(abs(AU))
+  cat(sprintf("h = %3d: relative error %.3e\n", h, e))
+}
+
+# [1] 2 1 2 2 1 2
+# [1] 1 1 1 1 1 1
+# [1]  3081  3081 15169
+# [1] TRUE
+# h = 100: relative error 7.746e-03
+# h =  50: relative error 1.941e-03
+# h =  25: relative error 4.856e-04
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
+
+def lap1(n):
+    return sparse.diags([-np.ones(n - 1), 2 * np.ones(n), -np.ones(n - 1)], [-1, 0, 1])
+
+def lap2d(nx, ny, h, D):                   # x runs fastest (as R; use order="F")
+    I = sparse.identity
+    return (D / h**2 * (sparse.kron(I(ny), lap1(nx)) + sparse.kron(lap1(ny), I(nx)))).tocsc()
+
+def edge_rhs(nx, ny, h, D, c0):            # boundary values -> right-hand side
+    B = np.zeros((nx, ny))
+    B[0, :] += c0; B[-1, :] += c0
+    B[:, 0] += c0; B[:, -1] += c0
+    return D / h**2 * B.ravel(order="F")
+
+# (a) 3 x 2 grid, h = D = 1, c = 1 on all edges
+b = edge_rhs(3, 2, 1, 1, 1); print(b)
+print(spsolve(lap2d(3, 2, 1, 1), b))
+# (b) the chamber
+D, Lx, Ly = 2000.0, 4000.0, 2000.0
+h = 50; nx = int(Lx / h) - 1; ny = int(Ly / h) - 1
+A = lap2d(nx, ny, h, D)
+print(A.shape, A.nnz, abs(A - A.T).max() == 0)
+# (c) manufactured field, three grids
+for h in [100, 50, 25]:
+    nx = int(Lx / h) - 1; ny = int(Ly / h) - 1
+    x = h * np.arange(1, nx + 1); y = h * np.arange(1, ny + 1)
+    U = np.outer(np.sin(np.pi * x / Lx), np.sin(2 * np.pi * y / Ly))   # U[i, j]
+    AU = D * np.pi**2 * (1 / Lx**2 + 4 / Ly**2) * U
+    e = np.max(np.abs(lap2d(nx, ny, h, D) @ U.ravel(order="F") - AU.ravel(order="F"))) / np.max(np.abs(AU))
+    print(f"h = {h:3d}: relative error {e:.3e}")
+
+# [2. 1. 2. 2. 1. 2.]
+# [1. 1. 1. 1. 1. 1.]
+# (3081, 3081) 15169 True
+# h = 100: relative error 7.746e-03
+# h =  50: relative error 1.941e-03
+# h =  25: relative error 4.856e-04
+```
+
+### Rust
+
+```rust
+// rust/examples/steady_state_2d_c4.rs  —  cargo run --example steady_state_2d_c4
+// C4: assemble the 2D five-point matrix from triplets (k = i + nx * j, x fastest),
+// put the edge values into the right-hand side, and check the matrix with a
+// manufactured field. sprs has no direct solver: we use a hand-written
+// conjugate gradient (CG), which works because the matrix is SPD.
+use sprs::{CsMat, TriMat};
+
+fn lap2d(nx: usize, ny: usize, h: f64, d: f64) -> CsMat<f64> {
+    let s = d / (h * h);
+    let idx = |i: usize, j: usize| i + nx * j;
+    let mut t = TriMat::new((nx * ny, nx * ny));
+    for j in 0..ny {
+        for i in 0..nx {
+            let k = idx(i, j);
+            t.add_triplet(k, k, 4.0 * s);
+            if i > 0 { t.add_triplet(k, idx(i - 1, j), -s); }
+            if i + 1 < nx { t.add_triplet(k, idx(i + 1, j), -s); }
+            if j > 0 { t.add_triplet(k, idx(i, j - 1), -s); }
+            if j + 1 < ny { t.add_triplet(k, idx(i, j + 1), -s); }
+        }
+    }
+    t.to_csr()
+}
+
+fn edge_rhs(nx: usize, ny: usize, h: f64, d: f64, c0: f64) -> Vec<f64> {
+    let s = d / (h * h);
+    let mut b = vec![0.0; nx * ny];
+    for j in 0..ny {
+        for i in 0..nx {
+            let mut m = 0.0;                       // number of edge neighbours
+            if i == 0 { m += 1.0; }
+            if i == nx - 1 { m += 1.0; }
+            if j == 0 { m += 1.0; }
+            if j == ny - 1 { m += 1.0; }
+            b[i + nx * j] = s * c0 * m;
+        }
+    }
+    b
+}
+
+fn matvec(a: &CsMat<f64>, x: &[f64]) -> Vec<f64> {
+    a.outer_iterator().map(|row| row.iter().map(|(j, v)| v * x[j]).sum()).collect()
+}
+fn dot(u: &[f64], v: &[f64]) -> f64 { u.iter().zip(v).map(|(p, q)| p * q).sum() }
+
+// conjugate gradient for SPD a; stops when ||r|| < tol * ||b||
+fn cg(a: &CsMat<f64>, b: &[f64], tol: f64, maxit: usize) -> (Vec<f64>, usize) {
+    let n = b.len();
+    let (mut x, mut r, mut p) = (vec![0.0; n], b.to_vec(), b.to_vec());
+    let mut rr = dot(&r, &r);
+    let stop = tol * rr.sqrt();
+    for it in 1..=maxit {
+        let ap = matvec(a, &p);
+        let alpha = rr / dot(&p, &ap);
+        for i in 0..n { x[i] += alpha * p[i]; r[i] -= alpha * ap[i]; }
+        let rr_new = dot(&r, &r);
+        if rr_new.sqrt() < stop { return (x, it); }
+        for i in 0..n { p[i] = r[i] + (rr_new / rr) * p[i]; }
+        rr = rr_new;
+    }
+    panic!("CG did not converge in {} iterations", maxit);
+}
+
+fn main() {
+    // (a) 3 x 2 grid, h = D = 1, c = 1 on all edges
+    let b = edge_rhs(3, 2, 1.0, 1.0, 1.0);
+    println!("{:?}", b);
+    let (x, _) = cg(&lap2d(3, 2, 1.0, 1.0), &b, 1e-12, 100);
+    println!("{:?}", x.iter().map(|v| format!("{:.6}", v)).collect::<Vec<_>>());
+    // (b) the chamber
+    let (d, lx, ly) = (2000.0_f64, 4000.0_f64, 2000.0_f64);
+    let h = 50.0;
+    let (nx, ny) = ((lx / h) as usize - 1, (ly / h) as usize - 1);
+    let a = lap2d(nx, ny, h, d);
+    let sym = (0..nx * ny).all(|k| a.outer_view(k).unwrap().iter()
+        .all(|(j, v)| a.get(j, k) == Some(v)));
+    println!("{:?} {} {}", a.shape(), a.nnz(), sym);
+    // (c) manufactured field, three grids
+    let pi = std::f64::consts::PI;
+    for h in [100.0_f64, 50.0, 25.0] {
+        let (nx, ny) = ((lx / h) as usize - 1, (ly / h) as usize - 1);
+        let mut u = vec![0.0; nx * ny];
+        for j in 0..ny { for i in 0..nx {
+            let (x, y) = (h * (i + 1) as f64, h * (j + 1) as f64);
+            u[i + nx * j] = (pi * x / lx).sin() * (2.0 * pi * y / ly).sin();
+        } }
+        let fac = d * pi * pi * (1.0 / (lx * lx) + 4.0 / (ly * ly));
+        let au = matvec(&lap2d(nx, ny, h, d), &u);
+        let e = (0..nx * ny).map(|k| (au[k] - fac * u[k]).abs()).fold(0.0, f64::max)
+            / u.iter().map(|v| (fac * v).abs()).fold(0.0, f64::max);
+        println!("h = {:3}: relative error {:.3e}", h, e);
+    }
+}
+
+// Output:
+// [2.0, 1.0, 2.0, 2.0, 1.0, 2.0]
+// ["1.000000", "1.000000", "1.000000", "1.000000", "1.000000", "1.000000"]
+// (3081, 3081) 15169 true
+// h = 100: relative error 7.746e-3
+// h =  50: relative error 1.941e-3
+// h =  25: relative error 4.856e-4
+```
+
+:::
+
+(a) $\mathbf b = (2, 1, 2, 2, 1, 2)$ and the solution is all ones, as in B4. (b) $3081 \times 3081$, $15\,169 = 5\cdot3081 - 2\cdot79 - 2\cdot39$ non-zeros, symmetric. (c) The relative error falls by 3.99 per halving of $h$: second order. The test field uses $\sin(2\pi y/L_y)$, not $\sin(\pi y/L_y)$, so that it differs in $x$ and $y$.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# lap1(), lap2d(), edge_rhs() from C4
+D <- 2000; c0 <- 200
+check <- function(Lx, Ly, h, my, wrong) {
+  nx <- Lx / h - 1; ny <- Ly / h - 1; x <- h * (1:nx); y <- h * (1:ny)
+  A <- if (!wrong) lap2d(nx, ny, h, D) else       # y-fastest factors (numpy order)
+    D / h^2 * (kronecker(lap1(nx), Diagonal(ny)) + kronecker(Diagonal(nx), lap1(ny)))
+  U <- outer(sin(pi * x / Lx), sin(my * pi * y / Ly))
+  AU <- D * pi^2 * (1 / Lx^2 + my^2 / Ly^2) * U
+  err <- max(abs(as.vector(A %*% as.vector(U)) - as.vector(AU))) / max(abs(AU))
+  cmax <- max(solve(A, edge_rhs(nx, ny, h, D, c0) - 0.5))
+  cat(sprintf("%4d x %4d, my = %d, wrong = %5s: check %.3e, max c %.1f\n",
+              Lx, Ly, my, wrong, err, cmax))
+}
+check(4000, 2000, 50, 2, FALSE)
+check(4000, 2000, 50, 2, TRUE)
+check(2000, 2000, 50, 2, TRUE)     # square chamber: the bug is invisible
+
+# 4000 x 2000, my = 2, wrong = FALSE: check 1.941e-03, max c 198.6
+# 4000 x 2000, my = 2, wrong =  TRUE: check 8.304e+01, max c 1533.2
+# 2000 x 2000, my = 2, wrong =  TRUE: check 1.746e-03, max c 198.6
+```
+
+### Python
+
+```python
+# imports, lap1(), lap2d(), edge_rhs() from C4
+D, c0 = 2000.0, 200.0
+
+def check(Lx, Ly, h, my, wrong):
+    nx = int(Lx / h) - 1; ny = int(Ly / h) - 1
+    x = h * np.arange(1, nx + 1); y = h * np.arange(1, ny + 1)
+    A = lap2d(nx, ny, h, D)                         # x-fastest factors (R order)
+    order = "C" if wrong else "F"                   # wrong: numpy's default ravel
+    U = np.outer(np.sin(np.pi * x / Lx), np.sin(my * np.pi * y / Ly))
+    AU = D * np.pi**2 * (1 / Lx**2 + my**2 / Ly**2) * U
+    err = np.max(np.abs(A @ U.ravel(order=order) - AU.ravel(order=order))) / np.max(np.abs(AU))
+    B = np.zeros((nx, ny)); B[0, :] += c0; B[-1, :] += c0; B[:, 0] += c0; B[:, -1] += c0
+    b = D / h**2 * B.ravel(order=order)
+    cmax = spsolve(A, b - 0.5).max()
+    print(f"{Lx:4.0f} x {Ly:4.0f}, my = {my}, wrong = {str(wrong):>5}: check {err:.3e}, max c {cmax:.1f}")
+
+check(4000, 2000, 50, 2, False)
+check(4000, 2000, 50, 2, True)
+check(2000, 2000, 50, 2, True)     # square chamber: the bug is invisible
+
+# 4000 x 2000, my = 2, wrong = False: check 1.941e-03, max c 198.6
+# 4000 x 2000, my = 2, wrong =  True: check 3.122e+01, max c 2330.2
+# 2000 x 2000, my = 2, wrong =  True: check 1.746e-03, max c 198.6
+```
+
+### Rust
+
+```rust
+// rust/examples/steady_state_2d_c5.rs  —  cargo run --example steady_state_2d_c5
+// C5: the ordering bug. The matrix numbers the grid with x fastest (k = i + nx * j),
+// but the vectors are filled with y fastest (k = j + ny * i), as numpy's default
+// ravel would. lap2d, edge_rhs, matvec, dot and cg are as in steady_state_2d_c4.rs.
+use sprs::{CsMat, TriMat};
+
+fn lap2d(nx: usize, ny: usize, h: f64, d: f64) -> CsMat<f64> {
+    let s = d / (h * h);
+    let idx = |i: usize, j: usize| i + nx * j;
+    let mut t = TriMat::new((nx * ny, nx * ny));
+    for j in 0..ny {
+        for i in 0..nx {
+            let k = idx(i, j);
+            t.add_triplet(k, k, 4.0 * s);
+            if i > 0 { t.add_triplet(k, idx(i - 1, j), -s); }
+            if i + 1 < nx { t.add_triplet(k, idx(i + 1, j), -s); }
+            if j > 0 { t.add_triplet(k, idx(i, j - 1), -s); }
+            if j + 1 < ny { t.add_triplet(k, idx(i, j + 1), -s); }
+        }
+    }
+    t.to_csr()
+}
+
+fn edge_rhs(nx: usize, ny: usize, h: f64, d: f64, c0: f64, wrong: bool) -> Vec<f64> {
+    let s = d / (h * h);
+    let mut b = vec![0.0; nx * ny];
+    for j in 0..ny {
+        for i in 0..nx {
+            let mut m = 0.0;                       // number of edge neighbours
+            if i == 0 { m += 1.0; }
+            if i == nx - 1 { m += 1.0; }
+            if j == 0 { m += 1.0; }
+            if j == ny - 1 { m += 1.0; }
+            let k = if wrong { j + ny * i } else { i + nx * j };
+            b[k] = s * c0 * m;
+        }
+    }
+    b
+}
+
+fn matvec(a: &CsMat<f64>, x: &[f64]) -> Vec<f64> {
+    a.outer_iterator().map(|row| row.iter().map(|(j, v)| v * x[j]).sum()).collect()
+}
+fn dot(u: &[f64], v: &[f64]) -> f64 { u.iter().zip(v).map(|(p, q)| p * q).sum() }
+
+// conjugate gradient for SPD a; stops when ||r|| < tol * ||b||
+fn cg(a: &CsMat<f64>, b: &[f64], tol: f64, maxit: usize) -> (Vec<f64>, usize) {
+    let n = b.len();
+    let (mut x, mut r, mut p) = (vec![0.0; n], b.to_vec(), b.to_vec());
+    let mut rr = dot(&r, &r);
+    let stop = tol * rr.sqrt();
+    for it in 1..=maxit {
+        let ap = matvec(a, &p);
+        let alpha = rr / dot(&p, &ap);
+        for i in 0..n { x[i] += alpha * p[i]; r[i] -= alpha * ap[i]; }
+        let rr_new = dot(&r, &r);
+        if rr_new.sqrt() < stop { return (x, it); }
+        for i in 0..n { p[i] = r[i] + (rr_new / rr) * p[i]; }
+        rr = rr_new;
+    }
+    panic!("CG did not converge in {} iterations", maxit);
+}
+
+fn check(lx: f64, ly: f64, h: f64, my: f64, wrong: bool) {
+    let (d, c0) = (2000.0, 200.0);
+    let pi = std::f64::consts::PI;
+    let (nx, ny) = ((lx / h) as usize - 1, (ly / h) as usize - 1);
+    let a = lap2d(nx, ny, h, d);                       // x fastest
+    let mut u = vec![0.0; nx * ny];
+    for j in 0..ny { for i in 0..nx {
+        let (x, y) = (h * (i + 1) as f64, h * (j + 1) as f64);
+        let k = if wrong { j + ny * i } else { i + nx * j };
+        u[k] = (pi * x / lx).sin() * (my * pi * y / ly).sin();
+    } }
+    let fac = d * pi * pi * (1.0 / (lx * lx) + my * my / (ly * ly));
+    let au = matvec(&a, &u);
+    let err = (0..nx * ny).map(|k| (au[k] - fac * u[k]).abs()).fold(0.0, f64::max)
+        / u.iter().map(|v| (fac * v).abs()).fold(0.0, f64::max);
+    let b: Vec<f64> = edge_rhs(nx, ny, h, d, c0, wrong).iter().map(|v| v - 0.5).collect();
+    let (c, _) = cg(&a, &b, 1e-12, 10000);
+    let cmax = c.iter().cloned().fold(f64::MIN, f64::max);
+    println!("{:4} x {:4}, my = {}, wrong = {:>5}: check {:.3e}, max c {:.1}",
+             lx, ly, my, wrong, err, cmax);
+}
+
+fn main() {
+    check(4000.0, 2000.0, 50.0, 2.0, false);
+    check(4000.0, 2000.0, 50.0, 2.0, true);
+    check(2000.0, 2000.0, 50.0, 2.0, true);            // square chamber: the bug is invisible
+}
+
+// Output:
+// 4000 x 2000, my = 2, wrong = false: check 1.941e-3, max c 198.6
+// 4000 x 2000, my = 2, wrong =  true: check 3.122e1, max c 2330.2
+// 2000 x 2000, my = 2, wrong =  true: check 1.746e-3, max c 198.6
+```
+
+:::
+
+(a) With the mixed order the check error is of order 30–80 (relative!) instead of $2\times10^{-3}$, and the "oxygen" reaches 1500–2300 µM, far above the 200 µM on the edges. That is impossible with pure uptake (maximum principle). R's mixed version and the Python/Rust version are mirror images of each other (matrix wrong vs vectors wrong), so their numbers differ; both are equally wrong. No language gives a warning: every size matches.
+(b) On a square grid the two orders give the same matrix (B5(c)), so the "bug" changes nothing: check and answer are fine. The bug sleeps until someone changes the chamber to a rectangle or uses different $h$ in $x$ and $y$. Lesson: test on a rectangle, with a field that differs in $x$ and $y$, and check bounds on the solution.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# lap1(), lap2d(), edge_rhs() from C4
+D <- 2000; c0 <- 200; Km <- 1; Lx <- 4000; Ly <- 2000; h <- 50
+nx <- Lx / h - 1; ny <- Ly / h - 1
+A <- forceSymmetric(lap2d(nx, ny, h, D))   # symmetric: sparse Cholesky
+b <- edge_rhs(nx, ny, h, D, c0)
+oxygen_mm <- function(R0, clip = TRUE, maxit = 50) {
+  cv <- rep(c0, nx * ny)
+  for (it in 0:maxit) {
+    F <- as.vector(A %*% cv) + R0 * cv / (Km + cv) - b
+    if (sqrt(sum(F^2)) < 1e-8) break
+    J <- A + Diagonal(x = R0 * Km / (Km + cv)^2)
+    cv <- cv + as.vector(solve(J, -F))
+    if (clip) cv <- pmax(cv, 0)
+  }
+  list(C = matrix(cv, nx, ny), it = it)
+}
+r <- oxygen_mm(1, clip = FALSE)
+cat(sprintf("plain Newton, 2e5 cells/cm2: %d steps, min c = %.2f\n", r$it, min(r$C)))
+for (rho in c(1, 2, 3)) {
+  r <- oxygen_mm(0.5 * rho)
+  cat(sprintf("%d e5 cells/cm2: %2d steps, min c = %7.3f uM, hypoxic %4.1f %%\n",
+              rho, r$it, min(r$C), 100 * mean(r$C < 10)))
+}
+image(h * (1:nx), h * (1:ny), r$C, col = hcl.colors(64, "viridis"))  # last: 3e5
+
+# plain Newton, 2e5 cells/cm2: 12 steps, min c = -27.61
+# 1 e5 cells/cm2:  3 steps, min c =  87.194 uM, hypoxic  0.0 %
+# 2 e5 cells/cm2:  8 steps, min c =   0.564 uM, hypoxic 10.0 %
+# 3 e5 cells/cm2:  9 steps, min c =   0.003 uM, hypoxic 25.3 %
+```
+
+### Python
+
+```python
+# imports, lap1(), lap2d(), edge_rhs() from C4
+D, c0, Km, Lx, Ly, h = 2000.0, 200.0, 1.0, 4000.0, 2000.0, 50
+nx = int(Lx / h) - 1; ny = int(Ly / h) - 1
+A = lap2d(nx, ny, h, D)
+b = edge_rhs(nx, ny, h, D, c0)
+
+def oxygen_mm(R0, clip=True, maxit=50):
+    c = np.full(nx * ny, c0)
+    for it in range(maxit + 1):
+        F = A @ c + R0 * c / (Km + c) - b
+        if np.linalg.norm(F) < 1e-8:
+            break
+        J = (A + sparse.diags(R0 * Km / (Km + c)**2)).tocsc()
+        c = c + spsolve(J, -F)
+        if clip:
+            c = np.maximum(c, 0)
+    return c.reshape((nx, ny), order="F"), it          # C[i, j] at (x_i, y_j)
+
+C, it = oxygen_mm(1, clip=False)
+print(f"plain Newton, 2e5 cells/cm2: {it} steps, min c = {C.min():.2f}")
+for rho in [1, 2, 3]:
+    C, it = oxygen_mm(0.5 * rho)
+    print(f"{rho} e5 cells/cm2: {it:2d} steps, min c = {C.min():7.3f} uM, hypoxic {100 * np.mean(C < 10):4.1f} %")
+# import matplotlib.pyplot as plt
+# plt.imshow(C.T, origin="lower", extent=[0, Lx, 0, Ly]); plt.show()   # note C.T
+
+# plain Newton, 2e5 cells/cm2: 12 steps, min c = -27.61
+# 1 e5 cells/cm2:  3 steps, min c =  87.194 uM, hypoxic  0.0 %
+# 2 e5 cells/cm2:  8 steps, min c =   0.564 uM, hypoxic 10.0 %
+# 3 e5 cells/cm2:  9 steps, min c =   0.003 uM, hypoxic 25.3 %
+```
+
+### Rust
+
+```rust
+// rust/examples/steady_state_2d_c6.rs  —  cargo run --release --example steady_state_2d_c6
+// C6: oxygen under a lid with Michaelis-Menten uptake, solved by Newton.
+// Each Newton step solves J delta = -F with J = A + diag(r'(c)), which is SPD,
+// so the hand-written CG works (sprs has no direct solver).
+// lap2d, edge_rhs, matvec, dot and cg are as in steady_state_2d_c4.rs.
+use sprs::{CsMat, TriMat};
+
+fn lap2d(nx: usize, ny: usize, h: f64, d: f64) -> CsMat<f64> {
+    let s = d / (h * h);
+    let idx = |i: usize, j: usize| i + nx * j;
+    let mut t = TriMat::new((nx * ny, nx * ny));
+    for j in 0..ny {
+        for i in 0..nx {
+            let k = idx(i, j);
+            t.add_triplet(k, k, 4.0 * s);
+            if i > 0 { t.add_triplet(k, idx(i - 1, j), -s); }
+            if i + 1 < nx { t.add_triplet(k, idx(i + 1, j), -s); }
+            if j > 0 { t.add_triplet(k, idx(i, j - 1), -s); }
+            if j + 1 < ny { t.add_triplet(k, idx(i, j + 1), -s); }
+        }
+    }
+    t.to_csr()
+}
+
+fn edge_rhs(nx: usize, ny: usize, h: f64, d: f64, c0: f64) -> Vec<f64> {
+    let s = d / (h * h);
+    let mut b = vec![0.0; nx * ny];
+    for j in 0..ny {
+        for i in 0..nx {
+            let mut m = 0.0;                       // number of edge neighbours
+            if i == 0 { m += 1.0; }
+            if i == nx - 1 { m += 1.0; }
+            if j == 0 { m += 1.0; }
+            if j == ny - 1 { m += 1.0; }
+            b[i + nx * j] = s * c0 * m;
+        }
+    }
+    b
+}
+
+fn matvec(a: &CsMat<f64>, x: &[f64]) -> Vec<f64> {
+    a.outer_iterator().map(|row| row.iter().map(|(j, v)| v * x[j]).sum()).collect()
+}
+fn dot(u: &[f64], v: &[f64]) -> f64 { u.iter().zip(v).map(|(p, q)| p * q).sum() }
+
+// conjugate gradient for SPD a; stops when ||r|| < tol * ||b||
+fn cg(a: &CsMat<f64>, b: &[f64], tol: f64, maxit: usize) -> (Vec<f64>, usize) {
+    let n = b.len();
+    let (mut x, mut r, mut p) = (vec![0.0; n], b.to_vec(), b.to_vec());
+    let mut rr = dot(&r, &r);
+    let stop = tol * rr.sqrt();
+    for it in 1..=maxit {
+        let ap = matvec(a, &p);
+        let alpha = rr / dot(&p, &ap);
+        for i in 0..n { x[i] += alpha * p[i]; r[i] -= alpha * ap[i]; }
+        let rr_new = dot(&r, &r);
+        if rr_new.sqrt() < stop { return (x, it); }
+        for i in 0..n { p[i] = r[i] + (rr_new / rr) * p[i]; }
+        rr = rr_new;
+    }
+    panic!("CG did not converge in {} iterations", maxit);
+}
+
+// returns (c with k = i + nx * j, Newton steps)
+fn oxygen_mm(a: &CsMat<f64>, b: &[f64], r0: f64, km: f64, c0: f64, clip: bool) -> (Vec<f64>, usize) {
+    let n = b.len();
+    let mut c = vec![c0; n];
+    let mut it = 0;
+    loop {
+        let ac = matvec(a, &c);
+        let f: Vec<f64> = (0..n).map(|k| ac[k] + r0 * c[k] / (km + c[k]) - b[k]).collect();
+        if dot(&f, &f).sqrt() < 1e-8 || it == 50 { break; }
+        // J = A + diag(r'(c)): add the diagonal to a copy of A
+        let mut t = TriMat::new((n, n));
+        for (v, (i, j)) in a.iter() { t.add_triplet(i, j, *v); }
+        for k in 0..n { t.add_triplet(k, k, r0 * km / ((km + c[k]) * (km + c[k]))); }
+        let jac: CsMat<f64> = t.to_csr();
+        let minus_f: Vec<f64> = f.iter().map(|v| -v).collect();
+        let (delta, _) = cg(&jac, &minus_f, 1e-12, 20000);
+        for k in 0..n {
+            c[k] += delta[k];
+            if clip { c[k] = c[k].max(0.0); }
+        }
+        it += 1;
+    }
+    (c, it)
+}
+
+fn main() {
+    let (d, c0, km, lx, ly, h) = (2000.0_f64, 200.0, 1.0, 4000.0_f64, 2000.0_f64, 50.0);
+    let (nx, ny) = ((lx / h) as usize - 1, (ly / h) as usize - 1);
+    let a = lap2d(nx, ny, h, d);
+    let b = edge_rhs(nx, ny, h, d, c0);
+    let min = |c: &[f64]| c.iter().cloned().fold(f64::MAX, f64::min);
+    let (c, it) = oxygen_mm(&a, &b, 1.0, km, c0, false);
+    println!("plain Newton, 2e5 cells/cm2: {} steps, min c = {:.2}", it, min(&c));
+    for rho in [1.0, 2.0, 3.0] {
+        let (c, it) = oxygen_mm(&a, &b, 0.5 * rho, km, c0, true);
+        let hyp = c.iter().filter(|&&v| v < 10.0).count() as f64 / c.len() as f64;
+        println!("{} e5 cells/cm2: {:2} steps, min c = {:7.3} uM, hypoxic {:4.1} %",
+                 rho, it, min(&c), 100.0 * hyp);
+    }
+}
+
+// Output:
+// plain Newton, 2e5 cells/cm2: 12 steps, min c = -27.61
+// 1 e5 cells/cm2:  3 steps, min c =  87.194 uM, hypoxic  0.0 %
+// 2 e5 cells/cm2:  8 steps, min c =   0.564 uM, hypoxic 10.0 %
+// 3 e5 cells/cm2:  9 steps, min c =   0.003 uM, hypoxic 25.3 %
+```
+
+:::
+
+(b) Plain Newton converges (12 steps, residual below $10^{-8}$) to a field with $\min c = -27.6$ µM: a root of the equations, not a possible oxygen level (B6). (c) With clipping: $10^5$ cells/cm² is well oxygenated (min 87 µM, 3 steps); at $2\times10^5$ the centre drops to 0.56 µM and 10 % of the chamber is hypoxic; at $3\times10^5$, 25 %. The three languages agree. Rust uses CG for every Newton step (110 to 200 CG iterations each; `--release` makes it fast), R and Python a sparse direct solve. In R, `forceSymmetric` makes `solve` use sparse Cholesky; in Python `spsolve` uses sparse LU (SuperLU) with a fill-reducing column ordering.
+:::
+
+## Where this leads
+
+- *Flow plus diffusion*: an advection term makes the matrix **non-symmetric**; Cholesky and CG no longer apply, and the order of upwind differences matters.
+- *Reaction–diffusion and pattern formation*: production and decay terms, the length scale $\sqrt{D/k}$ of C1, and time-dependent 2D problems, where each implicit time step is a sparse solve like the ones here.
+- *Beyond rectangles: finite elements and flow*: real chambers with pillars and curved walls, where a rectangular grid no longer fits.
+- *Iterative linear solvers in depth*: conjugate gradient (used in the Rust solutions here), preconditioning, and why 3D problems (B8(c)) need it.

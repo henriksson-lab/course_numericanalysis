@@ -45,7 +45,7 @@ const STYLE = `
 .reveal [data-demo="${NAME}"] .lg-col.lg-right { flex: 0 0 350px; }
 .reveal [data-demo="${NAME}"] .lg-fplot { flex: 0 0 600px; }
 .reveal [data-demo="${NAME}"] .lg-col.lg-fside { flex: 0 0 520px; }
-.reveal [data-demo="${NAME}"] .qb-readout { font-size: 17px; }
+.reveal [data-demo="${NAME}"] .qb-readout { font-size: 18px; }
 .reveal [data-demo="${NAME}"] .qb-btn { font-size: .78em; padding: .2em .5em; }
 `;
 

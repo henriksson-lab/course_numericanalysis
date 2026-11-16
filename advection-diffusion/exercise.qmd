@@ -1,0 +1,1385 @@
+---
+title: "Exercise: flow plus diffusion"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- compute the **Péclet number** of a microfluidic device and estimate a **mixing length** $\approx \bar u w^2/D$,
+- discretise the advection term with **central** and **upwind** differences, and predict from the **cell Péclet number** $u\Delta x/D$ when central differences **wiggle**,
+- show that upwind differences add a **numerical diffusion** $u\Delta x/2$, and detect it with grid refinement,
+- choose a stable explicit time step from the **CFL** condition $C + 2r \le 1$,
+- solve a steady channel problem by **marching** downstream with a given **Poiseuille** profile, and check the solver against an exact solution and with flux conservation,
+- use the solver for an **H-filter**, a **Christmas-tree** gradient generator, and to **fit a diffusion coefficient** to a downstream profile with Brent's method.
+
+The by-hand part needs pen, paper and a calculator. All "measurements" on this page are **synthetic**: generated from the model plus noise. The device parameters are our own round numbers, typical for microfluidics but not taken from a specific paper.
+
+## Background
+
+With a flow of speed $u$ the flux of a solute is $J = u\,c - D\,\partial c/\partial x$, and the mass balance gives the **advection–diffusion equation**
+
+$$\frac{\partial c}{\partial t} + u\,\frac{\partial c}{\partial x} = D\,\frac{\partial^2 c}{\partial x^2}.$$
+
+We work in **µm** and **s**: $D = 1000$ µm²/s is $10^{-9}$ m²/s (a small molecule), $D = 100$ µm²/s a protein.
+
+**Facts used below:**
+
+1. **Péclet number** $\text{Pe} = uL/D$: advection against diffusion over a length $L$. Across a channel of width $w$ at mean speed $\bar u$, streams mix after a **mixing length** of order $\bar u w^2/D = \text{Pe}\cdot w$. For two half-streams in plug flow, mixing is complete to 1 % at $x \approx 0.42\,\bar u w^2/D$.
+2. **Back-diffusion test problem.** Steady $u\,c' = D\,c''$ on $[0, L]$ with $c(0) = 0$, $c(L) = 1$: $c(x) = \dfrac{e^{\text{Pe}\,x/L} - 1}{e^{\text{Pe}} - 1}$, a boundary layer of thickness $D/u$ at $x = L$. We use $L = 500$ µm, $u = 100$ µm/s, $D = 1000$ µm²/s, so Pe = 50.
+3. **Central** differences, with the cell Péclet number $P = u\Delta x/D$:
+   $\left(1 + \tfrac P2\right)c_{i-1} - 2c_i + \left(1 - \tfrac P2\right)c_{i+1} = 0$. Second order; **wiggles** if $P > 2$.
+4. **Upwind** differences ($u > 0$): $(1 + P)\,c_{i-1} - (2 + P)\,c_i + c_{i+1} = 0$. First order, never wiggles, and exactly the central scheme with $D$ replaced by $D + u\Delta x/2$ (**numerical diffusion**).
+5. **Explicit upwind in time:** $c_i^{n+1} = (C + r)\,c_{i-1}^n + (1 - C - 2r)\,c_i^n + r\,c_{i+1}^n$ with **Courant number** $C = u\Delta t/\Delta x$ and $r = D\Delta t/\Delta x^2$. Stable (no new extremes) if $C + 2r \le 1$; for $D = 0$ this is the **CFL** condition $C \le 1$. Numerical diffusion $u\Delta x(1 - C)/2$.
+6. **Marching.** Steady flow along a channel, profile $u(y)$, Pe ≫ 1: drop diffusion along $x$ and solve $u(y)\,\partial c/\partial x = D\,\partial^2 c/\partial y^2$ as if $x$ were time. Grid across the channel: $M$ cells of width $\Delta y$, centres $y_j = (j - \tfrac12)\Delta y$. Backward Euler in $x$ with $a_j = D\Delta x/(u_j\Delta y^2)$:
+   $-a_j c_{j-1}^{k+1} + (1 + 2a_j)\,c_j^{k+1} - a_j c_{j+1}^{k+1} = c_j^k$, with $1 + a_j$ on the diagonal in the two wall rows (no flux). One tridiagonal solve per step.
+7. **Given flow profile** (Poiseuille): $u(y) = 6\bar u\,(y/w)(1 - y/w)$, zero at the walls, $1.5\bar u$ in the middle. The solute **flux** $\sum_j u_j c_j$ is the same at every $x$.
+
+The basic tool: the steady 1D problem with both schemes. The tridiagonal system is solved with [`solve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html) (Python: [`numpy.linalg.solve`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html); the Rust version uses the hand-written Thomas algorithm from *Implicit schemes and the method of lines*). The exact solution uses [`expm1`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Log.html) (Python: [`np.expm1`](https://numpy.org/doc/stable/reference/generated/numpy.expm1.html), Rust: `f64::exp_m1`).
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+L <- 500; D <- 1000; u <- 100                    # Pe = u L / D = 50
+exact <- function(x) expm1(u * x / D) / expm1(u * L / D)
+steady <- function(N, scheme, D = 1000) {
+  dx <- L / N; P <- u * dx / D; m <- N - 1       # P = cell Peclet number
+  if (scheme == "central") { lo <- 1 + P/2; di <- -2;     up <- 1 - P/2 }
+  else                     { lo <- 1 + P;   di <- -2 - P; up <- 1 }
+  A <- diag(di, m)
+  A[cbind(2:m, 1:(m-1))] <- lo; A[cbind(1:(m-1), 2:m)] <- up
+  b <- numeric(m); b[m] <- -up                   # c(L) = 1 moves to the right side
+  c(0, solve(A, b), 1)
+}
+x <- seq(0, L, length.out = 11)
+cat(sprintf("%6.3f", steady(10, "central")), "\n")
+cat(sprintf("%6.3f", steady(10, "upwind")), "\n")
+cat(sprintf("%6.3f", exact(x)), "\n")
+
+# Output:
+#  0.000 -0.001  0.001 -0.003  0.006 -0.015  0.034 -0.079  0.184 -0.429  1.000
+#  0.000  0.000  0.000  0.000  0.000  0.000  0.001  0.005  0.028  0.167  1.000
+#  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.007  1.000
+```
+
+### Python
+
+```python
+import numpy as np
+
+L, D, u = 500.0, 1000.0, 100.0                    # Pe = u L / D = 50
+
+def exact(x):
+    return np.expm1(u * x / D) / np.expm1(u * L / D)
+
+def steady(N, scheme, D=1000.0):
+    dx = L / N; P = u * dx / D; m = N - 1          # P = cell Peclet number
+    if scheme == "central":
+        lo, di, up = 1 + P / 2, -2.0, 1 - P / 2
+    else:
+        lo, di, up = 1 + P, -2 - P, 1.0
+    A = np.diag(np.full(m, di)) + np.diag(np.full(m - 1, lo), -1) + np.diag(np.full(m - 1, up), 1)
+    b = np.zeros(m); b[-1] = -up                   # c(L) = 1 moves to the right side
+    return np.concatenate(([0.0], np.linalg.solve(A, b), [1.0]))
+
+x = np.linspace(0, L, 11)
+print(" ".join(f"{v:6.3f}" for v in steady(10, "central")))
+print(" ".join(f"{v:6.3f}" for v in steady(10, "upwind")))
+print(" ".join(f"{v:6.3f}" for v in exact(x)))
+
+# Output:
+#  0.000 -0.001  0.001 -0.003  0.006 -0.015  0.034 -0.079  0.184 -0.429  1.000
+#  0.000  0.000  0.000  0.000  0.000  0.000  0.001  0.005  0.028  0.167  1.000
+#  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.007  1.000
+```
+
+### Rust
+
+```rust
+// rust/examples/advection_diffusion_background.rs  —  cargo run --example advection_diffusion_background
+// Background: steady advection-diffusion u c' = D c'' on [0, L], c(0) = 0, c(L) = 1,
+// with central and upwind differences for c'. The tridiagonal system is solved with the
+// Thomas algorithm (R and Python use a dense solve; same numbers).
+const L: f64 = 500.0; // um
+const U: f64 = 100.0; // um/s, Pe = u L / D = 50
+
+fn exact(x: f64, d: f64) -> f64 {
+    (U * x / d).exp_m1() / (U * L / d).exp_m1()
+}
+
+// a = sub-, b = main, c = super-diagonal, d = right-hand side
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+fn steady(n: usize, central: bool, d: f64) -> Vec<f64> {
+    let dx = L / n as f64;
+    let p = U * dx / d; // cell Peclet number
+    let m = n - 1;
+    let (lo, di, up) = if central { (1.0 + p / 2.0, -2.0, 1.0 - p / 2.0) } else { (1.0 + p, -2.0 - p, 1.0) };
+    let mut rhs = vec![0.0; m];
+    rhs[m - 1] = -up; // c(L) = 1 moves to the right side
+    let inner = thomas(&vec![lo; m], &vec![di; m], &vec![up; m], &rhs);
+    let mut c = vec![0.0];
+    c.extend(inner);
+    c.push(1.0);
+    c
+}
+
+fn show(v: &[f64]) -> String {
+    v.iter().map(|x| format!("{:6.3}", x)).collect::<Vec<_>>().join(" ")
+}
+
+fn main() {
+    let x: Vec<f64> = (0..=10).map(|i| i as f64 * L / 10.0).collect();
+    println!("{}", show(&steady(10, true, 1000.0)));
+    println!("{}", show(&steady(10, false, 1000.0)));
+    println!("{}", show(&x.iter().map(|&xi| exact(xi, 1000.0)).collect::<Vec<_>>()));
+}
+
+// Output:
+//  0.000 -0.001  0.001 -0.003  0.006 -0.015  0.034 -0.079  0.184 -0.429  1.000
+//  0.000  0.000  0.000  0.000  0.000  0.000  0.001  0.005  0.028  0.167  1.000
+//  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.007  1.000
+```
+
+:::
+
+The first line is the central scheme on a 50 µm grid ($P = 5$): negative concentrations, alternating in sign. The second is upwind: no wiggles, but $c(450) = 0.167$ against the exact 0.007.
+
+## By hand
+
+**B1. Péclet numbers and mixing lengths.** A T-sensor has width $w = 100$ µm and mean speed $\bar u = 1000$ µm/s.
+(a) Compute Pe $= \bar u w/D$ and the mixing length $\bar u w^2/D$ for a small molecule ($D = 1000$ µm²/s), a protein ($D = 100$) and a cell ($D \approx 0.05$ µm²/s).
+(b) The flow is halved. What happens to Pe, to the mixing length, and to the amount of sample processed per minute?
+(c) A serpentine in a gradient generator is 50 µm wide and carries $\bar u = 1000$ µm/s. How long must it be to mix two half-streams to 1 % (Fact 1), for a small molecule and for a protein chemokine ($D = 100$ µm²/s)? What happens to the outlet gradient if the serpentines are only 3 mm long and the molecule is the protein?
+(d) Back-diffusion: in the test problem (Fact 2), $c \approx e^{-us/D}$ at a distance $s$ upstream of the chamber. For $D = 1000$ µm²/s and perfusion speeds $u = 10$, 100 and 1000 µm/s, give the layer thickness $D/u$ and the distance at which the drug is down to 1 %.
+
+::: {.callout-note collapse="true" title="Solution B1"}
+(a)
+
+| | $D$ (µm²/s) | Pe | mixing length $\bar u w^2/D$ |
+|---|---|---|---|
+| small molecule | 1000 | 100 | $10^3\cdot 10^4/10^3 = 10^4$ µm = 10 mm |
+| protein | 100 | 1000 | 100 mm |
+| cell | 0.05 | $2\times10^6$ | $2\times10^8$ µm = 200 m |
+
+(b) Pe and the mixing length both halve: the streams mix in half the distance, because each parcel spends twice as long in every millimetre. Only $Dx/\bar u$ matters. But half the volume per minute flows through the device: a shorter device at the old speed would do the same separation with the full throughput.
+
+(c) $0.42\,\bar u w^2/D = 0.42\cdot 1000\cdot 2500/D$: 1.05 mm for the small molecule, 10.5 mm for the protein. With 3 mm serpentines the protein is far from mixed (3 mm is about $0.12\,\bar u w^2/D$: the first Fourier mode has decayed only to $e^{-\pi^2\cdot 0.12} \approx 0.3$ of its start value). Each new channel then carries a stream that is still partly two streams side by side, so the next split does not take the intended shares, and the outlet profile is not the designed staircase. Designers lengthen the serpentines or slow the flow.
+
+(d) $D/u = 100$, 10 and 1 µm. The drug is down to 1 % where $us/D = \ln 100 = 4.6$, i.e. $s = 4.6\,D/u$: 461, 46 and 4.6 µm. Even a slow perfusion protects the upstream channel.
+:::
+
+**B2. Central and upwind on a tiny grid.** Take the test problem with only $N = 4$ intervals and cell Péclet number $P = 4$ (so Pe = 16). Unknowns $c_1, c_2, c_3$; $c_0 = 0$, $c_4 = 1$.
+(a) Write down the three central-difference equations (Fact 3) and solve them. (Hint: express $c_2$ and $c_3$ in terms of $c_1$.) Which values are negative?
+(b) Do the same for upwind (Fact 4).
+(c) The exact solution is $c_i = (e^{4i} - 1)/(e^{16} - 1)$. Compute $c_3$ (use $e^{-4} \approx 0.0183$). Compare with (a) and (b).
+(d) For each scheme, find $\rho$ such that $c_i = \rho^i$ solves the difference equation (besides $\rho = 1$). Compare with the exact growth factor per cell, $e^{P}$.
+
+::: {.callout-note collapse="true" title="Solution B2"}
+(a) Central with $P = 4$: $3c_{i-1} - 2c_i - c_{i+1} = 0$.
+$i = 1$: $-2c_1 - c_2 = 0$, so $c_2 = -2c_1$.
+$i = 2$: $3c_1 - 2c_2 - c_3 = 0$, so $c_3 = 3c_1 + 4c_1 = 7c_1$.
+$i = 3$: $3c_2 - 2c_3 - 1 = 0$, so $-6c_1 - 14c_1 = 1$, $c_1 = -0.05$.
+Hence $c = (0, -0.05, 0.10, -0.35, 1)$: $c_1$ and $c_3$ are **negative**, and the signs alternate.
+
+(b) Upwind with $P = 4$: $5c_{i-1} - 6c_i + c_{i+1} = 0$.
+$i = 1$: $c_2 = 6c_1$. $i = 2$: $c_3 = 6c_2 - 5c_1 = 31c_1$. $i = 3$: $5c_2 - 6c_3 + 1 = 0$, so $30c_1 - 186c_1 = -1$, $c_1 = 1/156$.
+Hence $c = (0, 0.0064, 0.0385, 0.1987, 1)$: positive and increasing.
+
+(c) $c_3 = (e^{12} - 1)/(e^{16} - 1) \approx e^{-4} = 0.0183$ (and $c_1, c_2$ are tiny: $6\times10^{-6}$, $3\times10^{-4}$). Central is wrong in sign and size; upwind has the right shape but is 11 times too large at $x_3$: the boundary layer is smeared.
+
+(d) Central: $(1 - P/2)\rho^2 - 2\rho + (1 + P/2) = 0$, i.e. $-\rho^2 - 2\rho + 3 = 0$, roots 1 and $\rho = -3$. Check: $c_i = (\,(-3)^i - 1)/((-3)^4 - 1) = ((-3)^i - 1)/80$ gives $-0.05$, $0.1$, $-0.35$. Upwind: $\rho^2 - 6\rho + 5 = 0$, roots 1 and $\rho = 5$; $c_i = (5^i - 1)/624$. Exact: $e^4 = 54.6$. Neither comes close, because a grid with $P = 4$ cannot resolve a layer that is a quarter of a cell thick; but a negative $\rho$ is qualitatively wrong, while $\rho = 5$ is only too small.
+:::
+
+**B3. Numerical diffusion.**
+(a) Verify the identity $\dfrac{c_i - c_{i-1}}{\Delta x} = \dfrac{c_{i+1} - c_{i-1}}{2\Delta x} - \dfrac{\Delta x}{2}\cdot\dfrac{c_{i+1} - 2c_i + c_{i-1}}{\Delta x^2}$ and conclude that upwind with $D$ is central with $D + u\Delta x/2$.
+(b) Check it with B2: the central scheme with $D_\text{eff} = D + u\Delta x/2$ has cell Péclet number $P_\text{eff} = u\Delta x/D_\text{eff}$. Compute $P_\text{eff}$ for $P = 4$ and the central $\rho$ for $P_\text{eff}$. Show in general that $P_\text{eff} < 2$ always.
+(c) In the back-diffusion problem ($u = 100$ µm/s, $D = 1000$ µm²/s), what is $D_\text{num}$ for $\Delta x = 50$, 10 and 1 µm? From what grid spacing is $D_\text{num}$ less than 10 % of $D$?
+(d) For the stimulus pulse of the lecture ($u = 200$ µm/s, $D = 100$ µm²/s, $C = 0.5$) the numerical diffusion is $u\Delta x(1 - C)/2$. Which $\Delta x$ keeps it below 10 % of $D$? How many grid points and time steps does that need for 3 mm and 16 s?
+(e) At $C = 1$ the numerical diffusion vanishes. Why can we not simply run at $C = 1$ here?
+
+::: {.callout-note collapse="true" title="Solution B3"}
+(a) Put the right-hand side over the common denominator $2\Delta x$: $(c_{i+1} - c_{i-1}) - (c_{i+1} - 2c_i + c_{i-1}) = 2c_i - 2c_{i-1}$, divided by $2\Delta x$ gives the left-hand side. Multiply by $u$: $u\cdot\text{upwind} = u\cdot\text{central} - \tfrac{u\Delta x}{2}\cdot\text{second difference}$. Moving the last term to the diffusion side of $u c' = D c''$ gives $u\cdot\text{central} = (D + u\Delta x/2)\cdot\text{second difference}$.
+
+(b) $P_\text{eff} = P/(1 + P/2) = 4/3$, and $\rho = (1 + 2/3)/(1 - 2/3) = 5$: exactly the upwind $\rho$. In general $P/(1 + P/2) = 2P/(2 + P) < 2$ for every $P > 0$, so the upwind scheme never wiggles.
+
+(c) $D_\text{num} = 100\,\Delta x/2 = 50\,\Delta x$: 2500, 500 and 50 µm²/s. Below 100 µm²/s needs $\Delta x < 2$ µm.
+
+(d) $200\cdot\Delta x\cdot 0.5/2 = 50\,\Delta x \le 10$ gives $\Delta x \le 0.2$ µm: 15 001 points, $\Delta t = C\Delta x/u = 0.0005$ s, 32 000 steps. About 5×10⁸ point updates: feasible, but a coarse upwind grid is clearly not.
+
+(e) With $D > 0$, $r = D\Delta t/\Delta x^2 > 0$, so $C = 1$ gives $C + 2r > 1$: unstable (C2 shows it). Pure advection at $C = 1$ is the exact shift $c_i^{n+1} = c_{i-1}^n$, but only without diffusion and only for constant $u$.
+:::
+
+**B4. The CFL condition by hand.** Pulse problem: $u = 200$ µm/s, $D = 100$ µm²/s, $\Delta x = 10$ µm.
+(a) Express $C$ and $r$ in terms of $\Delta t$ and find the largest stable $\Delta t$ from $C + 2r \le 1$. Which part of the condition dominates?
+(b) Take $C = 0.5$, $r = 0.025$. At step $n$ the values at $x = 0, 10, 20, 30, 40$ µm are $(1, 1, 0, 0, 0)$, with $c_0 = 1$ held by the inlet. Compute $c_1, c_2, c_3$ at step $n + 1$.
+(c) Repeat with $C = 1.2$, $r = 0.06$. What goes wrong?
+(d) T-sensor, explicit marching (Fact 6 with forward Euler in $x$): the step must satisfy $D\Delta x/(u_j\Delta y^2) \le 1/2$ in every row. With $\Delta y = 2$ µm, $D = 1000$ µm²/s, $\bar u = 1000$ µm/s, compute the limit in the middle row ($u = 1500$ µm/s) and in the first row ($y = 1$ µm). How many steps for a 20 mm channel?
+
+::: {.callout-note collapse="true" title="Solution B4"}
+(a) $C = 200\,\Delta t/10 = 20\,\Delta t$, $r = 100\,\Delta t/100 = \Delta t$ (with $\Delta t$ in s). $C + 2r = 22\,\Delta t \le 1$: $\Delta t \le 1/22 = 0.0455$ s, i.e. $C \le 0.909$. Advection dominates ($C$ is ten times $2r$); the diffusion-only limit $r \le 1/2$ would allow $\Delta t = 0.5$ s.
+
+(b) Weights $(C + r, 1 - C - 2r, r) = (0.525, 0.45, 0.025)$.
+$c_1 = 0.525\cdot 1 + 0.45\cdot 1 + 0.025\cdot 0 = 0.975$; $c_2 = 0.525\cdot 1 + 0.45\cdot 0 + 0.025\cdot 0 = 0.525$; $c_3 = 0$. The front moves half a cell (and spreads).
+
+(c) Weights $(1.26, -0.32, 0.06)$. $c_1 = 1.26 - 0.32 + 0 = 0.94$; $c_2 = 1.26\cdot 1 = 1.26$. A value **above 1** appears where there was none: a new maximum, which the next steps amplify into a growing zigzag. One negative weight is enough.
+
+(d) $\Delta x \le u_j\Delta y^2/(2D) = 4u_j/2000$: 3.0 µm in the middle row; in the first row $u = 6000\cdot 0.01\cdot 0.99 = 59.4$ µm/s and the limit is 0.119 µm. The slowest row decides: $20\,000/0.119 \approx 168\,000$ steps. Implicit marching with $\Delta x = 50$ µm needs 400.
+:::
+
+**B5. The Christmas tree by hand.** In stage $n \to n + 1$, new channel $k$ ($k = 0, \dots, n$) receives a share $k/n$ of upstream stream $k - 1$ and $(n - k)/n$ of stream $k$, fully mixed.
+(a) Start from the inlets $(0, 1)$ and compute the next two stages.
+(b) Show that a linear staircase $c_k = k/(n - 1)$, $k = 0, \dots, n - 1$, becomes the linear staircase $k/n$ after one stage.
+(c) Start from three inlets $(0, 1, 0)$ and compute two stages. What shape is forming?
+(d) Why does the outlet staircase need a wide channel in which diffusion can act before it reaches the cells, and why should the cells not sit too far downstream?
+
+::: {.callout-note collapse="true" title="Solution B5"}
+(a) $n = 2$: $(0,\ \tfrac12\cdot 0 + \tfrac12\cdot 1,\ 1) = (0, 0.5, 1)$. $n = 3$: $k = 1$: $\tfrac13\cdot 0 + \tfrac23\cdot 0.5 = \tfrac13$; $k = 2$: $\tfrac23\cdot 0.5 + \tfrac13\cdot 1 = \tfrac23$. So $(0, \tfrac13, \tfrac23, 1)$.
+
+(b) $c'_k = \dfrac{k}{n}\cdot\dfrac{k - 1}{n - 1} + \dfrac{n - k}{n}\cdot\dfrac{k}{n - 1} = \dfrac{k(k - 1) + k(n - k)}{n(n - 1)} = \dfrac{k(n - 1)}{n(n - 1)} = \dfrac kn.$
+
+(c) $n = 3$: $(0,\ \tfrac23,\ \tfrac23,\ 0)$. $n = 4$: $k = 1$: $\tfrac14\cdot 0 + \tfrac34\cdot\tfrac23 = 0.5$; $k = 2$: $\tfrac12\cdot\tfrac23 + \tfrac12\cdot\tfrac23 = \tfrac23$; $k = 3$: $0.5$. So $(0, 0.5, 0.667, 0.5, 0)$: a hump, roughly a parabola.
+
+(d) At the outlet the profile is a staircase with jumps between neighbouring streams; a cell 10 µm wide sitting on a jump sees a sharp step, not a gradient. Diffusion across the 50 µm streams smooths the steps within about a millimetre (C5). But diffusion keeps acting on the whole profile, so far downstream the gradient flattens, fastest near the slow walls. The cells must sit in between.
+:::
+
+**B6. Marching and what a fit can tell.**
+(a) In the T-sensor ($w = 100$ µm, $\bar u = 1000$ µm/s), how long does fluid take to reach $x = 1$ mm in the middle of the channel and at $y = 1$ µm? How far does a small molecule ($D = 1000$ µm²/s) diffuse in each time, using $\sqrt{2Dt}$?
+(b) Write $u(y) = \bar u f(y)$. Show that the marching equation depends on $D$, $\bar u$ and $x$ only through $\xi = Dx/\bar u$.
+(c) A fit with an assumed $\bar u = 1000$ µm/s gives $D = 398$ µm²/s. Later you find that the pump delivered only 80 % of the nominal flow. What is the corrected $D$?
+(d) Would measuring the profile at two distances $x_1$ and $x_2$ let you determine $D$ and $\bar u$ separately? What would?
+
+::: {.callout-note collapse="true" title="Solution B6"}
+(a) Middle: $u = 1500$ µm/s, $t = 1000/1500 = 0.67$ s, $\sqrt{2\cdot 1000\cdot 0.67} = 37$ µm. At $y = 1$ µm: $u = 59.4$ µm/s, $t = 16.8$ s, $\sqrt{2\cdot 1000\cdot 16.8} = 183$ µm, more than the channel width. Near the walls the streams are mixed long before they are mixed in the middle.
+
+(b) $\bar u f(y)\,\partial c/\partial x = D\,\partial^2 c/\partial y^2$. Divide by $\bar u$ and write $\xi = Dx/\bar u$, so $\partial/\partial x = (D/\bar u)\,\partial/\partial\xi$: $f(y)\,\partial c/\partial\xi = \partial^2 c/\partial y^2$. No parameter is left except through $\xi$.
+
+(c) Only $D/\bar u$ is determined: $D = 398 \cdot 0.8 = 318.6$ µm²/s (C6 confirms 318.56).
+
+(d) No: both profiles depend on $D x_1/\bar u$ and $D x_2/\bar u$, so $(D, \bar u)$ and $(2D, 2\bar u)$ fit equally well; the parameters are not identifiable (*Identifiability and uncertainty of fitted parameters*). You need $\bar u$ independently: the flow rate $Q$ from a calibrated pump or by weighing the outflow, and the cross-section: $\bar u = Q/(wh)$.
+:::
+
+## In code
+
+**C1. Wiggles and smearing.** For the back-diffusion problem (Background):
+(a) Solve with both schemes for $N = 10, 20, 25, 40, 50, 100, 200, 400, 800$. Print $\Delta x$, the cell Péclet number, the maximum error of each scheme against the exact solution, and whether the solution **wiggles** (the exact profile only increases, so test whether any difference $c_{i+1} - c_i$ is negative).
+(b) Estimate the order of each scheme from the last two grids.
+(c) Check numerically that upwind with $D$ equals central with $D + u\Delta x/2$ for $N = 10, 50, 200$.
+(d) Which $N$ does each scheme need for a maximum error below 0.01?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Reuse `steady()` from the Background. For the wiggle test use [`diff`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/diff.html) and `any` (Python: [`np.diff`](https://numpy.org/doc/stable/reference/generated/numpy.diff.html), `np.any`). Order from two grids that differ by a factor 2: $\log_2(e_{N/2}/e_N)$.
+:::
+
+::: {.callout-note collapse="true" title="Solution C1"}
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+L <- 500; D <- 1000; u <- 100
+exact <- function(x) expm1(u * x / D) / expm1(u * L / D)
+steady <- function(N, scheme, D = 1000) {
+  dx <- L / N; P <- u * dx / D; m <- N - 1
+  if (scheme == "central") { lo <- 1 + P/2; di <- -2;     up <- 1 - P/2 }
+  else                     { lo <- 1 + P;   di <- -2 - P; up <- 1 }
+  A <- diag(di, m)
+  A[cbind(2:m, 1:(m-1))] <- lo; A[cbind(1:(m-1), 2:m)] <- up
+  b <- numeric(m); b[m] <- -up
+  c(0, solve(A, b), 1)
+}
+wiggly <- function(c) any(diff(c) < 0)           # exact profile only increases
+Ns <- c(10, 20, 25, 40, 50, 100, 200, 400, 800)
+ec <- eu <- numeric(length(Ns))
+for (j in seq_along(Ns)) {
+  N <- Ns[j]; x <- seq(0, L, length.out = N + 1)
+  cc <- steady(N, "central"); cu <- steady(N, "upwind")
+  ec[j] <- max(abs(cc - exact(x))); eu[j] <- max(abs(cu - exact(x)))
+  cat(sprintf("%4d %6.3f %5.2f %9.2e %-5s %9.2e %-5s\n", N, L / N, u * L / N / D,
+              ec[j], wiggly(cc), eu[j], wiggly(cu)))
+}
+k <- length(Ns)                                  # observed order from the last halving
+cat(sprintf("order: central %.2f, upwind %.2f\n",
+            log2(ec[k - 1] / ec[k]), log2(eu[k - 1] / eu[k])))
+for (N in c(10, 50, 200)) {                      # upwind = central with D + u dx / 2
+  dx <- L / N
+  cat(sprintf("N = %3d: %.1e\n", N,
+              max(abs(steady(N, "upwind") - steady(N, "central", D = D + u * dx / 2)))))
+}
+
+# Output:
+#   10 50.000  5.00  4.36e-01 TRUE   1.60e-01 FALSE
+#   20 25.000  2.50  1.93e-01 TRUE   2.04e-01 FALSE
+#   25 20.000  2.00  1.35e-01 FALSE  1.98e-01 FALSE
+#   40 12.500  1.25  5.57e-02 FALSE  1.58e-01 FALSE
+#   50 10.000  1.00  3.45e-02 FALSE  1.32e-01 FALSE
+#  100  5.000  0.50  7.88e-03 FALSE  7.66e-02 FALSE
+#  200  2.500  0.25  1.93e-03 FALSE  4.17e-02 FALSE
+#  400  1.250  0.12  4.80e-04 FALSE  2.19e-02 FALSE
+#  800  0.625  0.06  1.20e-04 FALSE  1.12e-02 FALSE
+# order: central 2.00, upwind 0.96
+# N =  10: 2.8e-17
+# N =  50: 1.1e-16
+# N = 200: 3.3e-16
+```
+
+### Python
+
+```python
+import numpy as np
+
+L, D, u = 500.0, 1000.0, 100.0
+
+def exact(x):
+    return np.expm1(u * x / D) / np.expm1(u * L / D)
+
+def steady(N, scheme, D=1000.0):
+    dx = L / N; P = u * dx / D; m = N - 1
+    if scheme == "central":
+        lo, di, up = 1 + P / 2, -2.0, 1 - P / 2
+    else:
+        lo, di, up = 1 + P, -2 - P, 1.0
+    A = np.diag(np.full(m, di)) + np.diag(np.full(m - 1, lo), -1) + np.diag(np.full(m - 1, up), 1)
+    b = np.zeros(m); b[-1] = -up
+    return np.concatenate(([0.0], np.linalg.solve(A, b), [1.0]))
+
+def wiggly(c):                                     # exact profile only increases
+    return bool(np.any(np.diff(c) < 0))
+
+Ns = [10, 20, 25, 40, 50, 100, 200, 400, 800]
+ec, eu = [], []
+for N in Ns:
+    x = np.linspace(0, L, N + 1)
+    cc, cu = steady(N, "central"), steady(N, "upwind")
+    ec.append(np.max(np.abs(cc - exact(x)))); eu.append(np.max(np.abs(cu - exact(x))))
+    print(f"{N:4d} {L / N:6.3f} {u * L / N / D:5.2f} {ec[-1]:9.2e} {str(wiggly(cc)).upper():<5s} "
+          f"{eu[-1]:9.2e} {str(wiggly(cu)).upper():<5s}")
+print(f"order: central {np.log2(ec[-2] / ec[-1]):.2f}, upwind {np.log2(eu[-2] / eu[-1]):.2f}")
+for N in [10, 50, 200]:                            # upwind = central with D + u dx / 2
+    dx = L / N
+    diff = np.max(np.abs(steady(N, "upwind") - steady(N, "central", D=D + u * dx / 2)))
+    print(f"N = {N:3d}: {diff:.1e}")
+
+# Output:
+#   10 50.000  5.00  4.36e-01 TRUE   1.60e-01 FALSE
+#   20 25.000  2.50  1.93e-01 TRUE   2.04e-01 FALSE
+#   25 20.000  2.00  1.35e-01 FALSE  1.98e-01 FALSE
+#   40 12.500  1.25  5.57e-02 FALSE  1.58e-01 FALSE
+#   50 10.000  1.00  3.45e-02 FALSE  1.32e-01 FALSE
+#  100  5.000  0.50  7.88e-03 FALSE  7.66e-02 FALSE
+#  200  2.500  0.25  1.93e-03 FALSE  4.17e-02 FALSE
+#  400  1.250  0.12  4.80e-04 FALSE  2.19e-02 FALSE
+#  800  0.625  0.06  1.20e-04 FALSE  1.12e-02 FALSE
+# order: central 2.00, upwind 0.96
+# N =  10: 2.8e-17
+# N =  50: 1.1e-16
+# N = 200: 3.3e-16
+```
+
+### Rust
+
+```rust
+// rust/examples/advection_diffusion_c1.rs  —  cargo run --example advection_diffusion_c1
+// C1: wiggles and smearing in the steady problem: max error vs grid, a wiggle check,
+// observed orders, and the identity upwind(D) = central(D + u dx / 2).
+const L: f64 = 500.0;
+const U: f64 = 100.0;
+const D: f64 = 1000.0;
+
+fn exact(x: f64) -> f64 {
+    (U * x / D).exp_m1() / (U * L / D).exp_m1()
+}
+
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+fn steady(n: usize, central: bool, d: f64) -> Vec<f64> {
+    let p = U * (L / n as f64) / d;
+    let m = n - 1;
+    let (lo, di, up) = if central { (1.0 + p / 2.0, -2.0, 1.0 - p / 2.0) } else { (1.0 + p, -2.0 - p, 1.0) };
+    let mut rhs = vec![0.0; m];
+    rhs[m - 1] = -up;
+    let mut c = vec![0.0];
+    c.extend(thomas(&vec![lo; m], &vec![di; m], &vec![up; m], &rhs));
+    c.push(1.0);
+    c
+}
+
+fn wiggly(c: &[f64]) -> bool {
+    c.windows(2).any(|p| p[1] - p[0] < 0.0) // exact profile only increases
+}
+
+fn sci(x: f64, digits: usize) -> String { // 1.60e-01 as R/Python print it
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn main() {
+    let ns = [10, 20, 25, 40, 50, 100, 200, 400, 800];
+    let (mut ec, mut eu) = (vec![], vec![]);
+    for &n in &ns {
+        let x: Vec<f64> = (0..=n).map(|i| i as f64 * L / n as f64).collect();
+        let (cc, cu) = (steady(n, true, D), steady(n, false, D));
+        let err = |c: &[f64]| c.iter().zip(&x).map(|(ci, xi)| (ci - exact(*xi)).abs()).fold(0.0, f64::max);
+        ec.push(err(&cc));
+        eu.push(err(&cu));
+        println!("{:4} {:6.3} {:5.2} {:>9} {:<5} {:>9} {:<5}", n, L / n as f64, U * L / n as f64 / D,
+                 sci(*ec.last().unwrap(), 2), wiggly(&cc).to_string().to_uppercase(),
+                 sci(*eu.last().unwrap(), 2), wiggly(&cu).to_string().to_uppercase());
+    }
+    let k = ns.len() - 1;
+    println!("order: central {:.2}, upwind {:.2}", (ec[k - 1] / ec[k]).log2(), (eu[k - 1] / eu[k]).log2());
+    for n in [10, 50, 200] {
+        let dx = L / n as f64;
+        let a = steady(n, false, D);
+        let b = steady(n, true, D + U * dx / 2.0);
+        let diff = a.iter().zip(&b).map(|(p, q)| (p - q).abs()).fold(0.0, f64::max);
+        println!("N = {:3}: {}", n, sci(diff, 1));
+    }
+}
+
+// Output:
+//   10 50.000  5.00  4.36e-01 TRUE   1.60e-01 FALSE
+//   20 25.000  2.50  1.93e-01 TRUE   2.04e-01 FALSE
+//   25 20.000  2.00  1.35e-01 FALSE  1.98e-01 FALSE
+//   40 12.500  1.25  5.57e-02 FALSE  1.58e-01 FALSE
+//   50 10.000  1.00  3.45e-02 FALSE  1.32e-01 FALSE
+//  100  5.000  0.50  7.88e-03 FALSE  7.66e-02 FALSE
+//  200  2.500  0.25  1.93e-03 FALSE  4.17e-02 FALSE
+//  400  1.250  0.12  4.80e-04 FALSE  2.19e-02 FALSE
+//  800  0.625  0.06  1.20e-04 FALSE  1.12e-02 FALSE
+// order: central 2.00, upwind 0.96
+// N =  10: 2.8e-17
+// N =  50: 1.1e-16
+// N = 200: 3.3e-16
+```
+
+:::
+
+Central differences wiggle for $P > 2$ ($N = 10$, 20) and have errors of 0.2–0.4 there; at $P = 2$ there are no wiggles but a kink. From $P \le 1$ on, the error falls 4× per halving (order 2.00). Upwind never wiggles but converges only at first order (0.96) and is not more accurate than central even at coarse grids. (d) Central reaches 0.01 at $N = 100$ ($\Delta x = 5$ µm); upwind is still at 0.011 at $N = 800$, so it needs about 900 intervals ($\Delta x \approx 0.55$ µm). The identity holds to rounding error.
+:::
+
+**C2. A stimulus pulse and the CFL condition.** A 1 s pulse of a protein ($D = 100$ µm²/s) enters a channel at $u = 200$ µm/s; cells sit at $x = 2000$ µm. Use the explicit upwind scheme of the lecture on $[0, 3000]$ µm with an outflow condition $c_N = c_{N-1}$.
+(a) With $\Delta x = 10$ µm and $C = 0.5$, find the peak concentration at the cells and its time. Repeat with $\Delta x = 5$, 2 and 1 µm (same $C$).
+(b) For a long channel the solution is close to the difference of two erfc steps, $c \approx s(x, t) - s(x, t - 1)$ with $s(x, t) = \tfrac12\,\text{erfc}\!\bigl((x - ut)/(2\sqrt{Dt})\bigr)$ (error below 0.01). Compute its peak at $x = 2000$ µm on a time grid for $D = 100$ and for $D = 100 + D_\text{num} = 600$ µm²/s. Which does the $\Delta x = 10$ µm simulation match?
+(c) With $\Delta x = 10$ µm run to $t = 10$ s for $C = 0.5$, 0.9, 0.95 and 1.0. Print $r$, $C + 2r$ and the largest $|c|$ anywhere during the run. Which runs are stable?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The update is one vectorised line, as for FTCS; the right-hand side uses the old values. R has no `erfc`; use $\text{erfc}(z) = 2\,\Phi(-z\sqrt2)$ with [`pnorm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Normal.html). Python: [`scipy.special.erfc`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.erfc.html); Rust: [`statrs::function::erf::erfc`](https://docs.rs/statrs/latest/statrs/function/erf/fn.erfc.html).
+:::
+
+::: {.callout-note collapse="true" title="Solution C2"}
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+u <- 200; D <- 100                               # um/s, um^2/s
+pulse <- function(dx, C, tend = 16) {            # explicit upwind, 1 s inlet pulse
+  x <- seq(0, 3000, by = dx); n <- length(x); i <- 2:(n - 1)
+  dt <- C * dx / u; r <- D * dt / dx^2
+  c <- numeric(n); obs <- numeric(round(tend / dt)); big <- 0
+  for (k in seq_along(obs)) {
+    c[i] <- c[i] - C * (c[i] - c[i - 1]) + r * (c[i - 1] - 2 * c[i] + c[i + 1])
+    c[n] <- c[n - 1]
+    c[1] <- if (k * dt <= 1) 1 else 0
+    obs[k] <- c[x == 2000]; big <- max(big, abs(c))
+  }
+  list(peak = max(obs), tpeak = which.max(obs) * dt, r = r, maxabs = big)
+}
+erfc <- function(z) 2 * pnorm(-z * sqrt(2))      # Python: scipy.special.erfc
+step <- function(x, t, D) ifelse(t > 0, 0.5 * erfc((x - u * t) / (2 * sqrt(D * pmax(t, 1e-12)))), 0)
+approx_exact <- function(x, t, D) step(x, t, D) - step(x, t - 1, D)
+tt <- seq(5, 16, by = 0.005)
+for (Dx in c(100, 600)) cat(sprintf("long-channel formula, D = %3d: peak %.4f\n", Dx,
+                                     max(approx_exact(2000, tt, Dx))))
+for (dx in c(10, 5, 2, 1)) {
+  p <- pulse(dx, 0.5)
+  cat(sprintf("dx = %4.1f  D_num = %5.1f  peak %.4f at t = %.3f s\n",
+              dx, u * dx * 0.5 / 2, p$peak, p$tpeak))
+}
+for (C in c(0.5, 0.9, 0.95, 1.0)) {
+  p <- pulse(10, C, tend = 10)
+  cat(sprintf("C = %.2f  r = %.4f  C + 2r = %.3f  max|c| = %.3g\n", C, p$r, C + 2 * p$r, p$maxabs))
+}
+
+# Output:
+# long-channel formula, D = 100: peak 0.9746
+# long-channel formula, D = 600: peak 0.6393
+# dx = 10.0  D_num = 500.0  peak 0.6405 at t = 10.475 s
+# dx =  5.0  D_num = 250.0  peak 0.7691 at t = 10.488 s
+# dx =  2.0  D_num = 100.0  peak 0.8866 at t = 10.500 s
+# dx =  1.0  D_num =  50.0  peak 0.9323 at t = 10.502 s
+# C = 0.50  r = 0.0250  C + 2r = 0.550  max|c| = 1
+# C = 0.90  r = 0.0450  C + 2r = 0.990  max|c| = 1
+# C = 0.95  r = 0.0475  C + 2r = 1.045  max|c| = 2.04e+06
+# C = 1.00  r = 0.0500  C + 2r = 1.100  max|c| = 1.57e+14
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.special import erfc
+
+u, D = 200.0, 100.0                                # um/s, um^2/s
+
+def pulse(dx, C, tend=16.0):                       # explicit upwind, 1 s inlet pulse
+    x = np.arange(0, 3000 + dx / 2, dx); n = len(x)
+    dt = C * dx / u; r = D * dt / dx**2
+    c = np.zeros(n); obs = np.zeros(round(tend / dt)); big = 0.0
+    iobs = np.flatnonzero(x == 2000)[0]
+    for k in range(1, len(obs) + 1):
+        c[1:-1] = c[1:-1] - C * (c[1:-1] - c[:-2]) + r * (c[:-2] - 2 * c[1:-1] + c[2:])
+        c[-1] = c[-2]
+        c[0] = 1.0 if k * dt <= 1 else 0.0
+        obs[k - 1] = c[iobs]; big = max(big, np.max(np.abs(c)))
+    return dict(peak=obs.max(), tpeak=(np.argmax(obs) + 1) * dt, r=r, maxabs=big)
+
+def step(x, t, D):
+    tt = np.maximum(t, 1e-12)
+    return np.where(t > 0, 0.5 * erfc((x - u * tt) / (2 * np.sqrt(D * tt))), 0.0)
+
+def approx_exact(x, t, D):
+    return step(x, t, D) - step(x, t - 1, D)
+
+tt = np.arange(5, 16 + 1e-9, 0.005)
+for Dx in [100, 600]:
+    print(f"long-channel formula, D = {Dx:3d}: peak {approx_exact(2000, tt, Dx).max():.4f}")
+for dx in [10, 5, 2, 1]:
+    p = pulse(dx, 0.5)
+    print(f"dx = {dx:4.1f}  D_num = {u * dx * 0.5 / 2:5.1f}  peak {p['peak']:.4f} at t = {p['tpeak']:.3f} s")
+for C in [0.5, 0.9, 0.95, 1.0]:
+    p = pulse(10, C, tend=10.0)
+    print(f"C = {C:.2f}  r = {p['r']:.4f}  C + 2r = {C + 2 * p['r']:.3f}  max|c| = {p['maxabs']:.3g}")
+
+# Output:
+# long-channel formula, D = 100: peak 0.9746
+# long-channel formula, D = 600: peak 0.6393
+# dx = 10.0  D_num = 500.0  peak 0.6405 at t = 10.475 s
+# dx =  5.0  D_num = 250.0  peak 0.7691 at t = 10.488 s
+# dx =  2.0  D_num = 100.0  peak 0.8866 at t = 10.500 s
+# dx =  1.0  D_num =  50.0  peak 0.9323 at t = 10.502 s
+# C = 0.50  r = 0.0250  C + 2r = 0.550  max|c| = 1
+# C = 0.90  r = 0.0450  C + 2r = 0.990  max|c| = 1
+# C = 0.95  r = 0.0475  C + 2r = 1.045  max|c| = 2.04e+06
+# C = 1.00  r = 0.0500  C + 2r = 1.100  max|c| = 1.57e+14
+```
+
+### Rust
+
+```rust
+// rust/examples/advection_diffusion_c2.rs  —  cargo run --example advection_diffusion_c2
+// C2: a 1 s pulse carried to cells 2 mm downstream, explicit upwind scheme.
+// Numerical diffusion (peak vs dx) and the stability condition C + 2r <= 1.
+use statrs::function::erf::erfc;
+
+const U: f64 = 200.0; // um/s
+const D: f64 = 100.0; // um^2/s
+
+struct Run { peak: f64, tpeak: f64, r: f64, maxabs: f64 }
+
+fn pulse(dx: f64, cfl: f64, tend: f64) -> Run {
+    let n = (3000.0 / dx).round() as usize + 1;
+    let iobs = (2000.0 / dx).round() as usize;
+    let dt = cfl * dx / U;
+    let r = D * dt / (dx * dx);
+    let mut c = vec![0.0; n];
+    let mut old = c.clone();
+    let nsteps = (tend / dt).round() as usize;
+    let (mut peak, mut kpeak, mut big) = (f64::NEG_INFINITY, 0, 0.0f64);
+    for k in 1..=nsteps {
+        old.copy_from_slice(&c); // previous time level
+        for i in 1..n - 1 {
+            c[i] = old[i] - cfl * (old[i] - old[i - 1]) + r * (old[i - 1] - 2.0 * old[i] + old[i + 1]);
+        }
+        c[n - 1] = c[n - 2]; // outflow
+        c[0] = if k as f64 * dt <= 1.0 { 1.0 } else { 0.0 }; // inlet: 1 s pulse
+        if c[iobs] > peak { peak = c[iobs]; kpeak = k; }
+        big = c.iter().fold(big, |m, v| m.max(v.abs()));
+    }
+    Run { peak, tpeak: kpeak as f64 * dt, r, maxabs: big }
+}
+
+fn step(x: f64, t: f64, d: f64) -> f64 {
+    if t > 0.0 { 0.5 * erfc((x - U * t) / (2.0 * (d * t).sqrt())) } else { 0.0 }
+}
+
+// like C's %.3g for the numbers printed here
+fn g3(x: f64) -> String {
+    if x.abs() >= 1e4 {
+        let s = format!("{:.2e}", x);
+        let (m, e) = s.split_once('e').unwrap();
+        let e: i32 = e.parse().unwrap();
+        format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+    } else {
+        let s = format!("{:.*}", (2 - x.abs().log10().floor() as i32).max(0) as usize, x);
+        if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s }
+    }
+}
+
+fn main() {
+    for dd in [100.0, 600.0] {
+        let peak = (0..=2200).map(|j| 5.0 + 0.005 * j as f64)
+            .map(|t| step(2000.0, t, dd) - step(2000.0, t - 1.0, dd)).fold(0.0, f64::max);
+        println!("long-channel formula, D = {:3}: peak {:.4}", dd, peak);
+    }
+    for dx in [10.0, 5.0, 2.0, 1.0] {
+        let p = pulse(dx, 0.5, 16.0);
+        println!("dx = {:4.1}  D_num = {:5.1}  peak {:.4} at t = {:.3} s", dx, U * dx * 0.5 / 2.0, p.peak, p.tpeak);
+    }
+    for cfl in [0.5, 0.9, 0.95, 1.0] {
+        let p = pulse(10.0, cfl, 10.0);
+        println!("C = {:.2}  r = {:.4}  C + 2r = {:.3}  max|c| = {}", cfl, p.r, cfl + 2.0 * p.r, g3(p.maxabs));
+    }
+}
+
+// Output:
+// long-channel formula, D = 100: peak 0.9746
+// long-channel formula, D = 600: peak 0.6393
+// dx = 10.0  D_num = 500.0  peak 0.6405 at t = 10.475 s
+// dx =  5.0  D_num = 250.0  peak 0.7691 at t = 10.488 s
+// dx =  2.0  D_num = 100.0  peak 0.8866 at t = 10.500 s
+// dx =  1.0  D_num =  50.0  peak 0.9323 at t = 10.502 s
+// C = 0.50  r = 0.0250  C + 2r = 0.550  max|c| = 1
+// C = 0.90  r = 0.0450  C + 2r = 0.990  max|c| = 1
+// C = 0.95  r = 0.0475  C + 2r = 1.045  max|c| = 2.04e+06
+// C = 1.00  r = 0.0500  C + 2r = 1.100  max|c| = 1.57e+14
+```
+
+:::
+
+The true peak is 0.975; the $\Delta x = 10$ µm simulation gives 0.6405, which is the peak of the exact solution with $D = 600$ µm²/s (0.6393; the small difference is the long-channel approximation). So the simulation is accurate, but for the wrong $D$: 5/6 of the spreading is numerical. Halving $\Delta x$ halves $D_\text{num}$, and the peak creeps up slowly (0.77, 0.89, 0.93): only the arrival time is right on every grid. (c) $C + 2r \le 1$ for $C = 0.5$ and 0.9 (stable, $|c| \le 1$); $C = 0.95$ (1.045) and $C = 1$ (1.1) blow up, although both satisfy the pure-advection CFL condition $C \le 1$.
+:::
+
+**C3. The T-sensor by marching.** Width $w = 100$ µm, $\bar u = 1000$ µm/s, small molecule $D = 1000$ µm²/s, sample ($c = 1$) in $y < 50$ µm at $x = 0$.
+(a) Write `march(c, u, D, dy, dx, nsteps)` (Fact 6) using `thomas()` from *Implicit schemes and the method of lines*. Test it with **plug flow** ($u = \bar u$ everywhere, $M = 200$ cells) against the exact solution
+$$c(x, y) = \tfrac12 + \sum_{n=1}^{\infty}\frac{2}{n\pi}\sin\frac{n\pi}{2}\cos\frac{n\pi y}{w}\,e^{-n^2\pi^2 Dx/(\bar u w^2)}$$
+at $x = 2$ mm, for $\Delta x = 200, 100, 50, 25, 12.5$ µm. What order do you see?
+(b) Now use the Poiseuille profile with $M = 50$. March to $x = 2$ mm with $\Delta x = 50$ µm and check that the flux $\sum u_j c_j$ is conserved.
+(c) Compute the explicit-marching step limit $u_j\Delta y^2/(2D)$ for every row and print the smallest and largest. Then march explicitly (forward Euler in $x$, mirror ghost cells at the walls) to $x = 100$ µm with $\Delta x = 1$ µm and with $\Delta x = 0.1$ µm, and print the largest $|c|$.
+
+::: {.callout-tip collapse="true" title="Hint"}
+In `march`, $a_j$ is a vector (one value per row); the sub- and super-diagonal are both $-a$. The exact series converges slowly at the jump: 2000 terms are plenty at $x = 2$ mm. Python: [`scipy.linalg.solve_banded`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_banded.html) solves the tridiagonal system (banded storage, rows: super-, main, sub-diagonal).
+:::
+
+::: {.callout-note collapse="true" title="Solution C3"}
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+thomas <- function(a, b, c, d) {                 # from "Implicit schemes and the method of lines"
+  n <- length(d)
+  for (i in 2:n) { w <- a[i] / b[i - 1]; b[i] <- b[i] - w * c[i - 1]; d[i] <- d[i] - w * d[i - 1] }
+  x <- numeric(n); x[n] <- d[n] / b[n]
+  for (i in (n - 1):1) x[i] <- (d[i] - c[i] * x[i + 1]) / b[i]
+  x
+}
+march <- function(c, u, D, dy, dx, nsteps) {     # backward Euler in x
+  M <- length(c); a <- D * dx / (u * dy^2)
+  di <- 1 + 2 * a; di[c(1, M)] <- 1 + a[c(1, M)]
+  for (k in seq_len(nsteps)) c <- thomas(-a, di, -a, c)
+  c
+}
+w <- 100; ubar <- 1000; D <- 1000
+plug_exact <- function(y, x, D, K = 2001) {      # two streams, plug flow, no-flux walls
+  s <- 0.5
+  for (n in 1:K) s <- s + 2 / (n * pi) * sin(n * pi / 2) * cos(n * pi * y / w) *
+      exp(-(n * pi)^2 * D * x / (ubar * w^2))
+  s
+}
+# (a) plug flow against the exact solution at x = 2 mm
+M <- 200; dy <- w / M; y <- (1:M - 0.5) * dy; c0 <- ifelse(y < w / 2, 1, 0)
+ex <- plug_exact(y, 2000, D)
+for (dx in c(200, 100, 50, 25, 12.5)) {
+  cm <- march(c0, rep(ubar, M), D, dy, dx, 2000 / dx)
+  cat(sprintf("dx = %5.1f  max error %.2e\n", dx, max(abs(cm - ex))))
+}
+# (b) Poiseuille: flux conservation and the explicit step limits
+M <- 50; dy <- w / M; y <- (1:M - 0.5) * dy; c0 <- ifelse(y < w / 2, 1, 0)
+u <- 6 * ubar * (y / w) * (1 - y / w)
+c2 <- march(c0, u, D, dy, 50, 40)
+cat(sprintf("flux ratio %.12f\n", sum(u * c2) / sum(u * c0)))
+cat(sprintf("explicit dx limit: wall row %.4f um, centre row %.4f um\n",
+            min(u * dy^2 / (2 * D)), max(u * dy^2 / (2 * D))))
+# (c) explicit marching, dx = 1 um and 0.1 um, to x = 100 um
+explicit <- function(c, u, D, dy, dx, nsteps) {
+  M <- length(c); a <- D * dx / (u * dy^2)
+  for (k in seq_len(nsteps)) { g <- c(c[1], c, c[M]); c <- c + a * (g[1:M] - 2 * c + g[3:(M + 2)]) }
+  c
+}
+cat(sprintf("explicit, dx = 1:   max|c| = %.3g\n", max(abs(explicit(c0, u, D, dy, 1, 100)))))
+cat(sprintf("explicit, dx = 0.1: max|c| = %.3g\n", max(abs(explicit(c0, u, D, dy, 0.1, 1000)))))
+
+# Output:
+# dx = 200.0  max error 1.66e-02
+# dx = 100.0  max error 8.47e-03
+# dx =  50.0  max error 4.27e-03
+# dx =  25.0  max error 2.15e-03
+# dx =  12.5  max error 1.08e-03
+# flux ratio 1.000000000000
+# explicit dx limit: wall row 0.1188 um, centre row 2.9988 um
+# explicit, dx = 1:   max|c| = 8.29e+39
+# explicit, dx = 0.1: max|c| = 0.999
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import solve_banded
+
+def march(c, u, D, dy, dx, nsteps):                # backward Euler in x
+    M = len(c); a = D * dx / (u * dy**2)
+    di = 1 + 2 * a; di[[0, -1]] = 1 + a[[0, -1]]   # no-flux walls
+    ab = np.zeros((3, M))                          # banded storage: super, main, sub
+    ab[0, 1:] = -a[:-1]; ab[1] = di; ab[2, :-1] = -a[1:]
+    for _ in range(int(round(nsteps))):
+        c = solve_banded((1, 1), ab, c)
+    return c
+
+w, ubar, D = 100.0, 1000.0, 1000.0
+
+def plug_exact(y, x, D, K=2001):                   # two streams, plug flow, no-flux walls
+    s = 0.5
+    for n in range(1, K + 1):
+        s = s + 2 / (n * np.pi) * np.sin(n * np.pi / 2) * np.cos(n * np.pi * y / w) * \
+            np.exp(-(n * np.pi)**2 * D * x / (ubar * w**2))
+    return s
+
+# (a) plug flow against the exact solution at x = 2 mm
+M = 200; dy = w / M; y = (np.arange(1, M + 1) - 0.5) * dy; c0 = np.where(y < w / 2, 1.0, 0.0)
+ex = plug_exact(y, 2000, D)
+for dx in [200, 100, 50, 25, 12.5]:
+    cm = march(c0, np.full(M, ubar), D, dy, dx, 2000 / dx)
+    print(f"dx = {dx:5.1f}  max error {np.max(np.abs(cm - ex)):.2e}")
+# (b) Poiseuille: flux conservation and the explicit step limits
+M = 50; dy = w / M; y = (np.arange(1, M + 1) - 0.5) * dy; c0 = np.where(y < w / 2, 1.0, 0.0)
+u = 6 * ubar * (y / w) * (1 - y / w)
+c2 = march(c0, u, D, dy, 50, 40)
+print(f"flux ratio {np.sum(u * c2) / np.sum(u * c0):.12f}")
+lim = u * dy**2 / (2 * D)
+print(f"explicit dx limit: wall row {lim.min():.4f} um, centre row {lim.max():.4f} um")
+# (c) explicit marching, dx = 1 um and 0.1 um, to x = 100 um
+def explicit(c, u, D, dy, dx, nsteps):
+    a = D * dx / (u * dy**2)
+    for _ in range(nsteps):
+        g = np.concatenate(([c[0]], c, [c[-1]]))
+        c = c + a * (g[:-2] - 2 * c + g[2:])
+    return c
+print(f"explicit, dx = 1:   max|c| = {np.max(np.abs(explicit(c0, u, D, dy, 1, 100))):.3g}")
+print(f"explicit, dx = 0.1: max|c| = {np.max(np.abs(explicit(c0, u, D, dy, 0.1, 1000))):.3g}")
+
+# Output:
+# dx = 200.0  max error 1.66e-02
+# dx = 100.0  max error 8.47e-03
+# dx =  50.0  max error 4.27e-03
+# dx =  25.0  max error 2.15e-03
+# dx =  12.5  max error 1.08e-03
+# flux ratio 1.000000000000
+# explicit dx limit: wall row 0.1188 um, centre row 2.9988 um
+# explicit, dx = 1:   max|c| = 8.29e+39
+# explicit, dx = 0.1: max|c| = 0.999
+```
+
+### Rust
+
+```rust
+// rust/examples/advection_diffusion_c3.rs  —  cargo run --example advection_diffusion_c3
+// C3: the T-sensor by marching in x. Implicit (backward Euler) marching checked against
+// the exact plug-flow solution; flux conservation; explicit marching and its step limit.
+use std::f64::consts::PI;
+
+const W: f64 = 100.0; // channel width, um
+const UBAR: f64 = 1000.0; // mean speed, um/s
+const D: f64 = 1000.0; // small molecule, um^2/s
+
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+// backward Euler in x: one tridiagonal solve per step of dx
+fn march(c: &[f64], u: &[f64], d: f64, dy: f64, dx: f64, nsteps: usize) -> Vec<f64> {
+    let m = c.len();
+    let a: Vec<f64> = u.iter().map(|uj| d * dx / (uj * dy * dy)).collect();
+    let mut di: Vec<f64> = a.iter().map(|aj| 1.0 + 2.0 * aj).collect();
+    di[0] = 1.0 + a[0]; // no-flux walls
+    di[m - 1] = 1.0 + a[m - 1];
+    let off: Vec<f64> = a.iter().map(|aj| -aj).collect();
+    let mut c = c.to_vec();
+    for _ in 0..nsteps {
+        c = thomas(&off, &di, &off, &c);
+    }
+    c
+}
+
+fn explicit(c: &[f64], u: &[f64], d: f64, dy: f64, dx: f64, nsteps: usize) -> Vec<f64> {
+    let m = c.len();
+    let mut c = c.to_vec();
+    for _ in 0..nsteps {
+        let old = c.clone();
+        for j in 0..m {
+            let left = if j == 0 { old[0] } else { old[j - 1] }; // mirror ghost cells
+            let right = if j == m - 1 { old[m - 1] } else { old[j + 1] };
+            c[j] = old[j] + d * dx / (u[j] * dy * dy) * (left - 2.0 * old[j] + right);
+        }
+    }
+    c
+}
+
+fn plug_exact(y: f64, x: f64, d: f64) -> f64 {
+    let mut s = 0.5;
+    for n in 1..=2001 {
+        let nf = n as f64;
+        s += 2.0 / (nf * PI) * (nf * PI / 2.0).sin() * (nf * PI * y / W).cos()
+            * (-(nf * PI).powi(2) * d * x / (UBAR * W * W)).exp();
+    }
+    s
+}
+
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn grid(m: usize) -> (f64, Vec<f64>, Vec<f64>) {
+    let dy = W / m as f64;
+    let y: Vec<f64> = (1..=m).map(|j| (j as f64 - 0.5) * dy).collect();
+    let c0 = y.iter().map(|&yj| if yj < W / 2.0 { 1.0 } else { 0.0 }).collect();
+    (dy, y, c0)
+}
+
+fn maxabs(v: &[f64]) -> f64 { v.iter().fold(0.0, |m, x| m.max(x.abs())) }
+
+fn main() {
+    // (a) plug flow against the exact solution at x = 2 mm
+    let (dy, y, c0) = grid(200);
+    let ex: Vec<f64> = y.iter().map(|&yj| plug_exact(yj, 2000.0, D)).collect();
+    for dx in [200.0, 100.0, 50.0, 25.0, 12.5] {
+        let cm = march(&c0, &vec![UBAR; 200], D, dy, dx, (2000.0 / dx) as usize);
+        let err = cm.iter().zip(&ex).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max);
+        println!("dx = {:5.1}  max error {}", dx, sci(err, 2));
+    }
+    // (b) Poiseuille: flux conservation and the explicit step limits
+    let (dy, y, c0) = grid(50);
+    let u: Vec<f64> = y.iter().map(|yj| 6.0 * UBAR * (yj / W) * (1.0 - yj / W)).collect();
+    let c2 = march(&c0, &u, D, dy, 50.0, 40);
+    let flux = |c: &[f64]| u.iter().zip(c).map(|(a, b)| a * b).sum::<f64>();
+    println!("flux ratio {:.12}", flux(&c2) / flux(&c0));
+    let lim: Vec<f64> = u.iter().map(|uj| uj * dy * dy / (2.0 * D)).collect();
+    println!("explicit dx limit: wall row {:.4} um, centre row {:.4} um",
+             lim.iter().cloned().fold(f64::INFINITY, f64::min), lim.iter().cloned().fold(0.0, f64::max));
+    // (c) explicit marching, dx = 1 um and 0.1 um, to x = 100 um
+    println!("explicit, dx = 1:   max|c| = {}", sci(maxabs(&explicit(&c0, &u, D, dy, 1.0, 100)), 2));
+    println!("explicit, dx = 0.1: max|c| = {:.3}", maxabs(&explicit(&c0, &u, D, dy, 0.1, 1000)));
+}
+
+// Output:
+// dx = 200.0  max error 1.66e-02
+// dx = 100.0  max error 8.47e-03
+// dx =  50.0  max error 4.27e-03
+// dx =  25.0  max error 2.15e-03
+// dx =  12.5  max error 1.08e-03
+// flux ratio 1.000000000000
+// explicit dx limit: wall row 0.1188 um, centre row 2.9988 um
+// explicit, dx = 1:   max|c| = 8.29e+39
+// explicit, dx = 0.1: max|c| = 0.999
+```
+
+:::
+
+(a) The error halves with $\Delta x$: first order, as expected from backward Euler in $x$ (the error from $\Delta y = 0.5$ µm is much smaller). At $\Delta x = 50$ µm the error is 0.4 %, good enough for the rest of the exercise. (b) The flux ratio is 1 to 12 digits: each step only redistributes solute between rows. (c) The middle rows would tolerate 3 µm, the wall rows only 0.12 µm. With $\Delta x = 1$ µm the wall rows blow up to $10^{39}$ within 100 µm; with 0.1 µm the run is stable, but would need 200 000 steps for 20 mm.
+:::
+
+**C4. Designing an H-filter.** Same channel, Poiseuille flow, $M = 50$, $\Delta x = 50$ µm.
+(a) For a small molecule ($D = 1000$), a protein ($D = 100$) and a cell ($D = 0.05$ µm²/s), print the fraction of the solute flux in the buffer half ($y > 50$ µm) at $x = 1, 2, 5, 10, 20$ mm.
+(b) Find the shortest channel (in steps of 50 µm) that delivers at least 45 % of the small molecule to the buffer half (90 % of the maximum 50 %). How much protein comes along?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Weight by $u_j$: the outlet collects what flows, $\sum_{y_j > w/2} u_j c_j \big/ \sum_j u_j c_j(0)$. March from one distance to the next, not from 0 each time. Python: [`np.flatnonzero`](https://numpy.org/doc/stable/reference/generated/numpy.flatnonzero.html) for the first index; R: [`which`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/which.html).
+:::
+
+::: {.callout-note collapse="true" title="Solution C4"}
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# thomas() and march() as in C3
+w <- 100; ubar <- 1000; M <- 50; dy <- w / M
+y <- (1:M - 0.5) * dy; u <- 6 * ubar * (y / w) * (1 - y / w)
+c0 <- ifelse(y < w / 2, 1, 0); up <- y > w / 2
+crossed <- function(D, xs, dx = 50) {            # fraction in the buffer half at each x
+  c <- c0; xprev <- 0; out <- numeric(length(xs))
+  for (j in seq_along(xs)) {
+    c <- march(c, u, D, dy, dx, (xs[j] - xprev) / dx); xprev <- xs[j]
+    out[j] <- sum(u[up] * c[up]) / sum(u * c0)
+  }
+  out
+}
+xs <- c(1000, 2000, 5000, 10000, 20000)
+for (D in c(1000, 100, 0.05)) cat(sprintf("D = %7.2f:", D), sprintf("%.4f", crossed(D, xs)), "\n")
+# shortest length (50 um steps) at which the small molecule reaches 45 %
+xs2 <- seq(50, 5000, by = 50)
+fs <- crossed(1000, xs2); fp <- crossed(100, xs2)
+j <- which(fs >= 0.45)[1]
+cat(sprintf("length %d um: small molecule %.3f, protein %.3f\n", xs2[j], fs[j], fp[j]))
+
+# Output:
+# D = 1000.00: 0.3944 0.4718 0.4995 0.5000 0.5000
+# D =  100.00: 0.1361 0.1926 0.2995 0.3986 0.4740
+# D =    0.05: 0.0005 0.0010 0.0024 0.0046 0.0086
+# length 1600 um: small molecule 0.452, protein 0.172
+```
+
+### Python
+
+```python
+# import numpy as np; march() as in C3
+w, ubar, M = 100.0, 1000.0, 50; dy = w / M
+y = (np.arange(1, M + 1) - 0.5) * dy; u = 6 * ubar * (y / w) * (1 - y / w)
+c0 = np.where(y < w / 2, 1.0, 0.0); up = y > w / 2
+
+def crossed(D, xs, dx=50.0):                       # fraction in the buffer half at each x
+    c = c0.copy(); xprev = 0.0; out = []
+    for x in xs:
+        c = march(c, u, D, dy, dx, (x - xprev) / dx); xprev = x
+        out.append(np.sum(u[up] * c[up]) / np.sum(u * c0))
+    return np.array(out)
+
+xs = [1000, 2000, 5000, 10000, 20000]
+for D in [1000, 100, 0.05]:
+    print(f"D = {D:7.2f}:", " ".join(f"{f:.4f}" for f in crossed(D, xs)))
+# shortest length (50 um steps) at which the small molecule reaches 45 %
+xs2 = np.arange(50, 5001, 50)
+fs, fp = crossed(1000, xs2), crossed(100, xs2)
+j = np.flatnonzero(fs >= 0.45)[0]
+print(f"length {xs2[j]} um: small molecule {fs[j]:.3f}, protein {fp[j]:.3f}")
+
+# Output:
+# D = 1000.00: 0.3944 0.4718 0.4995 0.5000 0.5000
+# D =  100.00: 0.1361 0.1926 0.2995 0.3986 0.4740
+# D =    0.05: 0.0005 0.0010 0.0024 0.0046 0.0086
+# length 1600 um: small molecule 0.452, protein 0.172
+```
+
+### Rust
+
+```rust
+// rust/examples/advection_diffusion_c4.rs  —  cargo run --example advection_diffusion_c4
+// C4: the H-filter. Fraction of the solute flux in the buffer half vs distance, for a
+// small molecule, a protein and a cell; the shortest channel that extracts 45 % of the
+// small molecule.
+// thomas() and march() as in C3 (written out in the file)
+
+fn main() {
+    let (w, ubar, m) = (100.0, 1000.0, 50);
+    let dy = w / m as f64;
+    let y: Vec<f64> = (1..=m).map(|j| (j as f64 - 0.5) * dy).collect();
+    let u: Vec<f64> = y.iter().map(|yj| 6.0 * ubar * (yj / w) * (1.0 - yj / w)).collect();
+    let c0: Vec<f64> = y.iter().map(|&yj| if yj < w / 2.0 { 1.0 } else { 0.0 }).collect();
+    let total: f64 = u.iter().zip(&c0).map(|(a, b)| a * b).sum();
+    // fraction in the buffer half (y > w/2) at each x
+    let crossed = |d: f64, xs: &[f64]| -> Vec<f64> {
+        let (mut c, mut xprev, dx) = (c0.clone(), 0.0, 50.0);
+        xs.iter().map(|&x| {
+            c = march(&c, &u, d, dy, dx, ((x - xprev) / dx).round() as usize);
+            xprev = x;
+            (0..m).filter(|&j| y[j] > w / 2.0).map(|j| u[j] * c[j]).sum::<f64>() / total
+        }).collect()
+    };
+    let xs = [1000.0, 2000.0, 5000.0, 10000.0, 20000.0];
+    for d in [1000.0, 100.0, 0.05] {
+        let f: Vec<String> = crossed(d, &xs).iter().map(|v| format!("{:.4}", v)).collect();
+        println!("D = {:7.2}: {}", d, f.join(" "));
+    }
+    // shortest length (50 um steps) at which the small molecule reaches 45 %
+    let xs2: Vec<f64> = (1..=100).map(|k| 50.0 * k as f64).collect();
+    let (fs, fp) = (crossed(1000.0, &xs2), crossed(100.0, &xs2));
+    let j = fs.iter().position(|&f| f >= 0.45).unwrap();
+    println!("length {} um: small molecule {:.3}, protein {:.3}", xs2[j], fs[j], fp[j]);
+}
+
+// Output:
+// D = 1000.00: 0.3944 0.4718 0.4995 0.5000 0.5000
+// D =  100.00: 0.1361 0.1926 0.2995 0.3986 0.4740
+// D =    0.05: 0.0005 0.0010 0.0024 0.0046 0.0086
+// length 1600 um: small molecule 0.452, protein 0.172
+```
+
+:::
+
+The small molecule is essentially mixed by 5 mm (49.95 %), the protein reaches 47 % only at 20 mm, and cells stay below 1 % throughout. (b) A 1.6 mm channel extracts 45.2 % of the small molecule but also 17.2 % of the protein: the extract contains about 38 % as much protein, relative to the sample, as small molecule. Separating by a factor 10 in $D$ gives only partial purity; separating a small molecule from cells (a factor $10^4$) is easy. That is why the H-filter is used for extracting small molecules from blood.
+:::
+
+**C5. A Christmas-tree gradient generator.**
+(a) Write `stage(c)` (B5) and compute the 8 outlet concentrations from the inlets $(0, 1)$ and from $(0, 1, 0)$.
+(b) The 8 streams (50 µm each) enter a 400 µm wide outlet channel with Poiseuille flow, mean 200 µm/s, and an IL-8-like protein ($D = 100$ µm²/s). Use $M = 160$ cells and march with $\Delta x = 50$ µm. Print $c$ at $y = 23.75, 123.75, 198.75, 273.75, 373.75$ µm and the contrast $\max c - \min c$ at $x = 0$, 1, 5 and 20 mm, for both inlet patterns.
+(c) Where along the channel would you image the neutrophils?
+
+::: {.callout-tip collapse="true" title="Hint"}
+`stage` in one line: `(k / n) * c(0, c) + ((n - k) / n) * c(c, 0)` with `k <- 0:n` (Python: `np.concatenate`). Cell $j$ belongs to stream `ceiling(y / 50)` ([`ceiling`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Round.html); Python `np.ceil`, 0-based index minus 1).
+:::
+
+::: {.callout-note collapse="true" title="Solution C5"}
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# thomas() and march() as in C3
+stage <- function(c) {                           # n streams -> n + 1 streams
+  n <- length(c); k <- 0:n
+  (k / n) * c(0, c) + ((n - k) / n) * c(c, 0)
+}
+tree <- function(inlets, nout) { c <- inlets; while (length(c) < nout) c <- stage(c); c }
+lin <- tree(c(0, 1), 8); hump <- tree(c(0, 1, 0), 8)
+cat("linear:", sprintf("%.3f", lin), "\n")
+cat("hump:  ", sprintf("%.3f", hump), "\n")
+W <- 400; M <- 160; dy <- W / M; y <- (1:M - 0.5) * dy
+u <- 6 * 200 * (y / W) * (1 - y / W)             # mean 200 um/s
+show <- c(10, 50, 80, 110, 150)                  # y = 23.75, 123.75, ..., 373.75 um
+for (cs in list(lin, hump)) {
+  c <- cs[ceiling(y / 50)]; xprev <- 0           # 8 streams of 50 um
+  for (x in c(0, 1000, 5000, 20000)) {
+    c <- march(c, u, 100, dy, 50, (x - xprev) / 50); xprev <- x
+    cat(sprintf("x = %5d um:", x), sprintf("%.3f", c[show]),
+        sprintf("  max - min %.3f\n", max(c) - min(c)))
+  }
+}
+
+# Output:
+# linear: 0.000 0.143 0.286 0.429 0.571 0.714 0.857 1.000
+# hump:   0.000 0.286 0.476 0.571 0.571 0.476 0.286 0.000
+# x =     0 um: 0.000 0.286 0.429 0.714 1.000   max - min 1.000
+# x =  1000 um: 0.076 0.282 0.496 0.711 0.923   max - min 0.855
+# x =  5000 um: 0.181 0.299 0.497 0.696 0.818   max - min 0.640
+# x = 20000 um: 0.339 0.390 0.498 0.607 0.661   max - min 0.324
+# x =     0 um: 0.000 0.476 0.571 0.476 0.000   max - min 0.571
+# x =  1000 um: 0.148 0.454 0.566 0.461 0.150   max - min 0.424
+# x =  5000 um: 0.307 0.427 0.515 0.431 0.307   max - min 0.210
+# x = 20000 um: 0.415 0.427 0.436 0.427 0.415   max - min 0.021
+```
+
+### Python
+
+```python
+# import numpy as np; march() as in C3
+def stage(c):                                      # n streams -> n + 1 streams
+    n = len(c); k = np.arange(n + 1)
+    return (k / n) * np.concatenate(([0.0], c)) + ((n - k) / n) * np.concatenate((c, [0.0]))
+
+def tree(inlets, nout):
+    c = np.array(inlets, dtype=float)
+    while len(c) < nout:
+        c = stage(c)
+    return c
+
+lin, hump = tree([0, 1], 8), tree([0, 1, 0], 8)
+print("linear:", " ".join(f"{v:.3f}" for v in lin))
+print("hump:  ", " ".join(f"{v:.3f}" for v in hump))
+W, M = 400.0, 160; dy = W / M; y = (np.arange(1, M + 1) - 0.5) * dy
+u = 6 * 200 * (y / W) * (1 - y / W)                # mean 200 um/s
+show = np.array([10, 50, 80, 110, 150]) - 1        # y = 23.75, 123.75, ..., 373.75 um
+for cs in [lin, hump]:
+    c = cs[np.ceil(y / 50).astype(int) - 1]; xprev = 0   # 8 streams of 50 um
+    for x in [0, 1000, 5000, 20000]:
+        c = march(c, u, 100, dy, 50, (x - xprev) / 50); xprev = x
+        print(f"x = {x:5d} um:", " ".join(f"{v:.3f}" for v in c[show]),
+              f"  max - min {c.max() - c.min():.3f}")
+
+# Output:
+# linear: 0.000 0.143 0.286 0.429 0.571 0.714 0.857 1.000
+# hump:   0.000 0.286 0.476 0.571 0.571 0.476 0.286 0.000
+# x =     0 um: 0.000 0.286 0.429 0.714 1.000   max - min 1.000
+# x =  1000 um: 0.076 0.282 0.496 0.711 0.923   max - min 0.855
+# x =  5000 um: 0.181 0.299 0.497 0.696 0.818   max - min 0.640
+# x = 20000 um: 0.339 0.390 0.498 0.607 0.661   max - min 0.324
+# x =     0 um: 0.000 0.476 0.571 0.476 0.000   max - min 0.571
+# x =  1000 um: 0.148 0.454 0.566 0.461 0.150   max - min 0.424
+# x =  5000 um: 0.307 0.427 0.515 0.431 0.307   max - min 0.210
+# x = 20000 um: 0.415 0.427 0.436 0.427 0.415   max - min 0.021
+```
+
+### Rust
+
+```rust
+// rust/examples/advection_diffusion_c5.rs  —  cargo run --example advection_diffusion_c5
+// C5: the Christmas-tree gradient generator. Outlet staircase from the mixing stages,
+// then the 8 streams flowing side by side in a 400 um outlet channel.
+// thomas() and march() as in C3 (written out in the file)
+
+// n streams -> n + 1 streams: channel k takes k/n of stream k-1 and (n-k)/n of stream k
+fn stage(c: &[f64]) -> Vec<f64> {
+    let n = c.len();
+    (0..=n).map(|k| {
+        let left = if k > 0 { c[k - 1] } else { 0.0 };
+        let right = if k < n { c[k] } else { 0.0 };
+        (k as f64 / n as f64) * left + ((n - k) as f64 / n as f64) * right
+    }).collect()
+}
+
+fn tree(inlets: &[f64], nout: usize) -> Vec<f64> {
+    let mut c = inlets.to_vec();
+    while c.len() < nout { c = stage(&c); }
+    c
+}
+
+fn show(v: &[f64]) -> String { v.iter().map(|x| format!("{:.3}", x)).collect::<Vec<_>>().join(" ") }
+
+fn main() {
+    let lin = tree(&[0.0, 1.0], 8);
+    let hump = tree(&[0.0, 1.0, 0.0], 8);
+    println!("linear: {}", show(&lin));
+    println!("hump:   {}", show(&hump));
+    let (wo, m) = (400.0, 160);
+    let dy = wo / m as f64;
+    let y: Vec<f64> = (1..=m).map(|j| (j as f64 - 0.5) * dy).collect();
+    let u: Vec<f64> = y.iter().map(|yj| 6.0 * 200.0 * (yj / wo) * (1.0 - yj / wo)).collect(); // mean 200 um/s
+    let idx = [9, 49, 79, 109, 149]; // y = 23.75, 123.75, ..., 373.75 um
+    for cs in [&lin, &hump] {
+        let mut c: Vec<f64> = y.iter().map(|yj| cs[(yj / 50.0).ceil() as usize - 1]).collect(); // 8 streams of 50 um
+        let mut xprev = 0.0;
+        for x in [0.0, 1000.0, 5000.0, 20000.0] {
+            c = march(&c, &u, 100.0, dy, 50.0, ((x - xprev) / 50.0) as usize);
+            xprev = x;
+            let sel: Vec<f64> = idx.iter().map(|&i| c[i]).collect();
+            let (mx, mn) = (c.iter().cloned().fold(f64::MIN, f64::max), c.iter().cloned().fold(f64::MAX, f64::min));
+            println!("x = {:5} um: {}   max - min {:.3}", x, show(&sel), mx - mn);
+        }
+    }
+}
+
+// Output:
+// linear: 0.000 0.143 0.286 0.429 0.571 0.714 0.857 1.000
+// hump:   0.000 0.286 0.476 0.571 0.571 0.476 0.286 0.000
+// x =     0 um: 0.000 0.286 0.429 0.714 1.000   max - min 1.000
+// x =  1000 um: 0.076 0.282 0.496 0.711 0.923   max - min 0.855
+// x =  5000 um: 0.181 0.299 0.497 0.696 0.818   max - min 0.640
+// x = 20000 um: 0.339 0.390 0.498 0.607 0.661   max - min 0.324
+// x =     0 um: 0.000 0.476 0.571 0.476 0.000   max - min 0.571
+// x =  1000 um: 0.148 0.454 0.566 0.461 0.150   max - min 0.424
+// x =  5000 um: 0.307 0.427 0.515 0.431 0.307   max - min 0.210
+// x = 20000 um: 0.415 0.427 0.436 0.427 0.415   max - min 0.021
+```
+
+:::
+
+(a) Two inlets give the linear staircase $k/7$; three give a hump with plateau 0.571. (b) At 1 mm the staircase has become a smooth profile (the printed points lie close to a straight line from 0.08 to 0.92 for the linear pattern) while the contrast is still 86 %. By 5 mm the linear profile has lost a third of its contrast, mostly at the edges where the slow fluid near the walls has had more time to diffuse; at 20 mm only a third remains. The hump flattens much faster (21 % of its contrast at 5 mm, 2 % at 20 mm), because its shape has a shorter length scale. (c) Roughly 0.5–2 mm downstream: smooth, and still close to the designed shape. Further downstream the cells see a weaker gradient than designed; nearer the junction they see steps.
+:::
+
+**C6. Estimating a diffusion coefficient (Part 9).** A fluorescent dye of unknown $D$ flows in the sample half of the T-sensor ($w = 100$ µm, nominal $\bar u = 1000$ µm/s). At $x = 1$ mm a line scan across the channel gives 25 pixels of 4 µm (synthetic data: model with $D = 400$ µm²/s plus noise with sd 0.02):
+
+```
+0.881 0.906 0.864 0.859 0.852 0.828 0.824 0.758 0.753 0.681 0.617 0.578 0.496
+0.457 0.383 0.346 0.269 0.216 0.153 0.157 0.112 0.180 0.100 0.089 0.125
+```
+
+(a) Write `profile(D, M, dx)`: march to $x = 1$ mm with the Poiseuille profile and average the $M$ cells over the 25 pixels. Fit $D$ by minimising the sum of squared residuals with Brent's method on $[10, 3000]$ µm²/s (*Optimisation in one dimension*), with $M = 50$, $\Delta x = 25$ µm.
+(b) Refit with coarser and finer grids: $(M, \Delta x) = (50, 1000), (50, 250), (50, 100), (100, 10), (200, 5)$. How much does the estimate depend on the grid?
+(c) Refit assuming $\bar u = 800$ µm/s. Compare with B6(c).
+
+::: {.callout-tip collapse="true" title="Hint"}
+R: [`optimize(sse, c(10, 3000), tol = 1e-6)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/optimize.html); pixel averages with [`colMeans(matrix(c, M / 25))`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/colSums.html). Python: [`minimize_scalar(sse, bounds=(10, 3000), method="bounded")`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize_scalar.html), pixel averages with `c.reshape(25, M // 25).mean(axis=1)`. Rust: [`argmin`'s `BrentOpt`](https://docs.rs/argmin/latest/argmin/solver/brent/struct.BrentOpt.html).
+:::
+
+::: {.callout-note collapse="true" title="Solution C6"}
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# thomas() and march() as in C3
+w <- 100
+cobs <- c(0.881, 0.906, 0.864, 0.859, 0.852, 0.828, 0.824, 0.758, 0.753, 0.681, 0.617,
+          0.578, 0.496, 0.457, 0.383, 0.346, 0.269, 0.216, 0.153, 0.157, 0.112, 0.180,
+          0.100, 0.089, 0.125)
+profile <- function(D, M = 50, dx = 25, ubar = 1000) {   # model at x = 1 mm, 25 pixels
+  dy <- w / M; y <- (1:M - 0.5) * dy
+  u <- 6 * ubar * (y / w) * (1 - y / w)
+  c <- march(ifelse(y < w / 2, 1, 0), u, D, dy, dx, 1000 / dx)
+  colMeans(matrix(c, M / 25))                    # average over each 4 um pixel
+}
+fitD <- function(M = 50, dx = 25, ubar = 1000) {
+  sse <- function(D) sum((cobs - profile(D, M, dx, ubar))^2)
+  o <- optimize(sse, c(10, 3000), tol = 1e-6)
+  c(D = o$minimum, sse = o$objective)
+}
+f <- fitD(); cat(sprintf("fit: D = %.2f um^2/s, SSE = %.5f\n", f["D"], f["sse"]))
+for (g in list(c(50, 1000), c(50, 250), c(50, 100), c(50, 25), c(100, 10), c(200, 5)))
+  cat(sprintf("M = %3d, dx = %6.1f: D = %.2f\n", g[1], g[2], fitD(g[1], g[2])["D"]))
+cat(sprintf("if the flow were 800 um/s: D = %.2f\n", fitD(ubar = 800)["D"]))
+
+# Output:
+# fit: D = 398.20 um^2/s, SSE = 0.00976
+# M =  50, dx = 1000.0: D = 504.86
+# M =  50, dx =  250.0: D = 418.80
+# M =  50, dx =  100.0: D = 404.88
+# M =  50, dx =   25.0: D = 398.20
+# M = 100, dx =   10.0: D = 396.42
+# M = 200, dx =    5.0: D = 395.86
+# if the flow were 800 um/s: D = 318.56
+```
+
+### Python
+
+```python
+# import numpy as np; march() as in C3
+from scipy.optimize import minimize_scalar
+
+w = 100.0
+cobs = np.array([0.881, 0.906, 0.864, 0.859, 0.852, 0.828, 0.824, 0.758, 0.753, 0.681, 0.617,
+                 0.578, 0.496, 0.457, 0.383, 0.346, 0.269, 0.216, 0.153, 0.157, 0.112, 0.180,
+                 0.100, 0.089, 0.125])
+
+def profile(D, M=50, dx=25.0, ubar=1000.0):        # model at x = 1 mm, 25 pixels
+    dy = w / M; y = (np.arange(1, M + 1) - 0.5) * dy
+    u = 6 * ubar * (y / w) * (1 - y / w)
+    c = march(np.where(y < w / 2, 1.0, 0.0), u, D, dy, dx, 1000 / dx)
+    return c.reshape(25, M // 25).mean(axis=1)     # average over each 4 um pixel
+
+def fitD(M=50, dx=25.0, ubar=1000.0):
+    sse = lambda D: np.sum((cobs - profile(D, M, dx, ubar))**2)
+    o = minimize_scalar(sse, bounds=(10, 3000), method="bounded", options={"xatol": 1e-6})
+    return o.x, o.fun
+
+D, s = fitD(); print(f"fit: D = {D:.2f} um^2/s, SSE = {s:.5f}")
+for M, dx in [(50, 1000), (50, 250), (50, 100), (50, 25), (100, 10), (200, 5)]:
+    print(f"M = {M:3d}, dx = {dx:6.1f}: D = {fitD(M, dx)[0]:.2f}")
+print(f"if the flow were 800 um/s: D = {fitD(ubar=800)[0]:.2f}")
+
+# Output:
+# fit: D = 398.20 um^2/s, SSE = 0.00976
+# M =  50, dx = 1000.0: D = 504.86
+# M =  50, dx =  250.0: D = 418.80
+# M =  50, dx =  100.0: D = 404.88
+# M =  50, dx =   25.0: D = 398.20
+# M = 100, dx =   10.0: D = 396.42
+# M = 200, dx =    5.0: D = 395.86
+# if the flow were 800 um/s: D = 318.56
+```
+
+### Rust
+
+```rust
+// rust/examples/advection_diffusion_c6.rs  —  cargo run --example advection_diffusion_c6
+// C6: estimate D by fitting the marching model to a synthetic T-sensor profile, with
+// Brent's method (argmin's BrentOpt). Grid refinement of the fit; a wrong flow rate.
+use argmin::core::{CostFunction, Error, Executor, State};
+use argmin::solver::brent::BrentOpt;
+
+// thomas() and march() as in C3 (written out in the file)
+
+const COBS: [f64; 25] = [0.881, 0.906, 0.864, 0.859, 0.852, 0.828, 0.824, 0.758, 0.753, 0.681, 0.617,
+                         0.578, 0.496, 0.457, 0.383, 0.346, 0.269, 0.216, 0.153, 0.157, 0.112, 0.180,
+                         0.100, 0.089, 0.125];
+const W: f64 = 100.0;
+
+// model at x = 1 mm, averaged over 25 pixels of 4 um
+fn profile(d: f64, m: usize, dx: f64, ubar: f64) -> Vec<f64> {
+    let dy = W / m as f64;
+    let y: Vec<f64> = (1..=m).map(|j| (j as f64 - 0.5) * dy).collect();
+    let u: Vec<f64> = y.iter().map(|yj| 6.0 * ubar * (yj / W) * (1.0 - yj / W)).collect();
+    let c0: Vec<f64> = y.iter().map(|&yj| if yj < W / 2.0 { 1.0 } else { 0.0 }).collect();
+    let c = march(&c0, &u, d, dy, dx, (1000.0 / dx).round() as usize);
+    c.chunks(m / 25).map(|p| p.iter().sum::<f64>() / p.len() as f64).collect()
+}
+
+struct Sse { m: usize, dx: f64, ubar: f64 }
+impl CostFunction for Sse {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, d: &f64) -> Result<f64, Error> {
+        Ok(profile(*d, self.m, self.dx, self.ubar).iter().zip(COBS.iter()).map(|(p, o)| (o - p).powi(2)).sum())
+    }
+}
+
+fn fit_d(m: usize, dx: f64, ubar: f64) -> Result<(f64, f64), Error> {
+    let solver = BrentOpt::new(10.0, 3000.0).set_tolerance(f64::EPSILON.sqrt(), 1e-6);
+    let res = Executor::new(Sse { m, dx, ubar }, solver).configure(|s| s.max_iters(100)).run()?;
+    Ok((*res.state().get_best_param().unwrap(), res.state().get_best_cost()))
+}
+
+fn main() -> Result<(), Error> {
+    let (d, s) = fit_d(50, 25.0, 1000.0)?;
+    println!("fit: D = {:.2} um^2/s, SSE = {:.5}", d, s);
+    for (m, dx) in [(50, 1000.0), (50, 250.0), (50, 100.0), (50, 25.0), (100, 10.0), (200, 5.0)] {
+        println!("M = {:3}, dx = {:6.1}: D = {:.2}", m, dx, fit_d(m, dx, 1000.0)?.0);
+    }
+    println!("if the flow were 800 um/s: D = {:.2}", fit_d(50, 25.0, 800.0)?.0);
+    Ok(())
+}
+
+// Output:
+// fit: D = 398.20 um^2/s, SSE = 0.00976
+// M =  50, dx = 1000.0: D = 504.86
+// M =  50, dx =  250.0: D = 418.80
+// M =  50, dx =  100.0: D = 404.88
+// M =  50, dx =   25.0: D = 398.20
+// M = 100, dx =   10.0: D = 396.42
+// M = 200, dx =    5.0: D = 395.86
+// if the flow were 800 um/s: D = 318.56
+```
+
+:::
+
+(a) $D = 398$ µm²/s against the true 400: the noise allows a few µm²/s either way. Every evaluation of the objective runs the PDE solver (40 tridiagonal solves); Brent needs 19 of them. (b) The grid matters more than the noise: a single 1 mm step gives 505 (27 % above the converged value), $\Delta x = 250$ µm gives 419, and the estimate settles near 396 only for $\Delta x \le 25$ µm. The solver's numerical diffusion is absorbed into the fitted $D$, which is therefore biased **upwards** on coarse grids. Refine until the fitted parameter stops changing. (c) $D = 318.56 = 0.8 \times 398.20$: the data fix only $D/\bar u$. A 20 % error in the flow rate is a 20 % error in $D$, whatever the quality of the profile.
+:::
+
+## Where this leads
+
+- **Reaction–diffusion and pattern formation** (unit 35) adds production and degradation terms to the diffusion equation; the explicit/implicit stability rules and grid-refinement checks of this unit carry over.
+- The flow profile was **given**. Computing flow fields in real geometries (the Stokes and Navier–Stokes equations) and handling curved walls is the subject of *Beyond rectangles: finite elements and flow* (Part 11).
+- Better advection schemes (higher-order upwind, flux limiters, semi-Lagrangian methods) reduce numerical diffusion without wiggles; we do not cover them. The fit in C6 had one parameter; fitting several (for example $D$ and an unknown inlet concentration) uses the methods of *Nonlinear least squares and ODE fitting*, and the identifiability problem of B6 is treated in *Identifiability and uncertainty of fitted parameters*.

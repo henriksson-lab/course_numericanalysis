@@ -1,0 +1,131 @@
+---
+title: "Quiz: beyond rectangles: finite elements and flow"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions on finite volumes, finite elements and flow. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** A culture chamber has round pillars of radius 50 µm. Name two problems a square finite-difference grid has with them.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Draw the grid cells that lie inside a pillar. Then ask what happens if you want finer resolution only near the pillars.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) The round wall becomes a **staircase**: its position is wrong by up to $\Delta x/2$, and a no-flux (or uptake) condition on a slanted wall has no clean stencil, so the flux through the wall, often the quantity of interest, is least accurate. (2) Refinement is **global**: a finer grid near the pillars is finer along whole grid lines across the chamber, so halving $\Delta x$ costs 4× the unknowns in 2D and 8× in 3D.
+:::
+
+---
+
+**Q2.** What equation does a finite-volume method write for each cell, and why does it conserve mass exactly?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Think of the mass balance used to derive the diffusion equation, before taking a limit.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+One balance per cell: (flux in through all faces) − (flux out) = uptake or accumulation inside. The flux through a face is computed once and used with opposite signs for the two cells sharing it, so what leaves one cell enters its neighbour exactly. Summed over all cells the internal fluxes cancel, and the total changes only by boundary fluxes and sources. This holds for cells of any shape.
+:::
+
+---
+
+**Q3.** On the nodes $0, 2, 3$, what are the values of the hat function $\varphi_1$ (the one at $x = 2$) at $x = 1$, $x = 2.5$ and $x = 3$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\varphi_1$ is 1 at its own node, 0 at the neighbouring nodes, and a straight line in between.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\varphi_1(1) = 1/2$ (halfway up the left side, from 0 at $x = 0$ to 1 at $x = 2$), $\varphi_1(2.5) = 1/2$ (halfway down the right side), $\varphi_1(3) = 0$.
+:::
+
+---
+
+**Q4.** In the weak form, why do we integrate by parts, and what happens to a no-flux boundary?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How many derivatives does a piecewise linear function have? What is $D u'$ at a wall?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Integration by parts moves one derivative from $u$ onto the test function, so only **first** derivatives remain. A piecewise linear $u_h$ has a first derivative (piecewise constant) but no second derivative at the nodes. The boundary term it produces is $D u'\varphi_i$, i.e. the flux; at a no-flux wall it is zero, so the condition is satisfied automatically (a **natural** boundary condition) with no ghost point.
+:::
+
+---
+
+**Q5.** For $-D u'' = f$ on a uniform mesh, how does the finite element matrix compare with the finite-difference matrix? And with uptake $k u$ added?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Element matrix $\frac{D}{h}\begin{pmatrix}1&-1\\-1&1\end{pmatrix}$; assemble two neighbours.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Interior rows are $\frac{D}{h}(-1, 2, -1)$ with right-hand side $fh$: the second-difference equation multiplied by $h$. With uptake, the consistent FEM row has $\frac{kh}{6}(u_{i-1} + 4u_i + u_{i+1})$ where finite differences have $kh\,u_i$. Lumping the uptake onto the diagonal makes the two identical.
+:::
+
+---
+
+**Q6.** The drug penetrates a hydrogel slab with length scale $\lambda = \sqrt{D/k} = 50$ µm, and the slab is 1 mm thick. With 10 elements, why is a graded mesh $x_i = L(i/N)^2$ better than a uniform one? Does it change the order of convergence?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Where does $u$ change? How many uniform nodes are there?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+All the change is in the top ~150 µm. The uniform mesh ($h = 100$ µm) has one node in that layer; the graded mesh has nodes at 10, 40 and 90 µm. The maximum error drops from 0.064 to 0.014 for the same 10 unknowns. The order stays 2 (error ∝ $N^{-2}$ for both); grading changes the constant, about 4.5 times smaller here.
+:::
+
+---
+
+**Q7.** A finite element solution of the slab with 4 elements of 250 µm returns $u = -0.17$ at 250 µm. What went wrong, how would you detect it, and how do you fix it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at the sign of the off-diagonal entry $-D/h + kh/6$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The elements are longer than $\sqrt6\,\lambda \approx 122$ µm, so the off-diagonal entries become positive and the discrete maximum principle is lost: the solution oscillates and goes negative. Detect it by checking that concentrations stay within physical bounds (here between 0 and the bath value) and by refining the mesh and watching the answer settle. Fix it by refining where the solution changes (elements shorter than about $\lambda$ in the layer). Lumping keeps the values positive but does not make them accurate.
+:::
+
+---
+
+**Q8.** Estimate the Reynolds number for water ($\rho = 1000$ kg/m³, $\mu = 10^{-3}$ Pa s) flowing at 1 mm/s in a 100 µm channel. What does that mean for the equations?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$Re = \rho U \ell / \mu$; convert everything to SI units.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$Re = 1000 \cdot 10^{-3} \cdot 10^{-4} / 10^{-3} = 0.1$. Viscous forces dominate inertia, so the nonlinear inertia term of Navier–Stokes can be dropped: **Stokes flow**, $\mu\nabla^2\mathbf u = \nabla p$, $\nabla\cdot\mathbf u = 0$. It is linear, laminar (no turbulence), and one sparse linear solve gives the flow field.
+:::
+
+---
+
+**Q9.** In a straight channel of width $w = 100$ µm the mean speed is 1000 µm/s. What is the speed at the centre and at the walls? Where did *Flow plus diffusion* use this?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Poiseuille: $u(y) = \frac{G}{2\mu}\,y\,(w - y)$. Average it over $0 \le y \le w$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The mean of $y(w-y)$ over the channel is $w^2/6$ and its maximum (at $y = w/2$) is $w^2/4$, so peak = 1.5 × mean = 1500 µm/s; at the walls the speed is 0 (no slip). *Flow plus diffusion* took this parabola as the **given** velocity of the T-sensor; here it is the exact solution of Stokes flow in a straight channel. Around pillars there is no formula and the flow must be computed.
+:::
+
+---
+
+**Q10.** You are asked to (a) fit a diffusion coefficient to 50 measured profiles across a straight channel, and (b) predict the drug concentration around the pillars of a new chip design drawn in CAD. Which would you do with a finite-difference script, and which with a finite element tool such as COMSOL or FEniCS? What check would you run on the tool?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Geometry, number of solves, and whether the flow field is known.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(a) A finite-difference script: the geometry is a rectangle, the flow profile is known (Poiseuille), and fitting needs many fast solves inside an optimiser (Part 9). (b) A finite element (or finite-volume) tool: curved walls from CAD, and the flow field must be computed (Stokes) before the transport. Checks: refine the mesh until the answer settles, check conservation (flux in = uptake + flux out), and reproduce a special case with a known answer, such as Poiseuille flow in a straight section or a 1D slice from your own finite-difference code.
+:::

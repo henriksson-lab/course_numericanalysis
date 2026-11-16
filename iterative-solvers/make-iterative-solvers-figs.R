@@ -260,10 +260,12 @@ rj <- jacobi(A, b, trace = TRUE); rg <- gauss_seidel(A, b, trace = TRUE)
 rc <- pcg(A, b); ri <- pcg(A, b, ic_prec(A, m)); rd <- pcg(A, b, function(r) r / diag(A))
 cat("m = 63: Jacobi", rj$it, " GS", rg$it, " CG", rc$it, " Jacobi-PCG", rd$it, " IC-CG", ri$it, "\n")
 svg("fig04-residuals.svg", width = 11, height = 5.2)
-par_big(mar = c(5, 5.5, 1, 1))
-plot(NA, log = "xy", xlim = c(1, 2e4), ylim = c(1e-6, 1.5), yaxt = "n",
-     xlab = "iteration (log scale)", ylab = "relative residual")
-axis(2, at = 10^(-6:0), labels = c("1e-6", "1e-5", "1e-4", "1e-3", "0.01", "0.1", "1"), las = 1)
+par_big(mar = c(5, 7, 1, 1), mgp = c(5, 1, 0))
+plot(NA, log = "xy", xlim = c(1, 2e4), ylim = c(1e-6, 20), yaxt = "n", xaxt = "n",
+     xlab = "", ylab = "relative residual")
+axis(1, at = 10^(0:4), labels = c("1", "10", "100", "1000", "10000"), mgp = c(3, 1, 0))
+mtext("iteration + 1 (log scale)", side = 1, line = 3.2, cex = 1.5)
+axis(2, at = 10^(-6:1), labels = c("1e-6", "1e-5", "1e-4", "1e-3", "0.01", "0.1", "1", "10"), las = 1)
 k <- function(r) seq_along(r)
 lines(k(rj$res), rj$res, lwd = 3, col = oi["orange"])
 lines(k(rg$res), rg$res, lwd = 3, col = oi["purple"])
@@ -298,9 +300,9 @@ lines(ms, cnt$gs, type = "b", pch = 15, lwd = 3, col = oi["purple"], cex = 1.3)
 lines(ms, cnt$cg, type = "b", pch = 17, lwd = 3, col = oi["blue"], cex = 1.3)
 lines(ms, cnt$ic, type = "b", pch = 18, lwd = 3, col = oi["green"], cex = 1.6)
 lines(ms, cnt$mg, type = "b", pch = 19, lwd = 3, col = oi["black"], cex = 1.3)
-text(255, 6e4, "Jacobi: ~ 1/h^2\n(dotted: from cos(pi h))", col = oi["orange"], cex = 1.2)
-text(400, 900, "CG: ~ 1/h", col = oi["blue"], cex = 1.3)
-text(400, 7, "multigrid: constant", cex = 1.3)
+text(300, 2.5e4, "Jacobi: ~ 1/h^2\n(dotted: from cos(pi h))", col = oi["orange"], cex = 1.2)
+text(300, 1600, "CG: ~ 1/h", col = oi["blue"], cex = 1.3)
+text(300, 8.5, "multigrid: constant", cex = 1.3)
 legend("topleft", bty = "n", cex = 1.2, lwd = 3, pch = c(19, 15, 17, 18, 19),
        col = oi[c("orange", "purple", "blue", "green", "black")],
        legend = c("Jacobi", "Gauss-Seidel", "CG", "CG + incomplete Cholesky", "multigrid V-cycles"))
@@ -332,14 +334,15 @@ image(g, g, cfield, col = seq_pal, zlim = c(0, 1), asp = 1, xlab = "x (mm)", yla
       main = "Perfused chamber, flow ->, Pe = 50")
 contour(g, g, cfield, levels = 0.25, add = TRUE, lwd = 3, col = "white", drawlabels = FALSE)
 arrows(0.1, 0.5, 0.35, 0.5, lwd = 4, col = "white", length = 0.15)
-par_big(mar = c(4.5, 5.5, 3, 1))
-plot(NA, xlim = c(0, 300), ylim = c(1e-6, 1e4), log = "y", yaxt = "n",
-     xlab = "iteration (matrix-vector products)", ylab = "relative residual", main = "Nonsymmetric A")
+par_big(mar = c(4.5, 7, 3, 1), mgp = c(5, 1, 0))
+plot(NA, xlim = c(0, 300), ylim = c(1e-6, 1e4), log = "y", yaxt = "n", xlab = "",
+     ylab = "relative residual", main = "Nonsymmetric A")
+mtext("iteration (matrix-vector products)", side = 1, line = 3, cex = 1.5)
 axis(2, at = 10^c(-6, -4, -2, 0, 2, 4), labels = c("1e-6", "1e-4", "0.01", "1", "100", "1e4"), las = 1)
 lines(seq_along(rcg) - 1, rcg, lwd = 3, col = oi["red"])
 lines(seq_along(rgr$res) - 1, rgr$res, lwd = 3, col = oi["sky"])
 lines(0:rgm$it, c(1, rgm$res), lwd = 3, col = oi["blue"])
-legend("topright", bty = "n", cex = 1.25, lwd = 3, col = oi[c("red", "blue", "sky")],
+legend("bottomright", bty = "n", cex = 1.25, lwd = 3, col = oi[c("red", "blue", "sky")],
        legend = c("CG (wrong method)", sprintf("GMRES (%d)", rgm$it),
                   sprintf("GMRES(20), restarted (%d)", length(rgr$res) - 1)))
 dev.off()
@@ -354,11 +357,11 @@ m1 <- 63; x1 <- (1:m1) / (m1 + 1); set.seed(2)
 e0 <- sin(pi * x1) + 0.5 * rnorm(m1) * sin(pi * x1)
 T1 <- as.matrix(lap1(m1)); e <- e0
 for (s in 1:5) e <- e - (2 / 3) * (T1 %*% e)[, 1] / 2         # weighted Jacobi on A e = 0
-plot(x1, e0, type = "l", lwd = 2, col = oi["grey"], ylim = c(-0.3, 1.8), xlab = "position",
+plot(x1, e0, type = "l", lwd = 2, col = oi["grey"], ylim = c(-0.3, 2.6), xlab = "position",
      ylab = "error", main = "1. smooth  2. coarsen")
 lines(x1, e, lwd = 3, col = oi["blue"])
 ic <- seq(2, m1, by = 4); points(x1[ic], e[ic], pch = 19, cex = 1.4, col = oi["red"])
-legend("topright", bty = "n", cex = 1.15, lwd = c(2, 3, NA), pch = c(NA, NA, 19),
+legend("topleft", bty = "n", cex = 1.15, lwd = c(2, 3, NA), pch = c(NA, NA, 19),
        col = oi[c("grey", "blue", "red")],
        legend = c("error now", "after 5 smoothing sweeps", "smooth error on a coarse grid"))
 # right: the V-cycle

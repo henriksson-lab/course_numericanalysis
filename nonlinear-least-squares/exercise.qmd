@@ -195,6 +195,48 @@ In R, [`nls`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/nls.html)
 
 **C7. Multistart.** Fit from the 36 starts $k_a \in \{0.03, 0.1, 0.3, 1, 3, 10\}$, $k_e \in 1.5\times\{0.03, \dots, 10\}$, $V = 10$, in log-parameters. Tabulate where the fits end (parameters and RSS, rounded to 4 digits). How many minima are there? Are they equally good? Which one would you report, and why?
 
+## Explore {#explore}
+
+The demo below runs the lecture's Gauss–Newton and Levenberg–Marquardt code on the plasma data in your browser: forward-difference Jacobian, one QR least-squares solve per pass, and for LM Marquardt's scaling with $\lambda_0 = 0.01$, divided by 10 after an accepted step and multiplied by 10 after a rejected one. Panel (a) is the RSS landscape of the lecture over $(k_a, k_e)$ on log axes, with $V$ at its best value for each pair; the stars are the fit ($V = 20.2$ L) and its flip-flop mirror ($V = 3.8$ L), the dashed line is $k_a = k_e$. The paths are the iterates of both methods projected onto $(k_a, k_e)$ (vermillion: Gauss–Newton; green: Levenberg–Marquardt); crosses are rejected LM trial points, and a square on the border marks a point off the map. The methods move all three parameters, so the start $V$ is a slider, and a path need not follow the landscape exactly. Drag the start point (or click on the map) to choose $k_a$ and $k_e$. **Step** does one pass of each method, **Run** keeps stepping. Panel (b) shows the data and the current curves; the table gives the pass, the parameters, the RSS, $\lambda$, whether the last step was accepted, and the status. The buttons **(ka, ke, V)** and **log** switch between fitting the parameters and their logarithms.
+
+The browser computes in the same IEEE doubles as R, Python and Rust, so the iterates agree with the lecture to the digits shown. In the last passes, where the RSS changes only in the 15th digit, whether a step counts as "down" depends on rounding, so the number of final passes can differ by one or two. The demo also stops when a rejected step is already below the tolerance.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="gnlm" data-start="0.5 0.1 10" data-param="lin"></div>
+<script src="../demos/dist/gnlm.js"></script>
+```
+
+**E1. (a good start)** Click the **good** start $(0.5, 0.1, 10)$ and press **Step** repeatedly. Write down the RSS of both methods after each pass and $\lambda$ for Levenberg–Marquardt. How many passes does each need? Do the two paths differ much, and why not?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Both start at RSS $93.53$. Gauss–Newton: $15.91$, $0.9775$, $0.09135$, $0.06657$, $0.06646745$, $0.06646744$, the iterates of the lecture's `gauss_newton` and of `nls`; it stops after 8 passes at $(1.015, 0.1906, 20.22)$. Levenberg–Marquardt: $12.41$, $0.8018$, $0.07744$, $0.06650$, $0.06646744$; every step is accepted, so $\lambda$ falls tenfold per pass from $0.01$ to $10^{-9}$, and it stops after 7 passes. With $\lambda \le 10^{-3}$ the damping rows are tiny and the LM step is almost the Gauss–Newton step: the two paths lie nearly on top of each other along the valley. Near the minimum both gain two to three digits per pass.
+:::
+
+**E2. (a bad start)** Click **bad**, $(3, 0.05, 50)$, and step. Where does the first Gauss–Newton step go, and what does the table say? Follow Levenberg–Marquardt: which passes are rejected, what happens to $\lambda$ after each, and how many passes, accepted and rejected steps does it need in total?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Gauss–Newton jumps to $k_a = -2.225$, $k_e = 0.1787$, $V = 0.0443$ with RSS $6.7\times10^{29}$: off the map (a negative rate cannot be drawn on a log axis), the curve off the scale, status *diverged*. That is the step that makes `nls` stop with "singular gradient". LM rejects pass 1 (trial RSS $7.0\times10^{21}$, the same wild step slightly damped) and pass 2 (trial RSS $11.4$), so $\lambda$ goes $0.01 \to 0.1 \to 1$. At $\lambda = 1$ the step is short and downhill: pass 3 is accepted (RSS $4.63$, $\lambda = 0.1$), pass 4 rejected again ($\lambda = 1$), pass 5 accepted ($3.39$). Then every step is accepted, $\lambda$ falls tenfold per pass and the steps become Gauss–Newton steps: $2.39$, $0.121$, $0.0685$, $0.06647$. The demo stops after 13 passes, 9 accepted and 4 rejected (the last rejection is a step already below the tolerance), at $(1.015, 0.1906, 20.22)$. The lecture's run needs 15 passes; the difference is only in the last passes, where rounding decides whether the RSS went down.
+:::
+
+**E3. (log-parameters are not enough)** Keep the **bad** start and switch to **log**. Step again. Does Gauss–Newton stay positive now? Does it converge? How many passes does Levenberg–Marquardt need now?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+In logs every iterate is positive, but Gauss–Newton is still not safe: the first step crosses the diagonal to $(0.526, 0.655, 18.4)$ with RSS $18.15$, **twice** the start's $9.53$; the second goes to $k_a = 2.2\times10^{-4}$, $k_e = 617$, $V = 0.0031$ (RSS $63.97$, close to $\sum y_i^2 = 64.5$: the model predicts almost nothing). There the Jacobian is numerically singular and the method stops (*singular gradient*), as on the lecture slide. Levenberg–Marquardt rejects only the first step ($\lambda \to 0.1$), then goes straight down the valley: RSS $2.45$, $0.108$, $0.0665$, done after 8 passes (6 accepted, 2 rejected) instead of 13. Log-parameters give positivity and better scaling; damping is still needed.
+:::
+
+**E4. (the mirror)** Switch back to **(ka, ke, V)** and click **mirror**: the good start with $k_a$ and $k_e$ swapped and $V$ multiplied by $k_e/k_a$, i.e. $(0.1, 0.5, 2)$. Compare the starting RSS with E1, run both methods, and compare the end point, its RSS and the curve in panel (b) with the fit. Then drag the start point to a few places on each side of the dashed line $k_a = k_e$ and press **Run**. Which minimum does each start find?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+The starting RSS is $93.53$, the same as the good start: the swapped parameters give the same curve already at the start. Both methods converge (GN 8 passes, LM 8 passes with one final rejection) to $(0.1906, 1.015, 3.796)$ with RSS $0.06646744$, equal to the fit's in all printed digits; the curve in panel (b) is the same curve. This is the flip-flop: the data cannot tell fast absorption and slow elimination from the reverse. Levenberg–Marquardt mostly finds the minimum on the side of the line where it starts: starts with $k_a > k_e$ mostly end at the fit, starts with $k_a < k_e$ almost always at the mirror, as in the multistart of C7. Gauss–Newton, started far from either minimum, often diverges instead. Only the RSS cannot decide; prior knowledge ($V = 3.8$ L is about the plasma volume) or an IV dose can.
+:::
+
+**E5. (watching $\lambda$ work)** Click **far**, $(10, 4.5, 10)$, still in **(ka, ke, V)**, and press **Run**. How does $\lambda$ behave during passes 4–18, and what does the LM path do on the map? Where does it end, although the start has $k_a > k_e$? Then switch to **log** with the same start: what happens now?
+
+::: {.callout-note collapse="true" title="Answer E5"}
+Gauss–Newton jumps to $k_a = 123$, $k_e = -27.1$, RSS $1.8\times10^{282}$: diverged. Levenberg–Marquardt rejects three steps ($\lambda = 10$), then alternates: accepted at $\lambda = 10$ ($\lambda \to 1$), rejected at $\lambda = 1$ ($\lambda \to 10$), again and again. It has found the largest step it can trust, and $\lambda$ hovers between 1 and 10 like a trust-region radius. The path crawls along the flat plateau, $k_a$ from 10 to 1.9 in short steps, with the RSS falling slowly from $67.7$ to $47.1$. At pass 19 a longer step crosses the line $k_a = k_e$ to $(0.17, 2.39)$, and from there $\lambda$ falls and the method converges quickly to the **mirror** $(0.1906, 1.015, 3.796)$ after 30 passes (18 accepted, 12 rejected). The side of the start does not guarantee the side of the end. In **log**, LM accepts two long steps and runs off to $k_a = 1.1\times10^{15}$, $k_e = 1.1\times10^{-5}$ (RSS $34.3$) and stops with a singular Jacobian: the run-off of the multistart slide. A fit that ends with a much larger RSS than others has failed; this is why one runs several starts and compares the RSS.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — Jacobian and one-parameter Gauss–Newton (B1, B2, B5)"}
