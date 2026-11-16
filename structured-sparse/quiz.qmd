@@ -1,0 +1,210 @@
+---
+title: "Quiz: structure — symmetric, banded, sparse"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of Cholesky, tridiagonal and sparse solvers. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** Which of these matrices are symmetric positive definite? (a) The sample covariance of 5 genes measured in 3 samples. (b) The identity matrix. (c) $\begin{pmatrix} 1 & 2 \\ 2 & 1 \end{pmatrix}$. (d) $0.6\,K + 0.4\,I$, where $K$ is a kinship matrix estimated from fewer SNPs than individuals.
+
+::: {.callout-tip collapse="true" title="Hint"}
+SPD means symmetric with all eigenvalues $> 0$. A covariance matrix estimated from $m$ samples has rank at most $m - 1$. Adding $cI$ raises every eigenvalue by $c$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(a) No: rank at most 2, so three of the five eigenvalues are 0 (semidefinite, not definite). (b) Yes, all eigenvalues 1. (c) No: eigenvalues 3 and $-1$. (d) Yes: $K$ is semidefinite (eigenvalues $\ge 0$), and $0.4I$ raises them all to at least $0.4$. This is why mixed models with a residual variance are always solvable by Cholesky.
+:::
+
+---
+
+**Q2.** Give two reasons to use Cholesky rather than LU for an SPD matrix.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Count operations, and think about what pivoting is for.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+It costs half as much ($\tfrac13 n^3$ against $\tfrac23 n^3$) and stores one triangle, and it needs no pivoting: for an SPD matrix the entries of $L$ cannot grow ($\ell_{ij}^2 \le a_{ii}$), so it is stable as it stands. A third: it is the cheapest test of positive definiteness, and it gives $\log\det A = 2\sum\log\ell_{ii}$ for free.
+:::
+
+---
+
+**Q3.** R stops with `the leading minor of order 5 is not positive` when you call `chol()` on a 200 × 200 gene covariance matrix. What does this mean, and what can you do?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Where in the algorithm can Cholesky fail? How many samples went into the covariance?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+At column 5 the number under the square root was $\le 0$: the matrix is not positive definite (in practice, the covariance was estimated from fewer samples than genes, or assembled from pairwise correlations, so it is singular or has negative eigenvalues). Options: more samples; **shrinkage** $C + \lambda I$ (or $(1-\alpha)C + \alpha\,\mathrm{diag}(C)$); a model with an explicit error variance; or work with fewer genes. Check with the smallest eigenvalue.
+:::
+
+---
+
+**Q4.** Why compute the log-determinant of a 5000 × 5000 covariance matrix as `2 * sum(log(diag(chol(S))))` rather than `log(det(S))`?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is the determinant of a large matrix with eigenvalues below 1? Recall *How computers store numbers*.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The determinant is a product of 5000 numbers (eigenvalues, or squared $\ell_{ii}$); if they are typically below 1 it **underflows** to 0 (above 1 it overflows to `Inf`), and the log is `-Inf` (or `Inf`). The sum of logs is an ordinary number. Same idea as summing log-likelihoods instead of multiplying likelihoods. (`determinant(S, logarithm = TRUE)` and `np.linalg.slogdet` also work.)
+:::
+
+---
+
+**Q5.** To simulate expression of three genes with covariance $\Sigma$, a colleague writes `R <- chol(Sigma); y <- R %*% z` with `z <- rnorm(3)`. What is wrong? Check by computing the covariance of `y`.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which triangle does R's `chol` return? $\operatorname{Cov}(M\mathbf{z}) = MM^T$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+R's `chol` returns the **upper** factor $R = L^T$, so $\operatorname{Cov}(R\mathbf{z}) = RR^T = L^TL$, which is not $\Sigma$. Use `t(R) %*% z`. (In numpy and nalgebra the factor is already the lower $L$, so `L @ z` is right; code translated between the languages often gets this wrong.)
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+Sigma <- matrix(c(4, 2, -2,  2, 10, 2,  -2, 2, 6), nrow = 3)
+R <- chol(Sigma)
+R %*% t(R)                               # covariance of R %*% z: wrong
+#      [,1] [,2] [,3]
+# [1,]    6    2   -2
+# [2,]    2   10    2
+# [3,]   -2    2    4
+t(R) %*% R                               # covariance of t(R) %*% z: Sigma
+#      [,1] [,2] [,3]
+# [1,]    4    2   -2
+# [2,]    2   10    2
+# [3,]   -2    2    6
+```
+
+### Python
+
+```python
+import numpy as np
+Sigma = np.array([[4.0, 2, -2], [2, 10, 2], [-2, 2, 6]])
+L = np.linalg.cholesky(Sigma)        # numpy: lower factor
+R = L.T                              # what R's chol() returns
+print(R @ R.T)                       # covariance of R @ z: wrong
+# [[ 6.  2. -2.]
+#  [ 2. 10.  2.]
+#  [-2.  2.  4.]]
+print(L @ L.T)                       # covariance of L @ z: Sigma
+# [[ 4.  2. -2.]
+#  [ 2. 10.  2.]
+#  [-2.  2.  6.]]
+```
+
+### Rust
+
+```rust
+// rust/examples/structured_sparse_q5.rs  —  cargo run --example structured_sparse_q5
+// Q5: which triangle? R's chol() returns the upper factor R = L^T.
+use nalgebra::dmatrix;
+
+fn main() {
+    let sigma = dmatrix![4.0, 2.0, -2.0; 2.0, 10.0, 2.0; -2.0, 2.0, 6.0];
+    let l = sigma.cholesky().unwrap().l();   // nalgebra: lower factor
+    let r = l.transpose();                   // what R's chol() returns
+    println!("{}", &r * r.transpose());      // covariance of R z: wrong
+    println!("{}", &l * l.transpose());      // covariance of L z: Sigma
+}
+
+// Output:
+//   ┌          ┐
+//   │  6  2 -2 │
+//   │  2 10  2 │
+//   │ -2  2  4 │
+//   └          ┘
+//   ┌          ┐
+//   │  4  2 -2 │
+//   │  2 10  2 │
+//   │ -2  2  6 │
+//   └          ┘
+```
+
+:::
+:::
+
+---
+
+**Q6.** Thomas solves the morphogen system for $10^5$ cells in 0.05 s. Roughly how long for $10^6$ cells? A dense `solve()` takes 1 s for 4000 cells; roughly how long for 8000?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Thomas is $O(n)$, dense LU $O(n^3)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Thomas: 10 times more cells, 10 times longer, about 0.5 s. Dense: twice the size, $2^3 = 8$ times longer, about 8 s (in practice 6–8 s; small sizes have overheads).
+:::
+
+---
+
+**Q7.** Is the Thomas algorithm safe for a tridiagonal matrix with diagonal 1 and off-diagonals $-0.8$ (above and below)? And with diagonal 2.01 and off-diagonals $-1$? What should you check after solving?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compare $|b_i|$ with $|a_i| + |c_i|$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+First matrix: $1 < 0.8 + 0.8$, not diagonally dominant, so there is no guarantee: a pivot may come close to zero (it is not SPD either: its smallest eigenvalue, about $1 - 1.6$, is negative for large $n$). Second: $2.01 > 2$, diagonally dominant, safe. In both cases, check the **residual** $\max|A\mathbf{x} - \mathbf{d}|$ after solving, and switch to a solver with pivoting (`solve`, `scipy.linalg.solve_banded`) if it is large.
+:::
+
+---
+
+**Q8.** A sparse matrix in CSC has `x = (2, 1, 4, 3)`, `i = (0, 2, 1, 2)`, `p = (0, 2, 2, 4)`. Write it out. How many columns does it have, and which one is empty?
+
+::: {.callout-tip collapse="true" title="Hint"}
+`p` has one more entry than there are columns. Column $j$ (from 0) has entries `p[j]` to `p[j+1] - 1`.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Three columns. Column 0: entries 0–1, values 2 (row 0) and 1 (row 2). Column 1: `p[1] = p[2]`, empty. Column 2: entries 2–3, values 4 (row 1) and 3 (row 2).
+$$\begin{pmatrix} 2 & 0 & 0 \\ 0 & 0 & 4 \\ 1 & 0 & 3 \end{pmatrix}$$
+:::
+
+---
+
+**Q9.** Your sparse 10⁶ × 10⁶ tridiagonal matrix takes 36 MB. Why does `solve(A) %*% b` run out of memory when `solve(A, b)` takes half a second?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How many zeros does the inverse of a tridiagonal matrix have?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The inverse of a (connected) sparse matrix is in general **dense**: every cell influences every other, so $A^{-1}$ has $10^{12}$ non-zero entries, 8 TB. `solve(A, b)` factorises $A$, and the factors of a tridiagonal matrix stay tridiagonal (no fill-in), then solves: $O(n)$ time and memory.
+:::
+
+---
+
+**Q10.** In a gene network one transcription factor is linked to all 5000 other genes, which are otherwise unlinked. You factorise its sparse precision matrix by Cholesky. Should the hub be the first or the last unknown? What happens in the other case?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Eliminating an unknown connects all of its neighbours to each other.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Last. Eliminating the hub first connects every gene to every other: $L$ is full, about $1.25\times10^7$ non-zeros instead of about $10^4$, and the factorisation costs $O(n^3)$ instead of $O(n)$. Sparse solvers choose such an ordering automatically (`Matrix::Cholesky(A, perm = TRUE)`, `splu(permc_spec="COLAMD")`); check with the number of non-zeros in the factor.
+:::
+
+---
+
+**Q11.** You run Jacobi on a large sparse system. After 1000 iterations the residual $\|\mathbf{b} - A\mathbf{x}\|$ has grown from 1 to $10^{12}$. What is the likely cause, and what are your options?
+
+::: {.callout-tip collapse="true" title="Hint"}
+When is Jacobi guaranteed to converge? What does CG need?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$A$ is probably not diagonally dominant, and the Jacobi iteration matrix $I - D^{-1}A$ has an eigenvalue larger than 1 in size, so the error grows every step. Options: a sparse direct solve if it fits in memory; conjugate gradient if $A$ is SPD; GMRES or a preconditioned method otherwise (*Iterative linear solvers in depth*). In every case, monitor the residual and stop with a message when it does not fall.
+:::

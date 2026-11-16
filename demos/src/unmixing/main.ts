@@ -15,7 +15,7 @@ import { svgEl, setAttrs, htmlEl, slider, presets, button, checkbox, scale, svgP
 
 const NAME = "unmixing";
 // Okabe-Ito, as in make-pivoting-conditioning-figs.R
-const COL = { d1: "#0072B2", d2: "#E69F00", bad: "#D55E00", grn: "#009E73", grey: "#8c8c8c", ink: "#222" };
+const COL = { d1: "#0072B2", d2: "#E69F00", bad: "#D55E00", grn: "#009E73", grey: "#8c8c8c", cell: "#555", ink: "#222" };
 const STYLE = `
 [data-demo="${NAME}"].qb-demo { flex-direction: column; gap: .45em; }
 [data-demo="${NAME}"] .um-row { display: flex; flex-wrap: wrap; gap: .4em 1.3em; align-items: center; width: 100%; }
@@ -73,7 +73,7 @@ function mount(host: HTMLElement): void {
   const Z = Array.from({ length: NCELL }, () => [r.norm(), r.norm()] as [number, number]);
   const uid = ++mountCount;
 
-  const st = { c: C0, s: S0, db: [DB0[0] ?? 0, DB0[1] ?? 0] as [number, number], cloud: true };
+  const st = { c: C0, s: S0, db: [DB0[0] ?? 0, DB0[1] ?? 0] as [number, number], cloud: true, lines: true };
   const BW = 0.05;      // detector panel: half-width around b0
   const XW = 0.6;       // dye panel: half-width around (1, 1)
   const clampDb = (v: number) => Math.max(-BW * 0.96, Math.min(BW * 0.96, v));
@@ -94,10 +94,11 @@ function mount(host: HTMLElement): void {
     apply: () => { st.db = [a, b]; draw(); },
   })));
   htmlEl("span", "qb-note", "or drag the red point in (b)", dg);
-  const cb = checkbox(row2, "show cells", st.cloud, v => { st.cloud = v; draw(); });
+  const cb = checkbox(row2, "cells", st.cloud, v => { st.cloud = v; draw(); });
+  const lb = checkbox(row2, "lines", st.lines, v => { st.lines = v; draw(); });
   button(row2, "reset", () => {
-    st.c = C0; st.s = S0; st.db = [DB0[0] ?? 0, DB0[1] ?? 0]; st.cloud = true;
-    cS.set(st.c); nS.set(st.s); cb.checked = true; markPresets(); draw();
+    st.c = C0; st.s = S0; st.db = [DB0[0] ?? 0, DB0[1] ?? 0]; st.cloud = true; st.lines = true;
+    cS.set(st.c); nS.set(st.s); cb.checked = true; lb.checked = true; markPresets(); draw();
   });
   function markPresets(): void {
     cBtns.forEach((b, i) => b.classList.toggle("active", Math.abs(cVals[i] - st.c) < 1e-9));
@@ -119,7 +120,7 @@ function mount(host: HTMLElement): void {
 
   const top = 36, bot = H - 50;
   // (a)
-  const ax = scale(430, 640, 46, WA - 10), ay = scale(0, 1.12, bot, top);
+  const ax = scale(430, 640, 58, WA - 10), ay = scale(0, 1.62, bot, top);
   // (b) square plot area, centred on b0
   const bL = 62, bR = WB - 14, bSide = Math.min(bR - bL, bot - top);
   const bxs = scale(-BW, BW, bL, bL + bSide), bys = scale(-BW, BW, top + bSide, top);
@@ -153,17 +154,17 @@ function mount(host: HTMLElement): void {
 
     // ---------- (a) spectra ----------
     svgA.replaceChildren();
-    svgEl("text", { x: 8, y: 24, class: "ttl" }, svgA).textContent = `(a) spectra, peaks ${d.toFixed(0)} nm apart`;
-    svgEl("line", { x1: 46, x2: WA - 10, y1: bot, y2: bot, class: "axis" }, svgA);
+    svgEl("text", { x: 8, y: 24, class: "ttl" }, svgA).textContent = "(a) emission spectra";
+    svgEl("line", { x1: 58, x2: WA - 10, y1: bot, y2: bot, class: "axis" }, svgA);
     for (let w = 450; w <= 600; w += 50) {
       svgEl("line", { x1: ax(w), x2: ax(w), y1: bot, y2: bot + 5, class: "axis" }, svgA);
       svgEl("text", { x: ax(w), y: bot + 22, "text-anchor": "middle", class: "sm" }, svgA).textContent = String(w);
     }
     for (const v of [0, 0.5, 1]) {
-      if (v > 0) svgEl("line", { x1: 46, x2: WA - 10, y1: ay(v), y2: ay(v), class: "grid" }, svgA);
-      svgEl("text", { x: 40, y: ay(v) + 6, "text-anchor": "end", class: "sm" }, svgA).textContent = String(v);
+      if (v > 0) svgEl("line", { x1: 58, x2: WA - 10, y1: ay(v), y2: ay(v), class: "grid" }, svgA);
+      svgEl("text", { x: 52, y: ay(v) + 6, "text-anchor": "end", class: "sm" }, svgA).textContent = String(v);
     }
-    axisLabels(svgA, 46, WA, top, bot, "wavelength (nm)", "emission");
+    axisLabels(svgA, 58, WA, top, bot, "wavelength (nm)", "emission");
     const p1 = 500, p2 = 500 + d;
     const spec = (p: number, stroke: string, dash: string) => {
       const pts: string[] = [];
@@ -175,19 +176,21 @@ function mount(host: HTMLElement): void {
     if (p2 < 640) spec(p2, COL.d2, "9 5");
     for (const [p, lab, anc] of [[p1, "det 1", "end"], [p2, "det 2", "start"]] as [number, string, string][]) {
       if (p > 638) continue;
-      svgEl("line", { x1: ax(p), x2: ax(p), y1: ay(1.1), y2: bot, stroke: COL.grey, "stroke-width": 2, "stroke-dasharray": "3 4" }, svgA);
-      svgEl("text", { x: ax(p) + (anc === "end" ? -4 : 4), y: ay(1.05), "text-anchor": anc, class: "sm" }, svgA).textContent = lab;
+      svgEl("line", { x1: ax(p), x2: ax(p), y1: ay(1.18), y2: bot, stroke: COL.grey, "stroke-width": 2, "stroke-dasharray": "3 4" }, svgA);
+      svgEl("text", { x: ax(p) + (anc === "end" ? -4 : 4), y: ay(1.08), "text-anchor": anc, class: "sm" }, svgA).textContent = lab;
     }
     // c = dye 2's signal in detector 1
     svgEl("circle", { cx: ax(p1), cy: ay(c), r: 6, fill: COL.d2, stroke: COL.ink, "stroke-width": 1.5 }, svgA);
-    const ct = svgEl("text", { x: ax(p1) - 8, y: ay(c) + (c > 0.85 ? 22 : 6), "text-anchor": "end", "font-weight": 600 }, svgA);
-    ct.textContent = `c = ${c.toFixed(2)}`;
-    const lg = (txt: string, y: number, col: string) => {
-      const t = svgEl("text", { x: WA - 14, y, "text-anchor": "end", "font-weight": 600 }, svgA);
+    const ct = svgEl("text", { x: ax(p1) - 9, y: ay(c) + 6, "text-anchor": "end", "font-weight": 600 }, svgA);
+    Object.assign(ct.style, { paintOrder: "stroke", stroke: "#fff", strokeWidth: "4px" });
+    ct.textContent = "c";
+    svgEl("text", { x: 64, y: ay(1.3), class: "sm" }, svgA).textContent = `c = ${c.toFixed(2)}, peaks ${d.toFixed(0)} nm apart`;
+    const lg = (txt: string, x: number, col: string) => {
+      const t = svgEl("text", { x, y: ay(1.47), "font-weight": 600 }, svgA);
       t.style.fill = col; t.textContent = txt;
     };
-    lg("dye 1", ay(0.62), COL.d1);
-    lg("dye 2", ay(0.62) + 22, COL.d2);
+    lg("— dye 1", 64, COL.d1);
+    lg("- - dye 2", 160, COL.d2);
 
     // ---------- (b) detector space ----------
     layB.replaceChildren();
@@ -207,7 +210,7 @@ function mount(host: HTMLElement): void {
     svgEl("rect", { x: bL, y: top, width: bSide, height: bSide }, clipB);
     const gB = svgEl("g", { "clip-path": `url(#um-cb-${uid})` }, layB);
     if (st.cloud && s > 0) {
-      for (const [z1, z2] of Z) svgEl("circle", { cx: bxs(s * z1), cy: bys(s * z2), r: 2.6, fill: COL.grey, "fill-opacity": 0.55 }, gB);
+      for (const [z1, z2] of Z) svgEl("circle", { cx: bxs(s * z1), cy: bys(s * z2), r: 3, fill: COL.cell, "fill-opacity": 0.5 }, gB);
       svgEl("ellipse", { cx: bxs(0), cy: bys(0), rx: bxs(2 * s) - bxs(0), ry: bxs(2 * s) - bxs(0), fill: "none", stroke: COL.grn, "stroke-width": 2.5, "stroke-dasharray": "8 5" }, gB);
     }
     svgEl("circle", { cx: bxs(0), cy: bys(0), r: 6, fill: COL.ink }, gB);
@@ -233,13 +236,14 @@ function mount(host: HTMLElement): void {
     const clipC = svgEl("clipPath", { id: `um-cc-${uid}` }, svgC);
     svgEl("rect", { x: cL, y: top, width: cSide, height: cSide }, clipC);
     const gC = svgEl("g", { "clip-path": `url(#um-cc-${uid})` }, svgC);
+    const gL = svgEl("g", {}, gC);         // lines underneath the cells
     let outside = 0;
     const X1: number[] = [];
     if (s > 0) for (const [z1, z2] of Z) {
       const [u1, u2] = solve2(c, b0 + s * z1, b0 + s * z2);
       X1.push(u1);
       if (Math.abs(u1 - 1) > XW || Math.abs(u2 - 1) > XW) outside++;
-      if (st.cloud) svgEl("circle", { cx: cxs(u1), cy: cys(u2), r: 2.6, fill: COL.grey, "fill-opacity": 0.55 }, gC);
+      if (st.cloud) svgEl("circle", { cx: cxs(u1), cy: cys(u2), r: 3, fill: COL.cell, "fill-opacity": 0.5 }, gC);
     }
     if (st.cloud && s > 0) {
       // predicted 2-sd ellipse: half-axes 2s/(1-c) along (1,-1), 2s/(1+c) along (1,1)
@@ -248,12 +252,13 @@ function mount(host: HTMLElement): void {
     }
     // the two equations as lines: x1 + c x2 = b1 (dye-1 detector), c x1 + x2 = b2
     const lineEq = (a: number, bb: number, rhs: number, stroke: string, dash: string, w: number) => {
+      if (!st.lines) return;
       // a*x1 + bb*x2 = rhs; draw across the window
       const lo = 1 - 2 * XW, hi = 1 + 2 * XW;
       let pA: [number, number], pB: [number, number];
       if (Math.abs(bb) >= Math.abs(a)) pA = [lo, (rhs - a * lo) / bb], pB = [hi, (rhs - a * hi) / bb];
       else pA = [(rhs - bb * lo) / a, lo], pB = [(rhs - bb * hi) / a, hi];
-      svgEl("line", { x1: cxs(pA[0]), y1: cys(pA[1]), x2: cxs(pB[0]), y2: cys(pB[1]), stroke, "stroke-width": w, "stroke-dasharray": dash }, gC);
+      svgEl("line", { x1: cxs(pA[0]), y1: cys(pA[1]), x2: cxs(pB[0]), y2: cys(pB[1]), stroke, "stroke-width": w, "stroke-dasharray": dash, "stroke-opacity": dash ? 1 : 0.6 }, gL);
     };
     lineEq(1, c, b0, COL.d1, "", 3);
     lineEq(c, 1, b0, COL.d2, "", 3);
@@ -269,12 +274,13 @@ function mount(host: HTMLElement): void {
       const t = svgEl("text", { x: cL + cSide + 8, y, "font-weight": 600 }, svgC);
       t.style.fill = col; t.textContent = txt;
     };
-    if (WC - cL - cSide > 60) {
+    if (st.lines && WC - cL - cSide > 60) {
       lgC("det 1", top + 40, COL.d1); lgC("line", top + 60, COL.d1);
       lgC("det 2", top + 100, COL.d2); lgC("line", top + 120, COL.d2);
     }
     if (outside > 0 && st.cloud) {
-      const t = svgEl("text", { x: cL + 6, y: top + 20, class: "sm" }, svgC);
+      const t = svgEl("text", { x: cL + 8, y: top + 22, class: "sm" }, svgC);
+      Object.assign(t.style, { paintOrder: "stroke", stroke: "#fff", strokeWidth: "4px" });
       t.textContent = `${outside} of ${NCELL} cells outside`;
     }
 

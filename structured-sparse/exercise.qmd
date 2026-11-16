@@ -1,0 +1,1289 @@
+---
+title: "Exercise: structure — symmetric, banded, sparse"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- compute a **Cholesky** factorisation $A = LL^T$ of a small symmetric positive definite (SPD) matrix by hand, and use it to solve a system and to get $\log\det A$,
+- recognise when a covariance or correlation matrix is **not** positive definite, and what to do about it,
+- solve a **tridiagonal** system with the **Thomas algorithm** by hand and in code, check the answer, and say when the algorithm is safe,
+- read and write the three arrays of **compressed sparse column** (CSC) storage,
+- predict **fill-in** in elimination, and explain why the inverse of a sparse matrix is dense,
+- run **Jacobi** and **conjugate gradient** iterations and tell from the residual whether they converge.
+
+The by-hand part needs pen, paper and a calculator for square roots. The code part checks the hand answers and then goes to sizes where only code works.
+
+## Background
+
+**Facts used below:**
+
+1. **SPD.** $A$ is symmetric positive definite if $A = A^T$ and $\mathbf{x}^TA\mathbf{x} > 0$ for every $\mathbf{x} \ne \mathbf{0}$; equivalently, all eigenvalues are positive. Covariance and kinship matrices are SPD, unless they are estimated from too few observations (then only semidefinite).
+2. **Cholesky.** Every SPD matrix is $A = LL^T$ with $L$ lower triangular and positive diagonal. Column by column:
+   $$\ell_{jj} = \sqrt{a_{jj} - \textstyle\sum_{k<j}\ell_{jk}^2}, \qquad \ell_{ij} = \Big(a_{ij} - \textstyle\sum_{k<j}\ell_{ik}\ell_{jk}\Big)\Big/\ell_{jj}\quad (i>j).$$
+   Cost $\tfrac13 n^3$, no pivoting. A square root of a number $\le 0$ means $A$ is not SPD.
+3. **Using $L$.** Solve $A\mathbf{x} = \mathbf{b}$ by $L\mathbf{y} = \mathbf{b}$ (forward) then $L^T\mathbf{x} = \mathbf{y}$ (back). $\log\det A = 2\sum_i \log\ell_{ii}$. If $\mathbf{z}$ has independent $N(0,1)$ entries, $L\mathbf{z}$ has covariance $A$.
+4. **Thomas algorithm** for a tridiagonal system with sub-diagonal $a_i$, diagonal $b_i$, super-diagonal $c_i$, right-hand side $d_i$: forward sweep $w = a_i/b_{i-1}$, $b_i \leftarrow b_i - w c_{i-1}$, $d_i \leftarrow d_i - w d_{i-1}$ for $i = 2,\dots,n$; back substitution $x_n = d_n/b_n$, $x_i = (d_i - c_i x_{i+1})/b_i$. About $8n$ operations. No pivoting: safe if $|b_i| \ge |a_i| + |c_i|$ in every row (strictly in at least one) or if the matrix is SPD.
+5. **Morphogen in a row of cells** (lecture): $-D\,c_{i-1} + (2D+k)\,c_i - D\,c_{i+1} = s_i$, with $D + k$ on the diagonal of the two end cells. We use $D = 1$, $k = 0.01$ per minute, production $s_1 = 1$ in cell 1.
+6. **CSC** stores the non-zeros column by column: `x` (values), `i` (row index, from 0), and `p` (column pointers, length = columns + 1, from 0): column $j$ (from 0) owns entries `p[j]` to `p[j+1] - 1`. About 12 bytes per non-zero.
+7. **Fill-in**: zeros of $A$ that become non-zero in $L$ (or $U$). It depends on the order of the unknowns. The inverse of a sparse matrix is usually completely dense.
+8. **Jacobi**: $\mathbf{x} \leftarrow \mathbf{x} + D^{-1}(\mathbf{b} - A\mathbf{x})$, $D$ = diagonal of $A$. Converges for diagonally dominant $A$. **Conjugate gradient** (CG) needs SPD $A$. Both need only products $A\mathbf{x}$.
+
+The basic tools in each language. R's [`chol`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/chol.html) returns the **upper** factor $R = L^T$; Python's [`np.linalg.cholesky`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.cholesky.html) and nalgebra's [`Cholesky`](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.Cholesky.html) return the **lower** factor $L$.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+A <- matrix(c(4, 2, 2, 5), nrow = 2)
+R <- chol(A)                     # upper triangular: A = t(R) %*% R
+t(R)                             # the lower factor L
+#      [,1] [,2]
+# [1,]    2    0
+# [2,]    1    2
+x <- backsolve(R, forwardsolve(t(R), c(2, 9)))
+x
+# [1] -0.5  2.0
+M <- sparseMatrix(i = c(1, 3, 2, 1, 4), j = c(1, 1, 2, 4, 4),
+                  x = c(3, 1, 5, 2, 7), dims = c(4, 4))
+nnzero(M)
+# [1] 5
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy import sparse
+from scipy.linalg import cho_factor, cho_solve
+
+A = np.array([[4.0, 2.0], [2.0, 5.0]])
+L = np.linalg.cholesky(A)        # lower triangular: A = L @ L.T
+print(L)
+# [[2. 0.]
+#  [1. 2.]]
+x = cho_solve(cho_factor(A), np.array([2.0, 9.0]))
+print(x)
+# [-0.5  2. ]
+M = sparse.csc_matrix(([3, 1, 5, 2, 7], ([0, 2, 1, 0, 3], [0, 0, 1, 3, 3])),
+                      shape=(4, 4), dtype=float)
+print(M.nnz)
+# 5
+```
+
+### Rust
+
+```rust
+// rust/examples/structured_sparse_background.rs  —  cargo run --example structured_sparse_background
+// Background: Cholesky with nalgebra, and a small sparse matrix with sprs.
+use nalgebra::{dmatrix, dvector};
+use sprs::TriMat;
+
+fn main() {
+    let a = dmatrix![4.0, 2.0; 2.0, 5.0];
+    let chol = a.cholesky().expect("not positive definite"); // None if not SPD
+    println!("{}", chol.l());          // lower triangular: A = L L^T
+    let x = chol.solve(&dvector![2.0, 9.0]);
+    println!("{:?}", x.as_slice());
+
+    // sprs builds CSC from triplets (row, column, value), 0-based
+    let mut t = TriMat::new((4, 4));
+    for (r, c, v) in [(0, 0, 3.0), (2, 0, 1.0), (1, 1, 5.0), (0, 3, 2.0), (3, 3, 7.0)] {
+        t.add_triplet(r, c, v);
+    }
+    let m: sprs::CsMat<f64> = t.to_csc();
+    println!("{}", m.nnz());
+}
+
+// Output:
+//   ┌     ┐
+//   │ 2 0 │
+//   │ 1 2 │
+//   └     ┘
+// [-0.5, 2.0]
+// 5
+```
+
+:::
+
+Python indexes from 0, so `sparse.csc_matrix((x, (i, j)))` takes 0-based rows and columns; R's `sparseMatrix(i, j, x)` takes 1-based ones but stores 0-based indices inside. Rust's `sprs` uses 0-based triplets.
+
+## By hand
+
+**B1. Cholesky.**
+(a) Compute the Cholesky factor $L$ of the covariance matrix of three genes
+$$\Sigma = \begin{pmatrix} 4 & 2 & -2 \\ 2 & 10 & 2 \\ -2 & 2 & 6 \end{pmatrix}.$$
+(b) Use $L$ to solve $\Sigma\mathbf{x} = (4, 14, 6)^T$: first $L\mathbf{y} = \mathbf{b}$, then $L^T\mathbf{x} = \mathbf{y}$.
+(c) Compute $\det\Sigma$ from $L$. Check it with the usual 3 × 3 determinant formula.
+(d) Three genes have pairwise correlations estimated from different subsets of samples (missing values): $r_{12} = 0.9$, $r_{13} = 0.9$, $r_{23} = -0.9$. Try to compute the Cholesky factor of the correlation matrix. Where does it break? Explain in words why these three correlations cannot all be true at once.
+
+**B2. Thomas by hand.** Four cells with $D = 1$, $k = 1$ and production 1 in cell 1:
+$$\begin{pmatrix} 2 & -1 & 0 & 0 \\ -1 & 3 & -1 & 0 \\ 0 & -1 & 3 & -1 \\ 0 & 0 & -1 & 2 \end{pmatrix}\mathbf{c} = \begin{pmatrix} 1 \\ 0 \\ 0 \\ 0 \end{pmatrix}.$$
+(a) Write down the vectors $a$, $b$, $c$, $d$ (with $a_1$ and $c_4$ unused).
+(b) Run the forward sweep with fractions: give the new $b_2, b_3, b_4$ and $d_2, d_3, d_4$.
+(c) Back-substitute to get $c_4, c_3, c_2, c_1$.
+(d) Check mass balance: total degradation $k\sum_i c_i$ should equal total production. Is it?
+(e) Is the matrix diagonally dominant? Are all pivots ($b_1$ and the new $b_2, b_3, b_4$) positive?
+
+**B3. When Thomas breaks.**
+(a) Run the forward sweep for $a = (\cdot, 1, 1)$, $b = (1, 1, 1)$, $c = (1, 1, \cdot)$. What happens at the second pivot?
+(b) Is this matrix diagonally dominant? Is it singular? (Compute its determinant.)
+(c) Which algorithm from *Pivoting, norms and conditioning* would solve it, and why?
+
+**B4. CSC by hand.** A count matrix of 3 genes × 5 cells:
+$$M = \begin{pmatrix} 0 & 1 & 0 & 0 & 3 \\ 4 & 0 & 0 & 6 & 0 \\ 0 & 2 & 0 & 0 & 1 \end{pmatrix}.$$
+(a) Write down `x`, `i` and `p` (0-based, column by column).
+(b) Use only `x` and `p` to compute the total count (library size) of each cell.
+(c) Go back: which matrix (3 × 3) has `x = (5, 1, 2)`, `i = (2, 0, 1)`, `p = (0, 1, 1, 3)`?
+(d) A 20 000 genes × 100 000 cells matrix has 7 % non-zeros. How much memory does it take dense, and in CSC (8 bytes per value, 4 per row index and per pointer)? Above what fraction of non-zeros is CSC larger than dense?
+
+**B5. Fill-in.** Use only the pattern: write × for a non-zero and · for a zero.
+(a) The arrow matrix with the hub first:
+$$A = \begin{pmatrix} \times & \times & \times & \times \\ \times & \times & \cdot & \cdot \\ \times & \cdot & \times & \cdot \\ \times & \cdot & \cdot & \times \end{pmatrix}.$$
+Eliminate the first column (subtract multiples of row 1 from rows 2–4). Which zeros become non-zero? What is the pattern of $L$?
+(b) Renumber so the hub is last. Write the new pattern and eliminate. How many fill-ins now?
+(c) Does elimination of a tridiagonal matrix (Thomas) create any fill-in?
+(d) Compute the inverse of $\begin{pmatrix} 2 & -1 & 0 \\ -1 & 2 & -1 \\ 0 & -1 & 2 \end{pmatrix}$ (hint: check that it is $\tfrac14\begin{pmatrix} 3 & 2 & 1 \\ 2 & 4 & 2 \\ 1 & 2 & 3\end{pmatrix}$). How many zeros does it have?
+
+**B6. Jacobi by hand.**
+(a) Do two Jacobi steps from $\mathbf{x} = (0, 0)$ for $\begin{pmatrix} 4 & 1 \\ 1 & 3 \end{pmatrix}\mathbf{x} = \begin{pmatrix} 1 \\ 2 \end{pmatrix}$. Compare with the exact solution $(1/11, 7/11)$.
+(b) Do three Jacobi steps from $(0, 0)$ for $\begin{pmatrix} 1 & 2 \\ 2 & 1 \end{pmatrix}\mathbf{x} = \begin{pmatrix} 3 \\ 3 \end{pmatrix}$ (exact solution $(1, 1)$). What happens? Which of the two matrices is diagonally dominant?
+
+**B7. What structure buys.** A computer does $10^9$ operations per second.
+(a) For a row of $n = 10^4$ cells, estimate the time of dense LU ($\tfrac23 n^3$), dense Cholesky ($\tfrac13 n^3$) and Thomas ($8n$).
+(b) Memory of the dense matrix and of the three diagonals, in bytes.
+(c) Same for $n = 10^6$.
+
+## In code
+
+**C1. Cholesky.** Check B1 (a)–(d) in code: the factor, the two triangular solves (R: [`forwardsolve` / `backsolve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/backsolve.html); Python: [`scipy.linalg.solve_triangular`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_triangular.html)), the log-determinant, and the failure for the correlation matrix of B1(d). Print the eigenvalues of that matrix.
+
+**C2. Log-determinant of an LD matrix.** The correlation between $n = 2000$ equally spaced SNP markers is $\Sigma_{ij} = 0.9^{|i-j|}$.
+(a) Compute `det(S)` and the log-determinant from the Cholesky factor. Compare with [`determinant(S, logarithm = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/det.html) (Python: [`np.linalg.slogdet`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.slogdet.html)) and with the exact value $(n-1)\log(1 - 0.9^2)$.
+(b) The quadratic form of the log-likelihood is $\mathbf{y}^T\Sigma^{-1}\mathbf{y}$. With $\mathbf{z} = L^{-1}\mathbf{y}$ it is $\mathbf{z}^T\mathbf{z}$. Compute it for $\mathbf{y} = (1, \dots, 1)$ with one triangular solve, and check against a general solve and the exact value $\big(2 + (n-2)(1+\rho^2) - 2(n-1)\rho\big)/(1-\rho^2)$.
+
+**C3. The Thomas algorithm.** Write `thomas(a, b, c, d)` (convention as in the lecture: all four vectors of length $n$).
+(a) Check your answer to B2.
+(b) Solve the morphogen system for $n = 100$ cells and check it three ways: the residual $\max|A\mathbf{x} - \mathbf{s}|$, mass balance $k\sum x_i = 1$, and $x_{11}/x_1 \approx e^{-1}$ (decay length 10 cells).
+(c) Compare with a library solver: R [`Matrix::bandSparse`](https://rdrr.io/cran/Matrix/man/bandSparse.html) + `solve`, Python [`scipy.linalg.solve_banded`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_banded.html).
+
+**C4. Timing.** Time a dense solve and `thomas` for $n = 1000, 2000, 4000$ cells, and `thomas` alone for $n = 10^5$ and $10^6$. By what factor does each time grow when $n$ doubles? Extrapolate the dense solve to $10^6$ cells.
+
+**C5. Thomas without pivoting.**
+(a) Write `diag_dominant(a, b, c)`. Apply it to the morphogen matrix and to $a = (\cdot, 1, 1, 1)$, $b = (10^{-17}, 2, 2, 2)$, $c = (1, 1, 1, \cdot)$.
+(b) Solve the second system with `d = (1, 1, 1, 1)` by `thomas` and by a general solver. Compute the residual of the Thomas answer. What went wrong?
+
+**C6. CSC and the dense inverse.**
+(a) Build $M$ from B4 from triplets (R [`sparseMatrix`](https://rdrr.io/cran/Matrix/man/sparseMatrix.html), Python [`scipy.sparse.csc_matrix`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html), Rust `sprs::TriMat`) and print its three arrays (R: `M@x`, `M@i`, `M@p`; Python: `.data`, `.indices`, `.indptr`). Compare with B4(a). Compute the library sizes.
+(b) For the 100-cell morphogen matrix, count the non-zeros of $A$ and of $A^{-1}$ (Python: [`scipy.sparse.linalg.inv`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.inv.html)). What would $A^{-1}$ cost in memory for $10^6$ cells?
+
+**C7. Fill-in.** Build the 1000 × 1000 arrow matrix (hub gene: diagonal $n$, row and column of ones; other genes: diagonal 2) with the hub first and with the hub last. Count the non-zeros of the Cholesky factor in both cases. In R, also try [`Cholesky(A, perm = TRUE)`](https://rdrr.io/cran/Matrix/man/Cholesky-methods.html). (Python: scipy has no sparse Cholesky; use [`scipy.sparse.linalg.splu`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.splu.html) with `permc_spec="NATURAL"` and `"COLAMD"`.)
+
+**C8. Jacobi and conjugate gradient.** Write `jacobi(A, b, tol, maxit)` and `cg(A, b, tol, maxit)` that stop when $\|\mathbf{b} - A\mathbf{x}\| <$ `tol` and report the number of iterations (or that they did not converge).
+(a) Run both on the morphogen system with $n = 1000$ cells and `tol = 1e-10`. How many iterations does each need? How close are they to the direct solution? (Python: compare with [`scipy.sparse.linalg.cg`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.cg.html).)
+(b) Run Jacobi on the matrix of B6(b) for 50 iterations. What happens?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — Cholesky by hand (B1)"}
+Work column by column. Column 1: $\ell_{11} = \sqrt{a_{11}}$, then $\ell_{i1} = a_{i1}/\ell_{11}$. Column 2: $\ell_{22} = \sqrt{a_{22} - \ell_{21}^2}$, $\ell_{32} = (a_{32} - \ell_{31}\ell_{21})/\ell_{22}$. Column 3: $\ell_{33} = \sqrt{a_{33} - \ell_{31}^2 - \ell_{32}^2}$. For (c), $\det\Sigma = \det L \cdot \det L^T = (\ell_{11}\ell_{22}\ell_{33})^2$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — Thomas (B2, C3)"}
+Keep fractions: $b_2 = 3 - \tfrac{-1}{2}(-1) = \tfrac52$. The multiplier $w$ is $a_i$ divided by the **new** $b_{i-1}$. In Python, copy `b` and `d` inside the function (`b = np.array(b, dtype=float)`), otherwise the caller's arrays are overwritten. To build the matrix for a check: R `bandSparse(n, k = -1:1, diagonals = list(a[-1], b, c[-n]))`; Python `scipy.sparse.diags([a[1:], b, c[:-1]], [-1, 0, 1])`. For `solve_banded((1, 1), ab, d)` the rows of `ab` are the super-diagonal (shifted right by one), the diagonal and the sub-diagonal (shifted left).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — CSC (B4, C6)"}
+Go down column 1 from top to bottom, then column 2, and so on. `p` starts at 0 and after each column adds the number of non-zeros in that column; an empty column repeats the previous value. Library size of cell $j$ = sum of `x[p[j]]` to `x[p[j+1]-1]`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — fill-in (B5, C7)"}
+Subtracting a multiple of row 1 from row $i$ makes row $i$ non-zero wherever row 1 is non-zero. If row 1 is full, every later row becomes full. In code count non-zeros with `nnzero` (R), `.nnz` or `np.count_nonzero` (Python). Build the arrow matrix with `Diagonal(n, 2)` and `forceSymmetric` in R, `scipy.sparse.lil_matrix` in Python.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — Jacobi and CG (B6, C8)"}
+Jacobi: $x_1^{\text{new}} = (b_1 - a_{12}x_2)/a_{11}$, $x_2^{\text{new}} = (b_2 - a_{21}x_1)/a_{22}$, using the **old** $x$ on the right. CG, one step: $\alpha = \mathbf{r}^T\mathbf{r} / \mathbf{p}^TA\mathbf{p}$, $\mathbf{x} \leftarrow \mathbf{x} + \alpha\mathbf{p}$, $\mathbf{r} \leftarrow \mathbf{r} - \alpha A\mathbf{p}$, $\mathbf{p} \leftarrow \mathbf{r} + (\mathbf{r}^T\mathbf{r})_\text{new}/(\mathbf{r}^T\mathbf{r})_\text{old}\,\mathbf{p}$, starting from $\mathbf{x} = 0$, $\mathbf{r} = \mathbf{p} = \mathbf{b}$. With a sparse `A`, `A %*% x` (R, returns a 1-column matrix: take `[, 1]`) and `A @ x` (Python) cost $O(\text{nnz})$.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $\ell_{11} = \sqrt4 = 2$, $\ell_{21} = 2/2 = 1$, $\ell_{31} = -2/2 = -1$. $\ell_{22} = \sqrt{10 - 1} = 3$, $\ell_{32} = (2 - (-1)(1))/3 = 1$. $\ell_{33} = \sqrt{6 - 1 - 1} = 2$.
+$$L = \begin{pmatrix} 2 & 0 & 0 \\ 1 & 3 & 0 \\ -1 & 1 & 2 \end{pmatrix}.$$
+(b) $L\mathbf{y} = (4, 14, 6)$: $y_1 = 4/2 = 2$, $y_2 = (14 - 2)/3 = 4$, $y_3 = (6 + 2 - 4)/2 = 2$. $L^T\mathbf{x} = \mathbf{y}$: $x_3 = 2/2 = 1$, $x_2 = (4 - 1\cdot 1)/3 = 1$, $x_1 = (2 - 1 + 1)/2 = 1$. So $\mathbf{x} = (1, 1, 1)$.
+(c) $\det\Sigma = (2\cdot3\cdot2)^2 = 144$, $\log\det\Sigma = 2(\log 2 + \log 3 + \log 2) = 2\log 12 = 4.970$. Directly: $4(60 - 4) - 2(12 + 4) + (-2)(4 + 20) = 224 - 32 - 48 = 144$.
+(d) $\ell_{11} = 1$, $\ell_{21} = 0.9$, $\ell_{31} = 0.9$, $\ell_{22} = \sqrt{1 - 0.81} = 0.4359$, $\ell_{32} = (-0.9 - 0.81)/0.4359 = -3.923$, and $\ell_{33}^2 = 1 - 0.81 - 15.39 = -15.2 < 0$: no real square root, the matrix is not positive definite. In words: if gene 1 rises with gene 2 and with gene 3 (both $r = 0.9$), then genes 2 and 3 must also rise together; they cannot be strongly anti-correlated. Correlations estimated pairwise on different samples need not fit together.
+
+**B2.**
+(a) $a = (\cdot, -1, -1, -1)$, $b = (2, 3, 3, 2)$, $c = (-1, -1, -1, \cdot)$, $d = (1, 0, 0, 0)$.
+(b) $i = 2$: $w = -1/2$, $b_2 = 3 - \tfrac12 = \tfrac52$, $d_2 = 0 + \tfrac12 = \tfrac12$. $i = 3$: $w = -1/\tfrac52 = -\tfrac25$, $b_3 = 3 - \tfrac25 = \tfrac{13}5$, $d_3 = \tfrac25\cdot\tfrac12 = \tfrac15$. $i = 4$: $w = -\tfrac5{13}$, $b_4 = 2 - \tfrac5{13} = \tfrac{21}{13}$, $d_4 = \tfrac5{13}\cdot\tfrac15 = \tfrac1{13}$.
+(c) $c_4 = \tfrac1{13}/\tfrac{21}{13} = \tfrac1{21}$. $c_3 = (\tfrac15 + \tfrac1{21})/\tfrac{13}5 = \tfrac2{21}$. $c_2 = (\tfrac12 + \tfrac2{21})/\tfrac52 = \tfrac5{21}$. $c_1 = (1 + \tfrac5{21})/2 = \tfrac{13}{21}$.
+(d) $k\sum c_i = (13 + 5 + 2 + 1)/21 = 1$. Yes: everything produced is degraded.
+(e) Yes: $2 \ge 1$, $3 \ge 2$, $3 \ge 2$, $2 \ge 1$, strictly in every row. The pivots $2, \tfrac52, \tfrac{13}5, \tfrac{21}{13}$ are all positive (and all $\ge 1$): diagonal dominance keeps them away from zero.
+
+**B3.**
+(a) $w = 1/1 = 1$, $b_2 = 1 - 1\cdot1 = 0$. At $i = 3$, $w = 1/0$: division by zero, and every result becomes `NaN`.
+(b) Not diagonally dominant ($1 < 1 + 1$ in row 2). $\det = 1(1 - 1) - 1(1 - 0) + 0 = -1 \ne 0$: not singular, it has a unique solution, $(-1, 2, 1)$ for $d = (1, 2, 3)$.
+(c) LU with **partial pivoting**: it swaps rows so that the pivot is the largest available entry in the column, so a zero (or tiny) pivot never gets used while a better one is available. That is what `solve` and `np.linalg.solve` do.
+
+**B4.**
+(a) `x = (4, 1, 2, 6, 3, 1)`, `i = (1, 0, 2, 1, 0, 2)`, `p = (0, 1, 3, 3, 4, 6)`.
+(b) Cell 1: `x[0]` = 4. Cell 2: `x[1] + x[2]` = 3. Cell 3: `p[2] = p[3]`, empty, 0. Cell 4: 6. Cell 5: $3 + 1 = 4$.
+(c) Column 1 has one entry, 5 in row 2 (0-based); column 2 is empty; column 3 has 1 in row 0 and 2 in row 1:
+$$\begin{pmatrix} 0 & 0 & 1 \\ 0 & 0 & 2 \\ 5 & 0 & 0 \end{pmatrix}.$$
+(d) Dense: $2\times10^9 \times 8 = 16$ GB. CSC: $0.07 \times 2\times10^9 = 1.4\times10^8$ non-zeros × 12 bytes = 1.68 GB, plus $100\,001 \times 4$ bytes ≈ 0.4 MB of pointers. CSC is larger than dense when $12f > 8$, i.e. $f > 2/3$.
+
+**B5.**
+(a) Row $i$ ($i = 2, 3, 4$) minus a multiple of row 1 becomes non-zero in columns 2, 3, 4: every zero in the lower right 3 × 3 block fills in. $L$ is full lower triangular (10 non-zeros, of which 3 are fill-in in $L$).
+(b) Hub last:
+$$\begin{pmatrix} \times & \cdot & \cdot & \times \\ \cdot & \times & \cdot & \times \\ \cdot & \cdot & \times & \times \\ \times & \times & \times & \times \end{pmatrix}.$$
+Eliminating column 1 only changes row 4, in column 4 (already non-zero). Same for columns 2 and 3. No fill-in; $L$ has the diagonal plus the last row: $2n - 1 = 7$ non-zeros.
+(c) No. Each step subtracts a multiple of row $i-1$, which is non-zero only in columns $i-1$ and $i$, from row $i$, which is already non-zero there. Fill-in is zero; the band is preserved.
+(d) Check: $\begin{pmatrix} 2 & -1 & 0 \\ -1 & 2 & -1 \\ 0 & -1 & 2 \end{pmatrix}\begin{pmatrix} 3 \\ 2 \\ 1\end{pmatrix} = \begin{pmatrix} 4 \\ 0 \\ 0\end{pmatrix}$, and similarly for the other columns, so the product is $4I$. The inverse has **no** zeros, although $A$ has 2.
+
+**B6.**
+(a) Step 1: $x_1 = 1/4 = 0.25$, $x_2 = 2/3 = 0.667$. Step 2: $x_1 = (1 - 0.667)/4 = 0.0833$, $x_2 = (2 - 0.25)/3 = 0.583$. Exact: $(0.0909, 0.636)$. The error shrinks, from $(0.16, 0.03)$ to $(0.008, 0.05)$.
+(b) Step 1: $x = (3, 3)$. Step 2: $x_1 = 3 - 2\cdot3 = -3$, $x_2 = -3$. Step 3: $x = (9, 9)$. The error $x_1 - 1$ goes $2, -4, 8, \dots$: it doubles and changes sign at every step, so the iteration diverges. The first matrix is diagonally dominant ($4 > 1$, $3 > 1$), the second is not ($1 < 2$).
+
+**B7.**
+(a) $n = 10^4$: LU $\tfrac23 10^{12}$ operations = 667 s ≈ 11 min; Cholesky 333 s; Thomas $8\times10^4$ operations = 80 µs.
+(b) Dense: $10^8 \times 8$ = 800 MB. Three diagonals: $3\times10^4 \times 8$ = 240 kB.
+(c) $n = 10^6$: LU $6.7\times10^{17}$ operations = $6.7\times10^8$ s ≈ 21 years; Cholesky 10 years; Thomas 8 ms. Dense memory 8 TB, three diagonals 24 MB.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+Sigma <- matrix(c(4, 2, -2,  2, 10, 2,  -2, 2, 6), nrow = 3)
+R <- chol(Sigma)
+t(R)                                     # L, compare with B1(a)
+#      [,1] [,2] [,3]
+# [1,]    2    0    0
+# [2,]    1    3    0
+# [3,]   -1    1    2
+b <- c(4, 14, 6)
+y <- forwardsolve(t(R), b); y            # B1(b)
+# [1] 2 4 2
+x <- backsolve(R, y); x
+# [1] 1 1 1
+2 * sum(log(diag(R)))                    # log det, B1(c)
+# [1] 4.969813
+log(det(Sigma))
+# [1] 4.969813
+C <- matrix(c(1, 0.9, 0.9,  0.9, 1, -0.9,  0.9, -0.9, 1), nrow = 3)
+try(chol(C))                             # B1(d)
+# Error in chol.default(C) : the leading minor of order 3 is not positive
+eigen(C, symmetric = TRUE)$values
+# [1]  1.9  1.9 -0.8
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import solve_triangular
+
+Sigma = np.array([[4.0, 2, -2], [2, 10, 2], [-2, 2, 6]])
+L = np.linalg.cholesky(Sigma)
+print(L)                                         # compare with B1(a)
+# [[ 2.  0.  0.]
+#  [ 1.  3.  0.]
+#  [-1.  1.  2.]]
+b = np.array([4.0, 14, 6])
+y = solve_triangular(L, b, lower=True); print(y)  # B1(b)
+# [2. 4. 2.]
+x = solve_triangular(L.T, y, lower=False); print(x)
+# [1. 1. 1.]
+print(2 * np.sum(np.log(np.diag(L))))            # log det, B1(c)
+# 4.969813299576001
+print(np.log(np.linalg.det(Sigma)))
+# 4.969813299576001
+C = np.array([[1, 0.9, 0.9], [0.9, 1, -0.9], [0.9, -0.9, 1]])
+try:
+    np.linalg.cholesky(C)                        # B1(d)
+except np.linalg.LinAlgError as e:
+    print("LinAlgError:", e)
+# LinAlgError: Matrix is not positive definite
+print(np.linalg.eigvalsh(C))
+# [-0.8  1.9  1.9]
+```
+
+### Rust
+
+```rust
+// rust/examples/structured_sparse_c1.rs  —  cargo run --example structured_sparse_c1
+// C1: Cholesky of a 3 x 3 covariance matrix, triangular solves, log det,
+// and a "correlation matrix" that is not positive definite.
+use nalgebra::{dmatrix, dvector};
+
+fn main() {
+    let sigma = dmatrix![4.0_f64, 2.0, -2.0; 2.0, 10.0, 2.0; -2.0, 2.0, 6.0];
+    let l = sigma.clone().cholesky().expect("not SPD").l();
+    println!("{}", l);                                   // compare with B1(a)
+    let b = dvector![4.0, 14.0, 6.0];
+    let y = l.solve_lower_triangular(&b).unwrap();      // B1(b)
+    println!("{:?}", y.as_slice());
+    let x = l.transpose().solve_upper_triangular(&y).unwrap();
+    println!("{:?}", x.as_slice());
+    let logdet: f64 = 2.0 * l.diagonal().iter().map(|v| v.ln()).sum::<f64>();
+    println!("{}", logdet);                              // log det, B1(c)
+    println!("{}", sigma.determinant().ln());
+
+    let c = dmatrix![1.0_f64, 0.9, 0.9; 0.9, 1.0, -0.9; 0.9, -0.9, 1.0];
+    match c.clone().cholesky() {                         // B1(d)
+        Some(_) => println!("SPD"),
+        None => println!("cholesky: None (not positive definite)"),
+    }
+    let mut ev: Vec<f64> = c.symmetric_eigen().eigenvalues.iter().cloned().collect();
+    ev.sort_by(|p, q| q.partial_cmp(p).unwrap());
+    println!("{:?}", ev);
+}
+
+// Output:
+//   ┌          ┐
+//   │  2  0  0 │
+//   │  1  3  0 │
+//   │ -1  1  2 │
+//   └          ┘
+// [2.0, 4.0, 2.0]
+// [1.0, 1.0, 1.0]
+// 4.969813299576001
+// 4.969813299576001
+// cholesky: None (not positive definite)
+// [1.9000000000000004, 1.9, -0.8000000000000002]
+```
+
+:::
+
+All agree with B1. The correlation matrix has eigenvalue $-0.8$: there is a combination of the three genes with "negative variance", which is impossible. R reports the order (3) at which the square root failed; numpy and nalgebra only say "not positive definite".
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+n <- 2000; rho <- 0.9
+S <- rho^abs(outer(1:n, 1:n, "-"))       # LD between SNP markers
+det(S)
+# [1] 0
+determinant(S, logarithm = TRUE)$modulus[1]
+# [1] -3319.802
+R <- chol(S)
+2 * sum(log(diag(R)))
+# [1] -3319.802
+(n - 1) * log(1 - rho^2)                 # exact
+# [1] -3319.802
+y <- rep(1, n)
+z <- forwardsolve(t(R), y)               # z = L^{-1} y
+sum(z^2)                                 # y^T S^{-1} y
+# [1] 106.2105
+sum(y * solve(S, y))                     # check with a general solve
+# [1] 106.2105
+(2 + (n - 2) * (1 + rho^2) - 2 * (n - 1) * rho) / (1 - rho^2)  # exact
+# [1] 106.2105
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import solve_triangular
+
+n, rho = 2000, 0.9
+i = np.arange(n)
+S = rho ** np.abs(np.subtract.outer(i, i))      # LD between SNP markers
+print(np.linalg.det(S))
+# 0.0
+print(np.linalg.slogdet(S)[1])
+# -3319.8016824365454
+L = np.linalg.cholesky(S)
+print(2 * np.sum(np.log(np.diag(L))))
+# -3319.801682436481
+print((n - 1) * np.log(1 - rho**2))             # exact
+# -3319.8016824364804
+y = np.ones(n)
+z = solve_triangular(L, y, lower=True)          # z = L^{-1} y
+print(np.sum(z**2))                             # y^T S^{-1} y
+# 106.21052631578945
+print(y @ np.linalg.solve(S, y))                # check with a general solve
+# 106.21052631578951
+print((2 + (n - 2) * (1 + rho**2) - 2 * (n - 1) * rho) / (1 - rho**2))  # exact
+# 106.21052631578864
+```
+
+### Rust
+
+```rust
+// rust/examples/structured_sparse_c2.rs  —  cargo run --release --example structured_sparse_c2
+// C2: log det and quadratic form of a 2000 x 2000 LD matrix by Cholesky (nalgebra).
+use nalgebra::{DMatrix, DVector};
+
+fn main() {
+    let (n, rho) = (2000usize, 0.9_f64);
+    let s = DMatrix::from_fn(n, n, |i, j| rho.powi((i as i32 - j as i32).abs()));
+    println!("{}", s.clone().lu().determinant());       // underflows
+    let l = s.clone().cholesky().expect("not SPD").l();
+    let logdet: f64 = 2.0 * l.diagonal().iter().map(|v| v.ln()).sum::<f64>();
+    println!("{}", logdet);
+    println!("{}", (n - 1) as f64 * (1.0 - rho * rho).ln()); // exact
+    let y = DVector::from_element(n, 1.0);
+    let z = l.solve_lower_triangular(&y).unwrap();      // z = L^{-1} y
+    println!("{}", z.norm_squared());                    // y^T S^{-1} y
+    println!("{}", y.dot(&s.lu().solve(&y).unwrap()));   // check with a general solve
+    let nf = n as f64;
+    println!("{}", (2.0 + (nf - 2.0) * (1.0 + rho * rho) - 2.0 * (nf - 1.0) * rho)
+        / (1.0 - rho * rho));                            // exact
+}
+
+// Output:
+// 0
+// -3319.801682436498
+// -3319.8016824364804
+// 106.21052631578918
+// 106.21052631578942
+// 106.21052631578864
+```
+
+:::
+
+The determinant is about $e^{-3320} \approx 10^{-1442}$, far below the smallest double: it underflows to 0, and its log would be `-Inf`. The sum of logs of the Cholesky diagonal is an ordinary number, correct to 13–14 digits. The quadratic form needs only one triangular solve; $\Sigma^{-1}$ is never formed. A mixed-model or GWAS program evaluates exactly these two terms, for a new $\Sigma$, at every step of the likelihood optimisation.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+thomas <- function(a, b, c, d) {
+  n <- length(d)
+  for (i in 2:n) {
+    w <- a[i] / b[i - 1]
+    b[i] <- b[i] - w * c[i - 1]
+    d[i] <- d[i] - w * d[i - 1]
+  }
+  x <- numeric(n)
+  x[n] <- d[n] / b[n]
+  for (i in (n - 1):1)
+    x[i] <- (d[i] - c[i] * x[i + 1]) / b[i]
+  x
+}
+thomas(c(0, -1, -1, -1), c(2, 3, 3, 2), c(-1, -1, -1, 0), c(1, 0, 0, 0)) * 21  # B2
+# [1] 13  5  2  1
+library(Matrix)
+n <- 100; D <- 1; k <- 0.01
+a <- c(0, rep(-D, n - 1)); cc <- c(rep(-D, n - 1), 0)
+b <- c(D + k, rep(2 * D + k, n - 2), D + k)
+s <- c(1, rep(0, n - 1))
+x <- thomas(a, b, cc, s)
+A <- bandSparse(n, k = -1:1, diagonals = list(a[-1], b, cc[-n]))
+max(abs(A %*% x - s))                    # residual
+# [1] 1.776357e-15
+k * sum(x)                               # mass balance
+# [1] 1
+x[11] / x[1]                             # one decay length
+# [1] 0.3680326
+exp(-1)
+# [1] 0.3678794
+max(abs(x - solve(A, s)))                # library sparse solve
+# [1] 2.309264e-14
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import solve_banded
+
+def thomas(a, b, c, d):
+    n = len(d)
+    b = np.array(b, dtype=float)    # copies: do not overwrite the caller's arrays
+    d = np.array(d, dtype=float)
+    for i in range(1, n):
+        w = a[i] / b[i - 1]
+        b[i] = b[i] - w * c[i - 1]
+        d[i] = d[i] - w * d[i - 1]
+    x = np.zeros(n)
+    x[n - 1] = d[n - 1] / b[n - 1]
+    for i in range(n - 2, -1, -1):
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i]
+    return x
+
+print(thomas([0, -1, -1, -1], [2, 3, 3, 2], [-1, -1, -1, 0], [1, 0, 0, 0]) * 21)  # B2
+# [13.  5.  2.  1.]
+n, D, k = 100, 1.0, 0.01
+a = np.r_[0, np.full(n - 1, -D)]; c = np.r_[np.full(n - 1, -D), 0]
+b = np.r_[D + k, np.full(n - 2, 2 * D + k), D + k]
+s = np.r_[1.0, np.zeros(n - 1)]
+x = thomas(a, b, c, s)
+Ax = b * x
+Ax[1:] += a[1:] * x[:-1]
+Ax[:-1] += c[:-1] * x[1:]
+print(np.max(np.abs(Ax - s)))                   # residual
+# 1.7763568394002505e-15
+print(k * np.sum(x))                            # mass balance
+# 1.0000000000000184
+print(x[10] / x[0])                             # one decay length
+# 0.36803258934694205
+print(np.exp(-1))
+# 0.36787944117144233
+ab = np.vstack([np.r_[0, c[:-1]], b, np.r_[a[1:], 0]])
+print(np.max(np.abs(x - solve_banded((1, 1), ab, s))))
+# 0.0
+```
+
+### Rust
+
+```rust
+// rust/examples/structured_sparse_c3.rs  —  cargo run --example structured_sparse_c3
+// C3: the Thomas algorithm (hand-written) for the morphogen gradient,
+// checked by residual, mass balance, decay length and nalgebra's dense LU.
+use nalgebra::{DMatrix, DVector};
+
+/// Thomas algorithm: a = below the diagonal (a[0] unused), b = diagonal,
+/// c = above the diagonal (c[n-1] unused), d = right-hand side.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec()); // copies: inputs stay unchanged
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// Morphogen in a row of n cells: exchange D, decay k, production 1 in cell 1.
+fn morphogen(n: usize, dd: f64, k: f64) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+    let mut a = vec![-dd; n];
+    a[0] = 0.0;
+    let mut c = vec![-dd; n];
+    c[n - 1] = 0.0;
+    let mut b = vec![2.0 * dd + k; n];
+    b[0] = dd + k;
+    b[n - 1] = dd + k;
+    let mut s = vec![0.0; n];
+    s[0] = 1.0;
+    (a, b, c, s)
+}
+
+fn main() {
+    let x4 = thomas(&[0.0, -1.0, -1.0, -1.0], &[2.0, 3.0, 3.0, 2.0],
+                    &[-1.0, -1.0, -1.0, 0.0], &[1.0, 0.0, 0.0, 0.0]);
+    println!("{:?}", x4.iter().map(|v| v * 21.0).collect::<Vec<_>>()); // B2
+
+    let (n, k) = (100, 0.01);
+    let (a, b, c, s) = morphogen(n, 1.0, k);
+    let x = thomas(&a, &b, &c, &s);
+    let mut res: f64 = 0.0;                              // residual max |A x - s|
+    for i in 0..n {
+        let mut ax = b[i] * x[i];
+        if i > 0 { ax += a[i] * x[i - 1]; }
+        if i < n - 1 { ax += c[i] * x[i + 1]; }
+        res = res.max((ax - s[i]).abs());
+    }
+    println!("{:e}", res);
+    println!("{}", k * x.iter().sum::<f64>());           // mass balance
+    println!("{}", x[10] / x[0]);                        // one decay length
+    println!("{}", (-1.0_f64).exp());
+    let am = DMatrix::from_fn(n, n, |i, j| {
+        if i == j { b[i] } else if i == j + 1 { a[i] } else if j == i + 1 { c[i] } else { 0.0 }
+    });
+    let xs = am.lu().solve(&DVector::from_vec(s.clone())).unwrap();
+    let diff = x.iter().zip(xs.iter()).map(|(p, q)| (p - q).abs()).fold(0.0, f64::max);
+    println!("{:e}", diff);
+}
+
+// Output:
+// [13.0, 5.0, 2.0, 1.0]
+// 1.7763568394002505e-15
+// 1.000000000000018
+// 0.36803258934694205
+// 0.36787944117144233
+// 0e0
+```
+
+:::
+
+The residual is at the level of rounding, total degradation equals production, and the gradient falls by $e^{-1}$ over 10 cells, as $\sqrt{D/k} = 10$ predicts (the small difference, 0.3680 vs 0.3679, is because the cells are discrete). The library solvers agree to rounding. Keep your `thomas` function: Part 10 uses it for implicit diffusion steps.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+morphogen <- function(n, D = 1, k = 0.01)
+  list(a = c(0, rep(-D, n - 1)), c = c(rep(-D, n - 1), 0),
+       b = c(D + k, rep(2 * D + k, n - 2), D + k), d = c(1, rep(0, n - 1)))
+for (n in c(1000, 2000, 4000)) {
+  m <- morphogen(n)
+  A <- diag(m$b); A[cbind(2:n, 1:(n - 1))] <- -1; A[cbind(1:(n - 1), 2:n)] <- -1
+  t_dense  <- system.time(solve(A, m$d))["elapsed"]
+  t_thomas <- system.time(thomas(m$a, m$b, m$c, m$d))["elapsed"]
+  cat(n, t_dense, t_thomas, "\n")
+}
+# 1000 0.025 0.013
+# 2000 0.145 0.001
+# 4000 0.944 0.002
+for (n in c(1e5, 1e6)) {
+  m <- morphogen(n)
+  cat(n, system.time(thomas(m$a, m$b, m$c, m$d))["elapsed"], "\n")
+}
+# 1e+05 0.06
+# 1e+06 0.7
+```
+
+### Python
+
+```python
+import time
+
+def morphogen(n, D=1.0, k=0.01):
+    a = np.r_[0, np.full(n - 1, -D)]; c = np.r_[np.full(n - 1, -D), 0]
+    b = np.r_[D + k, np.full(n - 2, 2 * D + k), D + k]
+    return a, b, c, np.r_[1.0, np.zeros(n - 1)]
+
+for n in [1000, 2000, 4000]:
+    a, b, c, d = morphogen(n)
+    A = np.diag(b) + np.diag(a[1:], -1) + np.diag(c[:-1], 1)
+    t0 = time.perf_counter(); np.linalg.solve(A, d); t1 = time.perf_counter()
+    thomas(a, b, c, d); t2 = time.perf_counter()
+    print(n, round(t1 - t0, 3), round(t2 - t1, 3))
+# 1000 0.032 0.002
+# 2000 0.136 0.003
+# 4000 0.909 0.006
+for n in [100_000, 1_000_000]:
+    a, b, c, d = morphogen(n)
+    t0 = time.perf_counter(); thomas(a, b, c, d)
+    print(n, round(time.perf_counter() - t0, 3))
+# 100000 0.194
+# 1000000 2.013
+```
+
+### Rust
+
+```rust
+// rust/examples/structured_sparse_c4.rs  —  cargo run --release --example structured_sparse_c4
+// C4: timing Thomas against a dense LU solve (nalgebra). Run with --release.
+use nalgebra::{DMatrix, DVector};
+use std::time::Instant;
+
+/// Thomas algorithm: a = below the diagonal (a[0] unused), b = diagonal,
+/// c = above the diagonal (c[n-1] unused), d = right-hand side.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec()); // copies: inputs stay unchanged
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// Morphogen in a row of n cells: exchange D, decay k, production 1 in cell 1.
+fn morphogen(n: usize, dd: f64, k: f64) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+    let mut a = vec![-dd; n];
+    a[0] = 0.0;
+    let mut c = vec![-dd; n];
+    c[n - 1] = 0.0;
+    let mut b = vec![2.0 * dd + k; n];
+    b[0] = dd + k;
+    b[n - 1] = dd + k;
+    let mut s = vec![0.0; n];
+    s[0] = 1.0;
+    (a, b, c, s)
+}
+
+fn main() {
+    for n in [1000, 2000, 4000] {
+        let (a, b, c, s) = morphogen(n, 1.0, 0.01);
+        let am = DMatrix::from_fn(n, n, |i, j| {
+            if i == j { b[i] } else if i == j + 1 { a[i] } else if j == i + 1 { c[i] } else { 0.0 }
+        });
+        let t0 = Instant::now();
+        let _ = am.lu().solve(&DVector::from_vec(s.clone()));
+        let t_dense = t0.elapsed().as_secs_f64();
+        let t1 = Instant::now();
+        let _ = thomas(&a, &b, &c, &s);
+        println!("{} {:.3} {:.6}", n, t_dense, t1.elapsed().as_secs_f64());
+    }
+    for n in [100_000, 1_000_000] {
+        let (a, b, c, s) = morphogen(n, 1.0, 0.01);
+        let t1 = Instant::now();
+        let _ = thomas(&a, &b, &c, &s);
+        println!("{} {:.6}", n, t1.elapsed().as_secs_f64());
+    }
+}
+
+// Output:
+// 1000 0.560 0.000026
+// 2000 4.167 0.000071
+// 4000 25.197 0.000071
+// 100000 0.015297
+// 1000000 0.162496
+```
+
+:::
+
+Your times will differ (these were measured on a busy server, one BLAS thread). The dense solve grows by a factor 6–7 per doubling (close to $2^3 = 8$); Thomas by a factor 2 (from $10^5$ to $10^6$: 10). The first R call of `thomas` (0.013 s at $n = 1000$) includes compiling the function to byte code. Extrapolating the dense solve from 4000 to $10^6$ cells: $0.94 \times 250^3 \approx 1.5\times10^7$ s, about half a year, and 8 TB of memory; Thomas takes under a second even as an interpreted R loop. nalgebra's dense LU is much slower than R's and numpy's LAPACK (about 20 s at $n = 4000$ here, without LAPACK's cache blocking), and compiled Rust runs Thomas for $10^6$ cells in 0.2 s.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+diag_dominant <- function(a, b, c) all(abs(b) >= abs(a) + abs(c))
+a <- c(0, 1, 1, 1); b <- c(1e-17, 2, 2, 2); cc <- c(1, 1, 1, 0); d <- c(1, 1, 1, 1)
+diag_dominant(a, b, cc)
+# [1] FALSE
+A <- diag(b); A[cbind(2:4, 1:3)] <- 1; A[cbind(1:3, 2:4)] <- 1
+x <- thomas(a, b, cc, d)
+x
+# [1]  0.0000000  1.0000000 -0.3333333  0.6666667
+solve(A, d)                              # LU with partial pivoting
+# [1] -0.6666667  1.0000000 -0.3333333  0.6666667
+max(abs(A %*% x - d))                    # residual exposes it
+# [1] 0.6666667
+n <- 100; k <- 0.01                      # the morphogen matrix
+diag_dominant(c(0, rep(-1, n - 1)), c(1 + k, rep(2 + k, n - 2), 1 + k),
+              c(rep(-1, n - 1), 0))
+# [1] TRUE
+```
+
+### Python
+
+```python
+def diag_dominant(a, b, c):
+    return bool(np.all(np.abs(b) >= np.abs(a) + np.abs(c)))
+
+a = np.array([0, 1, 1, 1.0]); b = np.array([1e-17, 2, 2, 2]); c = np.array([1, 1, 1, 0.0])
+d = np.ones(4)
+print(diag_dominant(a, b, c))
+# False
+A = np.diag(b) + np.diag(a[1:], -1) + np.diag(c[:-1], 1)
+x = thomas(a, b, c, d)
+print(x)
+# [ 0.          1.         -0.33333333  0.66666667]
+print(np.linalg.solve(A, d))                    # LU with partial pivoting
+# [-0.66666667  1.         -0.33333333  0.66666667]
+print(np.max(np.abs(A @ x - d)))                # residual exposes it
+# 0.6666666666666667
+n, k = 100, 0.01                                # the morphogen matrix
+print(diag_dominant(np.r_[0, -np.ones(n - 1)], np.r_[1 + k, np.full(n - 2, 2 + k), 1 + k],
+                    np.r_[-np.ones(n - 1), 0]))
+# True
+```
+
+### Rust
+
+```rust
+// rust/examples/structured_sparse_c5.rs  —  cargo run --example structured_sparse_c5
+// C5: Thomas has no pivoting. A tiny first pivot gives a wrong answer;
+// the residual exposes it. nalgebra's LU (partial pivoting) gets it right.
+use nalgebra::{DMatrix, DVector};
+
+/// Thomas algorithm: a = below the diagonal (a[0] unused), b = diagonal,
+/// c = above the diagonal (c[n-1] unused), d = right-hand side.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec()); // copies: inputs stay unchanged
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+fn diag_dominant(a: &[f64], b: &[f64], c: &[f64]) -> bool {
+    (0..b.len()).all(|i| b[i].abs() >= a[i].abs() + c[i].abs())
+}
+
+fn main() {
+    let a = [0.0, 1.0, 1.0, 1.0];
+    let b = [1e-17, 2.0, 2.0, 2.0];
+    let c = [1.0, 1.0, 1.0, 0.0];
+    let d = [1.0, 1.0, 1.0, 1.0];
+    println!("{}", diag_dominant(&a, &b, &c));
+    let am = DMatrix::from_fn(4, 4, |i, j| {
+        if i == j { b[i] } else if i == j + 1 { a[i] } else if j == i + 1 { c[i] } else { 0.0 }
+    });
+    let x = thomas(&a, &b, &c, &d);
+    println!("{:?}", x);
+    let dv = DVector::from_row_slice(&d);
+    println!("{:?}", am.clone().lu().solve(&dv).unwrap().as_slice()); // with pivoting
+    let res = (&am * DVector::from_vec(x) - dv).abs().max();
+    println!("{}", res);                                  // residual exposes it
+
+    let (n, k) = (100, 0.01);                             // the morphogen matrix
+    let mut a = vec![-1.0; n]; a[0] = 0.0;
+    let mut c = vec![-1.0; n]; c[n - 1] = 0.0;
+    let mut b = vec![2.0 + k; n]; b[0] = 1.0 + k; b[n - 1] = 1.0 + k;
+    println!("{}", diag_dominant(&a, &b, &c));
+}
+
+// Output:
+// false
+// [0.0, 1.0, -0.3333333333333333, 0.6666666666666666]
+// [-0.6666666666666667, 1.0, -0.3333333333333333, 0.6666666666666666]
+// 0.6666666666666667
+// true
+```
+
+:::
+
+The first pivot is $10^{-17}$, so $w = 10^{17}$ and $b_2 = 2 - 10^{17}$: the 2 is lost to rounding (*How computers store numbers*). Thomas returns $x_1 = 0$ instead of $-2/3$, with no warning. The residual (0.67, compared with entries of size 1) shows that the answer is wrong. Partial pivoting swaps rows 1 and 2 and avoids the tiny pivot. The morphogen matrix is diagonally dominant, so Thomas is safe there.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+M <- sparseMatrix(i = c(2, 1, 3, 2, 1, 3), j = c(1, 2, 2, 4, 5, 5),
+                  x = c(4, 1, 2, 6, 3, 1), dims = c(3, 5))
+M
+# 3 x 5 sparse Matrix of class "dgCMatrix"
+#
+# [1,] . 1 . . 3
+# [2,] 4 . . 6 .
+# [3,] . 2 . . 1
+M@x; M@i; M@p
+# [1] 4 1 2 6 3 1
+# [1] 1 0 2 1 0 2
+# [1] 0 1 3 3 4 6
+colSums(M)                               # library size of each cell
+# [1] 4 3 0 6 4
+n <- 100; k <- 0.01
+A <- bandSparse(n, k = -1:1, diagonals = list(rep(-1, n - 1),
+                c(1 + k, rep(2 + k, n - 2), 1 + k), rep(-1, n - 1)))
+Ainv <- solve(A)
+c(nnzero(A), nnzero(Ainv))
+# [1]   298 10000
+min(Ainv)                                # smallest entry: still positive
+# [1] 0.0009129246
+1e6^2 * 8 / 1e12                         # TB for the inverse at 1e6 cells
+# [1] 8
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import inv
+
+M = sparse.csc_matrix(([4, 1, 2, 6, 3, 1], ([1, 0, 2, 1, 0, 2], [0, 1, 1, 3, 4, 4])),
+                      shape=(3, 5), dtype=float)
+print(M.toarray())
+# [[0. 1. 0. 0. 3.]
+#  [4. 0. 0. 6. 0.]
+#  [0. 2. 0. 0. 1.]]
+print(M.data, M.indices, M.indptr)
+# [4. 1. 2. 6. 3. 1.] [1 0 2 1 0 2] [0 1 3 3 4 6]
+print(np.asarray(M.sum(axis=0)).ravel())       # library size of each cell
+# [4. 3. 0. 6. 4.]
+n, k = 100, 0.01
+A = sparse.diags([-np.ones(n - 1), np.r_[1 + k, np.full(n - 2, 2 + k), 1 + k], -np.ones(n - 1)],
+                 [-1, 0, 1], format="csc")
+Ainv = inv(A)
+print(A.nnz, Ainv.nnz)
+# 298 10000
+print(Ainv.toarray().min())                    # smallest entry: still positive
+# 0.0009129245703542946
+print(1e6**2 * 8 / 1e12)                       # TB for the inverse at 1e6 cells
+# 8.0
+```
+
+### Rust
+
+```rust
+// rust/examples/structured_sparse_c6.rs  —  cargo run --example structured_sparse_c6
+// C6: CSC arrays with sprs; the inverse of a sparse tridiagonal matrix is dense.
+// sprs has no sparse inverse: each column j of A^-1 solves A x = e_j, done here
+// with the hand-written Thomas algorithm.
+use sprs::{CsMat, TriMat};
+
+/// Thomas algorithm: a = below the diagonal (a[0] unused), b = diagonal,
+/// c = above the diagonal (c[n-1] unused), d = right-hand side.
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec()); // copies: inputs stay unchanged
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+fn main() {
+    let mut t = TriMat::new((3, 5));
+    for (r, c, v) in [(1, 0, 4.0), (0, 1, 1.0), (2, 1, 2.0), (1, 3, 6.0), (0, 4, 3.0), (2, 4, 1.0)] {
+        t.add_triplet(r, c, v);
+    }
+    let m: CsMat<f64> = t.to_csc();
+    for row in m.to_dense().rows() {
+        println!("{:?}", row.to_vec());
+    }
+    println!("{:?} {:?} {:?}", m.data(), m.indices(), m.indptr().raw_storage());
+    let lib: Vec<f64> = m.outer_iterator().map(|col| col.data().iter().fold(0.0, |acc, v| acc + v)).collect();
+    println!("{:?}", lib);                               // library size of each cell
+
+    let (n, k) = (100, 0.01);
+    let mut a = vec![-1.0; n]; a[0] = 0.0;
+    let mut c = vec![-1.0; n]; c[n - 1] = 0.0;
+    let mut b = vec![2.0 + k; n]; b[0] = 1.0 + k; b[n - 1] = 1.0 + k;
+    let nnz_a = 3 * n - 2;
+    let (mut nnz_inv, mut min_inv) = (0, f64::INFINITY);
+    for j in 0..n {
+        let mut e = vec![0.0; n];
+        e[j] = 1.0;
+        for v in thomas(&a, &b, &c, &e) {
+            if v != 0.0 { nnz_inv += 1; }
+            min_inv = min_inv.min(v);
+        }
+    }
+    println!("{} {}", nnz_a, nnz_inv);
+    println!("{}", min_inv);                             // smallest entry: still positive
+    println!("{}", 1e6_f64.powi(2) * 8.0 / 1e12);        // TB for the inverse at 1e6 cells
+}
+
+// Output:
+// [0.0, 1.0, 0.0, 0.0, 3.0]
+// [4.0, 0.0, 0.0, 6.0, 0.0]
+// [0.0, 2.0, 0.0, 0.0, 1.0]
+// [4.0, 1.0, 2.0, 6.0, 3.0, 1.0] [1, 0, 2, 1, 0, 2] [0, 1, 3, 3, 4, 6]
+// [4.0, 3.0, 0.0, 6.0, 4.0]
+// 298 10000
+// 0.0009129245703542933
+// 8
+```
+
+:::
+
+The arrays match B4(a). The tridiagonal matrix has 298 non-zeros, its inverse all 10 000: a source in any cell raises the level in every other cell, so no entry of $A^{-1}$ is zero (the smallest, $9\times10^{-4}$, is the effect of cell 1 on cell 100). For $10^6$ cells the inverse would take 8 TB, the matrix itself 36 MB. Solve with `solve(A, b)`, never with the inverse.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+arrow <- function(n, hub) {              # hub gene linked to all others
+  A <- Diagonal(n, 2); A[hub, ] <- 1; A[, hub] <- 1; A[hub, hub] <- n
+  forceSymmetric(A)
+}
+n <- 1000
+nnzero(arrow(n, 1))
+# [1] 2998
+nnzero(chol(arrow(n, 1)))                # hub first
+# [1] 500500
+nnzero(chol(arrow(n, n)))                # hub last
+# [1] 1999
+L <- Cholesky(arrow(n, 1), perm = TRUE)  # fill-reducing ordering
+nnzero(as(L, "Matrix"))
+# [1] 1999
+L@perm[n] + 1                            # the hub is eliminated last
+# [1] 1
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import splu
+
+def arrow(n, hub):                              # hub gene linked to all others
+    A = sparse.lil_matrix((n, n))
+    A.setdiag(2.0)
+    A[hub, :] = 1.0; A[:, hub] = 1.0; A[hub, hub] = n
+    return A.tocsc()
+
+n = 1000
+print(arrow(n, 0).nnz)
+# 2998
+L1 = np.linalg.cholesky(arrow(n, 0).toarray())  # hub first (dense Cholesky)
+L2 = np.linalg.cholesky(arrow(n, n - 1).toarray())  # hub last
+print(np.count_nonzero(L1), np.count_nonzero(L2))
+# 500500 1999
+# scipy has no sparse Cholesky; sparse LU with and without a fill-reducing ordering:
+for order in ["NATURAL", "COLAMD"]:
+    lu = splu(arrow(n, 0), permc_spec=order, diag_pivot_thresh=0)
+    print(order, lu.L.nnz)
+# NATURAL 500500
+# COLAMD 1999
+```
+
+### Rust
+
+```rust
+// rust/examples/structured_sparse_c7.rs  —  cargo run --release --example structured_sparse_c7
+// C7: fill-in for an arrow matrix (hub gene). sprs has no sparse Cholesky
+// (the separate sprs-ldl crate has one), so we run nalgebra's dense Cholesky and
+// count the non-zeros of L: the fill-in pattern is the same.
+use nalgebra::DMatrix;
+
+fn arrow(n: usize, hub: usize) -> DMatrix<f64> {
+    DMatrix::from_fn(n, n, |i, j| {
+        if i == hub && j == hub { n as f64 }
+        else if i == hub || j == hub { 1.0 }
+        else if i == j { 2.0 } else { 0.0 }
+    })
+}
+
+fn nnz(m: &DMatrix<f64>) -> usize {
+    m.iter().filter(|v| **v != 0.0).count()
+}
+
+fn main() {
+    let n = 1000;
+    println!("{}", nnz(&arrow(n, 0)));
+    let l_first = arrow(n, 0).cholesky().unwrap().l();    // hub first
+    let l_last = arrow(n, n - 1).cholesky().unwrap().l(); // hub last
+    println!("{} {}", nnz(&l_first), nnz(&l_last));
+}
+
+// Output:
+// 2998
+// 500500 1999
+```
+
+:::
+
+Same matrix, same solution, but with the hub first the factor is completely full ($n(n+1)/2 = 500\,500$ entries, 250 times more than $A$'s 2998), and with the hub last it has $2n - 1 = 1999$, as B5 predicts. The ordering routines in `Cholesky(perm = TRUE)` and `splu(permc_spec="COLAMD")` find the good order by themselves (R's `perm` is 0-based: the last unknown eliminated is unknown 0 + 1 = the hub). The general check: compare the non-zeros of the factor with those of $A$.
+
+**C8.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+jacobi <- function(A, b, tol = 1e-10, maxit = 20000) {
+  x <- numeric(length(b)); dA <- diag(A)
+  for (it in 1:maxit) {
+    x <- x + (b - A %*% x)[, 1] / dA
+    if (sqrt(sum((b - A %*% x)^2)) < tol) return(list(x = x, it = it))
+  }
+  list(x = x, it = NA)                   # not converged
+}
+cg <- function(A, b, tol = 1e-10, maxit = 20000) {
+  x <- numeric(length(b)); r <- b; p <- r; rr <- sum(r^2)
+  for (it in 1:maxit) {
+    Ap <- (A %*% p)[, 1]
+    alpha <- rr / sum(p * Ap)
+    x <- x + alpha * p
+    r <- r - alpha * Ap
+    rr_new <- sum(r^2)
+    if (sqrt(rr_new) < tol) return(list(x = x, it = it))
+    p <- r + (rr_new / rr) * p
+    rr <- rr_new
+  }
+  list(x = x, it = NA)
+}
+n <- 1000; k <- 0.01
+A <- bandSparse(n, k = -1:1, diagonals = list(rep(-1, n - 1),
+                c(1 + k, rep(2 + k, n - 2), 1 + k), rep(-1, n - 1)))
+s <- c(1, rep(0, n - 1))
+xs <- solve(A, s)
+j <- jacobi(A, s); g <- cg(A, s)
+c(jacobi = j$it, cg = g$it)
+# jacobi     cg
+#   4158    237
+c(max(abs(j$x - xs)), max(abs(g$x - xs)))
+# [1] 8.409466e-10 4.895521e-10
+B <- Matrix(c(1, 2, 2, 1), 2)
+jacobi(B, c(3, 3), maxit = 50)$it        # does not converge
+# [1] NA
+max(abs(jacobi(B, c(3, 3), maxit = 50)$x))
+# [1] 1.1259e+15
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import spsolve, cg as scipy_cg
+
+def jacobi(A, b, tol=1e-10, maxit=20000):
+    x = np.zeros(len(b)); dA = A.diagonal()
+    for it in range(1, maxit + 1):
+        x = x + (b - A @ x) / dA
+        if np.linalg.norm(b - A @ x) < tol:
+            return x, it
+    return x, None                              # not converged
+
+def cg(A, b, tol=1e-10, maxit=20000):
+    x = np.zeros(len(b)); r = b.copy(); p = r.copy(); rr = r @ r
+    for it in range(1, maxit + 1):
+        Ap = A @ p
+        alpha = rr / (p @ Ap)
+        x = x + alpha * p
+        r = r - alpha * Ap
+        rr_new = r @ r
+        if np.sqrt(rr_new) < tol:
+            return x, it
+        p = r + (rr_new / rr) * p
+        rr = rr_new
+    return x, None
+
+n, k = 1000, 0.01
+A = sparse.diags([-np.ones(n - 1), np.r_[1 + k, np.full(n - 2, 2 + k), 1 + k], -np.ones(n - 1)],
+                 [-1, 0, 1], format="csr")
+s = np.r_[1.0, np.zeros(n - 1)]
+xs = spsolve(A.tocsc(), s)
+xj, itj = jacobi(A, s); xc, itc = cg(A, s)
+print(itj, itc)
+# 4158 237
+print(np.max(np.abs(xj - xs)), np.max(np.abs(xc - xs)))
+# 8.409064555792156e-10 4.89552116907983e-10
+xsc, info = scipy_cg(A, s, rtol=1e-10, atol=0)  # scipy's CG: info = 0 means converged
+print(info, np.max(np.abs(xsc - xs)))
+# 0 4.89552116907983e-10
+B = sparse.csr_matrix(np.array([[1.0, 2], [2, 1]]))
+xb, itb = jacobi(B, np.array([3.0, 3]), maxit=50)
+print(itb)                                      # does not converge
+# None
+print(np.max(np.abs(xb)))
+# 1125899906842623.0
+```
+
+### Rust
+
+```rust
+// rust/examples/structured_sparse_c8.rs  —  cargo run --example structured_sparse_c8
+// C8: Jacobi and conjugate gradient (hand-written) on the morphogen system,
+// with the matrix stored in CSR by sprs and a hand-written matrix-vector product.
+use sprs::{CsMat, TriMat};
+
+fn matvec(a: &CsMat<f64>, x: &[f64]) -> Vec<f64> {   // CSR: one row at a time
+    a.outer_iterator()
+        .map(|row| row.iter().map(|(j, v)| v * x[j]).sum())
+        .collect()
+}
+fn norm(v: &[f64]) -> f64 { v.iter().map(|x| x * x).sum::<f64>().sqrt() }
+fn dot(u: &[f64], v: &[f64]) -> f64 { u.iter().zip(v).map(|(p, q)| p * q).sum() }
+
+fn jacobi(a: &CsMat<f64>, b: &[f64], tol: f64, maxit: usize) -> (Vec<f64>, Option<usize>) {
+    let n = b.len();
+    let d: Vec<f64> = (0..n).map(|i| *a.get(i, i).unwrap()).collect();
+    let mut x = vec![0.0; n];
+    for it in 1..=maxit {
+        let ax = matvec(a, &x);
+        for i in 0..n { x[i] += (b[i] - ax[i]) / d[i]; }
+        let ax = matvec(a, &x);
+        let r: Vec<f64> = (0..n).map(|i| b[i] - ax[i]).collect();
+        if norm(&r) < tol { return (x, Some(it)); }
+    }
+    (x, None)                                           // not converged
+}
+
+fn cg(a: &CsMat<f64>, b: &[f64], tol: f64, maxit: usize) -> (Vec<f64>, Option<usize>) {
+    let n = b.len();
+    let (mut x, mut r, mut p) = (vec![0.0; n], b.to_vec(), b.to_vec());
+    let mut rr = dot(&r, &r);
+    for it in 1..=maxit {
+        let ap = matvec(a, &p);
+        let alpha = rr / dot(&p, &ap);
+        for i in 0..n { x[i] += alpha * p[i]; r[i] -= alpha * ap[i]; }
+        let rr_new = dot(&r, &r);
+        if rr_new.sqrt() < tol { return (x, Some(it)); }
+        for i in 0..n { p[i] = r[i] + (rr_new / rr) * p[i]; }
+        rr = rr_new;
+    }
+    (x, None)
+}
+
+fn main() {
+    let (n, k) = (1000, 0.01);
+    let mut t = TriMat::new((n, n));
+    for i in 0..n {
+        let end = i == 0 || i == n - 1;
+        t.add_triplet(i, i, if end { 1.0 + k } else { 2.0 + k });
+        if i > 0 { t.add_triplet(i, i - 1, -1.0); }
+        if i < n - 1 { t.add_triplet(i, i + 1, -1.0); }
+    }
+    let a: CsMat<f64> = t.to_csr();
+    let mut s = vec![0.0; n];
+    s[0] = 1.0;
+    let (xj, itj) = jacobi(&a, &s, 1e-10, 20000);
+    let (xc, itc) = cg(&a, &s, 1e-10, 20000);
+    println!("{:?} {:?}", itj, itc);
+    let diff = xj.iter().zip(&xc).map(|(p, q)| (p - q).abs()).fold(0.0, f64::max);
+    println!("{:e}", diff);                              // Jacobi vs CG
+
+    let mut tb = TriMat::new((2, 2));
+    for (i, j, v) in [(0, 0, 1.0), (0, 1, 2.0), (1, 0, 2.0), (1, 1, 1.0)] { tb.add_triplet(i, j, v); }
+    let bm: CsMat<f64> = tb.to_csr();
+    let (xb, itb) = jacobi(&bm, &[3.0, 3.0], 1e-10, 50);
+    println!("{:?}", itb);                               // does not converge
+    println!("{:e}", xb.iter().fold(0.0_f64, |m, v| m.max(v.abs())));
+}
+
+// Output:
+// Some(4158) Some(237)
+// 8.409064555792156e-10
+// None
+// 1.125899906842623e15
+```
+
+:::
+
+Jacobi needs 4158 iterations, CG 237: both reach the residual $10^{-10}$, and both are within $10^{-9}$ of the direct solution (the error is larger than the residual: the matrix has condition number about 400, *Pivoting, norms and conditioning*). (The Rust version compares Jacobi with CG instead of with a direct solve, since `sprs` has no sparse direct solver.) Each iteration costs one or two sparse matrix–vector products, $O(\text{nnz})$; here a direct solve is cheaper, but for a 3D tissue with $10^8$ grid points it is not. On the matrix of B6(b), Jacobi diverges: the error doubles at every step, so after 50 iterations the entries are about $2^{50} \approx 10^{15}$. The check that catches it is the residual, which must go down.
+:::
+
+## Where this leads
+
+- *Least squares: normal equations vs QR* (Part 4): the normal equations $X^TX\boldsymbol\beta = X^T\mathbf{y}$ have an SPD matrix and are solved by Cholesky, but squaring $X$ squares the condition number.
+- *How `eigen()` works, and big problems* (Part 5): PCA of a sparse single-cell matrix with Krylov methods (`irlba`, `scipy.sparse.linalg.eigsh`), which, like CG, only need products $A\mathbf{x}$.
+- *Implicit schemes and the method of lines* (Part 10): one Thomas solve per time step for diffusion along a line; *Steady state in two dimensions* (Part 10): sparse matrices from Kronecker products and sparse direct solves with fill-reducing orderings.
+- *Iterative linear solvers in depth* (Part 11, optional): Jacobi, Gauss–Seidel, conjugate gradient, GMRES and preconditioning for systems too large for a direct solve.
