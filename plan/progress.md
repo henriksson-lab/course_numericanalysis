@@ -27,7 +27,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 22 | runge-kutta | done | done | done |
 | 23 | stiffness | done | done | done |
 | 24 | phase-plane | done | done | done |
-| 25 | gillespie | done | running | |
+| 25 | gillespie | done | done | done |
 | 26 | optimisation-1d | done | done | done |
 | 27 | gradient-methods | done | running | |
 | 28 | nonlinear-least-squares | done | done | done |

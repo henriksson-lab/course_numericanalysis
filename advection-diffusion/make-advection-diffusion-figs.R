@@ -148,9 +148,9 @@ text(6.5, 7.4, "small molecules\nspread across", cex = 1.1, col = oi["blue"])
 text(5, 9.4, "T-sensor / H-filter, top view", cex = 1.3, font = 2)
 pal <- hcl.colors(60, "Blues 3", rev = TRUE)
 par(mar = c(4.5, 5, 2.5, 1))
-image(xs, y, t(F1), col = pal, zlim = c(0, 1), xlab = "", ylab = paste0("y (", um, ")"),
+image(xs, y, t(F1), col = pal, zlim = c(0, 1), useRaster = TRUE, xlab = "", ylab = paste0("y (", um, ")"),
       main = paste0("small molecule, D = 1000 ", um, "²/s"))
-image(xs, y, t(F2), col = pal, zlim = c(0, 1), xlab = "distance downstream x (mm)",
+image(xs, y, t(F2), col = pal, zlim = c(0, 1), useRaster = TRUE, xlab = "distance downstream x (mm)",
       ylab = paste0("y (", um, ")"), main = paste0("protein, D = 100 ", um, "²/s"))
 dev.off()
 
