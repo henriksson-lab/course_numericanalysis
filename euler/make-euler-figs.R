@@ -113,17 +113,18 @@ dev.off()
 ## ---- fig04: local and global error vs h --------------------------------------
 
 svg("fig04-order.svg", width = 9, height = 5.5)
-par(mar = c(5, 6.5, 1, 1), mgp = c(4.5, 1, 0), cex.lab = 1.5, cex.axis = 1.3)
+par(mar = c(5, 6.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
 h <- 2^-(0:10)
 glob <- sapply(h, function(h) abs(tail(euler(f, 0, N0, h, 5 / h)$y, 1) - exact(5)))
 loc  <- sapply(h, function(h) abs(N0 + h * f(0, N0) - exact(h)))
 plot(h, glob, log = "xy", type = "o", pch = 19, lwd = 3, cex = 1.3, col = oi["red"],
-     ylim = range(c(glob, loc)), xlab = "step size h (hours)", ylab = "error",
+     ylim = range(c(glob, loc)), xlab = "step size h (hours)", ylab = "",
      axes = FALSE)
+title(ylab = "error", line = 4.8)
 lines(h, loc, type = "o", pch = 17, lwd = 3, cex = 1.3, col = oi["green"])
-axis(1, at = 10^(-3:0), labels = c("0.001", "0.01", "0.1", "1"), mgp = c(3, 1, 0))
+axis(1, at = 10^(-3:0), labels = c("0.001", "0.01", "0.1", "1"))
 axis(2, at = 10^(-9:0), labels = parse(text = paste0("10^", -9:0)), las = 1); box()
-text(0.0015, 6e-3, "global error at t = 5 h:  slope 1", adj = 0, cex = 1.3, col = oi["red"])
+text(0.0012, 2.5e-2, "global error at t = 5 h:  slope 1", adj = 0, cex = 1.3, col = oi["red"])
 text(0.008, 1.5e-8, "local error, one step:  slope 2", adj = 0, cex = 1.3, col = oi["green"])
 dev.off()
 
@@ -132,7 +133,7 @@ dev.off()
 svg("fig05-unstable.svg", width = 9, height = 5.5)
 par(mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
 k <- 0.8; tt <- seq(0, 24, length.out = 300)
-plot(tt, 10 * exp(-k * tt), type = "l", lwd = 4, col = oi["blue"], ylim = c(-15, 20),
+plot(tt, 10 * exp(-k * tt), type = "l", lwd = 4, col = oi["blue"], ylim = c(-30, 30),
      xlab = "time t (h)", ylab = "C (mg/L)", las = 1)
 abline(h = 0, col = oi["grey"])
 hs <- c(0.5, 2, 3); cols <- oi[c("green", "orange", "red")]
@@ -142,20 +143,20 @@ for (j in 1:3) {
 }
 legend("topright", c("exact", "h = 0.5:  factor 0.6", "h = 2:  factor -0.6", "h = 3:  factor -1.4"),
        col = c(oi["blue"], cols), lwd = c(4, 2.5, 2.5, 2.5), pch = c(NA, 19, 19, 19),
-       cex = 1.3, bty = "n")
+       cex = 1.3, bg = "white")
 dev.off()
 
 ## ---- fig06: logistic with h = 3: spurious cycle ----------------------------
 
 svg("fig06-logistic-cycle.svg", width = 9, height = 5.5)
 par(mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
-tt <- seq(0, 40, length.out = 400)
+tt <- seq(0, 90, length.out = 600)
 plot(tt, exact(tt), type = "l", lwd = 4, col = oi["blue"], ylim = c(0, 1.6),
      xlab = "time t (h)", ylab = "OD  N(t)", las = 1)
-e <- euler(f, 0, N0, 1, 40);   lines(e$t, e$y, type = "o", pch = 19, lwd = 2, col = oi["green"])
-e <- euler(f, 0, N0, 3, 13);   lines(e$t, e$y, type = "o", pch = 19, lwd = 2.5, cex = 1.3, col = oi["red"])
+e <- euler(f, 0, N0, 1, 90);   lines(e$t, e$y, lwd = 2.5, lty = 2, col = oi["green"])
+e <- euler(f, 0, N0, 3, 30);   lines(e$t, e$y, type = "o", pch = 19, lwd = 2.5, cex = 1.2, col = oi["red"])
 legend("bottomright", c("exact", "Euler h = 1 h  (rh = 0.8)", "Euler h = 3 h  (rh = 2.4)"),
-       col = oi[c("blue", "green", "red")], lwd = c(4, 2, 2.5), pch = c(NA, 19, 19),
+       col = oi[c("blue", "green", "red")], lwd = c(4, 2.5, 2.5), lty = c(1, 2, 1), pch = c(NA, NA, 19), bg = "white",
        cex = 1.3, bty = "n")
 dev.off()
 
@@ -170,15 +171,16 @@ y0 <- c(9990, 10, 0)
 Imax <- sum(y0[1:2]) - Npop / (beta / gamma) * (1 + log(beta / gamma * y0[1] / Npop))
 
 svg("fig07-sir.svg", width = 12, height = 5)
-par(mfrow = c(1, 2), mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
+par(mfrow = c(1, 2), mar = c(5, 6.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
 ref <- euler_sys(sir, 0, y0, 0.01, 16000)
 plot(ref$t, ref$y[, 1], type = "l", lwd = 3, col = oi["blue"], ylim = c(0, 10000),
-     xlab = "time (days)", ylab = "people", las = 1)
+     xlab = "time (days)", ylab = "", las = 1)
+title(ylab = "people", line = 4.8)
 lines(ref$t, ref$y[, 2], lwd = 3, col = oi["red"])
 lines(ref$t, ref$y[, 3], lwd = 3, col = oi["green"])
 e <- euler_sys(sir, 0, y0, 4, 40)
 for (j in 1:3) points(e$t, e$y[, j], pch = 19, cex = 1, col = oi[c("blue", "red", "green")][j])
-legend("right", c("S", "I", "R", "dots: Euler h = 4 d"), col = c(oi[c("blue", "red", "green")], "black"),
+legend(75, 8500, c("S", "I", "R", "dots: Euler h = 4 d"), col = c(oi[c("blue", "red", "green")], "black"),
        lwd = c(3, 3, 3, NA), pch = c(NA, NA, NA, 19), cex = 1.25, bty = "n")
 hs <- 2^(2:-6)
 perr <- sapply(hs, function(h) max(euler_sys(sir, 0, y0, h, 200 / h)$y[, 2]) - Imax)
@@ -206,7 +208,7 @@ legend("topleft", c("exact  cos(wt)", "Euler h = 0.1 h"), col = oi[c("blue", "re
        lwd = 2.5, cex = 1.25, bty = "n", horiz = TRUE)
 e <- euler_sys(osc, 0, c(1, 0), 1, 48)
 plot(e$y[, 1], e$y[, 2] / w, type = "o", pch = 19, cex = 0.9, lwd = 2, col = oi["red"],
-     asp = 1, xlab = "x", ylab = expression(x * "'" / omega), las = 1)
+     asp = 1, ylim = c(-3, 5.5), xlab = "x", ylab = expression(x * "'" / omega), las = 1)
 th <- seq(0, 2 * pi, length.out = 200)
 lines(cos(th), sin(th), lwd = 3, col = oi["blue"])
 points(1, 0, pch = 19, cex = 1.6, col = "black")
