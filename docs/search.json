@@ -7053,168 +7053,312 @@
     "href": "euler/lec.html#about-this-lecture",
     "title": "Initial value problems and Euler’s method",
     "section": "About this lecture",
-    "text": "About this lecture\nMost models in biology say how fast something changes, not what it is: growth, decay, infection, binding. Those are ordinary differential equations (ODEs). Very few have a formula for the solution, so we step through time numerically.\n\nAn ODE model is rate in − rate out. With a starting value it is an initial value problem.\nEuler’s method: follow the slope for a short step h, recompute the slope, repeat. Ten lines of code.\nIts error: local O(h^2) per step, global O(h) at the end. Order 1: halving h halves the error, read off a log–log plot.\nIt can fail: too large a step gives negative concentrations, spurious boom–bust cycles, or oscillations that grow without end.\nSystems (the SIR epidemic) and higher-order equations (a 24-hour oscillator) use the same method, with vectors.\nBiology: exponential and logistic growth (exact solution known, so we can measure errors), the SIR model.\n\n\nThis opens Part 8. Students know y’ = ky from calculus and nothing more about differential equations, so the first slides are about what an ODE model is and what a solution is, before any numerics. Everything here is hand-written: library solvers (deSolve::ode, scipy’s solve_ivp) come in the next unit, Runge–Kutta and adaptive step size, and they do the same thing as our ten-line Euler, only more cleverly. The point of this unit is to understand what “solving an ODE numerically” means and how to tell whether the answer is right."
+    "text": "About this lecture\nMost models in biology say how fast something changes, not what it is: growth, decay, infection, binding. Those are ordinary differential equations (ODEs). Very few have a formula for the solution, so we step through time numerically.\n\nAn ODE model is rate in − rate out. With a starting value it is an initial value problem.\nEuler’s method: follow the slope for a short step h, recompute the slope, repeat. Ten lines of code.\nIts error: local O(h^2) per step, global O(h) at the end. Order 1: halving h halves the error, read off a log–log plot.\nIt can fail: too large a step gives negative concentrations, spurious boom–bust cycles, or oscillations that grow without end.\nSystems (the SIR epidemic) and higher-order equations (a 24-hour oscillator) use the same method, with vectors.\nBiology: exponential and logistic growth (exact solution known, so we can measure errors), the SIR model.\n\n\nThis opens Part 8. Students know y’ = ky from calculus and nothing more about differential equations, so the first slides are about what an ODE model is and what a solution is, before any numerics. Everything here is hand-written: library solvers (deSolve::ode, scipy’s solve_ivp) come in the next unit, Runge–Kutta and adaptive step size, and they do the same thing as our ten-line Euler, only more cleverly. The point of this unit is to understand what “solving an ODE numerically” means and how to tell whether the answer is right.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#recap-euler-already-failed-once",
     "href": "euler/lec.html#recap-euler-already-failed-once",
     "title": "Initial value problems and Euler’s method",
     "section": "Recap: Euler already failed once",
-    "text": "Recap: Euler already failed once\nIn Why numerical analysis? we stepped drug clearance C' = -kC (k = 0.8 per hour) forward with 3-hour steps:\nk &lt;- 0.8; h &lt;- 3\nC &lt;- numeric(9); C[1] &lt;- 10                  # mg/L\nfor (i in 1:8) C[i + 1] &lt;- C[i] - h * k * C[i]\nsignif(C, 2)\n# [1]   10  -14   20  -27   38  -54   75 -110  150\n\nEach step multiplies by 1 - hk = -1.4: negative concentrations, growing without bound.\nWith h = 0.5 the factor is 0.6 and the answer is fine.\nToday: where that formula comes from, how accurate it is when it works, and how to know which case you are in.\n\n\nOne slide only, to connect to the introduction. There we used the formula without deriving it; the point was that a method can amplify errors instead of damping them. Today we derive the step, measure its accuracy, and come back to this exact example on the instability slide with the full rule |1 - kh| &lt; 1. Ask the room: what is the true concentration after 24 hours? (10 e^(-19.2), essentially 0.)"
+    "text": "Recap: Euler already failed once\nIn Why numerical analysis? we stepped drug clearance C' = -kC (k = 0.8 per hour) forward with 3-hour steps:\nk &lt;- 0.8; h &lt;- 3\nC &lt;- numeric(9); C[1] &lt;- 10                  # mg/L\nfor (i in 1:8) C[i + 1] &lt;- C[i] - h * k * C[i]\nsignif(C, 2)\n# [1]   10  -14   20  -27   38  -54   75 -110  150\n\nEach step multiplies by 1 - hk = -1.4: negative concentrations, growing without bound.\nWith h = 0.5 the factor is 0.6 and the answer is fine.\nToday: where that formula comes from, how accurate it is when it works, and how to know which case you are in.\n\n\nOne slide only, to connect to the introduction. There we used the formula without deriving it; the point was that a method can amplify errors instead of damping them. Today we derive the step, measure its accuracy, and come back to this exact example on the instability slide with the full rule |1 - kh| &lt; 1. Ask the room: what is the true concentration after 24 hours? (10 e^(-19.2), essentially 0.)",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#odes-as-models-rate-in-rate-out",
     "href": "euler/lec.html#odes-as-models-rate-in-rate-out",
     "title": "Initial value problems and Euler’s method",
     "section": "ODEs as models: rate in − rate out",
-    "text": "ODEs as models: rate in − rate out\nAn ODE says how fast a quantity changes, from what is known about flows:\n\n\n\n\n\n\n\n\nModel\nODE\nRates\n\n\n\n\nDrug clearance\nC' = -kC\nout: k = 0.8 per hour\n\n\nmRNA level\nm' = \\alpha - \\delta m\nin: \\alpha = 10 per min; out: \\delta = 0.2 per min\n\n\nLogistic growth\nN' = rN\\,(1 - N/K)\nr = 0.8 per hour, K = 1.2 (OD)\n\n\n\n\nTogether with a start value this is an initial value problem (IVP): y'(t) = f(t, y), \\qquad y(t_0) = y_0.\nf gives the slope at every time and state. Solving the IVP means finding the curve y(t) that starts at y_0 and has slope f everywhere.\n\n\nThe modelling step is the part biologists are good at: write down what flows in and what flows out. Each term has units of “amount per time”. For the mRNA, production is constant and each molecule is degraded with probability delta per minute, so the loss is delta times m. Setting the right-hand side to zero gives the steady state m = alpha / delta = 50 molecules. The logistic: per-capita growth rate r when the culture is sparse, falling linearly to zero at the carrying capacity K. The OD units and numbers are the growth curve from Convergence and cost. In general f can depend on t too (a drug dosed at certain times); in our examples it does not."
+    "text": "ODEs as models: rate in − rate out\nAn ODE says how fast a quantity changes, from what is known about flows:\n\n\n\n\n\n\n\n\nModel\nODE\nRates\n\n\n\n\nDrug clearance\nC' = -kC\nout: k = 0.8 per hour\n\n\nmRNA level\nm' = \\alpha - \\delta m\nin: \\alpha = 10 per min; out: \\delta = 0.2 per min\n\n\nLogistic growth\nN' = rN\\,(1 - N/K)\nr = 0.8 per hour, K = 1.2 (OD)\n\n\n\n\nTogether with a start value this is an initial value problem (IVP): y'(t) = f(t, y), \\qquad y(t_0) = y_0.\nf gives the slope at every time and state. Solving the IVP means finding the curve y(t) that starts at y_0 and has slope f everywhere.\n\n\nThe modelling step is the part biologists are good at: write down what flows in and what flows out. Each term has units of “amount per time”. For the mRNA, production is constant and each molecule is degraded with probability delta per minute, so the loss is delta times m. Setting the right-hand side to zero gives the steady state m = alpha / delta = 50 molecules. The logistic: per-capita growth rate r when the culture is sparse, falling linearly to zero at the carrying capacity K. The OD units and numbers are the growth curve from Convergence and cost. In general f can depend on t too (a drug dosed at certain times); in our examples it does not.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#exponential-and-logistic-growth-exact-answers",
     "href": "euler/lec.html#exponential-and-logistic-growth-exact-answers",
     "title": "Initial value problems and Euler’s method",
     "section": "Exponential and logistic growth: exact answers",
-    "text": "Exponential and logistic growth: exact answers\nFrom calculus:\n\nN' = rN has N(t) = N_0 e^{rt}. Grows for ever.\nN' = rN(1 - N/K) has (separation of variables) N(t) = \\frac{K}{1 + (K/N_0 - 1)\\,e^{-rt}}, \\qquad K = 1.2,\\ N_0 = 0.05,\\ r = 0.8 \\text{ per hour}.\n\nK &lt;- 1.2; N0 &lt;- 0.05; r &lt;- 0.8\nexact &lt;- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))\nround(exact(0:5), 4)\n# [1] 0.0500 0.1059 0.2126 0.3888 0.6193 0.8443\n\nWe use the logistic because we know the answer: every error today is measured, not guessed.\nReal models (SIR, gene circuits, pharmacokinetics with several compartments) have no formula. That is why we need numerics.\n\n\nThe logistic formula can be derived by separating variables and partial fractions; we do not need the derivation, only the formula. It is our test case: a nonlinear ODE with a known solution. This is the standard way to test a numerical method: run it on a problem where you know the answer, measure the error, and then trust it (with checks) on problems where you do not. Note how slowly N starts: OD 0.05 to 0.11 in the first hour, then the curve steepens around t = 4 h, where N = K/2 = 0.6."
+    "text": "Exponential and logistic growth: exact answers\nFrom calculus:\n\nN' = rN has N(t) = N_0 e^{rt}. Grows for ever.\nN' = rN(1 - N/K) has (separation of variables) N(t) = \\frac{K}{1 + (K/N_0 - 1)\\,e^{-rt}}, \\qquad K = 1.2,\\ N_0 = 0.05,\\ r = 0.8 \\text{ per hour}.\n\nK &lt;- 1.2; N0 &lt;- 0.05; r &lt;- 0.8\nexact &lt;- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))\nround(exact(0:5), 4)\n# [1] 0.0500 0.1059 0.2126 0.3888 0.6193 0.8443\n\nWe use the logistic because we know the answer: every error today is measured, not guessed.\nReal models (SIR, gene circuits, pharmacokinetics with several compartments) have no formula. That is why we need numerics.\n\n\nThe logistic formula can be derived by separating variables and partial fractions; we do not need the derivation, only the formula. It is our test case: a nonlinear ODE with a known solution. This is the standard way to test a numerical method: run it on a problem where you know the answer, measure the error, and then trust it (with checks) on problems where you do not. Note how slowly N starts: OD 0.05 to 0.11 in the first hour, then the curve steepens around t = 4 h, where N = K/2 = 0.6.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#direction-field-the-ode-as-a-picture",
     "href": "euler/lec.html#direction-field-the-ode-as-a-picture",
     "title": "Initial value problems and Euler’s method",
     "section": "Direction field: the ODE as a picture",
-    "text": "Direction field: the ODE as a picture\n\n\nAt each point (t, N) draw a short line with slope f(t, N) = rN(1 - N/K).\nA solution follows the lines. Different start values give different curves; they never cross.\nN = 0 and N = K are equilibria (slope 0). Steepest growth at N = K/2.\n\n\nThe direction field is the ODE without any solving: the equation gives the slope everywhere, and a solution is a curve tangent to all the little lines. Here the slope depends only on N, not on t, so every column looks the same. The dark blue curve is our culture starting at 0.05; the light ones start at 0.01, 0.2 and 1.6 (above the carrying capacity, it decays down to K). Euler’s method is exactly “walk along the little lines”: that is the next slide. Equilibria and their stability are the topic of Equilibria, stability and the phase plane, later in Part 8."
+    "text": "Direction field: the ODE as a picture\n\n\nAt each point (t, N) draw a short line with slope f(t, N) = rN(1 - N/K).\nA solution follows the lines. Different start values give different curves; they never cross.\nN = 0 and N = K are equilibria (slope 0). Steepest growth at N = K/2.\n\n\nThe direction field is the ODE without any solving: the equation gives the slope everywhere, and a solution is a curve tangent to all the little lines. Here the slope depends only on N, not on t, so every column looks the same. The dark blue curve is our culture starting at 0.05; the light ones start at 0.01, 0.2 and 1.6 (above the carrying capacity, it decays down to K). Euler’s method is exactly “walk along the little lines”: that is the next slide. Equilibria and their stability are the topic of Equilibria, stability and the phase plane, later in Part 8.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#eulers-method-follow-the-slope",
     "href": "euler/lec.html#eulers-method-follow-the-slope",
     "title": "Initial value problems and Euler’s method",
     "section": "Euler’s method: follow the slope",
-    "text": "Euler’s method: follow the slope\nTake a small step h along the tangent, then look again:\ny_{n+1} = y_n + h\\,f(t_n, y_n), \\qquad t_{n+1} = t_n + h.\n\nFrom Taylor: y(t + h) = y(t) + h\\,y'(t) + \\tfrac{h^2}{2}\\,y''(\\xi), and y'(t) = f(t, y). Euler drops the h^2 term.\nOne f evaluation per step. y_n is our approximation to y(t_n).\nThe forward difference from Numerical differentiation, rearranged: \\dfrac{y_{n+1} - y_n}{h} = f(t_n, y_n).\n\n\nThis is the Taylor row “Euler / Runge-Kutta” from the table in Why numerical analysis?: y(t+h) approx y(t) + h y’(t). The ODE hands us y’(t) for free, as f(t, y). The dropped term h^2/2 y’’ is the error of one step; we come back to it in a few slides. Euler (1768) is the simplest method, and every better one (Runge–Kutta, next unit) uses the same template: evaluate the slope, step, repeat; only the choice of slope gets smarter."
+    "text": "Euler’s method: follow the slope\nTake a small step h along the tangent, then look again:\ny_{n+1} = y_n + h\\,f(t_n, y_n), \\qquad t_{n+1} = t_n + h.\n\nFrom Taylor: y(t + h) = y(t) + h\\,y'(t) + \\tfrac{h^2}{2}\\,y''(\\xi), and y'(t) = f(t, y). Euler drops the h^2 term.\nOne f evaluation per step. y_n is our approximation to y(t_n).\nThe forward difference from Numerical differentiation, rearranged: \\dfrac{y_{n+1} - y_n}{h} = f(t_n, y_n).\n\n\nThis is the Taylor row “Euler / Runge-Kutta” from the table in Why numerical analysis?: y(t+h) approx y(t) + h y’(t). The ODE hands us y’(t) for free, as f(t, y). The dropped term h^2/2 y’’ is the error of one step; we come back to it in a few slides. Euler (1768) is the simplest method, and every better one (Runge–Kutta, next unit) uses the same template: evaluate the slope, step, repeat; only the choice of slope gets smarter.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#euler-by-hand",
     "href": "euler/lec.html#euler-by-hand",
     "title": "Initial value problems and Euler’s method",
     "section": "Euler by hand",
-    "text": "Euler by hand\nLogistic growth, h = 1 hour, f(N) = 0.8\\,N\\,(1 - N/1.2):\n\n\n\n\n\n\n\n\n\n\n\nn\nt_n\nN_n\nf(N_n)\nN_{n+1} = N_n + 1 \\cdot f(N_n)\nexact N(t_{n+1})\n\n\n\n\n0\n0\n0.05\n0.8 \\cdot 0.05 \\cdot 0.9583 = 0.03833\n0.08833\n0.10587\n\n\n1\n1\n0.08833\n0.8 \\cdot 0.08833 \\cdot 0.9264 = 0.06547\n0.15380\n0.21263\n\n\n2\n2\n0.15380\n0.8 \\cdot 0.15380 \\cdot 0.8718 = 0.10727\n0.26107\n0.38879\n\n\n\n\nEuler is behind the true curve: the slope keeps increasing during each step, and Euler uses the slope at the start.\nAfter 3 h the error is 0.26 - 0.39 = -0.13: a third of the true value. h = 1 is too big here.\n\n\nDo the first row on the board. 0.05/1.2 = 0.04167, so 1 - N/K = 0.9583; times 0.8 times 0.05 gives 0.03833. The exercise asks for the same steps with h = 0.5. The curve is convex in this region (y’’ &gt; 0), so the tangent lies below the curve and every Euler step undershoots. After the inflection point at N = 0.6 the curve is concave and Euler starts to catch up, and even overshoots slightly near K (next slide)."
+    "text": "Euler by hand\nLogistic growth, h = 1 hour, f(N) = 0.8\\,N\\,(1 - N/1.2):\n\n\n\n\n\n\n\n\n\n\n\nn\nt_n\nN_n\nf(N_n)\nN_{n+1} = N_n + 1 \\cdot f(N_n)\nexact N(t_{n+1})\n\n\n\n\n0\n0\n0.05\n0.8 \\cdot 0.05 \\cdot 0.9583 = 0.03833\n0.08833\n0.10587\n\n\n1\n1\n0.08833\n0.8 \\cdot 0.08833 \\cdot 0.9264 = 0.06547\n0.15380\n0.21263\n\n\n2\n2\n0.15380\n0.8 \\cdot 0.15380 \\cdot 0.8718 = 0.10727\n0.26107\n0.38879\n\n\n\n\nEuler is behind the true curve: the slope keeps increasing during each step, and Euler uses the slope at the start.\nAfter 3 h the error is 0.26 - 0.39 = -0.13: a third of the true value. h = 1 is too big here.\n\n\nDo the first row on the board. 0.05/1.2 = 0.04167, so 1 - N/K = 0.9583; times 0.8 times 0.05 gives 0.03833. The exercise asks for the same steps with h = 0.5. The curve is convex in this region (y’’ &gt; 0), so the tangent lies below the curve and every Euler step undershoots. After the inflection point at N = 0.6 the curve is concave and Euler starts to catch up, and even overshoots slightly near K (next slide).",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#euler-in-r",
     "href": "euler/lec.html#euler-in-r",
     "title": "Initial value problems and Euler’s method",
     "section": "Euler in R",
-    "text": "Euler in R\neuler &lt;- function(f, t0, y0, h, n) {\n  t &lt;- t0 + (0:n) * h\n  y &lt;- numeric(n + 1); y[1] &lt;- y0         # R vectors start at index 1\n  for (i in 1:n) y[i + 1] &lt;- y[i] + h * f(t[i], y[i])\n  data.frame(t = t, y = y)\n}\nf &lt;- function(t, N) r * N * (1 - N / K)    # f(t, y), even if t is unused\nout &lt;- euler(f, 0, N0, h = 1, n = 5)\nround(out$y, 4)\n# [1] 0.0500 0.0883 0.1538 0.2611 0.4245 0.6439\n\nThe loop is the whole method. f always takes (t, y), so the same euler works for every ODE.\nThe first values match the hand table.\n\n\nPoint out the R detail: y[1] holds y_0, so y[i + 1] holds y_i. The function signature f(t, y) is the convention of every ODE library (deSolve uses f(t, y, parms), scipy uses f(t, y)), so writing it this way now makes the switch to library solvers in the next unit painless. A loop is unavoidable here: each step needs the previous one, so there is nothing to vectorise."
+    "text": "Euler in R\neuler &lt;- function(f, t0, y0, h, n) {\n  t &lt;- t0 + (0:n) * h\n  y &lt;- numeric(n + 1); y[1] &lt;- y0         # R vectors start at index 1\n  for (i in 1:n) y[i + 1] &lt;- y[i] + h * f(t[i], y[i])\n  data.frame(t = t, y = y)\n}\nf &lt;- function(t, N) r * N * (1 - N / K)    # f(t, y), even if t is unused\nout &lt;- euler(f, 0, N0, h = 1, n = 5)\nround(out$y, 4)\n# [1] 0.0500 0.0883 0.1538 0.2611 0.4245 0.6439\n\nThe loop is the whole method. f always takes (t, y), so the same euler works for every ODE.\nThe first values match the hand table.\n\n\nPoint out the R detail: y[1] holds y_0, so y[i + 1] holds y_i. The function signature f(t, y) is the convention of every ODE library (deSolve uses f(t, y, parms), scipy uses f(t, y)), so writing it this way now makes the switch to library solvers in the next unit painless. A loop is unavoidable here: each step needs the previous one, so there is nothing to vectorise.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#smaller-steps-closer-to-the-truth",
     "href": "euler/lec.html#smaller-steps-closer-to-the-truth",
     "title": "Initial value problems and Euler’s method",
     "section": "Smaller steps, closer to the truth",
-    "text": "Smaller steps, closer to the truth\n\n\nError at t = 5 h: -0.20 with h = 1, -0.094 with h = 0.5, -0.017 with h = 0.1.\nError roughly proportional to h. Why, and how to check it?\n\n\nThe true OD at 5 h is 0.844. With 1-hour steps Euler says 0.644, a 24 % error; that would be a terrible fit to growth data. With 0.1-hour steps the curve is close. The errors 0.20, 0.094, 0.017 are roughly in proportion to h; the next slides explain why and make it precise."
+    "text": "Smaller steps, closer to the truth\n\n\nError at t = 5 h: -0.20 with h = 1, -0.094 with h = 0.5, -0.017 with h = 0.1.\nError roughly proportional to h. Why, and how to check it?\n\n\nThe true OD at 5 h is 0.844. With 1-hour steps Euler says 0.644, a 24 % error; that would be a terrible fit to growth data. With 0.1-hour steps the curve is close. The errors 0.20, 0.094, 0.017 are roughly in proportion to h; the next slides explain why and make it precise.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#local-and-global-error",
     "href": "euler/lec.html#local-and-global-error",
     "title": "Initial value problems and Euler’s method",
     "section": "Local and global error",
-    "text": "Local and global error\n\n\nLocal error: error made in one step, starting on the exact curve through the previous point. From Taylor: \\tfrac{h^2}{2}\\,y'', so O(h^2).\nGlobal error: y_n - y(t_n), everything accumulated since t_0.\n\n\nThe dashed grey curves are exact solutions of the ODE, but starting from an Euler point instead of from N0. The local error at t = 3 (green) is how far one Euler step lands from the dashed curve through the previous point. The global error (red) is how far we are from the curve we actually want. After the first step, Euler is on a “wrong” solution curve, and each step moves to another wrong one. The global error is the sum of the local errors, each carried forward (and here slightly grown) by the ODE."
+    "text": "Local and global error\n\n\nLocal error: error made in one step, starting on the exact curve through the previous point. From Taylor: \\tfrac{h^2}{2}\\,y'', so O(h^2).\nGlobal error: y_n - y(t_n), everything accumulated since t_0.\n\n\nThe dashed grey curves are exact solutions of the ODE, but starting from an Euler point instead of from N0. The local error at t = 3 (green) is how far one Euler step lands from the dashed curve through the previous point. The global error (red) is how far we are from the curve we actually want. After the first step, Euler is on a “wrong” solution curve, and each step moves to another wrong one. The global error is the sum of the local errors, each carried forward (and here slightly grown) by the ODE.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#why-global-error-is-oh",
     "href": "euler/lec.html#why-global-error-is-oh",
     "title": "Initial value problems and Euler’s method",
     "section": "Why global error is O(h)",
-    "text": "Why global error is O(h)\n\nOne step: local error \\approx \\tfrac{h^2}{2}\\,y''. Check on the first logistic step, y''(0) = 0.0281:\n\n\n\n\n\n\n\n\n\n\nh\n1\n0.5\n0.25\n0.1\n\n\n\n\nlocal error\n0.0175\n0.0039\n0.00093\n0.000144\n\n\npredicted \\tfrac{h^2}{2}y''(0)\n0.0141\n0.0035\n0.00088\n0.000141\n\n\n\nHalving h divides the local error by about 4.\nTo reach time T takes n = T/h steps. Adding up T/h local errors of size C h^2: \\text{global error} \\approx \\frac{T}{h}\\cdot C h^2 = C\\,T\\,h = O(h).\nHalving h makes each step 4× more accurate but doubles the number of steps: the total improves 2×. Euler is order 1.\n\n\nThe local error table is computed in the exercise. The prediction uses y’’ at t = 0, which for the logistic is r N’ (1 - 2N/K) = 0.8 * 0.0383 * 0.917 = 0.0281. For small h the prediction is very good (0.000141 vs 0.000144); for h = 1, y’’ changes during the step and the prediction is off. The counting argument assumes errors simply add. In reality each earlier error is also carried along by the ODE, growing or shrinking; for a stable problem that changes the constant, not the power of h. The general rule: local error O(h^(p+1)) gives global error O(h^p), and p is called the order of the method."
+    "text": "Why global error is O(h)\n\nOne step: local error \\approx \\tfrac{h^2}{2}\\,y''. Check on the first logistic step, y''(0) = 0.0281:\n\n\n\n\n\n\n\n\n\n\nh\n1\n0.5\n0.25\n0.1\n\n\n\n\nlocal error\n0.0175\n0.0039\n0.00093\n0.000144\n\n\npredicted \\tfrac{h^2}{2}y''(0)\n0.0141\n0.0035\n0.00088\n0.000141\n\n\n\nHalving h divides the local error by about 4.\nTo reach time T takes n = T/h steps. Adding up T/h local errors of size C h^2: \\text{global error} \\approx \\frac{T}{h}\\cdot C h^2 = C\\,T\\,h = O(h).\nHalving h makes each step 4× more accurate but doubles the number of steps: the total improves 2×. Euler is order 1.\n\n\nThe local error table is computed in the exercise. The prediction uses y’’ at t = 0, which for the logistic is r N’ (1 - 2N/K) = 0.8 * 0.0383 * 0.917 = 0.0281. For small h the prediction is very good (0.000141 vs 0.000144); for h = 1, y’’ changes during the step and the prediction is off. The counting argument assumes errors simply add. In reality each earlier error is also carried along by the ODE, growing or shrinking; for a stable problem that changes the constant, not the power of h. The general rule: local error O(h^(p+1)) gives global error O(h^p), and p is called the order of the method.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#measure-the-order",
     "href": "euler/lec.html#measure-the-order",
     "title": "Initial value problems and Euler’s method",
     "section": "Measure the order",
-    "text": "Measure the order\nexact &lt;- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))\nh   &lt;- 2^-(0:8)                               # 1, 1/2, ..., 1/256 hours\nerr &lt;- sapply(h, function(h)\n  abs(tail(euler(f, 0, N0, h, 5 / h)$y, 1) - exact(5)))\nsignif(err, 3)\n# [1] 0.200000 0.094000 0.044400 0.021400 0.010500 0.005220 0.002600 0.001300\n# [9] 0.000647\nsignif(err[-9] / err[-1], 3)                  # ratio when h is halved\n# [1] 2.13 2.12 2.07 2.04 2.02 2.01 2.00 2.00\ncoef(lm(log10(err) ~ log10(h)))[2]            # slope on log-log axes\n#  log10(h)\n#  1.031108\n\nHalving h halves the error: ratio 2 = 2^1, slope 1. Order p would give ratio 2^p.\n\n\nThis is the experiment from Convergence and cost, now for an ODE solver. tail(…, 1) takes the last value, the approximation at t = 5. The ratios approach 2 as h shrinks; for large h the higher-order terms still matter. Fitting the slope of log error against log h gives 1.03. The figure on the next slide shows it, together with the slope-2 local error."
+    "text": "Measure the order\nexact &lt;- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))\nh   &lt;- 2^-(0:8)                               # 1, 1/2, ..., 1/256 hours\nerr &lt;- sapply(h, function(h)\n  abs(tail(euler(f, 0, N0, h, 5 / h)$y, 1) - exact(5)))\nsignif(err, 3)\n# [1] 0.200000 0.094000 0.044400 0.021400 0.010500 0.005220 0.002600 0.001300\n# [9] 0.000647\nsignif(err[-9] / err[-1], 3)                  # ratio when h is halved\n# [1] 2.13 2.12 2.07 2.04 2.02 2.01 2.00 2.00\ncoef(lm(log10(err) ~ log10(h)))[2]            # slope on log-log axes\n#  log10(h)\n#  1.031108\n\nHalving h halves the error: ratio 2 = 2^1, slope 1. Order p would give ratio 2^p.\n\n\nThis is the experiment from Convergence and cost, now for an ODE solver. tail(…, 1) takes the last value, the approximation at t = 5. The ratios approach 2 as h shrinks; for large h the higher-order terms still matter. Fitting the slope of log error against log h gives 1.03. The figure on the next slide shows it, together with the slope-2 local error.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#order-on-a-loglog-plot",
     "href": "euler/lec.html#order-on-a-loglog-plot",
     "title": "Initial value problems and Euler’s method",
     "section": "Order on a log–log plot",
-    "text": "Order on a log–log plot\n\n\nGlobal error: slope 1. Local (one-step) error: slope 2. Parallel lines would mean the same order.\nCheck your own solver this way: a slope that is not the expected order means a bug.\n\n\nTwo straight lines on log-log axes: the global error at t = 5 (slope 1) and the error of a single step from t = 0 (slope 2). Neither line bends at small h here; rounding error of order n * eps (about 1e-12 for 5000 steps) is far below. The debugging use is real: if a hand-written method that should be order 1 (or 4, for RK4) shows another slope, there is a mistake in the code, for example the slope evaluated at the wrong time."
+    "text": "Order on a log–log plot\n\n\nGlobal error: slope 1. Local (one-step) error: slope 2. Parallel lines would mean the same order.\nCheck your own solver this way: a slope that is not the expected order means a bug.\n\n\nTwo straight lines on log-log axes: the global error at t = 5 (slope 1) and the error of a single step from t = 0 (slope 2). Neither line bends at small h here; rounding error of order n * eps (about 1e-12 for 5000 steps) is far below. The debugging use is real: if a hand-written method that should be order 1 (or 4, for RK4) shows another slope, there is a mistake in the code, for example the slope evaluated at the wrong time.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#without-the-exact-answer-halve-the-step",
     "href": "euler/lec.html#without-the-exact-answer-halve-the-step",
     "title": "Initial value problems and Euler’s method",
     "section": "Without the exact answer: halve the step",
-    "text": "Without the exact answer: halve the step\nUsually there is no formula. Run twice, with h and h/2:\ny1 &lt;- tail(euler(f, 0, N0, 0.1, 50)$y, 1)       # h = 0.1\ny2 &lt;- tail(euler(f, 0, N0, 0.05, 100)$y, 1)     # h = 0.05\nc(y1, y2, y1 - y2, y2 - exact(5))\n# [1]  0.827288203  0.835925961 -0.008637758 -0.008395457\n\nOrder 1: y_h \\approx y + Ch and y_{h/2} \\approx y + Ch/2, so y_h - y_{h/2} \\approx Ch/2 \\approx the error of y_{h/2}. Here -0.0086 vs the true -0.0084.\nCost: the error at t = 5 is about 0.17\\,h. Four correct digits (10^{-4}) need h \\approx 6\\times10^{-4}: 8300 steps. Six digits: 830 000.\nOrder 1 is cheap per step and expensive per digit. Higher order: Runge–Kutta and adaptive step size.\n\n\nStep halving is the check to run on every ODE solution you compute with a fixed step: if halving the step changes the answer in a digit you care about, the step was too large. It is also the idea behind adaptive step-size control in the next unit, which estimates the local error at every step by comparing two methods. The cost numbers: err(1/256) = 0.000647, so C = 0.166 and h = 1e-4 / 0.166 = 6e-4, 5 / 6e-4 = 8300 steps. Every extra digit costs ten times the work for an order-1 method; for an order-4 method, an extra digit costs a factor 10^(1/4) = 1.8."
+    "text": "Without the exact answer: halve the step\nUsually there is no formula. Run twice, with h and h/2:\ny1 &lt;- tail(euler(f, 0, N0, 0.1, 50)$y, 1)       # h = 0.1\ny2 &lt;- tail(euler(f, 0, N0, 0.05, 100)$y, 1)     # h = 0.05\nc(y1, y2, y1 - y2, y2 - exact(5))\n# [1]  0.827288203  0.835925961 -0.008637758 -0.008395457\n\nOrder 1: y_h \\approx y + Ch and y_{h/2} \\approx y + Ch/2, so y_h - y_{h/2} \\approx Ch/2 \\approx the error of y_{h/2}. Here -0.0086 vs the true -0.0084.\nCost: the error at t = 5 is about 0.17\\,h. Four correct digits (10^{-4}) need h \\approx 6\\times10^{-4}: 8300 steps. Six digits: 830 000.\nOrder 1 is cheap per step and expensive per digit. Higher order: Runge–Kutta and adaptive step size.\n\n\nStep halving is the check to run on every ODE solution you compute with a fixed step: if halving the step changes the answer in a digit you care about, the step was too large. It is also the idea behind adaptive step-size control in the next unit, which estimates the local error at every step by comparing two methods. The cost numbers: err(1/256) = 0.000647, so C = 0.166 and h = 1e-4 / 0.166 = 6e-4, 5 / 6e-4 = 8300 steps. Every extra digit costs ten times the work for an order-1 method; for an order-4 method, an extra digit costs a factor 10^(1/4) = 1.8.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#instability-back-to-drug-clearance",
     "href": "euler/lec.html#instability-back-to-drug-clearance",
     "title": "Initial value problems and Euler’s method",
     "section": "Instability: back to drug clearance",
-    "text": "Instability: back to drug clearance\n\nOn C' = -kC each Euler step multiplies by 1 - kh:\n\n0 &lt; kh &lt; 1: decays, like the truth. \\;1 &lt; kh &lt; 2: decays, but flips sign every step.\nkh &gt; 2: |1 - kh| &gt; 1, grows without bound. Stable only for h &lt; 2/k = 2.5 h.\n\n\nFor C’ = -kC Euler gives C_{n+1} = C_n - h k C_n = (1 - kh) C_n, so C_n = (1 - kh)^n C_0. This is a geometric sequence: it shrinks if |1 - kh| &lt; 1 and grows otherwise. h = 0.5: factor 0.6, monotone and close to exact. h = 2: factor -0.6, oscillating but decaying: wrong in shape (negative concentrations) but at least it goes to zero. h = 3: factor -1.4, the introduction’s example. The bound h &lt; 2/k depends only on the rate: a drug cleared ten times faster (k = 8 per hour) needs h &lt; 0.25 h. When a model contains one very fast rate, this bound forces tiny steps everywhere; that is stiffness, the topic of Stiffness and implicit methods."
+    "text": "Instability: back to drug clearance\n\nOn C' = -kC each Euler step multiplies by 1 - kh:\n\n0 &lt; kh &lt; 1: decays, like the truth. \\;1 &lt; kh &lt; 2: decays, but flips sign every step.\nkh &gt; 2: |1 - kh| &gt; 1, grows without bound. Stable only for h &lt; 2/k = 2.5 h.\n\n\nFor C’ = -kC Euler gives C_{n+1} = C_n - h k C_n = (1 - kh) C_n, so C_n = (1 - kh)^n C_0. This is a geometric sequence: it shrinks if |1 - kh| &lt; 1 and grows otherwise. h = 0.5: factor 0.6, monotone and close to exact. h = 2: factor -0.6, oscillating but decaying: wrong in shape (negative concentrations) but at least it goes to zero. h = 3: factor -1.4, the introduction’s example. The bound h &lt; 2/k depends only on the rate: a drug cleared ten times faster (k = 8 per hour) needs h &lt; 0.25 h. When a model contains one very fast rate, this bound forces tiny steps everywhere; that is stiffness, the topic of Stiffness and implicit methods.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#instability-in-a-nonlinear-model",
     "href": "euler/lec.html#instability-in-a-nonlinear-model",
     "title": "Initial value problems and Euler’s method",
     "section": "Instability in a nonlinear model",
-    "text": "Instability in a nonlinear model\n\n\n\n\nround(tail(euler(f, 0, N0, 3, 40)$y, 4), 3)\n# [1] 1.432 0.770 1.432 0.767\n\nNear K, the logistic behaves like y' = -r\\,(N - K): the same test equation with rate r.\nStable only for h &lt; 2/r = 2.5 h. With h = 3 (rh = 2.4), Euler settles into a boom–bust cycle 0.77 ↔︎ 1.43.\n\n\n\nA confident wrong answer: a clean, repeating cycle that the true model does not have. Check: halve the step. The cycle disappears.\n\n\nLinearise: f(N) = r N (1 - N/K) has f’(K) = -r, so near the carrying capacity the deviation N - K obeys approximately d/dt (N - K) = -r (N - K). Euler multiplies the deviation by 1 - rh = -1.4 each step, so it grows until the nonlinearity limits it. The Euler map N -&gt; N + h r N (1 - N/K) is the discrete logistic map, the cousin of the Ricker model from Bisection and fixed-point iteration: with rh = 2.4 it has a stable 2-cycle, and above rh = 2.57 it becomes chaotic. A discrete-time population model can really cycle; the continuous logistic ODE cannot. Any long simulation with a fixed step should be repeated with half the step before you interpret oscillations."
+    "text": "Instability in a nonlinear model\n\n\n\n\nround(tail(euler(f, 0, N0, 3, 40)$y, 4), 3)\n# [1] 1.432 0.770 1.432 0.767\n\nNear K, the logistic behaves like y' = -r\\,(N - K): the same test equation with rate r.\nStable only for h &lt; 2/r = 2.5 h. With h = 3 (rh = 2.4), Euler settles into a boom–bust cycle 0.77 ↔︎ 1.43.\n\n\n\nA confident wrong answer: a clean, repeating cycle that the true model does not have. Check: halve the step. The cycle disappears.\n\n\nLinearise: f(N) = r N (1 - N/K) has f’(K) = -r, so near the carrying capacity the deviation N - K obeys approximately d/dt (N - K) = -r (N - K). Euler multiplies the deviation by 1 - rh = -1.4 each step, so it grows until the nonlinearity limits it. The Euler map N -&gt; N + h r N (1 - N/K) is the discrete logistic map, the cousin of the Ricker model from Bisection and fixed-point iteration: with rh = 2.4 it has a stable 2-cycle, and above rh = 2.57 it becomes chaotic. A discrete-time population model can really cycle; the continuous logistic ODE cannot. Any long simulation with a fixed step should be repeated with half the step before you interpret oscillations.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#systems-of-odes-the-sir-epidemic",
     "href": "euler/lec.html#systems-of-odes-the-sir-epidemic",
     "title": "Initial value problems and Euler’s method",
     "section": "Systems of ODEs: the SIR epidemic",
-    "text": "Systems of ODEs: the SIR epidemic\nSusceptible S, infected I, recovered R in a population of N = 10\\,000:\nS' = -\\beta \\frac{SI}{N}, \\qquad I' = \\beta\\frac{SI}{N} - \\gamma I, \\qquad R' = \\gamma I\n\n\\beta = 0.3 per day (infectious contacts), \\gamma = 0.1 per day (recovery: 10 days infectious). R_0 = \\beta/\\gamma = 3.\nStart: S = 9990, I = 10, R = 0. Rate in − rate out again: \\beta SI/N flows from S to I, \\gamma I from I to R.\nVector form: \\mathbf y = (S, I, R), \\mathbf y' = \\mathbf f(t, \\mathbf y). Euler is unchanged: \\mathbf y_{n+1} = \\mathbf y_n + h\\,\\mathbf f(t_n, \\mathbf y_n).\n\n\nThe SIR model (Kermack and McKendrick, 1927) has no closed-form solution in time, which is typical. Each term is a flow: new infections happen at a rate proportional to contacts between S and I, beta S I / N, and infected people recover at rate gamma per person. R0 = 3 means one infected person infects 3 others in a fully susceptible population. Every term appears once with a minus sign and once with a plus, so S + I + R stays N. The vector form is the key idea: a system of ODEs is one ODE for a vector, and the Euler step is the same line of code with vectors. We reuse this model in Runge–Kutta and adaptive step size."
+    "text": "Systems of ODEs: the SIR epidemic\nSusceptible S, infected I, recovered R in a population of N = 10\\,000:\nS' = -\\beta \\frac{SI}{N}, \\qquad I' = \\beta\\frac{SI}{N} - \\gamma I, \\qquad R' = \\gamma I\n\n\\beta = 0.3 per day (infectious contacts), \\gamma = 0.1 per day (recovery: 10 days infectious). R_0 = \\beta/\\gamma = 3.\nStart: S = 9990, I = 10, R = 0. Rate in − rate out again: \\beta SI/N flows from S to I, \\gamma I from I to R.\nVector form: \\mathbf y = (S, I, R), \\mathbf y' = \\mathbf f(t, \\mathbf y). Euler is unchanged: \\mathbf y_{n+1} = \\mathbf y_n + h\\,\\mathbf f(t_n, \\mathbf y_n).\n\n\nThe SIR model (Kermack and McKendrick, 1927) has no closed-form solution in time, which is typical. Each term is a flow: new infections happen at a rate proportional to contacts between S and I, beta S I / N, and infected people recover at rate gamma per person. R0 = 3 means one infected person infects 3 others in a fully susceptible population. Every term appears once with a minus sign and once with a plus, so S + I + R stays N. The vector form is the key idea: a system of ODEs is one ODE for a vector, and the Euler step is the same line of code with vectors. We reuse this model in Runge–Kutta and adaptive step size.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#sir-in-r",
     "href": "euler/lec.html#sir-in-r",
     "title": "Initial value problems and Euler’s method",
     "section": "SIR in R",
-    "text": "SIR in R\nbeta &lt;- 0.3; gamma &lt;- 0.1; N &lt;- 10000       # per day; R0 = beta/gamma = 3\nsir &lt;- function(t, y) {\n  S &lt;- y[1]; I &lt;- y[2]\n  c(-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I)\n}\neuler_sys &lt;- function(f, t0, y0, h, n) {    # one row per time point\n  Y &lt;- matrix(0, n + 1, length(y0)); Y[1, ] &lt;- y0\n  for (i in 1:n) Y[i + 1, ] &lt;- Y[i, ] + h * f(t0 + (i - 1) * h, Y[i, ])\n  Y\n}\nY &lt;- euler_sys(sir, 0, c(9990, 10, 0), h = 1, n = 160)\nc(peak = max(Y[, 2]), day = which.max(Y[, 2]) - 1)\n#     peak      day\n# 3127.315   41.000\n\nThe only change from euler: y is a vector, so the solution is a matrix (time × variable).\n\n\nf now returns a vector of three slopes, and each Euler step updates all three at once, using the old values of all three. (Updating S first and then using the new S for I would be a different method.) The peak of 3127 people infected at day 41: how accurate is it? For SIR there is one quantity with a formula, the peak, so we can measure the error (next slide)."
+    "text": "SIR in R\nbeta &lt;- 0.3; gamma &lt;- 0.1; N &lt;- 10000       # per day; R0 = beta/gamma = 3\nsir &lt;- function(t, y) {\n  S &lt;- y[1]; I &lt;- y[2]\n  c(-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I)\n}\neuler_sys &lt;- function(f, t0, y0, h, n) {    # one row per time point\n  Y &lt;- matrix(0, n + 1, length(y0)); Y[1, ] &lt;- y0\n  for (i in 1:n) Y[i + 1, ] &lt;- Y[i, ] + h * f(t0 + (i - 1) * h, Y[i, ])\n  Y\n}\nY &lt;- euler_sys(sir, 0, c(9990, 10, 0), h = 1, n = 160)\nc(peak = max(Y[, 2]), day = which.max(Y[, 2]) - 1)\n#     peak      day\n# 3127.315   41.000\n\nThe only change from euler: y is a vector, so the solution is a matrix (time × variable).\n\n\nf now returns a vector of three slopes, and each Euler step updates all three at once, using the old values of all three. (Updating S first and then using the new S for I would be a different method.) The peak of 3127 people infected at day 41: how accurate is it? For SIR there is one quantity with a formula, the peak, so we can measure the error (next slide).",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#sir-how-accurate-is-the-peak",
     "href": "euler/lec.html#sir-how-accurate-is-the-peak",
     "title": "Initial value problems and Euler’s method",
     "section": "SIR: how accurate is the peak?",
-    "text": "SIR: how accurate is the peak?\n\n\nExact peak: I_{\\max} = S_0 + I_0 - \\tfrac{N}{R_0}\\bigl(1 + \\ln\\tfrac{R_0 S_0}{N}\\bigr) = 3008. Euler: 3127 (h = 1 d), 3020 (h = 0.1 d). Order 1 again.\nS + I + R = 10\\,000 to 10^{-11} for every h: Euler keeps sums exactly. A conservation check finds bugs, not step-size error.\n\n\nThe peak formula comes from dividing I’ by S’, which gives an ODE for I as a function of S that can be integrated; it is in every epidemiology textbook. The left panel: with 4-day steps (dots) Euler’s epidemic starts later, peaks higher (3535) and too late, and ends with too few susceptibles left. The right panel: the error in the peak falls in proportion to h, slope 1. The conservation check is worth stressing: since the three slopes add to zero, the Euler step adds zero to S + I + R whatever h is. So a perfect conservation check says nothing about accuracy. It does catch a typo such as a wrong sign."
+    "text": "SIR: how accurate is the peak?\n\n\nExact peak: I_{\\max} = S_0 + I_0 - \\tfrac{N}{R_0}\\bigl(1 + \\ln\\tfrac{R_0 S_0}{N}\\bigr) = 3008. Euler: 3127 (h = 1 d), 3020 (h = 0.1 d). Order 1 again.\nS + I + R = 10\\,000 to 10^{-11} for every h: Euler keeps sums exactly. A conservation check finds bugs, not step-size error.\n\n\nThe peak formula comes from dividing I’ by S’, which gives an ODE for I as a function of S that can be integrated; it is in every epidemiology textbook. The left panel: with 4-day steps (dots) Euler’s epidemic starts later, peaks higher (3535) and too late, and ends with too few susceptibles left. The right panel: the error in the peak falls in proportion to h, slope 1. The conservation check is worth stressing: since the three slopes add to zero, the Euler step adds zero to S + I + R whatever h is. So a perfect conservation check says nothing about accuracy. It does catch a typo such as a wrong sign.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#higher-order-odes-first-order-systems",
     "href": "euler/lec.html#higher-order-odes-first-order-systems",
     "title": "Initial value problems and Euler’s method",
     "section": "Higher-order ODEs → first-order systems",
-    "text": "Higher-order ODEs → first-order systems\nA 24-hour rhythm in its simplest form: the deviation x of a clock protein from its mean obeys x'' = -\\omega^2 x, \\qquad \\omega = \\frac{2\\pi}{24} \\text{ per hour}, \\qquad x(0) = 1,\\ x'(0) = 0. Exact solution: x(t) = \\cos \\omega t, period 24 h.\nRecipe: name each derivative except the highest as a new variable.\n\ny_1 = x, y_2 = x'. Then y_1' = y_2 and y_2' = x'' = -\\omega^2 y_1: \\begin{pmatrix} y_1 \\\\ y_2 \\end{pmatrix}' = \\begin{pmatrix} y_2 \\\\ -\\omega^2 y_1 \\end{pmatrix}, \\qquad \\mathbf y(0) = \\begin{pmatrix} 1 \\\\ 0 \\end{pmatrix}.\nAn order-m equation becomes m first-order ones; it needs m initial values. Every solver only handles \\mathbf y' = \\mathbf f(t, \\mathbf y).\n\n\nx’’ = -omega^2 x is the harmonic oscillator; it is the linearisation of many oscillating systems near their equilibrium, and Newton’s law for a spring. Real circadian clock models are nonlinear systems of first-order ODEs (Equilibria, stability and the phase plane), but this one has an exact solution, so we can see what Euler does to an oscillation. The recipe works for any order: for x’’’ = g(x, x’, x’‘), set y1 = x, y2 = x’, y3 = x’’. All solvers (Euler, deSolve, solve_ivp, the Rust ode_solvers crate) expect a first-order system, so this rewrite is something you will do yourself."
+    "text": "Higher-order ODEs → first-order systems\nA 24-hour rhythm in its simplest form: the deviation x of a clock protein from its mean obeys x'' = -\\omega^2 x, \\qquad \\omega = \\frac{2\\pi}{24} \\text{ per hour}, \\qquad x(0) = 1,\\ x'(0) = 0. Exact solution: x(t) = \\cos \\omega t, period 24 h.\nRecipe: name each derivative except the highest as a new variable.\n\ny_1 = x, y_2 = x'. Then y_1' = y_2 and y_2' = x'' = -\\omega^2 y_1: \\begin{pmatrix} y_1 \\\\ y_2 \\end{pmatrix}' = \\begin{pmatrix} y_2 \\\\ -\\omega^2 y_1 \\end{pmatrix}, \\qquad \\mathbf y(0) = \\begin{pmatrix} 1 \\\\ 0 \\end{pmatrix}.\nAn order-m equation becomes m first-order ones; it needs m initial values. Every solver only handles \\mathbf y' = \\mathbf f(t, \\mathbf y).\n\n\nx’’ = -omega^2 x is the harmonic oscillator; it is the linearisation of many oscillating systems near their equilibrium, and Newton’s law for a spring. Real circadian clock models are nonlinear systems of first-order ODEs (Equilibria, stability and the phase plane), but this one has an exact solution, so we can see what Euler does to an oscillation. The recipe works for any order: for x’’’ = g(x, x’, x’‘), set y1 = x, y2 = x’, y3 = x’’. All solvers (Euler, deSolve, solve_ivp, the Rust ode_solvers crate) expect a first-order system, so this rewrite is something you will do yourself.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#euler-on-an-oscillation-it-spirals-out",
     "href": "euler/lec.html#euler-on-an-oscillation-it-spirals-out",
     "title": "Initial value problems and Euler’s method",
     "section": "Euler on an oscillation: it spirals out",
-    "text": "Euler on an oscillation: it spirals out\nw &lt;- 2 * pi / 24                       # one cycle per 24 h\nosc &lt;- function(t, y) c(y[2], -w^2 * y[1])\nfor (h in c(1, 0.1, 0.01)) {\n  Y &lt;- euler_sys(osc, 0, c(1, 0), h, n = 240 / h)\n  x &lt;- Y[nrow(Y), ]\n  cat(h, sqrt(x[1]^2 + (x[2] / w)^2), \"\\n\")   # amplitude after 10 days; exact: 1\n}\n# 1 2849.977\n# 0.1 2.275467\n# 0.01 1.085723\n\nEach step multiplies the amplitude by \\sqrt{1 + \\omega^2 h^2} &gt; 1, for every h. No step is small enough to be stable for long times.\n\n\nThe amplitude sqrt(x^2 + (x’/omega)^2) is constant (1) for the exact solution. Euler multiplies it by sqrt(1 + omega^2 h^2) per step: one Euler step maps (y1, y2) to (y1 + h y2, y2 - h omega^2 y1), and in the scaled variables that is a rotation combined with a stretch by that factor. With h = 1 h the amplitude grows by 3.4 % per step, a factor 2.2 per day, 2850 after 10 days. With h = 0.01 h it is still 8.6 % too large after 10 days. Compare with the decay equation, where small enough h is stable: for pure oscillation Euler is never stable. Methods with a better stability region (RK4, next unit) fix this for practical purposes."
+    "text": "Euler on an oscillation: it spirals out\nw &lt;- 2 * pi / 24                       # one cycle per 24 h\nosc &lt;- function(t, y) c(y[2], -w^2 * y[1])\nfor (h in c(1, 0.1, 0.01)) {\n  Y &lt;- euler_sys(osc, 0, c(1, 0), h, n = 240 / h)\n  x &lt;- Y[nrow(Y), ]\n  cat(h, sqrt(x[1]^2 + (x[2] / w)^2), \"\\n\")   # amplitude after 10 days; exact: 1\n}\n# 1 2849.977\n# 0.1 2.275467\n# 0.01 1.085723\n\nEach step multiplies the amplitude by \\sqrt{1 + \\omega^2 h^2} &gt; 1, for every h. No step is small enough to be stable for long times.\n\n\nThe amplitude sqrt(x^2 + (x’/omega)^2) is constant (1) for the exact solution. Euler multiplies it by sqrt(1 + omega^2 h^2) per step: one Euler step maps (y1, y2) to (y1 + h y2, y2 - h omega^2 y1), and in the scaled variables that is a rotation combined with a stretch by that factor. With h = 1 h the amplitude grows by 3.4 % per step, a factor 2.2 per day, 2850 after 10 days. With h = 0.01 h it is still 8.6 % too large after 10 days. Compare with the decay equation, where small enough h is stable: for pure oscillation Euler is never stable. Methods with a better stability region (RK4, next unit) fix this for practical purposes.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#the-spiral",
     "href": "euler/lec.html#the-spiral",
     "title": "Initial value problems and Euler’s method",
     "section": "The spiral",
-    "text": "The spiral\n\n\nLeft: h = 0.1 h, the amplitude grows by 8.6 % per day. Right: h = 1 h, the orbit in the (x, x'/\\omega) plane spirals outwards instead of closing.\nCheck: track a quantity that should stay constant (here the amplitude). Drift means step-size error.\n\n\nThe right panel is a phase-plane picture, which comes back in Equilibria, stability and the phase plane: the exact solution is a closed circle (a periodic orbit) and Euler turns it into an outward spiral. A biologist simulating a clock model with Euler could conclude that the oscillation is unstable and grows, when it is the method that grows. Unlike S + I + R in the SIR model, the amplitude here is not preserved by Euler, so it is a real accuracy check."
+    "text": "The spiral\n\n\nLeft: h = 0.1 h, the amplitude grows by 8.6 % per day. Right: h = 1 h, the orbit in the (x, x'/\\omega) plane spirals outwards instead of closing.\nCheck: track a quantity that should stay constant (here the amplitude). Drift means step-size error.\n\n\nThe right panel is a phase-plane picture, which comes back in Equilibria, stability and the phase plane: the exact solution is a closed circle (a periodic orbit) and Euler turns it into an outward spiral. A biologist simulating a clock model with Euler could conclude that the oscillation is unstable and grows, when it is the method that grows. Unlike S + I + R in the SIR model, the amplitude here is not preserved by Euler, so it is a real accuracy check.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#before-you-trust-an-ode-solution",
     "href": "euler/lec.html#before-you-trust-an-ode-solution",
     "title": "Initial value problems and Euler’s method",
     "section": "Before you trust an ODE solution",
-    "text": "Before you trust an ODE solution\n\nHalve the step and compare. If the answer moves in a digit you care about, the step was too large.\nMeasure the order on a test problem with a known answer (logistic): slope 1 for Euler. Another slope means a bug.\nStability: for each decay rate k in the model, need h &lt; 2/k. Negative concentrations, sign-flipping or sudden cycles are warning signs.\nPlausibility and invariants: concentrations \\ge 0; conserved totals (S + I + R) catch typos; quantities that should be constant (an amplitude) catch step-size error.\nPlot the solution, and look at it at the resolution of the steps.\n\n\nThese five checks apply to every ODE solver, including the library ones of the next unit. Adaptive solvers automate the first one, but they choose steps from a tolerance you set, so the “halve the step” check becomes “tighten the tolerance”."
+    "text": "Before you trust an ODE solution\n\nHalve the step and compare. If the answer moves in a digit you care about, the step was too large.\nMeasure the order on a test problem with a known answer (logistic): slope 1 for Euler. Another slope means a bug.\nStability: for each decay rate k in the model, need h &lt; 2/k. Negative concentrations, sign-flipping or sudden cycles are warning signs.\nPlausibility and invariants: concentrations \\ge 0; conserved totals (S + I + R) catch typos; quantities that should be constant (an amplitude) catch step-size error.\nPlot the solution, and look at it at the resolution of the steps.\n\n\nThese five checks apply to every ODE solver, including the library ones of the next unit. Adaptive solvers automate the first one, but they choose steps from a tolerance you set, so the “halve the step” check becomes “tighten the tolerance”.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#summary",
     "href": "euler/lec.html#summary",
     "title": "Initial value problems and Euler’s method",
     "section": "Summary",
-    "text": "Summary\n\nAn ODE model is rate in − rate out; with a start value it is an initial value problem y' = f(t, y), y(t_0) = y_0. The direction field shows f as slopes.\nEuler: y_{n+1} = y_n + h\\,f(t_n, y_n), the first-order Taylor step. Ten lines of code.\nLocal error O(h^2), global error O(h): order 1, slope 1 on a log–log plot. Without an exact solution, the change when h is halved estimates the error. Six digits on the logistic: 830 000 steps.\nInstability: on y' = -ky each step multiplies by 1 - kh; need h &lt; 2/k. Too large a step gives negative concentrations or a spurious cycle; on an oscillation Euler spirals out for every h.\nSystems: same formula with vectors (SIR). Higher-order ODEs: introduce y_2 = x', … to get a first-order system.\n\nNext: Runge–Kutta and adaptive step size: higher order, automatic step control, and the library solvers deSolve::ode and solve_ivp.\n\nRecap the method, its order, how it fails and the checks. The next unit keeps the SIR model and the logistic test problem and shows how much less work an order-4 method needs, then hands the step-size choice to an adaptive library solver. Stiffness and implicit methods returns to the stability bound h &lt; 2/k, for models with very fast and very slow rates together."
+    "text": "Summary\n\nAn ODE model is rate in − rate out; with a start value it is an initial value problem y' = f(t, y), y(t_0) = y_0. The direction field shows f as slopes.\nEuler: y_{n+1} = y_n + h\\,f(t_n, y_n), the first-order Taylor step. Ten lines of code.\nLocal error O(h^2), global error O(h): order 1, slope 1 on a log–log plot. Without an exact solution, the change when h is halved estimates the error. Six digits on the logistic: 830 000 steps.\nInstability: on y' = -ky each step multiplies by 1 - kh; need h &lt; 2/k. Too large a step gives negative concentrations or a spurious cycle; on an oscillation Euler spirals out for every h.\nSystems: same formula with vectors (SIR). Higher-order ODEs: introduce y_2 = x', … to get a first-order system.\n\nNext: Runge–Kutta and adaptive step size: higher order, automatic step control, and the library solvers deSolve::ode and solve_ivp.\n\nRecap the method, its order, how it fails and the checks. The next unit keeps the SIR model and the logistic test problem and shows how much less work an order-4 method needs, then hands the step-size choice to an adaptive library solver. Stiffness and implicit methods returns to the stability bound h &lt; 2/k, for models with very fast and very slow rates together.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "eigen-algorithms/lec.html#about-this-lecture",
@@ -9151,7 +9295,7 @@
     "href": "runge-kutta/exercise.html#by-hand",
     "title": "Exercise: Runge–Kutta and adaptive step size",
     "section": "By hand",
-    "text": "By hand\nB1. Midpoint and Heun. Drug clearance \\(C' = -0.8\\,C\\), \\(C_0 = 10\\) mg/L, one step of \\(h = 0.5\\) hours. (a) Take one Euler, one midpoint and one Heun step. Write down \\(k_1\\), \\(k_2\\) and the point where \\(k_2\\) is evaluated for each. (b) Compare with the exact \\(C(0.5) = 10e^{-0.4} = 6.70320\\). Give the error of each method. (c) Show that for \\(C' = -kC\\) midpoint and Heun both give \\(C_1 = C_0(1 + z + z^2/2)\\) with \\(z = -kh\\). Which Taylor polynomial is this?\nB2. One RK4 step. Same problem and step. (a) Compute \\(k_1, k_2, k_3, k_4\\) (fill in a table: stage, point, slope) and \\(C_1\\). (b) Compare with the exact value. How many times smaller is the error than Heun’s? (c) The error of one step is \\(\\propto h^5\\). Predict the error of a single RK4 step with \\(h = 0.25\\), then check it: the exact value is \\(10e^{-0.2} = 8.187308\\).\nB3. Reading the order. Errors in \\(N(10)\\) for the logistic curve:\n\n\n\n\n\n\n\n\n\n\\(h\\)\n0.5\n0.25\n0.125\n\n\n\n\nHeun\n\\(1.51\\times10^{-3}\\)\n\\(3.36\\times10^{-4}\\)\n\\(8.05\\times10^{-5}\\)\n\n\nRK4\n\\(9.25\\times10^{-6}\\)\n\\(5.31\\times10^{-7}\\)\n\\(3.20\\times10^{-8}\\)\n\n\n\n\nEstimate the order of each method from consecutive ratios.\nPredict both errors for \\(h = 0.0625\\).\nAbout how many function evaluations does each method need (from \\(t = 0\\) to \\(10\\)) for an error of \\(10^{-8}\\)?\n\nB4. An embedded pair by hand. Clearance again, from \\(C_0 = 10\\) with \\(h = 0.5\\), using Euler (order 1) and Heun (order 2) from B1 as a pair, with rtol = 0.01 and atol = 0. (a) What is the error estimate? Compare it with the true errors of Euler and Heun. Which of the two does it estimate? (b) Compute \\(\\text{sc}\\), the scaled error err and decide: accept or reject? Compute the next step size. (c) The error estimate of this pair is \\(\\propto h^2\\). Predict err for the new step, then compute it.\nB5. What rtol and atol mean. SIR at \\(t = 0\\): \\(S = 9990\\), \\(I = 10\\), \\(R = 0\\) people. (a) With rtol = 1e-3 and atol = 1e-6, what error is allowed in one step for each of \\(S\\), \\(I\\) and \\(R\\)? (b) A colleague writes the same model in fractions of the population (\\(S = 0.999\\), \\(I = 0.001\\)) and keeps atol = 1e-6. What error does this allow in \\(I\\), in people? Is that still fine? (c) Another colleague sets atol = 10 (“ten people do not matter in a town of 10 000”). What error does this allow in \\(I\\) at \\(t = 0\\), relative to \\(I\\) itself? What could go wrong? (d) A signalling model measures concentrations in mol/L; the important species is around \\(10^{-9}\\) M. What is wrong with atol = 1e-6? Give two fixes.\nB6. A conserved quantity. Lotka–Volterra with \\(V(x, y) = c x - d \\ln x + b y - a \\ln y\\). (a) Use the chain rule, \\(\\frac{dV}{dt} = \\frac{\\partial V}{\\partial x} x' + \\frac{\\partial V}{\\partial y} y'\\), to show that \\(dV/dt = 0\\) along every solution. (b) Compute \\(V\\) at the start \\((10, 5)\\) and at the equilibrium \\((x^*, y^*) = (d/c,\\ a/b)\\). (Use \\(\\ln 2 = 0.6931\\), \\(\\ln 5 = 1.6094\\), \\(\\ln 10 = 2.3026\\).) (c) \\(V\\) is smallest at the equilibrium, and the orbits are the curves $V = $ constant around it. Euler makes \\(V\\) increase. What does the plotted orbit do? Why is that a biologically misleading picture?\nB7. Events. For SIR let \\(g = \\beta S/N - \\gamma\\). (a) Show that \\(I' = g\\, I\\), so \\(I\\) peaks where \\(g\\) changes sign from \\(+\\) to \\(-\\). What is \\(S\\) at the peak? (b) An adaptive solver (rtol = 1e-4) takes two consecutive steps ending at \\(t = 35.16\\) with \\(S = 4426.1\\) and at \\(t = 42.04\\) with \\(S = 2404.5\\). Compute \\(g\\) at both, and locate the peak by linear interpolation of \\(g\\). The true peak time is \\(38.355\\) days; why is your estimate off, and what does a solver do instead? (c) Lynx numbers rise above 20 for about 0.8 years in each 5.6-year cycle. A program only checks \\(y - 20\\) at the end of each step, and its steps are 2.5 years long. Can it miss the event? What two remedies are there?"
+    "text": "By hand\nB1. Midpoint and Heun. Drug clearance \\(C' = -0.8\\,C\\), \\(C_0 = 10\\) mg/L, one step of \\(h = 0.5\\) hours. (a) Take one Euler, one midpoint and one Heun step. Write down \\(k_1\\), \\(k_2\\) and the point where \\(k_2\\) is evaluated for each. (b) Compare with the exact \\(C(0.5) = 10e^{-0.4} = 6.70320\\). Give the error of each method. (c) Show that for \\(C' = -kC\\) midpoint and Heun both give \\(C_1 = C_0(1 + z + z^2/2)\\) with \\(z = -kh\\). Which Taylor polynomial is this?\nB2. One RK4 step. Same problem and step. (a) Compute \\(k_1, k_2, k_3, k_4\\) (fill in a table: stage, point, slope) and \\(C_1\\). (b) Compare with the exact value. How many times smaller is the error than Heun’s? (c) The error of one step is \\(\\propto h^5\\). Predict the error of a single RK4 step with \\(h = 0.25\\), then check it: the exact value is \\(10e^{-0.2} = 8.187308\\).\nB3. Reading the order. Errors in \\(N(10)\\) for the logistic curve:\n\n\n\n\n\n\n\n\n\n\\(h\\)\n0.5\n0.25\n0.125\n\n\n\n\nHeun\n\\(1.51\\times10^{-3}\\)\n\\(3.36\\times10^{-4}\\)\n\\(8.05\\times10^{-5}\\)\n\n\nRK4\n\\(9.25\\times10^{-6}\\)\n\\(5.31\\times10^{-7}\\)\n\\(3.20\\times10^{-8}\\)\n\n\n\n\nEstimate the order of each method from consecutive ratios.\nPredict both errors for \\(h = 0.0625\\).\nAbout how many function evaluations does each method need (from \\(t = 0\\) to \\(10\\)) for an error of \\(10^{-8}\\)?\n\nB4. An embedded pair by hand. Clearance again, from \\(C_0 = 10\\) with \\(h = 0.5\\), using Euler (order 1) and Heun (order 2) from B1 as a pair, with rtol = 0.01 and atol = 0. (a) What is the error estimate? Compare it with the true errors of Euler and Heun. Which of the two does it estimate? (b) Compute \\(\\text{sc}\\), the scaled error err and decide: accept or reject? Compute the next step size. (c) The error estimate of this pair is \\(\\propto h^2\\). Predict err for the new step, then compute it.\nB5. What rtol and atol mean. SIR at \\(t = 0\\): \\(S = 9990\\), \\(I = 10\\), \\(R = 0\\) people. (a) With rtol = 1e-3 and atol = 1e-6, what error is allowed in one step for each of \\(S\\), \\(I\\) and \\(R\\)? (b) A colleague writes the same model in fractions of the population (\\(S = 0.999\\), \\(I = 0.001\\)) and keeps atol = 1e-6. What error does this allow in \\(I\\), in people? Is that still fine? (c) Another colleague sets atol = 10 (“ten people do not matter in a town of 10 000”). What error does this allow in \\(I\\) at \\(t = 0\\), relative to \\(I\\) itself? What could go wrong? (d) A signalling model measures concentrations in mol/L; the important species is around \\(10^{-9}\\) M. What is wrong with atol = 1e-6? Give two fixes.\nB6. A conserved quantity. Lotka–Volterra with \\(V(x, y) = c x - d \\ln x + b y - a \\ln y\\). (a) Use the chain rule, \\(\\frac{dV}{dt} = \\frac{\\partial V}{\\partial x} x' + \\frac{\\partial V}{\\partial y} y'\\), to show that \\(dV/dt = 0\\) along every solution. (b) Compute \\(V\\) at the start \\((10, 5)\\) and at the equilibrium \\((x^*, y^*) = (d/c,\\ a/b)\\). (Use \\(\\ln 2 = 0.6931\\), \\(\\ln 5 = 1.6094\\), \\(\\ln 10 = 2.3026\\).) (c) \\(V\\) is smallest at the equilibrium, and the orbits are the curves $V = $ constant around it. Euler makes \\(V\\) increase. What does the plotted orbit do? Why is that a biologically misleading picture?\nB7. Events. For SIR let \\(g = \\beta S/N - \\gamma\\). (a) Show that \\(I' = g\\, I\\), so \\(I\\) peaks where \\(g\\) changes sign from \\(+\\) to \\(-\\). What is \\(S\\) at the peak? (b) An adaptive solver (rtol = 1e-4) takes two consecutive steps ending at \\(t = 35.16\\) with \\(S = 4426.1\\) and at \\(t = 42.04\\) with \\(S = 2404.5\\). Compute \\(g\\) at both, and locate the peak by linear interpolation of \\(g\\). The true peak time is \\(38.355\\) days; why is your estimate off, and what does a solver do instead? (c) Lynx numbers rise above 20 for about 0.8 years in each 5.5-year cycle. A program only checks \\(y - 20\\) at the end of each step, and its steps are 2.5 years long. Can it miss the event? What two remedies are there?"
   },
   {
     "objectID": "runge-kutta/exercise.html#in-code",
@@ -9367,6 +9511,19 @@
       "Part 8: Ordinary differential equations",
       "Initial value problems and Euler's method",
       "Exercise"
+    ]
+  },
+  {
+    "objectID": "euler/lec.html#try-it-step-through-euler",
+    "href": "euler/lec.html#try-it-step-through-euler",
+    "title": "Initial value problems and Euler’s method",
+    "section": "Try it: step through Euler",
+    "text": "Try it: step through Euler\n\n\n\n\nLive in the browser, same numbers as the slides. Start on logistic growth with h = 1: Reset, then Step three times; the dashed orange segment is the tangent, the next step; the readout shows 0.08833, 0.15380, 0.26107, the hand table. Point at the dashed grey curve: after each step Euler is on another solution curve, below ours. Then drag h down to 0.5, 0.1, 0.01: the error at t = 5 goes -0.20, -0.094, -0.017, -0.0017, the ratio readout says 2, and the big dot walks down the slope-1 line in panel (b). Switch to drug clearance: h = 2 flips sign but decays, h = 3 (factor -1.4) leaves the plot after two steps, and the dot jumps into the shaded range h &gt; 2/k. Click “logistic h = 3, 60 h” and press Run: the boom–bust cycle from the last slide; halve the step to 1.5 and it is gone. If there is time, the Systems tab: SIR peak error 527, 119, 11.6 for h = 4, 1, 0.1 days, and the oscillator spiralling out.",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Initial value problems and Euler's method",
+      "Lecture (slides)"
     ]
   }
 ]
