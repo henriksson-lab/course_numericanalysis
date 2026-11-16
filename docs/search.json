@@ -6741,168 +6741,312 @@
     "href": "monte-carlo/lec.html#about-this-lecture",
     "title": "Random numbers and Monte Carlo",
     "section": "About this lecture",
-    "text": "About this lecture\nNumerical integration placed points on a grid. This lecture places them at random, and answers questions a grid cannot.\n\nA computer makes “random” numbers with a deterministic recipe. A seed fixes the whole stream, which makes results reproducible.\nInverse-transform and rejection sampling turn uniform numbers into draws from other distributions.\nMonte Carlo integration: an integral is an average, so estimate it by a sample mean, with a standard error as the error bar. The error falls like 1/\\sqrt{N}, whatever the dimension.\nThat is slow in 1-D but beats any grid in many dimensions (the curse of dimensionality).\nImportance sampling makes rare events visible.\nBiology: are motif hits enriched in promoters (a permutation-style test)? A marginal likelihood in 10 dimensions.\n\n\nThe thread of the lecture: an integral (or a probability, which is an integral) can be written as an expected value, and expected values can be estimated by averaging random draws. That trades the high order of the quadrature rules from the previous unit for an error rate that does not care about dimension. We start with where the random numbers come from, because every later result depends on them being good and reproducible."
+    "text": "About this lecture\nNumerical integration placed points on a grid. This lecture places them at random, and answers questions a grid cannot.\n\nA computer makes “random” numbers with a deterministic recipe. A seed fixes the whole stream, which makes results reproducible.\nInverse-transform and rejection sampling turn uniform numbers into draws from other distributions.\nMonte Carlo integration: an integral is an average, so estimate it by a sample mean, with a standard error as the error bar. The error falls like 1/\\sqrt{N}, whatever the dimension.\nThat is slow in 1-D but beats any grid in many dimensions (the curse of dimensionality).\nImportance sampling makes rare events visible.\nBiology: are motif hits enriched in promoters (a permutation-style test)? A marginal likelihood in 10 dimensions.\n\n\nThe thread of the lecture: an integral (or a probability, which is an integral) can be written as an expected value, and expected values can be estimated by averaging random draws. That trades the high order of the quadrature rules from the previous unit for an error rate that does not care about dimension. We start with where the random numbers come from, because every later result depends on them being good and reproducible.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#a-biology-problem-first",
     "href": "monte-carlo/lec.html#a-biology-problem-first",
     "title": "Random numbers and Monte Carlo",
     "section": "A biology problem first",
-    "text": "A biology problem first\nA ChIP-seq peak caller reports 200 hits of a TF motif (10 bp) in a 1 Mb region. 18 of them overlap one of the region’s 50 promoters (1 kb each, 5% of the region). Is that more than chance?\nG &lt;- 1e6; L &lt;- 10                                   # region and motif length (bp)\npstart &lt;- seq(10001, by = 20000, length.out = 50)   # 50 promoters of 1 kb\npend   &lt;- pstart + 999\nn_hits &lt;- 200; k_obs &lt;- 18\np &lt;- 50 * (1000 + L - 1) / (G - L + 1)   # P(one random hit overlaps a promoter)\nn_hits * p                               # expected number of overlaps\n# [1] 10.09009\npbinom(k_obs - 1, n_hits, p, lower.tail = FALSE)    # exact P(K &gt;= 18)\n# [1] 0.01314003\n\nA hit overlaps a 1 kb promoter if its start is in a window of 1000 + L - 1 = 1009 positions. With independent uniform starts, K \\sim \\text{Binomial}(200, p).\nHere an exact answer exists. Change the null model a little and it does not.\n\n\nThis is the question behind every “enrichment of binding sites in promoters” or “overlap of two sets of genomic intervals” analysis (tools like bedtools shuffle, GAT, regioneR). The exact calculation works because the null model is very simple: each hit starts uniformly and independently. The (1000 + L - 1) is the classic off-by-a-motif-length: a hit starting up to 9 bp before the promoter still overlaps it. pbinom with lower.tail = FALSE gives P(K &gt; 17) = P(K &gt;= 18)."
+    "text": "A biology problem first\nA ChIP-seq peak caller reports 200 hits of a TF motif (10 bp) in a 1 Mb region. 18 of them overlap one of the region’s 50 promoters (1 kb each, 5% of the region). Is that more than chance?\nG &lt;- 1e6; L &lt;- 10                                   # region and motif length (bp)\npstart &lt;- seq(10001, by = 20000, length.out = 50)   # 50 promoters of 1 kb\npend   &lt;- pstart + 999\nn_hits &lt;- 200; k_obs &lt;- 18\np &lt;- 50 * (1000 + L - 1) / (G - L + 1)   # P(one random hit overlaps a promoter)\nn_hits * p                               # expected number of overlaps\n# [1] 10.09009\npbinom(k_obs - 1, n_hits, p, lower.tail = FALSE)    # exact P(K &gt;= 18)\n# [1] 0.01314003\n\nA hit overlaps a 1 kb promoter if its start is in a window of 1000 + L - 1 = 1009 positions. With independent uniform starts, K \\sim \\text{Binomial}(200, p).\nHere an exact answer exists. Change the null model a little and it does not.\n\n\nThis is the question behind every “enrichment of binding sites in promoters” or “overlap of two sets of genomic intervals” analysis (tools like bedtools shuffle, GAT, regioneR). The exact calculation works because the null model is very simple: each hit starts uniformly and independently. The (1000 + L - 1) is the classic off-by-a-motif-length: a hit starting up to 9 bp before the promoter still overlaps it. pbinom with lower.tail = FALSE gives P(K &gt; 17) = P(K &gt;= 18).",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#simulate-instead-a-permutation-style-test",
     "href": "monte-carlo/lec.html#simulate-instead-a-permutation-style-test",
     "title": "Random numbers and Monte Carlo",
     "section": "Simulate instead: a permutation-style test",
-    "text": "Simulate instead: a permutation-style test\nPlace the 200 hits at random, count overlaps, repeat 10 000 times.\noverlaps &lt;- function(s) {                     # s: start positions of the hits\n  i &lt;- findInterval(s + L - 1, pstart)        # last promoter starting before hit end\n  i &gt; 0 & pend[pmax(i, 1)] &gt;= s\n}\nset.seed(1)\nK &lt;- replicate(10000, sum(overlaps(sample.int(G - L + 1, n_hits, replace = TRUE))))\nmean(K &gt;= k_obs)                              # simulated P(K &gt;= 18)\n# [1] 0.0122\n\nSimulated 0.0122 vs exact 0.0131. The difference is Monte Carlo error: about \\sqrt{0.012 \\cdot 0.988 / 10\\,000} = 0.0011.\nThe simulation needs no formula. Real nulls do not have one: keep hits out of gaps and repeats, match GC content, forbid overlapping hits. Change the placement line, keep the rest.\n\n\nThis is the same idea as a permutation test: generate data under the null hypothesis by shuffling, and see how often the shuffled statistic is at least as extreme as the observed one. findInterval finds for each hit end the last promoter that starts at or before it; the hit overlaps that promoter if the promoter has not ended before the hit starts. sample.int draws start positions uniformly. The standard error formula is that of a proportion; we will see it is the general Monte Carlo standard error. Ask: how many simulations would you need to tell 0.0131 from 0.0122 reliably?"
+    "text": "Simulate instead: a permutation-style test\nPlace the 200 hits at random, count overlaps, repeat 10 000 times.\noverlaps &lt;- function(s) {                     # s: start positions of the hits\n  i &lt;- findInterval(s + L - 1, pstart)        # last promoter starting before hit end\n  i &gt; 0 & pend[pmax(i, 1)] &gt;= s\n}\nset.seed(1)\nK &lt;- replicate(10000, sum(overlaps(sample.int(G - L + 1, n_hits, replace = TRUE))))\nmean(K &gt;= k_obs)                              # simulated P(K &gt;= 18)\n# [1] 0.0122\n\nSimulated 0.0122 vs exact 0.0131. The difference is Monte Carlo error: about \\sqrt{0.012 \\cdot 0.988 / 10\\,000} = 0.0011.\nThe simulation needs no formula. Real nulls do not have one: keep hits out of gaps and repeats, match GC content, forbid overlapping hits. Change the placement line, keep the rest.\n\n\nThis is the same idea as a permutation test: generate data under the null hypothesis by shuffling, and see how often the shuffled statistic is at least as extreme as the observed one. findInterval finds for each hit end the last promoter that starts at or before it; the hit overlaps that promoter if the promoter has not ended before the hit starts. sample.int draws start positions uniformly. The standard error formula is that of a proportion; we will see it is the general Monte Carlo standard error. Ask: how many simulations would you need to tell 0.0131 from 0.0122 reliably?",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#simulated-vs-exact",
     "href": "monte-carlo/lec.html#simulated-vs-exact",
     "title": "Random numbers and Monte Carlo",
     "section": "Simulated vs exact",
-    "text": "Simulated vs exact\n\n\nBars: the 10 000 simulated counts. Dots: the exact binomial probabilities. The p-value is the mass at or right of the dashed line.\nReport a simulated p-value as (k+1)/(B+1) (k of B simulations as extreme), so it is never exactly 0.\n\n\nThe two agree within simulation noise, which is the check that the simulation code is right. Always run a simulation once on a case with a known answer before trusting it on a case without one. The (k+1)/(B+1) rule counts the observed data as one of the permutations; with k = 122 and B = 10000 it gives 0.0123. A p-value of exactly 0 from 1000 permutations means p &lt; about 1/1000, not p = 0."
+    "text": "Simulated vs exact\n\n\nBars: the 10 000 simulated counts. Dots: the exact binomial probabilities. The p-value is the mass at or right of the dashed line.\nReport a simulated p-value as (k+1)/(B+1) (k of B simulations as extreme), so it is never exactly 0.\n\n\nThe two agree within simulation noise, which is the check that the simulation code is right. Always run a simulation once on a case with a known answer before trusting it on a case without one. The (k+1)/(B+1) rule counts the observed data as one of the permutations; with k = 122 and B = 10000 it gives 0.0123. A p-value of exactly 0 from 1000 permutations means p &lt; about 1/1000, not p = 0.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#a-second-problem-an-integral-in-10-dimensions",
     "href": "monte-carlo/lec.html#a-second-problem-an-integral-in-10-dimensions",
     "title": "Random numbers and Monte Carlo",
     "section": "A second problem: an integral in 10 dimensions",
-    "text": "A second problem: an integral in 10 dimensions\nA model with d = 10 parameters \\theta (e.g. log fold changes of 10 genes in a pathway), prior \\pi(\\theta), likelihood L(\\theta). To compare it with another model (a Bayes factor) we need the marginal likelihood\nZ = \\int L(\\theta)\\,\\pi(\\theta)\\,d\\theta_1 \\cdots d\\theta_{10}.\n\nZ is the normalising constant of the posterior L(\\theta)\\pi(\\theta)/Z.\nA grid with only 10 points per axis needs 10^{10} likelihood evaluations. At 1 µs each: 3 hours. With 100 points per axis: 10^{20} evaluations, about 3 million years.\nBut Z = \\mathrm{E}_\\pi[L(\\theta)]: the average likelihood over draws from the prior. An average can be estimated from a sample.\n\n\nThis is the second motivating problem: any Bayesian model comparison needs Z, and so do many latent-variable likelihoods (integrating over unobserved random effects). The tensor-product rules of the previous unit cost n^d. The rewriting of an integral as an expected value is the key step of the whole lecture; everything else is about making the average accurate. We return to this integral with numbers later; it is chosen so that Z is known exactly."
+    "text": "A second problem: an integral in 10 dimensions\nA model with d = 10 parameters \\theta (e.g. log fold changes of 10 genes in a pathway), prior \\pi(\\theta), likelihood L(\\theta). To compare it with another model (a Bayes factor) we need the marginal likelihood\nZ = \\int L(\\theta)\\,\\pi(\\theta)\\,d\\theta_1 \\cdots d\\theta_{10}.\n\nZ is the normalising constant of the posterior L(\\theta)\\pi(\\theta)/Z.\nA grid with only 10 points per axis needs 10^{10} likelihood evaluations. At 1 µs each: 3 hours. With 100 points per axis: 10^{20} evaluations, about 3 million years.\nBut Z = \\mathrm{E}_\\pi[L(\\theta)]: the average likelihood over draws from the prior. An average can be estimated from a sample.\n\n\nThis is the second motivating problem: any Bayesian model comparison needs Z, and so do many latent-variable likelihoods (integrating over unobserved random effects). The tensor-product rules of the previous unit cost n^d. The rewriting of an integral as an expected value is the key step of the whole lecture; everything else is about making the average accurate. We return to this integral with numbers later; it is chosen so that Z is known exactly.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#random-numbers-are-computed",
     "href": "monte-carlo/lec.html#random-numbers-are-computed",
     "title": "Random numbers and Monte Carlo",
     "section": "Random numbers are computed",
-    "text": "Random numbers are computed\nA linear congruential generator (LCG): x_{n+1} = (a\\,x_n + c) \\bmod m, \\;u_n = x_n / m.\nlcg &lt;- function(n, seed, a = 5, c = 1, m = 16) {\n  x &lt;- numeric(n); x[1] &lt;- seed\n  for (i in 2:n) x[i] &lt;- (a * x[i - 1] + c) %% m     # %% is \"mod\"\n  x\n}\nlcg(18, seed = 1)\n#  [1]  1  6 15 12 13  2 11  8  9 14  7  4  5 10  3  0  1  6\nlcg(8, seed = 7)\n# [1]  7  4  5 10  3  0  1  6\n\nEntirely deterministic: the seed fixes the whole sequence. Another seed starts at another place in the same cycle.\nAfter at most m steps the sequence repeats (period 16 here). Real generators have astronomically long periods.\n\n\nPseudo-random numbers look random but are produced by a formula. This is a feature: rerunning with the same seed gives the same numbers, which is how we make simulations reproducible and debuggable. The toy LCG with m = 16 has full period 16 because the constants satisfy the Hull–Dobell conditions; with a = 4 it gets stuck after one step (the exercise does this by hand). Old C library rand() functions were LCGs with m = 2^31 or 2^32."
+    "text": "Random numbers are computed\nA linear congruential generator (LCG): x_{n+1} = (a\\,x_n + c) \\bmod m, \\;u_n = x_n / m.\nlcg &lt;- function(n, seed, a = 5, c = 1, m = 16) {\n  x &lt;- numeric(n); x[1] &lt;- seed\n  for (i in 2:n) x[i] &lt;- (a * x[i - 1] + c) %% m     # %% is \"mod\"\n  x\n}\nlcg(18, seed = 1)\n#  [1]  1  6 15 12 13  2 11  8  9 14  7  4  5 10  3  0  1  6\nlcg(8, seed = 7)\n# [1]  7  4  5 10  3  0  1  6\n\nEntirely deterministic: the seed fixes the whole sequence. Another seed starts at another place in the same cycle.\nAfter at most m steps the sequence repeats (period 16 here). Real generators have astronomically long periods.\n\n\nPseudo-random numbers look random but are produced by a formula. This is a feature: rerunning with the same seed gives the same numbers, which is how we make simulations reproducible and debuggable. The toy LCG with m = 16 has full period 16 because the constants satisfy the Hull–Dobell conditions; with a = 4 it gets stuck after one step (the exercise does this by hand). Old C library rand() functions were LCGs with m = 2^31 or 2^32.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#bad-generators-leave-patterns",
     "href": "monte-carlo/lec.html#bad-generators-leave-patterns",
     "title": "Random numbers and Monte Carlo",
     "section": "Bad generators leave patterns",
-    "text": "Bad generators leave patterns\n\n\n\n\nSuccessive pairs of an LCG lie on a few lines.\nRANDU (a = 65539, m = 2^{31}, 1960s IBM) puts all triples on 15 planes:\nu &lt;- randu(30000)       # exercise C1\nv &lt;- 9 * u[1:29998] -\n     6 * u[2:29999] + u[3:30000]\ntable(round(v))         # only -5..9\n\n\nCheck: plot u_{n+1} against u_n; use the language’s default generator, never a home-made one.\n\n\nAn LCG with a small multiplier relative to m gives pairs on a lattice of lines; every LCG has such a lattice in some dimension (Marsaglia, 1968, “random numbers fall mainly in the planes”). RANDU was used widely for years, and simulation results from that time had to be redone. The identity behind the RANDU check is x_{n+2} = 6 x_{n+1} - 9 x_n mod 2^31, so 9u_n - 6u_{n+1} + u_{n+2} is always a whole number. For runif the same combination takes over 11 000 different values (rounded to 3 decimals) in 30 000 triples."
+    "text": "Bad generators leave patterns\n\n\n\n\nSuccessive pairs of an LCG lie on a few lines.\nRANDU (a = 65539, m = 2^{31}, 1960s IBM) puts all triples on 15 planes:\nu &lt;- randu(30000)       # exercise C1\nv &lt;- 9 * u[1:29998] -\n     6 * u[2:29999] + u[3:30000]\ntable(round(v))         # only -5..9\n\n\nCheck: plot u_{n+1} against u_n; use the language’s default generator, never a home-made one.\n\n\nAn LCG with a small multiplier relative to m gives pairs on a lattice of lines; every LCG has such a lattice in some dimension (Marsaglia, 1968, “random numbers fall mainly in the planes”). RANDU was used widely for years, and simulation results from that time had to be redone. The identity behind the RANDU check is x_{n+2} = 6 x_{n+1} - 9 x_n mod 2^31, so 9u_n - 6u_{n+1} + u_{n+2} is always a whole number. For runif the same combination takes over 11 000 different values (rounded to 3 decimals) in 30 000 triples.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#the-generators-you-actually-use",
     "href": "monte-carlo/lec.html#the-generators-you-actually-use",
     "title": "Random numbers and Monte Carlo",
     "section": "The generators you actually use",
-    "text": "The generators you actually use\n\n\n\n\ndefault generator\nset the seed\n\n\n\n\nR\nMersenne Twister (period 2^{19937}-1)\nset.seed(42); runif(3)\n\n\nPython / numpy\nPCG64\nrng = np.random.default_rng(42); rng.random(3)\n\n\nRust (rand)\nStdRng (ChaCha12)\nStdRng::seed_from_u64(42); rng.random::&lt;f64&gt;()\n\n\n\nset.seed(42); runif(3)\n# [1] 0.9148060 0.9370754 0.2861395\nset.seed(42); runif(3)          # same seed: same numbers\n# [1] 0.9148060 0.9370754 0.2861395\nrunif(3)                        # the stream continues\n# [1] 0.8304476 0.6417455 0.5190959\n\nThe same seed in another language gives other numbers (numpy: 0.774, 0.439, 0.859). Compare results statistically, never digit by digit.\n\n\nThree different generator algorithms, so the streams differ even for the same seed; this is why the exercise outputs differ between the R, Python and Rust tabs. All three are good for simulation. None is suitable for cryptography except ChaCha, which is a stream cipher. RNGkind() in R shows the generator in use, the method for normal numbers (Inversion) and for sample() (Rejection). numpy’s old global np.random.seed / np.random.random interface uses the Mersenne Twister; new code should use default_rng."
+    "text": "The generators you actually use\n\n\n\n\ndefault generator\nset the seed\n\n\n\n\nR\nMersenne Twister (period 2^{19937}-1)\nset.seed(42); runif(3)\n\n\nPython / numpy\nPCG64\nrng = np.random.default_rng(42); rng.random(3)\n\n\nRust (rand)\nStdRng (ChaCha12)\nStdRng::seed_from_u64(42); rng.random::&lt;f64&gt;()\n\n\n\nset.seed(42); runif(3)\n# [1] 0.9148060 0.9370754 0.2861395\nset.seed(42); runif(3)          # same seed: same numbers\n# [1] 0.9148060 0.9370754 0.2861395\nrunif(3)                        # the stream continues\n# [1] 0.8304476 0.6417455 0.5190959\n\nThe same seed in another language gives other numbers (numpy: 0.774, 0.439, 0.859). Compare results statistically, never digit by digit.\n\n\nThree different generator algorithms, so the streams differ even for the same seed; this is why the exercise outputs differ between the R, Python and Rust tabs. All three are good for simulation. None is suitable for cryptography except ChaCha, which is a stream cipher. RNGkind() in R shows the generator in use, the method for normal numbers (Inversion) and for sample() (Rejection). numpy’s old global np.random.seed / np.random.random interface uses the Mersenne Twister; new code should use default_rng.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#seeds-and-reproducibility",
     "href": "monte-carlo/lec.html#seeds-and-reproducibility",
     "title": "Random numbers and Monte Carlo",
     "section": "Seeds and reproducibility",
-    "text": "Seeds and reproducibility\nset.seed(42); sample(10, 3)                      # R &gt;= 3.6\n# [1]  1  5 10\nRNGversion(\"3.5.0\"); set.seed(42); sample(10, 3) # R before 3.6\n# [1] 10  9  3\n\nR changed how sample() turns uniform numbers into integers in version 3.6 (the old way was slightly biased). Same seed, different result. Record the software version with the seed (sessionInfo()).\nSet the seed once, at the top of a script, not inside a loop (re-seeding with the same value repeats the same numbers).\nA seed makes a run reproducible, not correct: a result that changes with the seed by more than its error bar is not a result. Try a few seeds.\nParallel runs need separate streams (parallel::RNGStreams, numpy SeedSequence.spawn), not seeds 1, 2, 3 by hand.\n\n\nReproducibility questions come up in every reviewer report on simulation work. The R 3.6 change is a real example of the same seed producing different results on different versions. Re-seeding inside a loop is a common bug: set.seed(1) inside a function called 1000 times gives the same “random” sample 1000 times. Choosing the seed that gives the nicest result is a form of p-hacking. Parallel streams: R’s L’Ecuyer-CMRG generator via RNGkind(“L’Ecuyer-CMRG”) and parallel::nextRNGStream; numpy SeedSequence."
+    "text": "Seeds and reproducibility\nset.seed(42); sample(10, 3)                      # R &gt;= 3.6\n# [1]  1  5 10\nRNGversion(\"3.5.0\"); set.seed(42); sample(10, 3) # R before 3.6\n# [1] 10  9  3\n\nR changed how sample() turns uniform numbers into integers in version 3.6 (the old way was slightly biased). Same seed, different result. Record the software version with the seed (sessionInfo()).\nSet the seed once, at the top of a script, not inside a loop (re-seeding with the same value repeats the same numbers).\nA seed makes a run reproducible, not correct: a result that changes with the seed by more than its error bar is not a result. Try a few seeds.\nParallel runs need separate streams (parallel::RNGStreams, numpy SeedSequence.spawn), not seeds 1, 2, 3 by hand.\n\n\nReproducibility questions come up in every reviewer report on simulation work. The R 3.6 change is a real example of the same seed producing different results on different versions. Re-seeding inside a loop is a common bug: set.seed(1) inside a function called 1000 times gives the same “random” sample 1000 times. Choosing the seed that gives the nicest result is a form of p-hacking. Parallel streams: R’s L’Ecuyer-CMRG generator via RNGkind(“L’Ecuyer-CMRG”) and parallel::nextRNGStream; numpy SeedSequence.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#inverse-transform-sampling",
     "href": "monte-carlo/lec.html#inverse-transform-sampling",
     "title": "Random numbers and Monte Carlo",
     "section": "Inverse-transform sampling",
-    "text": "Inverse-transform sampling\n\nIf U \\sim \\text{Uniform}(0, 1) and F is a CDF, then X = F^{-1}(U) has CDF F. Exponential waiting time (rate \\lambda): u = 1 - e^{-\\lambda x} \\Rightarrow x = -\\log(1 - u)/\\lambda.\n\nRead the picture: draw a height U on the vertical axis, go across to the curve and down. Where F is steep (short waiting times), many U values map to a small range of x, so x is dense there. Proof in one line: P(X &lt;= x) = P(F^{-1}(U) &lt;= x) = P(U &lt;= F(x)) = F(x). Example: waiting times between transcriptional bursts at rate 0.5 per hour, mean 2 h. Since 1 - U is also uniform, -log(U)/lambda works too. The unit Stochastic simulation draws all its waiting times this way."
+    "text": "Inverse-transform sampling\n\nIf U \\sim \\text{Uniform}(0, 1) and F is a CDF, then X = F^{-1}(U) has CDF F. Exponential waiting time (rate \\lambda): u = 1 - e^{-\\lambda x} \\Rightarrow x = -\\log(1 - u)/\\lambda.\n\nRead the picture: draw a height U on the vertical axis, go across to the curve and down. Where F is steep (short waiting times), many U values map to a small range of x, so x is dense there. Proof in one line: P(X &lt;= x) = P(F^{-1}(U) &lt;= x) = P(U &lt;= F(x)) = F(x). Example: waiting times between transcriptional bursts at rate 0.5 per hour, mean 2 h. Since 1 - U is also uniform, -log(U)/lambda works too. The unit Stochastic simulation draws all its waiting times this way.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#inverse-transform-in-r",
     "href": "monte-carlo/lec.html#inverse-transform-in-r",
     "title": "Random numbers and Monte Carlo",
     "section": "Inverse transform in R",
-    "text": "Inverse transform in R\nset.seed(1)\nlambda &lt;- 0.5                          # bursts per hour\nx &lt;- -log(runif(1e5)) / lambda         # F^{-1}(1 - U), and 1 - U is uniform too\nc(mean(x), sd(x))                      # both should be 1 / lambda = 2\n# [1] 2.007696 2.011384\n\nprob &lt;- c(A = 0.3, C = 0.2, G = 0.2, T = 0.3)       # base composition\nu &lt;- c(0.45, 0.95)\nnames(prob)[findInterval(u, c(0, cumsum(prob)))]    # discrete inverse transform\n# [1] \"C\" \"T\"\n\nDiscrete case: cut [0, 1) into pieces of length p_k (cumulative sums) and see where U falls. This is what sample() does with prob =.\nCheck: compare sample mean, sd or histogram with the target. R’s own rexp, qnorm(runif(n)) (R’s default for rnorm) do the same.\n\n\nThe exponential case is two lines. For the discrete case, findInterval returns the index of the interval [0, 0.3), [0.3, 0.5), [0.5, 0.7), [0.7, 1) in which each u falls: 0.45 is in the second (C), 0.95 in the fourth (T). The failure of inverse transform is that F^{-1} often has no formula: the normal CDF has none, so qnorm is itself a numerical approximation (a rational function, accurate to full precision). RNGkind() says “Inversion” for normals for exactly this reason."
+    "text": "Inverse transform in R\nset.seed(1)\nlambda &lt;- 0.5                          # bursts per hour\nx &lt;- -log(runif(1e5)) / lambda         # F^{-1}(1 - U), and 1 - U is uniform too\nc(mean(x), sd(x))                      # both should be 1 / lambda = 2\n# [1] 2.007696 2.011384\n\nprob &lt;- c(A = 0.3, C = 0.2, G = 0.2, T = 0.3)       # base composition\nu &lt;- c(0.45, 0.95)\nnames(prob)[findInterval(u, c(0, cumsum(prob)))]    # discrete inverse transform\n# [1] \"C\" \"T\"\n\nDiscrete case: cut [0, 1) into pieces of length p_k (cumulative sums) and see where U falls. This is what sample() does with prob =.\nCheck: compare sample mean, sd or histogram with the target. R’s own rexp, qnorm(runif(n)) (R’s default for rnorm) do the same.\n\n\nThe exponential case is two lines. For the discrete case, findInterval returns the index of the interval [0, 0.3), [0.3, 0.5), [0.5, 0.7), [0.7, 1) in which each u falls: 0.45 is in the second (C), 0.95 in the fourth (T). The failure of inverse transform is that F^{-1} often has no formula: the normal CDF has none, so qnorm is itself a numerical approximation (a rational function, accurate to full precision). RNGkind() says “Inversion” for normals for exactly this reason.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#rejection-sampling-when-f-1-is-hard",
     "href": "monte-carlo/lec.html#rejection-sampling-when-f-1-is-hard",
     "title": "Random numbers and Monte Carlo",
     "section": "Rejection sampling (when F^{-1} is hard)",
-    "text": "Rejection sampling (when F^{-1} is hard)\nTarget density f, easy proposal g, constant M with f \\le M g. Draw x \\sim g, accept with probability f(x)/(M g(x)).\nf &lt;- function(x) 20 * x * (1 - x)^3      # Beta(2, 4) density on [0, 1]\nM &lt;- f(1/4)                              # its maximum: f &lt;= M * 1 (uniform g)\n# [1] 2.109375\nset.seed(1)\nx &lt;- runif(1e5)                          # proposals\nkeep &lt;- runif(1e5) &lt; f(x) / M            # accept or reject\nc(mean(keep), mean(x[keep]))             # acceptance ~ 1/M; Beta(2,4) mean = 1/3\n# [1] 0.4737500 0.3338191\n\nAccepted points are exact draws from f. The acceptance rate is 1/M.\nFailure: a poor g gives a huge M; in d dimensions M typically grows exponentially and almost nothing is accepted. Check: print the acceptance rate.\n\n\nGeometrically: scatter points uniformly under the curve M g(x) and keep the ones under f(x); their x-coordinates are distributed as f. Rejection sampling only needs f up to a constant, which is why it appears inside many samplers (rgamma, rbeta, rbinom use clever rejection methods). With a box proposal for a narrow peak in 10 dimensions, the acceptance rate can easily be 1e-6. MCMC is the answer for those cases; it is outside this course."
+    "text": "Rejection sampling (when F^{-1} is hard)\nTarget density f, easy proposal g, constant M with f \\le M g. Draw x \\sim g, accept with probability f(x)/(M g(x)).\nf &lt;- function(x) 20 * x * (1 - x)^3      # Beta(2, 4) density on [0, 1]\n(M &lt;- f(1/4))                            # its maximum: f &lt;= M * 1 (uniform g)\n# [1] 2.109375\nset.seed(1)\nx &lt;- runif(1e5)                          # proposals\nkeep &lt;- runif(1e5) &lt; f(x) / M            # accept or reject\nc(mean(keep), mean(x[keep]))             # acceptance ~ 1/M; Beta(2,4) mean = 1/3\n# [1] 0.4737500 0.3338191\n\nAccepted points are exact draws from f. The acceptance rate is 1/M.\nFailure: a poor g gives a huge M; in d dimensions M typically grows exponentially and almost nothing is accepted. Check: print the acceptance rate.\n\n\nGeometrically: scatter points uniformly under the curve M g(x) and keep the ones under f(x); their x-coordinates are distributed as f. Rejection sampling only needs f up to a constant, which is why it appears inside many samplers (rgamma, rbeta, rbinom use clever rejection methods). With a box proposal for a narrow peak in 10 dimensions, the acceptance rate can easily be 1e-6. MCMC is the answer for those cases; it is outside this course.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#monte-carlo-integration",
     "href": "monte-carlo/lec.html#monte-carlo-integration",
     "title": "Random numbers and Monte Carlo",
     "section": "Monte Carlo integration",
-    "text": "Monte Carlo integration\n\n\\int_a^b f(t)\\,dt = (b - a)\\,\\mathrm{E}[f(U)], \\quad U \\sim \\text{Uniform}(a, b) \\quad\\Rightarrow\\quad \\hat I_N = \\frac{b-a}{N}\\sum_{i=1}^N f(U_i).\n\nThe area under the curve is the width times the mean height, and the mean height is estimated by the average of the curve at random points. Example: area under the logistic OD curve (K = 1.2, N0 = 0.05, r = 0.8 per hour, the shared running example) from 0 to 10 h, the AUC that Numerical integration computed with the trapezoid rule. Exact value 7.244. With only 20 random times the estimate is 7.79: the points happen to fall more in the late, high part of the curve. More points, smaller error; how much smaller is the next question."
+    "text": "Monte Carlo integration\n\n\\int_a^b f(t)\\,dt = (b - a)\\,\\mathrm{E}[f(U)], \\quad U \\sim \\text{Uniform}(a, b) \\quad\\Rightarrow\\quad \\hat I_N = \\frac{b-a}{N}\\sum_{i=1}^N f(U_i).\n\nThe area under the curve is the width times the mean height, and the mean height is estimated by the average of the curve at random points. Example: area under the logistic OD curve (K = 1.2, N0 = 0.05, r = 0.8 per hour, the shared running example) from 0 to 10 h, the AUC that Numerical integration computed with the trapezoid rule. Exact value 7.244. With only 20 random times the estimate is 7.79: the points happen to fall more in the late, high part of the curve. More points, smaller error; how much smaller is the next question.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#monte-carlo-in-r-with-an-error-bar",
     "href": "monte-carlo/lec.html#monte-carlo-in-r-with-an-error-bar",
     "title": "Random numbers and Monte Carlo",
     "section": "Monte Carlo in R, with an error bar",
-    "text": "Monte Carlo in R, with an error bar\nK &lt;- 1.2; N0 &lt;- 0.05; r &lt;- 0.8\nod &lt;- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))\nset.seed(1)\nN &lt;- 1000\nfx &lt;- 10 * od(runif(N, 0, 10))          # (b - a) f(U_i)\nc(estimate = mean(fx), se = sd(fx) / sqrt(N))\n#  estimate        se\n# 7.2188630 0.1306143\nintegrate(od, 0, 10)                    # for comparison\n# 7.244448 with absolute error &lt; 3.2e-06\n\nStandard error \\text{SE} = s/\\sqrt{N}, s = sample sd of the (b-a) f(U_i). Report 7.22 \\pm 0.26 (\\pm 2\\,\\text{SE}, about 95%).\nThe true error (-0.026) is well inside the error bar. The SE comes free, from the same sample.\n\n\nThe central limit theorem says the average of N independent draws is approximately normal with sd sigma/sqrt(N), so the estimate plus or minus 2 SE covers the true value about 95% of the time. This is the big practical advantage of Monte Carlo: every estimate comes with its own error estimate, without knowing the answer. Quadrature rules give an error estimate only by comparing two rules (as integrate does). For a smooth 1-D integral, integrate is far better: 3e-6 error with 21 evaluations."
+    "text": "Monte Carlo in R, with an error bar\nK &lt;- 1.2; N0 &lt;- 0.05; r &lt;- 0.8\nod &lt;- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))\nset.seed(1)\nN &lt;- 1000\nfx &lt;- 10 * od(runif(N, 0, 10))          # (b - a) f(U_i)\nc(estimate = mean(fx), se = sd(fx) / sqrt(N))\n#  estimate        se\n# 7.2188630 0.1306143\nintegrate(od, 0, 10)                    # for comparison\n# 7.244448 with absolute error &lt; 3.2e-06\n\nStandard error \\text{SE} = s/\\sqrt{N}, s = sample sd of the (b-a) f(U_i). Report 7.22 \\pm 0.26 (\\pm 2\\,\\text{SE}, about 95%).\nThe true error (-0.026) is well inside the error bar. The SE comes free, from the same sample.\n\n\nThe central limit theorem says the average of N independent draws is approximately normal with sd sigma/sqrt(N), so the estimate plus or minus 2 SE covers the true value about 95% of the time. This is the big practical advantage of Monte Carlo: every estimate comes with its own error estimate, without knowing the answer. Quadrature rules give an error estimate only by comparing two rules (as integrate does). For a smooth 1-D integral, integrate is far better: 3e-6 error with 21 evaluations.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#the-error-falls-like-1sqrtn",
     "href": "monte-carlo/lec.html#the-error-falls-like-1sqrtn",
     "title": "Random numbers and Monte Carlo",
     "section": "The error falls like 1/\\sqrt{N}",
-    "text": "The error falls like 1/\\sqrt{N}\n\n\nMonte Carlo: slope -\\tfrac12. 100 times more samples for one more digit. For \\pm 0.01 on the AUC: N \\approx (2 \\cdot 4.13 / 0.01)^2 \\approx 680\\,000.\nTrapezoid: slope -2 in 1-D. In one dimension, Monte Carlo is a bad idea.\n\n\nThe error is random, so the plot shows the root-mean-square error over 20 runs at each N; the fitted slope is -0.51. The dashed reference line has slope -1/2 exactly. To plan N: solve 2 s / sqrt(N) = target for N, with s estimated from a pilot run (here s = 4.13 from N = 1000). Compare with the trapezoid rule from Numerical integration: 10^4 points give an error near 1e-9. The reason to use Monte Carlo is never one dimension; it is many dimensions, or a complicated region, or a probability defined by a simulation (the binding sites)."
+    "text": "The error falls like 1/\\sqrt{N}\n\n\nMonte Carlo: slope -\\tfrac12. 100 times more samples for one more digit. For \\pm 0.01 on the AUC: N \\approx (2 \\cdot 4.13 / 0.01)^2 \\approx 680\\,000.\nTrapezoid: slope -2 in 1-D. In one dimension, Monte Carlo is a bad idea.\n\n\nThe error is random, so the plot shows the root-mean-square error over 20 runs at each N; the fitted slope is -0.51. The dashed reference line has slope -1/2 exactly. To plan N: solve 2 s / sqrt(N) = target for N, with s estimated from a pilot run (here s = 4.13 from N = 1000). Compare with the trapezoid rule from Numerical integration: 10^4 points give an error near 1e-9. The reason to use Monte Carlo is never one dimension; it is many dimensions, or a complicated region, or a probability defined by a simulation (the binding sites).",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#when-the-error-bar-lies",
     "href": "monte-carlo/lec.html#when-the-error-bar-lies",
     "title": "Random numbers and Monte Carlo",
     "section": "When the error bar lies",
-    "text": "When the error bar lies\n\n\n\\int_0^1 x^{-3/4}\\,dx = 4 is finite, but \\int_0^1 (x^{-3/4})^2 dx = \\infty: infinite variance. The estimate creeps up in jumps, and the \\pm 2 SE band misses 4 for long stretches.\nCheck: plot the running estimate; repeat with a few seeds. Jumps or SEs that disagree between seeds mean the SE is not to be trusted.\n\n\nThe 1/sqrt(N) law needs a finite variance of f(U). Integrands with a singularity (or, after a change of variables, heavy tails) can have a finite integral but infinite variance. Then the sample sd is dominated by the rare huge values: most of the time it underestimates, and a rare draw near 0 makes the estimate and the SE jump. Over seeds 2 to 6 at N = 1e5, the estimates were 3.75, 4.13, 3.85, 4.35, 4.47, each with an SE that is too small. Fixes: remove the singularity analytically (substitute x = v^4 here) or use importance sampling with a proposal that has the same singularity."
+    "text": "When the error bar lies\n\n\n\\int_0^1 x^{-3/4}\\,dx = 4 is finite, but \\int_0^1 (x^{-3/4})^2 dx = \\infty: infinite variance. The estimate creeps up in jumps, and the \\pm 2 SE band misses 4 for long stretches.\nCheck: plot the running estimate; repeat with a few seeds. Jumps or SEs that disagree between seeds mean the SE is not to be trusted.\n\n\nThe 1/sqrt(N) law needs a finite variance of f(U). Integrands with a singularity (or, after a change of variables, heavy tails) can have a finite integral but infinite variance. Then the sample sd is dominated by the rare huge values: most of the time it underestimates, and a rare draw near 0 makes the estimate and the SE jump. Over seeds 2 to 6 at N = 1e5, the estimates were 3.75, 4.13, 3.85, 4.35, 4.47, each with an SE that is too small. Fixes: remove the singularity analytically (substitute x = v^4 here) or use importance sampling with a proposal that has the same singularity.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#the-curse-of-dimensionality",
     "href": "monte-carlo/lec.html#the-curse-of-dimensionality",
     "title": "Random numbers and Monte Carlo",
     "section": "The curse of dimensionality",
-    "text": "The curse of dimensionality\nN function evaluations in d dimensions:\n\n\n\n\n\n\n\n\n\ngrid, n points per axis\nMonte Carlo\n\n\n\n\npoints per axis\nn = N^{1/d}\n(no grid)\n\n\nerror, trapezoid-like rule of order 2\nn^{-2} = N^{-2/d}\n\\sigma / \\sqrt{N}\n\n\nN = 10^6, d = 1\n10^6 per axis\n\n\n\nN = 10^6, d = 10\n3–4 per axis\nsame 1/\\sqrt{N}\n\n\n\n\nA grid’s error rate gets worse with every dimension; Monte Carlo’s rate does not depend on d. They break even at d = 4 for a second-order rule.\nThe constant \\sigma can still grow with d (see importance sampling).\n\n\nThis is the reason Monte Carlo exists. The tensor-product rules of Numerical integration have an error of order n^-p per axis, and with a fixed total budget N the points per axis shrink like N^(1/d). Simpson (order 4) breaks even with Monte Carlo at d = 8, Gauss rules a bit later, but all lose eventually. The term “curse of dimensionality” is from Richard Bellman (1957). Quasi-Monte Carlo (low-discrepancy sequences, Sobol) improves on 1/sqrt(N) for smooth integrands in moderate d; one sentence only."
+    "text": "The curse of dimensionality\nN function evaluations in d dimensions:\n\n\n\n\n\n\n\n\n\ngrid, n points per axis\nMonte Carlo\n\n\n\n\npoints per axis\nn = N^{1/d}\n(no grid)\n\n\nerror, trapezoid-like rule of order 2\nn^{-2} = N^{-2/d}\n\\sigma / \\sqrt{N}\n\n\nN = 10^6, d = 1\n10^6 per axis\n\n\n\nN = 10^6, d = 10\n3–4 per axis\nsame 1/\\sqrt{N}\n\n\n\n\nA grid’s error rate gets worse with every dimension; Monte Carlo’s rate does not depend on d. They break even at d = 4 for a second-order rule.\nThe constant \\sigma can still grow with d (see importance sampling).\n\n\nThis is the reason Monte Carlo exists. The tensor-product rules of Numerical integration have an error of order n^-p per axis, and with a fixed total budget N the points per axis shrink like N^(1/d). Simpson (order 4) breaks even with Monte Carlo at d = 8, Gauss rules a bit later, but all lose eventually. The term “curse of dimensionality” is from Richard Bellman (1957). Quasi-Monte Carlo (low-discrepancy sequences, Sobol) improves on 1/sqrt(N) for smooth integrands in moderate d; one sentence only.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#the-marginal-likelihood-in-10-dimensions",
     "href": "monte-carlo/lec.html#the-marginal-likelihood-in-10-dimensions",
     "title": "Random numbers and Monte Carlo",
     "section": "The marginal likelihood in 10 dimensions",
-    "text": "The marginal likelihood in 10 dimensions\nToy model with a known answer: prior \\theta_i \\sim N(0, 1), one measurement y_i = 1 per parameter with noise sd 1. Then Z = \\phi(1; 0, \\sqrt2)^{10}.\nd &lt;- 10; y &lt;- rep(1, d)\nlik &lt;- function(th) exp(colSums(dnorm(y, th, sd = 1, log = TRUE)))  # th: d x N\nZ_exact &lt;- dnorm(1, 0, sqrt(2))^d\nnodes &lt;- qnorm((1:3 - 0.5) / 3)                          # 3 prior quantiles per axis\ngrid &lt;- t(as.matrix(expand.grid(rep(list(nodes), d))))   # 3^10 = 59049 points\nset.seed(1)\nth &lt;- matrix(rnorm(d * 59049), nrow = d)                 # 59049 draws from the prior\nL &lt;- lik(th)\nc(exact = Z_exact, grid = mean(lik(grid)), mc = mean(L), se = sd(L) / sqrt(59049))\n#        exact         grid           mc           se\n# 2.619476e-07 4.668612e-07 2.633375e-07 5.102569e-09\n\nSame budget: the grid is 78% wrong; Monte Carlo is off by 0.5%, with an honest SE of 2%.\n\n\nThe integrand is the likelihood times the prior; writing it as an average over prior draws absorbs the prior. The grid uses 3 points per axis at the prior quantiles 1/6, 1/2, 5/6 (a midpoint rule after the inverse-transform change of variables u = pnorm(theta)), so each grid point has weight 1/59049. Three points per axis cannot resolve a bell-shaped likelihood, and the error multiplies over 10 axes. The model is a product of 1-D models only so that we know Z exactly; real models are not, and that is where nothing but sampling works. dnorm(…, log = TRUE) and colSums avoid underflow when d is large (floating-point unit)."
+    "text": "The marginal likelihood in 10 dimensions\nToy model with a known answer: prior \\theta_i \\sim N(0, 1), one measurement y_i = 1 per parameter with noise sd 1. Then Z = \\phi(1; 0, \\sqrt2)^{10}.\nd &lt;- 10; y &lt;- rep(1, d)\nlik &lt;- function(th) exp(colSums(dnorm(y, th, sd = 1, log = TRUE)))  # th: d x N\nZ_exact &lt;- dnorm(1, 0, sqrt(2))^d\nnodes &lt;- qnorm((1:3 - 0.5) / 3)                          # 3 prior quantiles per axis\ngrid &lt;- t(as.matrix(expand.grid(rep(list(nodes), d))))   # 3^10 = 59049 points\nset.seed(1)\nth &lt;- matrix(rnorm(d * 59049), nrow = d)                 # 59049 draws from the prior\nL &lt;- lik(th)\nc(exact = Z_exact, grid = mean(lik(grid)), mc = mean(L), se = sd(L) / sqrt(59049))\n#        exact         grid           mc           se\n# 2.619476e-07 4.668612e-07 2.633375e-07 5.102569e-09\n\nSame budget: the grid is 78% wrong; Monte Carlo is off by 0.5%, with an honest SE of 2%.\n\n\nThe integrand is the likelihood times the prior; writing it as an average over prior draws absorbs the prior. The grid uses 3 points per axis at the prior quantiles 1/6, 1/2, 5/6 (a midpoint rule after the inverse-transform change of variables u = pnorm(theta)), so each grid point has weight 1/59049. Three points per axis cannot resolve a bell-shaped likelihood, and the error multiplies over 10 axes. The model is a product of 1-D models only so that we know Z exactly; real models are not, and that is where nothing but sampling works. dnorm(…, log = TRUE) and colSums avoid underflow when d is large (floating-point unit).",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#grid-vs-monte-carlo-as-d-grows",
     "href": "monte-carlo/lec.html#grid-vs-monte-carlo-as-d-grows",
     "title": "Random numbers and Monte Carlo",
     "section": "Grid vs Monte Carlo as d grows",
-    "text": "Grid vs Monte Carlo as d grows\n\n\nBudget 10^5 evaluations. The grid wins for d \\le 2, is level at d = 3, loses from d = 4, and at d \\ge 17 has one point per axis.\nMonte Carlo’s error grows slowly with d: here the variance of L under the prior grows like 1.36^d.\n\n\nRead off the crossover around d = 3 (expected SE of Monte Carlo 0.004, grid error 0.005), close to the d = 4 the table predicted from the rates alone. Monte Carlo errors are random: each dot is one run. The grid errors for d = 1..3 are tiny because the midpoint rule on a smooth integrand converges fast. The Monte Carlo error is still rising: the relative variance of the likelihood over the prior is 1.364^d - 1. When the data are informative (many measurements per parameter), the likelihood is a narrow peak inside the broad prior, almost all prior draws have negligible L, and the factor per dimension becomes large. That is the case for importance sampling."
+    "text": "Grid vs Monte Carlo as d grows\n\n\nBudget 10^5 evaluations. The grid wins for d \\le 2, is level at d = 3, loses from d = 4, and at d \\ge 17 has one point per axis.\nMonte Carlo’s error grows slowly with d: here the variance of L under the prior grows like 1.36^d.\n\n\nRead off the crossover around d = 3 (expected SE of Monte Carlo 0.004, grid error 0.005), close to the d = 4 the table predicted from the rates alone. Monte Carlo errors are random: each dot is one run. The grid errors for d = 1..3 are tiny because the midpoint rule on a smooth integrand converges fast. The Monte Carlo error is still rising: the relative variance of the likelihood over the prior is 1.364^d - 1. When the data are informative (many measurements per parameter), the likelihood is a narrow peak inside the broad prior, almost all prior draws have negligible L, and the factor per dimension becomes large. That is the case for importance sampling.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#rare-events-plain-monte-carlo-sees-nothing",
     "href": "monte-carlo/lec.html#rare-events-plain-monte-carlo-sees-nothing",
     "title": "Random numbers and Monte Carlo",
     "section": "Rare events: plain Monte Carlo sees nothing",
-    "text": "Rare events: plain Monte Carlo sees nothing\n\n\nA motif score of a random sequence is roughly normal (a sum over positions). P-value of a hit with standardised score above 5: P(X &gt; 5) = 2.87\\times10^{-7}.\nset.seed(1); mean(rnorm(1e5) &gt; 5) gives 0, with SE 0: a confident wrong answer. For 10% relative error, plain MC needs N = 100/p \\approx 3.5 \\times 10^8.\n\n\nFor a rare event the indicator f(x) = 1(x &gt; 5) is almost always 0. With N draws we expect Np = 0.029 hits, so the estimate is almost always exactly 0, and so is the sample sd. The relative SE of a proportion is sqrt((1-p)/(N p)), roughly 1/sqrt(expected number of hits): you need about 100 hits for 10% error. The same issue appears for small permutation p-values (genome-wide significance, 5e-8, needs billions of permutations) and for rare-event probabilities in stochastic simulation."
+    "text": "Rare events: plain Monte Carlo sees nothing\n\n\nA motif score of a random sequence is roughly normal (a sum over positions). P-value of a hit with standardised score above 5: P(X &gt; 5) = 2.87\\times10^{-7}.\nset.seed(1); mean(rnorm(1e5) &gt; 5) gives 0, with SE 0: a confident wrong answer. For 10% relative error, plain MC needs N = 100/p \\approx 3.5 \\times 10^8.\n\n\nFor a rare event the indicator f(x) = 1(x &gt; 5) is almost always 0. With N draws we expect Np = 0.029 hits, so the estimate is almost always exactly 0, and so is the sample sd. The relative SE of a proportion is sqrt((1-p)/(N p)), roughly 1/sqrt(expected number of hits): you need about 100 hits for 10% error. The same issue appears for small permutation p-values (genome-wide significance, 5e-8, needs billions of permutations) and for rare-event probabilities in stochastic simulation.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#importance-sampling",
     "href": "monte-carlo/lec.html#importance-sampling",
     "title": "Random numbers and Monte Carlo",
     "section": "Importance sampling",
-    "text": "Importance sampling\nDraw from a proposal g that puts points where the integrand matters, and reweight:\n\\int h(x) f(x)\\,dx = \\mathrm{E}_g\\!\\left[h(X)\\,\\frac{f(X)}{g(X)}\\right], \\qquad w(x) = \\frac{f(x)}{g(x)}.\nset.seed(1)\nN &lt;- 1e5\nx &lt;- rnorm(N, mean = 5)                   # proposal g = N(5, 1)\nw &lt;- dnorm(x) / dnorm(x, mean = 5)        # weights f / g = exp(12.5 - 5 x)\nhw &lt;- (x &gt; 5) * w\nc(estimate = mean(hw), se = sd(hw) / sqrt(N))\n#     estimate           se\n# 2.865596e-07 2.157211e-09\npnorm(5, lower.tail = FALSE)\n# [1] 2.866516e-07\n\nHalf of the draws now land in the tail; the weights correct for drawing them too often. Relative SE 0.75% with the same 10^5 draws.\n\n\nThe identity is one line: multiply and divide by g inside the integral. Any g works as long as g &gt; 0 wherever h f is nonzero; a good g makes h(x) f(x) / g(x) nearly constant. The best possible g is proportional to |h f|, which would give zero variance but needs the answer to normalise it; in practice we choose something close. Shifting a normal to the threshold is the classic choice for tail probabilities. For the marginal likelihood, the analogue is drawing from an approximation to the posterior instead of the prior, with weights prior times likelihood over proposal."
+    "text": "Importance sampling\nDraw from a proposal g that puts points where the integrand matters, and reweight:\n\\int h(x) f(x)\\,dx = \\mathrm{E}_g\\!\\left[h(X)\\,\\frac{f(X)}{g(X)}\\right], \\qquad w(x) = \\frac{f(x)}{g(x)}.\nset.seed(1)\nN &lt;- 1e5\nx &lt;- rnorm(N, mean = 5)                   # proposal g = N(5, 1)\nw &lt;- dnorm(x) / dnorm(x, mean = 5)        # weights f / g = exp(12.5 - 5 x)\nhw &lt;- (x &gt; 5) * w\nc(estimate = mean(hw), se = sd(hw) / sqrt(N))\n#     estimate           se\n# 2.865596e-07 2.157211e-09\npnorm(5, lower.tail = FALSE)\n# [1] 2.866516e-07\n\nHalf of the draws now land in the tail; the weights correct for drawing them too often. Relative SE 0.75% with the same 10^5 draws.\n\n\nThe identity is one line: multiply and divide by g inside the integral. Any g works as long as g &gt; 0 wherever h f is nonzero; a good g makes h(x) f(x) / g(x) nearly constant. The best possible g is proportional to |h f|, which would give zero variance but needs the answer to normalise it; in practice we choose something close. Shifting a normal to the threshold is the classic choice for tail probabilities. For the marginal likelihood, the analogue is drawing from an approximation to the posterior instead of the prior, with weights prior times likelihood over proposal.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#when-importance-sampling-fails",
     "href": "monte-carlo/lec.html#when-importance-sampling-fails",
     "title": "Random numbers and Monte Carlo",
     "section": "When importance sampling fails",
-    "text": "When importance sampling fails\nA proposal with lighter tails than the target. Estimate \\int \\phi(x)\\,dx = 1 with g = N(0, 0.5^2):\ness &lt;- function(w) sum(w)^2 / sum(w^2)        # effective sample size\nset.seed(1)\nx &lt;- rnorm(1e5, sd = 0.5)\nw &lt;- dnorm(x) / dnorm(x, sd = 0.5)            # grows like exp(1.5 x^2)\nc(estimate = mean(w), se = sd(w) / sqrt(1e5), ess = ess(w))\n#     estimate           se          ess\n#    0.9897005    0.0169248 3306.4640000\n\nThe variance of w is infinite: a few draws in the tail carry huge weights. Over seeds the SE ranges from 0.011 to 0.029.\nCheck: the effective sample size, here 3 306 of 100 000. With g = N(0, 2^2) (heavier tails): ESS 65 997, SE 0.0023.\nRule: the proposal must have heavier tails than |h| f.\n\n\nThe ESS formula (Kish) says how many equally weighted draws the weighted sample is worth. A low ESS, or one huge weight (here one draw carries 1.2% of the total weight), is the warning sign; it is the importance-sampling version of the heavy-tail problem two slides back. The narrow proposal almost never visits |x| &gt; 2, where the target still has 5% of its mass, and when it does, the weight is enormous. A wider proposal wastes some draws but has bounded weights. In high dimensions even a well-chosen Gaussian proposal can have a tiny ESS, which is why Bayesian software uses MCMC or sequential methods."
+    "text": "When importance sampling fails\nA proposal with lighter tails than the target. Estimate \\int \\phi(x)\\,dx = 1 with g = N(0, 0.5^2):\ness &lt;- function(w) sum(w)^2 / sum(w^2)        # effective sample size\nset.seed(1)\nx &lt;- rnorm(1e5, sd = 0.5)\nw &lt;- dnorm(x) / dnorm(x, sd = 0.5)            # grows like exp(1.5 x^2)\nc(estimate = mean(w), se = sd(w) / sqrt(1e5))   # true value: 1\n#   estimate         se\n# 0.98970045 0.01692477\ness(w)\n# [1] 3306.464\n\nThe variance of w is infinite: a few draws in the tail carry huge weights. Over seeds the SE ranges from 0.011 to 0.029.\nCheck: the effective sample size, here 3 306 of 100 000. With g = N(0, 2^2) (heavier tails): ESS 65 997, SE 0.0023.\nRule: the proposal must have heavier tails than |h| f.\n\n\nThe ESS formula (Kish) says how many equally weighted draws the weighted sample is worth. A low ESS, or one huge weight (here one draw carries 1.2% of the total weight), is the warning sign; it is the importance-sampling version of the heavy-tail problem two slides back. The narrow proposal almost never visits |x| &gt; 2, where the target still has 5% of its mass, and when it does, the weight is enormous. A wider proposal wastes some draws but has bounded weights. In high dimensions even a well-chosen Gaussian proposal can have a tiny ESS, which is why Bayesian software uses MCMC or sequential methods.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#checklist-is-my-monte-carlo-answer-right",
     "href": "monte-carlo/lec.html#checklist-is-my-monte-carlo-answer-right",
     "title": "Random numbers and Monte Carlo",
     "section": "Checklist: is my Monte Carlo answer right?",
-    "text": "Checklist: is my Monte Carlo answer right?\n\nSeed set once at the top, software version recorded; result stable over a few seeds.\nEvery estimate has an error bar: estimate \\pm 2\\,\\text{SE}, \\text{SE} = s/\\sqrt{N}.\nCode tested on a case with a known answer (the binomial overlap, the toy Z).\nRunning estimate plotted: smooth 1/\\sqrt{N} narrowing, no jumps.\nRare events: zero hits is not a probability of zero; use importance sampling, or report p &lt; 1/N.\nWeights: check the effective sample size and the largest weight.\nIn 1–3 dimensions with a smooth integrand, use quadrature (integrate) instead.\n\n\nA list to keep next to the keyboard. The common thread: Monte Carlo always returns a number, so the checks are about whether the number and its error bar can be trusted. The last item is a reminder that Monte Carlo is the method of last resort for low-dimensional smooth integrals."
+    "text": "Checklist: is my Monte Carlo answer right?\n\nSeed set once at the top, software version recorded; result stable over a few seeds.\nEvery estimate has an error bar: estimate \\pm 2\\,\\text{SE}, \\text{SE} = s/\\sqrt{N}.\nCode tested on a case with a known answer (the binomial overlap, the toy Z).\nRunning estimate plotted: smooth 1/\\sqrt{N} narrowing, no jumps.\nRare events: zero hits is not a probability of zero; use importance sampling, or report p &lt; 1/N.\nWeights: check the effective sample size and the largest weight.\nIn 1–3 dimensions with a smooth integrand, use quadrature (integrate) instead.\n\n\nA list to keep next to the keyboard. The common thread: Monte Carlo always returns a number, so the checks are about whether the number and its error bar can be trusted. The last item is a reminder that Monte Carlo is the method of last resort for low-dimensional smooth integrals.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "monte-carlo/lec.html#summary",
     "href": "monte-carlo/lec.html#summary",
     "title": "Random numbers and Monte Carlo",
     "section": "Summary",
-    "text": "Summary\n\nPseudo-random numbers are deterministic streams from a seed. Use the default generator (R: Mersenne Twister, numpy: PCG64, Rust: ChaCha12); streams differ between languages.\nInverse transform X = F^{-1}(U); rejection when F^{-1} is unknown (acceptance rate 1/M).\nMonte Carlo integration: integral = average; estimate \\pm 2\\,s/\\sqrt{N}. Error \\propto N^{-1/2} in any dimension, if the variance is finite.\nCurse of dimensionality: a grid’s error N^{-p/d} collapses with d; Monte Carlo wins from d \\approx 4.\nImportance sampling for rare events and peaked integrands; check the effective sample size.\nBiology: motif enrichment by simulated placement (permutation-style test); marginal likelihood as an average over prior draws.\n\nNext: Part 8, Initial value problems and Euler’s method. Random numbers return in Stochastic simulation, where exponential waiting times drive Gillespie’s algorithm.\n\nRecap the two pillars: where random numbers come from and how to turn averages into integrals with an error bar. The deterministic ODE units come next; Stochastic simulation (the last unit of Part 8) uses inverse-transform sampling of exponential waiting times to simulate reactions with small copy numbers, and its results are again Monte Carlo averages with standard errors."
+    "text": "Summary\n\nPseudo-random numbers are deterministic streams from a seed. Use the default generator (R: Mersenne Twister, numpy: PCG64, Rust: ChaCha12); streams differ between languages.\nInverse transform X = F^{-1}(U); rejection when F^{-1} is unknown (acceptance rate 1/M).\nMonte Carlo integration: integral = average; estimate \\pm 2\\,s/\\sqrt{N}. Error \\propto N^{-1/2} in any dimension, if the variance is finite.\nCurse of dimensionality: a grid’s error N^{-p/d} collapses with d; Monte Carlo wins from d \\approx 4.\nImportance sampling for rare events and peaked integrands; check the effective sample size.\nBiology: motif enrichment by simulated placement (permutation-style test); marginal likelihood as an average over prior draws.\n\nNext: Part 8, Initial value problems and Euler’s method. Random numbers return in Stochastic simulation, where exponential waiting times drive Gillespie’s algorithm.\n\nRecap the two pillars: where random numbers come from and how to turn averages into integrals with an error bar. The deterministic ODE units come next; Stochastic simulation (the last unit of Part 8) uses inverse-transform sampling of exponential waiting times to simulate reactions with small copy numbers, and its results are again Monte Carlo averages with standard errors.",
+    "crumbs": [
+      "Home",
+      "Part 7: Numerical differentiation and integration",
+      "Random numbers and Monte Carlo",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "euler/lec.html#about-this-lecture",

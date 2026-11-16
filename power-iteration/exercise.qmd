@@ -186,6 +186,46 @@ Explain the difference with fact 7.
 (b) Run it from $(1, 0, 0)$ and from $(1, -1, 0)$. Which eigenvalues do you get?
 (c) What happens if you lower the tolerance to $10^{-12}$ in (a)? Why?
 
+## Explore {#explore}
+
+The demo below runs power iteration in your browser on the matrices of this unit: the 2 × 2 plants of the lecture and of B1–B3, a symmetric 2 × 2, the fish Leslie matrix, its semelparous variant, and the cell-state chain (as $P^T$, so that the iteration is $\mathbf x \leftarrow P^T\mathbf x$). Panel (a) shows the current vector $\mathbf x_k$: for a 2 × 2 matrix as a direction in the plane, with the two eigen-directions dashed ($\mathbf v_1$ blue, $\mathbf v_2$ red), the earlier iterates faded and $A\mathbf x_k$ in green (drag the circle to move the start $\mathbf x_0$); for larger matrices as bars, with the eigenvector dashed. Panel (b) shows the error in $\mathbf x_k$ and in the eigenvalue estimate against $k$ on a log scale, with the predicted line $C\,|\lambda_2/\lambda_1|^k$ (dashed). Nonnegative matrices are normalised by the sum (proportions, estimate = growth of the total), others by the 2-norm (estimate = Rayleigh quotient). **Inverse iteration** switches to $(A - \sigma I)^{-1}$; the $\sigma$ buttons set useful shifts. The readout lists the eigenvalues, the predicted rate, the steps per digit, the measured rate over the last five steps and the residual.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="poweriter" data-preset="plant" data-k="0"></div>
+<script src="../demos/dist/poweriter.js"></script>
+```
+
+**E1. (swinging towards $\mathbf v_1$)** With the lecture's plant $\begin{pmatrix} 1 & 1 \\ 0.75 & 0\end{pmatrix}$ and the start "class 1", click **step +1** four times. Write down the eigenvalue estimate and the error in $\mathbf x$ at each step, and watch where $\mathbf x_k$ lies relative to the blue line. By what factor does the error fall per step, and why does $\mathbf x_k$ land on alternate sides of $\mathbf v_1$? At which $k$ does the error first drop below $10^{-10}$?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+The estimates are $1.75$, $1.4286$, $1.525$, $1.4918$: the lecture's table. The error in the proportions goes $0.33$ ($k = 0$), $0.095$, $0.033$, $0.011$, $0.0037$: divided by 3 each step, and the measured rate settles at $0.333 = |\lambda_2/\lambda_1| = 0.5/1.5$. The proportion of class 1 alternates around $2/3$ ($0.571$, $0.700$, $0.656$, $0.670$), so $\mathbf x_k$ falls on one side of $\mathbf v_1$, then the other: the $\mathbf v_2$ part is multiplied by $\lambda_2 = -0.5$ each step and changes sign. The readout predicts 2.1 steps per digit; the error is below $10^{-10}$ at $k = 20$, and the marker lies on the dashed line the whole way.
+:::
+
+**E2. (the rate decides)** Read the predicted rate and the steps per digit for **plant B1**, **early flowering** and **biennial**. Predict for each how many steps it takes to reach an error of $10^{-10}$, then move the $k$ slider to find out. What happens for the biennial plant, and what does the eigenvalue estimate do?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Plant B1: rate $0.6/1.2 = 0.5$, 3.3 steps per digit, so about 33 steps; the error first drops below $10^{-10}$ at $k = 33$. Early flowering: rate $0.8198/1.2198 = 0.672$, 5.8 steps per digit, so about 58; it takes 55 (the constant $C$ in front of $0.672^k$ is below 1 here). Biennial: $\lambda = \pm 1$, rate $1.00$, and the readout warns that two eigenvalues share the largest modulus. The proportions jump between $(1, 0)$ and $(0, 1)$, the error stays at $0.80$ and $0.20$ forever, and the estimate alternates $0.25$, $4$, $0.25$, $4$: the population grows by $0.25 \times 4 = 1$ per **two** years, as in B3, and there is no stable stage distribution to find.
+:::
+
+**E3. (the fish, and a fish that spawns once)** Choose **fish** (start: age 1) and go to $k = 20$, then $k = 40$. Compare the bars with the dashed stable age distribution and the measured rate with $|\lambda_2/\lambda_1|$. Why does the error curve wiggle? Then choose **semelparous fish**, press **play**, and describe what the bars and the estimate do. Does the start "equal" help?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+At $k = 20$ the bars read $0.694$, $0.177$, $0.090$, $0.038$, on top of the dashed outlines; the estimate is $1.1771512$ (true $1.1773586$), the error in $\mathbf x$ is $5.8\times10^{-5}$ and the measured rate $0.651$ (at $k = 40$: $9.5\times10^{-9}$ and $0.652$), close to $|\lambda_2/\lambda_1| = 0.7699/1.177 = 0.654$ (5.4 steps per digit). The second eigenvalues are the complex pair $-0.2663 \pm 0.7224i$, so the $\mathbf v_2$ part rotates as it shrinks: the error wiggles under the dashed line, like the transient oscillation of the age structure. Semelparous fish: all fish sit in one age class, which moves one class per step (age 2, age 3, age 0, age 1, ...); the estimate cycles $0.6$, $0.5$, $12$, $0.3$, the error stays between $0.36$ and $0.95$, the residual does not fall, and the readout says that four eigenvalues share the largest modulus $1.0194$. The start "equal" does not help: after four steps $\mathbf x_4 = (0.25, 0.25, 0.25, 0.25)$ again, because $L^4 = 1.08\,I$, and the error stays at $0.39$.
+:::
+
+**E4. (shift and invert)** Choose **cell states $P^T$**. With power iteration, read the rate and the error at $k = 60$. Then switch to **inverse iteration** and try $\sigma = 1$, $0.82$, $0.77$ and $0.9$. For each: which eigenvalue is found, at what predicted rate, and after how many steps is the error below $10^{-10}$?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+Power iteration: rate $0.8$, 10.3 steps per digit; after 60 steps the error is still $3.8\times10^{-7}$. $\sigma = 1$: the shift is the eigenvalue itself; the readout warns that $A - \sigma I$ is singular to working precision, yet one step gives $(0.200, 0.550, 0.250)$ with error $10^{-16}$. $\sigma = 0.82$: finds $\lambda = 0.8$ with eigenvector $(0, 0.707, -0.707)$ (the B–L exchange), rate $0.02/0.07 = 0.286$, error below $10^{-10}$ at $k = 20$. $\sigma = 0.77$: finds $0.75$, not $0.8$, because $0.75$ is nearer; rate $0.02/0.03 = 0.667$, 54 steps. $\sigma = 0.9$ lies exactly halfway between $0.8$ and $1$: rate $1$, no single nearest eigenvalue, and the residual stays at $0.062$. These are the lecture's 21 and 58 iterations (counted there by a residual below $10^{-12}$).
+:::
+
+**E5. (complex eigenvalues)** Choose the lecture's plant again and set $a_{21}$ to $-0.75$ with its slider. What happens to the eigenvalues, to the dashed lines in panel (a), and to $\mathbf x_k$ as you step?
+
+::: {.callout-note collapse="true" title="Answer E5"}
+The characteristic polynomial becomes $\lambda^2 - \lambda + 0.75$, with eigenvalues $0.5 \pm 0.7071i$: there are no real eigen-directions, so the dashed lines disappear. Both eigenvalues have the same modulus, so none dominates: $\mathbf x_k$ keeps turning around the circle (on average by about 55° per step, the angle of $0.5 + 0.7071i$), the residual does not fall (still $0.98$ at $k = 60$) and the readout says that the largest eigenvalues are a complex pair. A real matrix with a complex dominant pair cannot be handled by real power iteration at all; for nonnegative population matrices this cannot happen, because a nonnegative matrix always has a real, positive eigenvalue of largest modulus (Perron–Frobenius; it may still share that modulus with others, as for the semelparous fish).
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — eigenvalues and eigenvectors of a 2 × 2 (B1, B3, B4, B5)"}

@@ -22,7 +22,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 17 | fourier-fft | running | | |
 | 18 | finite-differences | done | done | done |
 | 19 | quadrature | running | | |
-| 20 | monte-carlo | running | | |
+| 20 | monte-carlo | done | running | |
 | 21 | euler | running | | |
 | 22 | runge-kutta | running | | |
 | 23 | stiffness | running | | |
@@ -43,3 +43,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - power-iteration: Rayleigh quotient iteration included (slide + C7) — check overlap with eigen-algorithms in pass 2. Cell-state chain 'after Gupta et al. 2011' illustrative. Timing claim 17 s vs 0.3 s single run.
 - finite-differences: optim default BFGS gradient = central diff with ndeps=1e-3 — verify. Install: numDeriv.
 - splines: tradeSeq / Monocle use spline trends — from memory, verify.
+- monte-carlo: from memory — RANDU history, R 3.6 sample() change, ChaCha12 as StdRng, Bellman 'curse of dimensionality', bedtools shuffle / GAT / regioneR. Slides 13–18 figures not seen in browser.

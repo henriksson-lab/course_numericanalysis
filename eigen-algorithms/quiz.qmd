@@ -1,0 +1,234 @@
+---
+title: "Quiz: how eigen() works, and big problems"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of the QR algorithm, eigenvalue sensitivity and Krylov methods. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** One step of the QR algorithm replaces $A_k = Q_kR_k$ by $A_{k+1} = R_kQ_k$. Why does this not change the eigenvalues?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Write $R_k$ in terms of $Q_k$ and $A_k$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$R_k = Q_k^TA_k$, so $A_{k+1} = Q_k^TA_kQ_k$: a similarity transform with an orthogonal matrix. Similar matrices have the same eigenvalues ($A_{k+1}\,(Q_k^T\mathbf v) = \lambda\,Q_k^T\mathbf v$ whenever $A_k\mathbf v = \lambda\mathbf v$). Because $Q_k$ is orthogonal the transform also does not magnify rounding errors.
+:::
+
+---
+
+**Q2.** A symmetric matrix has eigenvalues 5, 4 and 1. Running the unshifted QR algorithm, which subdiagonal entry goes to zero faster, $a_{21}$ or $a_{32}$? About how many steps does each need to fall from 1 to $10^{-8}$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$a_{i+1,i}$ shrinks like $|\lambda_{i+1}/\lambda_i|^k$. Solve $r^k = 10^{-8}$ with logarithms.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$a_{21}$: ratio $4/5 = 0.8$, $k = 8/\log_{10}(1.25) \approx 83$ steps. $a_{32}$: ratio $1/4$, $k = 8/\log_{10}4 \approx 13$ steps. So $a_{32}$ is much faster. The close pair 5 and 4 is the bottleneck, which is why real implementations use shifts.
+:::
+
+---
+
+**Q3.** Why does LAPACK first reduce a matrix to Hessenberg (or, if symmetric, tridiagonal) form before starting the QR iteration?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compare the cost of one QR step on a full matrix and on a Hessenberg matrix, and ask whether the form survives a step.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A QR step on a full $n \times n$ matrix costs $O(n^3)$; on a Hessenberg matrix only $O(n^2)$ (one Givens rotation per subdiagonal entry), and on a tridiagonal one $O(n)$. The reduction costs $O(n^3)$ but is done only once, and QR steps keep the Hessenberg (tridiagonal) form, so all later steps are cheap.
+:::
+
+---
+
+**Q4.** What does a shift $\mu$ do in the QR algorithm, and why is $\mu = a_{nn}$ a good choice? Give a matrix where it fails.
+
+::: {.callout-tip collapse="true" title="Hint"}
+The rate for the last subdiagonal entry is $|\lambda_n - \mu|/|\lambda_{n-1} - \mu|$. Try $\begin{pmatrix} 2 & 1 \\ 1 & 2 \end{pmatrix}$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The step is done on $A - \mu I$, whose eigenvalues are $\lambda_i - \mu$; then $\mu I$ is added back. If $\mu$ is close to an eigenvalue $\lambda_n$, the ratio $|\lambda_n - \mu|/|\lambda_{n-1} - \mu|$ is tiny and the last row converges in a few steps. $a_{nn}$ is a Rayleigh quotient, so it approaches $\lambda_n$ as the iteration proceeds: convergence becomes quadratic (cubic for symmetric matrices). It fails for $\begin{pmatrix} 2 & 1 \\ 1 & 2 \end{pmatrix}$: $a_{22} = 2$ lies exactly between the eigenvalues 1 and 3, so $A - 2I$ has eigenvalues $\pm1$ of equal modulus and nothing happens. The Wilkinson shift (the eigenvalue of the trailing 2 × 2 block nearer to $a_{nn}$) avoids this.
+:::
+
+---
+
+**Q5.** `eigen()` of a real 3 × 3 Jacobian returns `-0.2+1.1i, -0.2-1.1i, -0.5+0i`. A colleague suspects a rounding problem and wants to keep only the real parts. What do you say?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Can a real matrix have complex eigenvalues? What do they mean for $\dot{\mathbf x} = J\mathbf x$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The complex pair is the correct answer, not noise: real matrices can have complex eigenvalues, always in conjugate pairs. The steady state is a stable spiral: perturbations oscillate with period $2\pi/1.1 \approx 5.7$ time units and decay like $e^{-0.2t}$. Dropping the imaginary parts would lose the oscillation. (Rounding noise looks different: imaginary parts of size $10^{-15}$ on a matrix that should be symmetric. Then say `symmetric = TRUE`.)
+:::
+
+---
+
+**Q6.** A cell-maturation model has 20 transit compartments in a chain, all with rate 1 per day. In exact arithmetic all eigenvalues are $-1$. Roughly how far from $-1$ may the eigenvalues that `eigen()` returns lie, given rounding errors of about $10^{-16}$ in the entries? What would the answer be for a symmetric matrix?
+
+::: {.callout-tip collapse="true" title="Hint"}
+For a chain of $n$ compartments with a perturbation $\varepsilon$, the eigenvalues move by about $\varepsilon^{1/n}$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$(10^{-16})^{1/20} = 10^{-0.8} \approx 0.16$: the computed eigenvalues may sit anywhere on a circle of radius about 0.16 around $-1$, some with imaginary parts. For a symmetric matrix the change is at most the size of the perturbation, about $10^{-16}$.
+:::
+
+---
+
+**Q7.** Name two checks you can run to see whether the eigenvalues of a nonsymmetric matrix are trustworthy.
+
+::: {.callout-tip collapse="true" title="Hint"}
+One uses the eigenvectors; the other uses only `eigen()` and random numbers.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) The condition number of the eigenvector matrix, `kappa(eigen(A)$vectors)` (Python `np.linalg.cond(np.linalg.eig(A)[1])`): eigenvalues can move by up to $\kappa(V)$ times the perturbation (Bauer–Fike); near 1 is safe, $10^9$ means up to 9 digits lost. (2) Perturb and recompute: add random changes at the level of the uncertainty of the entries and see how far the eigenvalues move. For the 10-compartment chain, $10^{-12}$ in gives $5\times10^{-5}$ out.
+:::
+
+---
+
+**Q8.** What do these lines print, and why? ($P$ is the transition matrix of a cell that switches state every generation.)
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+P <- matrix(c(0, 1,
+              1, 0), 2)
+f <- qr(P)
+qr.R(f) %*% qr.Q(f)                            # one unshifted step
+#      [,1] [,2]
+# [1,]    0    1
+# [2,]    1    0
+mu <- 0.5
+P1 <- P
+for (k in 1:10) {                              # shifted steps, shift 0.5
+  f <- qr(P1 - mu * diag(2))
+  P1 <- qr.R(f) %*% qr.Q(f) + mu * diag(2)
+}
+round(P1, 6)
+#          [,1]    [,2]
+# [1,] -1.0e+00 3.4e-05
+# [2,]  3.4e-05 1.0e+00
+```
+
+### Python
+
+```python
+import numpy as np
+
+P = np.array([[0.0, 1.0], [1.0, 0.0]])
+Q, R = np.linalg.qr(P)
+print(R @ Q)                                   # one unshifted step
+# [[0. 1.]
+#  [1. 0.]]
+mu = 0.5
+P1 = P.copy()
+for k in range(10):                            # shifted steps, shift 0.5
+    Q, R = np.linalg.qr(P1 - mu * np.eye(2))
+    P1 = R @ Q + mu * np.eye(2)
+print(np.round(P1, 6))
+# [[-1.0e+00  3.4e-05]
+#  [ 3.4e-05  1.0e+00]]
+```
+
+### Rust
+
+```rust
+// rust/examples/eigen_algorithms_q8.rs  —  cargo run --example eigen_algorithms_q8
+// Quiz Q8: the QR algorithm on the period-2 transition matrix, unshifted and shifted.
+use nalgebra::Matrix2;
+
+fn show(m: &Matrix2<f64>) {
+    for i in 0..2 { println!("{:10.6} {:10.6}", m[(i, 0)], m[(i, 1)]); }
+}
+
+fn main() {
+    let p: Matrix2<f64> = Matrix2::new(0.0, 1.0,
+                                       1.0, 0.0);
+    let qr = p.qr();
+    show(&(qr.r() * qr.q()));                         // one unshifted step
+    let mu = 0.5;
+    let eye = Matrix2::<f64>::identity();
+    let mut p1 = p;
+    for _ in 0..10 {                                  // shifted steps, shift 0.5
+        let qr = (p1 - eye * mu).qr();
+        p1 = qr.r() * qr.q() + eye * mu;
+    }
+    show(&p1);
+}
+
+// Output:
+//   0.000000   1.000000
+//   1.000000   0.000000
+//  -1.000000   0.000034
+//   0.000034   1.000000
+```
+
+:::
+
+::: {.callout-tip collapse="true" title="Hint"}
+The eigenvalues of $P$ are $\pm1$. What are the eigenvalues of $P - 0.5I$, and their ratio?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The unshifted step returns $P$ itself: the columns of $P$ are orthonormal, so $Q = \pm P$, $R = \pm I$, $RQ = P$, and the eigenvalues $\pm1$ have equal modulus, so the QR algorithm never makes progress. With shift 0.5 the shifted eigenvalues are $-1.5$ and $0.5$ (ratio 1/3), so the off-diagonal shrinks by about 1/3 per step: after 10 steps it is $3.4\times10^{-5}$ and the diagonal shows $-1$ and $1$. (The outputs are printed in the code tabs.)
+:::
+
+---
+
+**Q9.** Lanczos and other Krylov methods need only one thing from the matrix. What is it, and why does that matter for PCA of a sparse cells × genes matrix?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at the line of the Lanczos loop that uses $A$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Products $A\mathbf v$. For PCA, $A = X_c^TX_c$ and $A\mathbf v = X_c^T(X_c\mathbf v)$, with $X_c\mathbf v = X\mathbf v - \mathbf 1(\boldsymbol\mu^T\mathbf v)$ and $X_c^T\mathbf w = X^T\mathbf w - \boldsymbol\mu(\mathbf 1^T\mathbf w)$. So the sparse $X$ is never centred (which would make it dense) and the covariance matrix is never formed. Memory stays at the size of $X$ plus a few dozen vectors, and each step costs about $4\,\text{nnz}(X)$ operations.
+:::
+
+---
+
+**Q10.** A hand-written Lanczos run on a covariance matrix reports the top Ritz values 41.2, 41.2, 41.2, 17.5, 17.5, 9.3. What has probably happened, and how do you fix it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What happens to the orthogonality of the Lanczos vectors in floating point once a Ritz value has converged?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Loss of orthogonality: once a Ritz value converges, the Lanczos vectors drift back towards its eigenvector and the eigenvalue reappears as **ghost** copies. The matrix most likely has single eigenvalues 41.2 and 17.5. Fix: reorthogonalise each new vector against all previous ones (or use a library with restarting and selective reorthogonalisation: `RSpectra`, `irlba`, `eigsh`). Check: the residual $\|A\mathbf y - \theta\mathbf y\|$, and whether the problem has any reason for a repeated eigenvalue.
+:::
+
+---
+
+**Q11.** `irlba(X, nv = 10, center = mu)` needed 84 products with $X$; asking for `nv = 20` needed 336. The singular values are 335, 294, ..., 218 for the first ten and 72.44, 72.41, 72.05, ... after that. Explain.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which eigenvalues does a Krylov method find quickly?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Krylov methods converge fast for **extreme, well-separated** eigenvalues. The first ten are well separated from the rest (a gap from 218 to 72). Numbers 11–20 lie inside a tight cluster of noise singular values, so separating them needs many more steps. They are also poorly determined (small changes in the data reorder them) and carry no cell-type signal, so the extra cost buys nothing.
+:::
+
+---
+
+**Q12.** For PCA of 100 000 cells × 2 000 genes (10 % non-zero), compare the memory needed by (a) the dense centred matrix, (b) the sparse matrix, (c) the gene–gene covariance matrix, (d) a cell–cell matrix. Which route would you take for the top 30 PCs?
+
+::: {.callout-tip collapse="true" title="Hint"}
+8 bytes per double; about 12 bytes per non-zero in sparse storage.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(a) $10^5 \cdot 2000 \cdot 8 = 1.6$ GB. (b) $2\times10^7$ non-zeros × 12 bytes = 240 MB. (c) $2000^2 \cdot 8 = 32$ MB, but forming it via a dense centred $X$ costs (a). (d) $10^{10} \cdot 8 = 80$ GB. Use a truncated, matrix-free method on the sparse matrix with implicit centring: `irlba(X, nv = 30, center = colMeans(X))` or `RSpectra::svds` in R, `scipy.sparse.linalg.svds` with a `LinearOperator` in Python. Then check the residuals.
+:::
