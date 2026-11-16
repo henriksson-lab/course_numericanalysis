@@ -37,7 +37,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 32 | diffusion-implicit | done | done | done |
 | 33 | steady-state-2d | done | done | done |
 | 34 | advection-diffusion | done | done | done |
-| 35 | reaction-diffusion | running | | |
+| 35 | reaction-diffusion | done | running | |
 | 36 | fem-outlook | done | (no demo: further reading) | done |
 | 37 | iterative-solvers | running | (no demo) | |
 
@@ -80,3 +80,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - steady-state-2d lecture notes: 'core size changes little with threshold' — demo shows 5.7/10.0/16.3 % at 5/10/20 µM; soften sentence.
 - quadrature: QUADPACK actually works to ~4300 and fails from 4400 (one bisection when error cap hit); '~2300' is the first-pass/5σ rule — check intro + quadrature lecture wording matches. Exercise page horizontal scroll from MathJax.
 - advection-diffusion: deck now 29 slides. Mixing length: demo 3.1 mm (Poiseuille, 1 % criterion) vs lecture note '4–5 mm'/4.2 mm plug flow — align wording. E4 uses central-explicit stability C ≤ 2/P (not stated in unit).
+- reaction-diffusion: time in minutes vs seconds in diffusion-explicit — reconcile. 2D uses periodic FFT diffusion, not Kronecker Laplacian. From memory: Bicoid λ≈100 µm, D FRAP 0.3 / FCS 7 µm²/s; Fgf8 D≈50, λ≈200 µm; Gregor 2007, Abu-Arish 2010, Berezhkovskii 2010 (notes only). Slides not screenshotted.
