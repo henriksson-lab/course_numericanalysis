@@ -1,0 +1,155 @@
+---
+title: "Quiz: iterative linear solvers in depth"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of iterative linear solvers. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** A sparse direct solve of the 2D oxygen chamber with 640 000 unknowns takes 11 s. Why can you not simply do the same for a 3D tissue block with $10^6$ unknowns?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What happens to the Cholesky factor, compared with the matrix itself, in 2D and in 3D?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+**Fill-in.** Even with the best ordering, the Cholesky factor of a 3D grid matrix has far more non-zeros than the matrix (44 times more already at $50^3$), growing like $n^{4/3}$, and the work grows like $n^2$. For $100^3$ that is roughly $6\times10^8$ non-zeros (about 7 GB) and an hour of computing, against 7 million non-zeros (84 MB) for $A$ itself. An iterative method stores only $A$ and a few vectors; CG solved the $100^3$ block in 203 iterations, 6 s in R.
+:::
+
+---
+
+**Q2.** Jacobi and Gauss–Seidel are both "splittings" $\mathbf{x} \leftarrow \mathbf{x} + M^{-1}(\mathbf{b} - A\mathbf{x})$. What is $M$ in each, and why must $M$ be cheap to solve with but close to $A$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Think of the two extremes $M = I$ and $M = A$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Jacobi: $M = D$, the diagonal of $A$. Gauss–Seidel: $M$ = the lower triangle of $A$ including the diagonal (a forward substitution, which is what "use new values as soon as they exist" means). With $M = A$ one step would give the exact answer but solving with $M$ would be the original problem; with $M$ far from $A$ the iteration matrix $T = I - M^{-1}A$ has a large spectral radius and the method is slow or diverges.
+:::
+
+---
+
+**Q3.** The iteration matrix of a splitting has spectral radius $\rho = 0.99$. Roughly how many iterations does it take to gain one digit? Six digits? What if $\rho = 1.01$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The error shrinks by about $\rho$ per step. Solve $\rho^k = 0.1$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$k = \ln 10/(-\ln 0.99) = 2.303/0.01005 \approx 229$ iterations per digit, about 1375 for six. With $\rho = 1.01 > 1$ the error component along the corresponding eigenvector grows by 1 % per step: the iteration **diverges**, whatever the start (unless that component happens to be exactly zero).
+:::
+
+---
+
+**Q4.** You refine the chamber grid from $h$ to $h/2$ in 2D. By what factor do (a) the number of unknowns, (b) the Jacobi sweeps, (c) the CG iterations, and (d) the total work of Jacobi and of CG change?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\rho_J = \cos\pi h \approx 1 - \pi^2h^2/2$, and $\kappa \approx 4/(\pi^2h^2)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(a) ×4 ($n = m^2$). (b) ×4: sweeps per digit $\approx 0.47/h^2$. (c) ×2: CG needs $\sim\sqrt\kappa \sim 1/h$ iterations. (d) Work per iteration ∝ $n$, so Jacobi ×16 and CG ×8. Only multigrid keeps the iteration count constant, so its work grows ×4, like the number of unknowns.
+:::
+
+---
+
+**Q5.** Why does a finer grid make Jacobi and Gauss–Seidel slower, in words a biologist would accept?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How far does information travel in one sweep? Which kind of error is left after a few sweeps?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Each sweep only lets a grid point "talk" to its immediate neighbours: it is like diffusion with a time step of one grid spacing. Wiggly, local errors are averaged away within a few sweeps, but a smooth error that spans the whole chamber (e.g. the oxygen level in the centre being too high everywhere) can only be corrected by information that travels from the walls, one grid point per sweep, many times back and forth. A finer grid means more grid points between the walls and the centre.
+:::
+
+---
+
+**Q6.** A colleague runs Jacobi on a large diffusion problem and stops "when the solution no longer changes": the largest change in one sweep is below $10^{-8}$. The spectral radius is $0.9999$. How far from the solution can the result be? What should they check instead?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Add up all the remaining steps as a geometric series.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Remaining error $\approx 10^{-8} \times 0.9999/0.0001 \approx 10^{-4}$: four orders of magnitude more than the step. Slow methods take small steps without being close. Check the **relative residual** $\|\mathbf{b} - A\mathbf{x}\|/\|\mathbf{b}\|$, report whether the iteration limit was reached, and on a small version of the problem compare with a direct solve. (Even the residual bounds the relative error only up to a factor $\kappa(A)$.)
+:::
+
+---
+
+**Q7.** What is the Krylov space after $k$ iterations, and what does CG choose from it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which vectors can you make from $\mathbf{b}$ using $k$ products with $A$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\mathcal{K}_k = \text{span}\{\mathbf{b}, A\mathbf{b}, \dots, A^{k-1}\mathbf{b}\}$. For SPD $A$, CG picks the $\mathbf{x}_k$ in $\mathcal{K}_k$ with the smallest error in the $A$-norm, equivalently the minimiser of $\tfrac12\mathbf{x}^TA\mathbf{x} - \mathbf{b}^T\mathbf{x}$ over $\mathcal{K}_k$, using only a short recurrence (four vectors of storage). That optimal choice is why CG needs about $\sqrt\kappa$ iterations where Jacobi needs about $\kappa$.
+:::
+
+---
+
+**Q8.** You run CG on the perfused chamber (advection–diffusion with upwind differences). It returns after `maxit` iterations without an error message. What went wrong, how would you have noticed, and what should you use instead?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What property of $A$ does CG assume? What does the advection term do to it?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The advection term couples each point only to its upstream neighbour, so $A \ne A^T$, and CG's derivation (minimising a quadratic) no longer holds: in the lecture the true residual grew to 314. Check `isSymmetric(A)` before using CG, and always compute the true relative residual of the returned $\mathbf{x}$. Use **GMRES** (or BiCGSTAB) instead: 116 iterations there, 187 with restarts every 20.
+:::
+
+---
+
+**Q9.** Jacobi (diagonal) preconditioning did nothing for CG on the uniform chamber but halved the iteration count when a cell aggregate lowered $D$ tenfold in the middle. Explain both.
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is $D$ for the uniform chamber? What does scaling by a constant do to a condition number?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Uniform chamber: $D = 4I$, so $D^{-1}A = A/4$ has the same eigenvectors and the same condition number, and CG takes exactly the same steps (100 at $m = 63$). Aggregate: the diagonal varies from 0.4 to 4, so rows are badly scaled relative to each other; part of the large $\kappa$ is due only to that scaling, and the diagonal preconditioner removes it (197 → 103). It cannot fix the $1/h^2$ growth that comes from the grid itself.
+:::
+
+---
+
+**Q10.** What is "incomplete" in incomplete Cholesky, and what is the trade-off when you allow more fill-in?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compare with the fill-in of the full Cholesky factor in *Structure: symmetric, banded, sparse*.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+IC(0) runs the Cholesky algorithm but throws away every entry that would fall outside the sparsity pattern of $A$ (the fill-in). So $L$ is as sparse as $A$ and $LL^T \approx A$, not $= A$. Allowing more fill-in (IC($k$), threshold dropping) makes $LL^T$ closer to $A$ and the iteration count smaller, but costs more memory and more work per iteration (two larger triangular solves), and for very much fill you are back to a direct solver. Count both iterations and time.
+:::
+
+---
+
+**Q11.** GMRES never lets the residual grow. Why not always use GMRES, even for SPD matrices? And what is the risk of restarting it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does GMRES store after $k$ iterations?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+GMRES stores an orthonormal basis of the Krylov space, one vector of length $n$ per iteration, and orthogonalises each new vector against all old ones, so memory and work per step grow with $k$ ($n = 10^6$, $k = 300$: 2.4 GB). For SPD matrices CG reaches the same accuracy in about the same number of iterations (99 vs 100 on the chamber) with four vectors. Restarting after $k$ steps (GMRES($k$)) caps the memory but throws away the subspace; convergence slows (187 instead of 116 in the lecture) and on hard problems can **stall** completely. The cure is a better preconditioner.
+:::
+
+---
+
+**Q12.** In one or two sentences: why does multigrid need the same number of iterations on every grid?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which error does a smoothing sweep remove well, and how does a smooth error look on a coarser grid?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A few Gauss–Seidel sweeps remove the wiggly error on any grid in a few steps, independently of $h$; the smooth error that is left looks wiggly on a coarser grid, where it is again removed quickly, and so on down to a tiny grid solved directly. Every error component is thus handled on the grid where it is wiggly, so a V-cycle reduces the error by a fixed factor regardless of $h$ (5 cycles to $10^{-6}$ for every $m$ from 15 to 511 in the lecture), at a cost proportional to $n$.
+:::

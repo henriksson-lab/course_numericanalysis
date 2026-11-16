@@ -384,6 +384,18 @@ The memory argument is the whole story: n^2 storage and n^2 work per step are fi
 Nelder and Mead, 1965. No gradients, no line search, just comparisons of function values, so it does not care about rounding noise in f, kinks, or discontinuities that would wreck a finite-difference gradient. Right: the points R's optim evaluates when fitting only EC50 and Hill (63 evaluations); the simplex tumbles downhill, then shrinks around the minimum. Weaknesses: in more than a handful of dimensions it becomes very slow, and the simplex can collapse into a flat shape and stop where the gradient is not zero; there are known examples (McKinnon 1998) where it converges to a non-stationary point. Its stopping rule is "the function values at the corners agree to reltol", which is also satisfied on a plateau: that is what happened to the growth curve in Why numerical analysis?.
 :::
 
+## Try it: an optimiser race
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="optrace" data-preset="quad" data-kappa="10"></div>
+<script src="../demos/dist/optrace.js"></script>
+```
+
+::: notes
+The four methods of this lecture, as on the slides, computed live in the browser on functions of two variables: steepest descent with Armijo backtracking (vermillion), Newton with the same line search and H + mu I when H is not positive definite (blue), BFGS with B0 = I (orange), Nelder-Mead with optim's rules, simplex shaded (green). Right: f - f* on a log axis against the iteration, and the counts of f, gradient and Hessian calls. Start on the bowl with kappa = 10: press race, steepest descent zig-zags, 76 iterations, a straight line on the log plot; Newton 1 step, BFGS 5. Drag kappa to 100 and 1000: steepest descent 861 and 9475 iterations (switch the iteration axis to "all"), Newton still 1. Then Rosenbrock: Newton 21, BFGS 35, Nelder-Mead 86, steepest descent 19435; point at Newton's tail, the exponent doubles (quadratic), BFGS slightly slower (superlinear). Then the 4PL with EC50 in µM (bottom and top fixed at the best fit): kappa 1.03, all fast. Switch to nM: the map looks the same, kappa is 1e6, steepest descent is stuck after 20000 iterations, Newton takes exactly the same 4 steps. Finish by clicking near EC50 = 3.5, hill = 0.4: steepest descent and BFGS shoot to hill = 36, a plateau, and report convergence with SSE 1700 too high.
+:::
+
 ## What `optim`, `minimize` and `argmin` do {.smaller}
 
 | R [`optim`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/optim.html) | Python [`minimize`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html) | Rust `argmin` | method |

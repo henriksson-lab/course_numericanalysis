@@ -1,0 +1,143 @@
+---
+title: "Quiz: flow plus diffusion"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of advection–diffusion and its discretisation. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** A channel is 200 µm wide and carries a mean flow of 500 µm/s. A drug has $D = 500$ µm²/s. Compute the Péclet number across the channel and the distance after which two side-by-side streams are mixed to about 1 % (use $0.42\,\bar u w^2/D$).
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\text{Pe} = \bar u w/D$. Keep everything in µm and s.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\text{Pe} = 500\cdot 200/500 = 200$. Mixing length $0.42\cdot 500\cdot 200^2/500 = 0.42\cdot 40\,000 = 16\,800$ µm, about 17 mm: 84 channel widths. With Pe ≫ 1, streams flow side by side a long way.
+:::
+
+---
+
+**Q2.** You solve the steady problem $u\,c' = D\,c''$ with central differences, $u = 100$ µm/s, $D = 1000$ µm²/s, $\Delta x = 30$ µm. Do you expect wiggles? What is the largest $\Delta x$ that avoids them?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compute the cell Péclet number $P = u\Delta x/D$ and look at the sign of the coefficient $1 - P/2$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$P = 100\cdot 30/1000 = 3 > 2$: the coefficient of $c_{i+1}$ is $1 - 1.5 < 0$, the recurrence has a negative root $\rho = (1 + 1.5)/(1 - 1.5) = -5$, and the solution alternates in sign near the boundary layer. Wiggles disappear for $P \le 2$, i.e. $\Delta x \le 2D/u = 20$ µm; for second-order accuracy you want $P$ well below 2.
+:::
+
+---
+
+**Q3.** An upwind simulation of a protein ($D = 100$ µm²/s) in a channel with $u = 1000$ µm/s on a 2 µm grid looks smooth and plausible. Why should you not trust it yet?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Upwind = central + something. How large is that something here?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Upwind adds a numerical diffusion $u\Delta x/2 = 1000\cdot 2/2 = 1000$ µm²/s, ten times the protein's real $D$. The simulation is (nearly) the solution for $D = 1100$ µm²/s: it spreads the protein like a small molecule. Smoothness is no evidence of accuracy. Check by refining the grid (the answer must stop changing) or by comparing $D_\text{num}$ with $D$ before running.
+:::
+
+---
+
+**Q4.** A simulated dye concentration contains values of $-0.2$ next to a steep front. Name two different numerical causes, and a quick check that tells them apart.
+
+::: {.callout-tip collapse="true" title="Hint"}
+One cause is in the steady discrete equations, one in the time stepping.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) **Central differences with cell Péclet number $u\Delta x/D > 2$**: the discrete equations have an oscillating solution. The wiggles have a fixed size and do not grow in time (they appear in a steady solve too). (2) **An unstable explicit time step**, $C + 2r > 1$ (or $r > 1/2$, or $C > 1$): a zigzag that **grows** step by step until it overflows. Check: compute $P$, $C$ and $r$, and watch $\max|c|$ over time: bounded means (1), growing means (2). In both cases the fix is a finer grid or (for 2) a smaller or implicit step.
+:::
+
+---
+
+**Q5.** Explicit upwind with $u = 500$ µm/s, $D = 1000$ µm²/s, $\Delta x = 5$ µm. What is the largest stable time step? Is it set by advection or by diffusion?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$C = u\Delta t/\Delta x$, $r = D\Delta t/\Delta x^2$, and the condition is $C + 2r \le 1$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$C = 100\,\Delta t$ and $r = 40\,\Delta t$, so $C + 2r = 180\,\Delta t \le 1$: $\Delta t \le 5.6$ ms. Both matter: advection alone would allow 10 ms ($C \le 1$), diffusion alone 12.5 ms ($r \le 1/2$). On fine grids diffusion wins, since $r$ grows like $1/\Delta x^2$ and $C$ only like $1/\Delta x$.
+:::
+
+---
+
+**Q6.** In the T-sensor we solved a steady 2D problem by "marching" in $x$ as if $x$ were time. What assumption makes this possible, and when would it fail?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which term did we drop, and what does that do to the direction in which information travels?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+We dropped diffusion **along** the flow, $D\,\partial^2 c/\partial x^2$, which is about $1/\text{Pe}^2$ times smaller than advection when $\text{Pe} \gg 1$. Then the concentration at $x$ depends only on what happened upstream, like a solution at time $t$ depends only on earlier times. It fails when Pe is not large (diffusion upstream matters, as in the back-diffusion problem), when the flow reverses or recirculates (eddies, dead-end side chambers), or where $u = 0$ along a whole region. Then one solves the full steady problem as one sparse linear system (*Steady state in two dimensions*).
+:::
+
+---
+
+**Q7.** Why is explicit marching impractical for the T-sensor with a Poiseuille profile, even though it works well with plug flow?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The "time step" in row $j$ is $\Delta x/u_j$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Explicit marching needs $D\,\Delta x/(u_j\Delta y^2) \le 1/2$ in **every** row, so $\Delta x \le u_j\Delta y^2/(2D)$. Near the walls $u_j \to 0$, so the step must shrink towards 0: with 2 µm cells it is 0.12 µm in the first row against 3 µm in the middle, 168 000 steps for 20 mm. It is stiffness again: the slowest fluid sets the step for everyone. Backward Euler (one tridiagonal solve per step) has no such limit.
+:::
+
+---
+
+**Q8.** An H-filter extracts 45 % of a small molecule in a 1.6 mm channel at $\bar u = 1000$ µm/s. You double the flow rate to process more sample. How long must the channel be for the same extraction?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The marching equation depends on $D$, $\bar u$ and $x$ only through one combination.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Only $Dx/\bar u$ matters, so doubling $\bar u$ needs twice the length: 3.2 mm. The protein carried along stays the same fraction (17 %), since it obeys the same scaling. The channel length per unit throughput is fixed by $D$.
+:::
+
+---
+
+**Q9.** In the simplified Christmas-tree model, new channel $k$ in stage $n \to n + 1$ takes $k/n$ of upstream stream $k - 1$ and $(n - k)/n$ of stream $k$. Starting from inlets $(0, 1)$, what are the concentrations after two stages? What does the model assume about each serpentine?
+
+::: {.callout-tip collapse="true" title="Hint"}
+First stage: $n = 2$, three channels.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$(0, 1) \to (0, 0.5, 1) \to (0, \tfrac13, \tfrac23, 1)$: a linear staircase, and it stays linear at every stage. The model assumes each serpentine mixes its two inputs **completely**, i.e. it is longer than about $0.4\,\bar u w^2/D$ for the molecule used. For a slowly diffusing protein at high flow that may fail, and the outlet profile then differs from the design.
+:::
+
+---
+
+**Q10.** You fit a diffusion coefficient to a T-sensor profile with the marching model. On a coarse grid ($\Delta x = 1$ mm, one step) the fit gives $D = 505$ µm²/s; on fine grids it settles at 396. Why is the coarse estimate too **high**, and how do you know when the grid is fine enough?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does a coarse backward-Euler step do to the profile, compared with the exact solution?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Backward Euler damps each Fourier mode (rate $\lambda$) by $1/(1 + \lambda\Delta x)$ per step instead of the exact $e^{-\lambda\Delta x}$, and $1/(1 + z) > e^{-z}$. So one coarse step spreads the interface **too little**; to reproduce the measured spreading the optimiser must raise $D$. The fitted parameter absorbs the discretisation error, here 27 % upwards. Refit on a sequence of finer grids until the fitted $D$ stops changing to the precision you need (here $\Delta x \le 25$ µm): the same grid-refinement check as for any simulation, applied to the estimate.
+:::
+
+---
+
+**Q11.** The flow rate in your T-sensor experiment is only known to ±10 %. How precisely can you estimate $D$ from downstream profiles, however many profiles you measure?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which parameter combination do the profiles determine?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+To about ±10 %. The profiles depend only on $D/\bar u$ (times $x$), so $D$ and $\bar u$ are not separately identifiable: a 10 % error in $\bar u$ is a 10 % error in $D$. More profiles or less noise shrink the uncertainty of $D/\bar u$, not that of $\bar u$. Measure the flow rate independently (calibrated pump, weighing the outflow, bead tracking).
+:::

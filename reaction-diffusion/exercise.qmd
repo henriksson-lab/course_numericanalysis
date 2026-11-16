@@ -1,0 +1,1591 @@
+---
+title: "Exercise: reaction–diffusion and pattern formation"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- compute the **decay length** $\lambda = \sqrt{D/k}$ of a synthesis–diffusion–degradation gradient, and use it to go between $D$, $k$, $\lambda$ and threshold positions,
+- set up the steady gradient on a grid with **ghost-point** boundaries, solve it with the Thomas algorithm, and check it against the exact solution and the **mass balance**,
+- take **IMEX Euler** steps (diffusion implicit, reaction explicit) and say when the explicit reaction makes them unstable,
+- measure the error of **Lie** and **Strang splitting** and explain when it vanishes,
+- compute the **dispersion relation** of a two-species model from 2 × 2 eigenvalues and find the band of growing wavelengths (**Turing instability**),
+- run a 2D pattern simulation and decide, by refining the grid and the time step, whether a pattern is **real or an artefact**.
+
+The by-hand part needs pen, paper and a calculator. The code part checks the hand answers and then goes to sizes where only code works. All "data" in this exercise are synthetic: model output plus noise. Literature numbers are approximate.
+
+## Background
+
+**Facts used below:**
+
+1. **Synthesis–diffusion–degradation** (units µm and min): $\partial c/\partial t = D\,\partial^2 c/\partial x^2 - k\,c$ on $0 < x < L$, influx $j$ at $x = 0$ ($-D\,\partial c/\partial x = j$), wall at $x = L$ ($\partial c/\partial x = 0$). We use $D = 100$ µm²/min, $k = 0.01$ per min, $L = 500$ µm, $j = D/\lambda = 1$.
+2. **Steady state**: $c(x) = \dfrac{j\lambda}{D}\,\dfrac{\cosh\bigl((L - x)/\lambda\bigr)}{\sinh(L/\lambda)}$ with $\lambda = \sqrt{D/k}$; in a long embryo simply $c(x) = \tfrac{j\lambda}{D}e^{-x/\lambda}$. Mass balance: $k\int_0^L c\,dx = j$.
+3. **Grid**: nodes $x_i = i\,\Delta x$, $i = 0, \dots, N$. Ghost points: $c_{-1} = c_1 + 2\Delta x\,j/D$ and $c_{N+1} = c_{N-1}$. With $r = D/\Delta x^2$, the operator $-D\,c''$ becomes a tridiagonal matrix $K_D$ with diagonal $2r$, off-diagonals $-r$, and $-2r$ in the first row (above the diagonal) and in the last row (below the diagonal); the influx gives the right-hand side $2j/\Delta x$ in row 0.
+4. **IMEX Euler**: $(I + \Delta t\,K_D)\,\mathbf c^{n+1} = \mathbf c^n + \Delta t\,\bigl(\mathbf f(\mathbf c^n) + \mathbf s\bigr)$. On one Fourier mode with $f = -kc$ it multiplies by $G = (1 - k\Delta t)/(1 + Dq^2\Delta t)$.
+5. **Splitting**: Lie does $\Delta t$ of diffusion, then $\Delta t$ of reaction; Strang does $\Delta t/2$ reaction, $\Delta t$ diffusion, $\Delta t/2$ reaction. With exact sub-steps the error comes from $\mathcal{AB} - \mathcal{BA}$: Lie is order 1, Strang order 2.
+6. **Schnakenberg model** (dimensionless): $u_t = a - u + u^2 v + \nabla^2 u$, $v_t = b - u^2 v + d\,\nabla^2 v$, with $a = 0.1$, $b = 0.9$. A perturbation $\boldsymbol\delta\cos(qx)$ of the uniform state grows or decays with the eigenvalues of $J - q^2\,\mathrm{diag}(1, d)$, $J$ = Jacobian of the reaction.
+7. **Periodic 2D grid**: the five-point Laplacian has eigenvalues $-\kappa_{kl}$ with $\kappa_{kl} = \frac{4}{\Delta x^2}\bigl(\sin^2\frac{\pi k}{N} + \sin^2\frac{\pi l}{N}\bigr)$ on the 2D Fourier modes, so an implicit diffusion step is: FFT, divide by $1 + \Delta t\,D\,\kappa$, inverse FFT.
+8. **Euler stability** for a reaction eigenvalue $\lambda$: $|1 + \Delta t\,\lambda| \le 1$.
+
+The set-up in each language. `thomas()` is the function from *Structure: symmetric, banded, sparse* (Python: it copies `b` and `d`). The variables `lo`, `di`, `up` (diagonals of $K_D$), `src`, `cs` (steady state) and the function `imex()` are used again in C2 and C3.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+thomas <- function(a, b, c, d) {               # from Structure: symmetric, banded, sparse
+  n <- length(d)
+  for (i in 2:n) {
+    w <- a[i] / b[i - 1]
+    b[i] <- b[i] - w * c[i - 1]
+    d[i] <- d[i] - w * d[i - 1]
+  }
+  x <- numeric(n)
+  x[n] <- d[n] / b[n]
+  for (i in (n - 1):1) x[i] <- (d[i] - c[i] * x[i + 1]) / b[i]
+  x
+}
+D <- 100; k <- 0.01; L <- 500                  # µm^2/min, 1/min, µm
+lam <- sqrt(D / k); j <- D / lam               # decay length 100 µm; c(0) close to 1
+D <- 100; k <- 0.01; L <- 500                  # µm^2/min, 1/min, µm
+lam <- sqrt(D / k); j <- D / lam               # decay length 100 µm; c(0) close to 1
+D <- 100; k <- 0.01; L <- 500                  # µm^2/min, 1/min, µm
+lam <- sqrt(D / k); j <- D / lam               # decay length 100 µm; c(0) close to 1
+N <- 50; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+lam <- sqrt(D / k); j <- D / lam               # decay length 100 µm; c(0) close to 1
+N <- 50; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+lo <- c(0, rep(-r, N - 1), -2 * r)             # -D c'' on the grid, ghost points
+N <- 50; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+lo <- c(0, rep(-r, N - 1), -2 * r)             # -D c'' on the grid, ghost points
+N <- 50; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+lo <- c(0, rep(-r, N - 1), -2 * r)             # -D c'' on the grid, ghost points
+N <- 50; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+lo <- c(0, rep(-r, N - 1), -2 * r)             # -D c'' on the grid, ghost points
+di <- rep(2 * r, N + 1)
+up <- c(-2 * r, rep(-r, N - 1), 0)
+src <- c(2 * j / dx, rep(0, N))                # flux j enters at x = 0
+cs <- thomas(lo, di + k, up, src)              # steady state: -D c'' + k c = src
+exact <- j * lam / D * cosh((L - x) / lam) / sinh(L / lam)
+max(abs(cs - exact))
+# [1] 0.001247396
+k * dx * (sum(cs) - (cs[1] + cs[N + 1]) / 2)   # total decay (trapezoid) = influx j
+# [1] 1
+imex <- function(c, dt, nsteps, f) {           # IMEX Euler; f(c) = reaction term
+  for (n in seq_len(nsteps))
+    c <- thomas(dt * lo, 1 + dt * di, dt * up, c + dt * (f(c) + src))
+  c
+}
+c60 <- imex(rep(0, N + 1), dt = 1, nsteps = 60, f = function(c) -k * c)
+round(c60[c(1, 11, 21)], 4)                    # x = 0, 100, 200 µm at t = 60 min
+# [1] 0.7255 0.1503 0.0193
+```
+
+### Python
+
+```python
+import numpy as np
+
+def thomas(a, b, c, d):                        # from Structure: symmetric, banded, sparse
+    n = len(d)
+    b = np.array(b, dtype=float); d = np.array(d, dtype=float)   # copies
+    for i in range(1, n):
+        w = a[i] / b[i - 1]
+        b[i] -= w * c[i - 1]
+        d[i] -= w * d[i - 1]
+    x = np.zeros(n)
+    x[-1] = d[-1] / b[-1]
+    for i in range(n - 2, -1, -1):
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i]
+    return x
+
+D, k, L = 100.0, 0.01, 500.0                   # µm^2/min, 1/min, µm
+lam = np.sqrt(D / k); j = D / lam              # decay length 100 µm; c(0) close to 1
+N = 50; dx = L / N; x = np.arange(N + 1) * dx; r = D / dx**2
+lo = np.r_[0, np.full(N - 1, -r), -2 * r]      # -D c'' on the grid, ghost points
+di = np.full(N + 1, 2 * r)
+up = np.r_[-2 * r, np.full(N - 1, -r), 0]
+src = np.r_[2 * j / dx, np.zeros(N)]           # flux j enters at x = 0
+cs = thomas(lo, di + k, up, src)               # steady state: -D c'' + k c = src
+exact = j * lam / D * np.cosh((L - x) / lam) / np.sinh(L / lam)
+print(np.max(np.abs(cs - exact)))
+# 0.0012473961575379944
+print(k * dx * (cs.sum() - (cs[0] + cs[N]) / 2))   # total decay (trapezoid) = influx j
+# 1.0000000000000222
+
+def imex(c, dt, nsteps, f):                    # IMEX Euler; f(c) = reaction term
+    for _ in range(nsteps):
+        c = thomas(dt * lo, 1 + dt * di, dt * up, c + dt * (f(c) + src))
+    return c
+
+c60 = imex(np.zeros(N + 1), 1.0, 60, lambda c: -k * c)
+print(np.round(c60[[0, 10, 20]], 4))           # x = 0, 100, 200 µm at t = 60 min
+# [0.7255 0.1503 0.0193]
+```
+
+### Rust
+
+```rust
+// rust/examples/reaction_diffusion_background.rs  —  cargo run --example reaction_diffusion_background
+// Background: steady synthesis-diffusion-degradation gradient on a grid with
+// ghost points, solved by Thomas, checked against the exact cosh formula;
+// then one hour of IMEX Euler from c = 0.
+
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec()); // copies: inputs stay unchanged
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// IMEX Euler: diffusion implicit (one Thomas solve per step), reaction f explicit.
+fn imex(c: &[f64], lo: &[f64], di: &[f64], up: &[f64], src: &[f64], dt: f64, nsteps: usize,
+        f: &dyn Fn(&[f64]) -> Vec<f64>) -> Vec<f64> {
+    let a: Vec<f64> = lo.iter().map(|v| dt * v).collect();
+    let b: Vec<f64> = di.iter().map(|v| 1.0 + dt * v).collect();
+    let cc: Vec<f64> = up.iter().map(|v| dt * v).collect();
+    let mut c = c.to_vec();
+    for _ in 0..nsteps {
+        let fc = f(&c);
+        let rhs: Vec<f64> = (0..c.len()).map(|i| c[i] + dt * (fc[i] + src[i])).collect();
+        c = thomas(&a, &b, &cc, &rhs);
+    }
+    c
+}
+
+fn main() {
+    let (dd, k, l) = (100.0_f64, 0.01_f64, 500.0_f64); // µm^2/min, 1/min, µm
+    let lam = (dd / k).sqrt();
+    let j = dd / lam; // decay length 100 µm; c(0) close to 1
+    let n = 50;
+    let dx = l / n as f64;
+    let r = dd / (dx * dx);
+    let x: Vec<f64> = (0..=n).map(|i| i as f64 * dx).collect();
+    // -D c'' on the grid, ghost points at both ends
+    let mut lo = vec![-r; n + 1];
+    lo[0] = 0.0;
+    lo[n] = -2.0 * r;
+    let mut up = vec![-r; n + 1];
+    up[0] = -2.0 * r;
+    up[n] = 0.0;
+    let di: Vec<f64> = vec![2.0 * r; n + 1];
+    let di_k: Vec<f64> = di.iter().map(|v| v + k).collect(); // + decay
+    let mut src = vec![0.0; n + 1];
+    src[0] = 2.0 * j / dx; // flux j enters at x = 0
+    let cs = thomas(&lo, &di_k, &up, &src); // steady state: -D c'' + k c = src
+    let err = x.iter().zip(&cs)
+        .map(|(xi, ci)| (ci - j * lam / dd * ((l - xi) / lam).cosh() / (l / lam).sinh()).abs())
+        .fold(0.0, f64::max);
+    println!("{}", err);
+    let total: f64 = cs.iter().sum::<f64>() - (cs[0] + cs[n]) / 2.0;
+    println!("{}", k * dx * total); // total decay (trapezoid) = influx j
+    let c60 = imex(&vec![0.0; n + 1], &lo, &di, &up, &src, 1.0, 60,
+                   &|c: &[f64]| c.iter().map(|v| -k * v).collect());
+    println!("{:.4} {:.4} {:.4}", c60[0], c60[10], c60[20]); // x = 0, 100, 200 µm at t = 60 min
+}
+
+// Output:
+// 0.0012473961575379944
+// 1.0000000000000226
+// 0.7255 0.1503 0.0193
+```
+
+:::
+
+Rust prints numbers in its own format (e.g. `1e-3` rather than `1e-03`); where it matters the Rust code formats them like R. The Rust versions are hand-written: Thomas, IMEX, the 2D FFT solve (with the [`rustfft`](https://docs.rs/rustfft) crate) and the line fit; the matrix exponential in C3 is nalgebra's [`exp`](https://docs.rs/nalgebra/latest/nalgebra/base/struct.Matrix.html#method.exp).
+
+## By hand
+
+**B1. Decay lengths.**
+(a) Our running example has $D = 100$ µm²/min and $k = 0.01$ per min. Compute $\lambda$, and $D$ in µm²/s.
+(b) **Bicoid** (approximate literature values): $\lambda \approx 100$ µm and a lifetime $1/k \approx 50$ min. Which $D$ (in µm²/s) does that require? Which $\lambda$ would a lifetime of 50 min give with $D = 0.3$ µm²/s (a FRAP estimate) and with $D = 7$ µm²/s (an FCS estimate)?
+(c) **Fgf8** [M4] (approximate): $D \approx 50$ µm²/s and $\lambda \approx 200$ µm. Infer $k$ and the lifetime in minutes.
+(d) In a long embryo, $c(x) = c_0 e^{-x/\lambda}$ with $c_0 = j\lambda/D = 1$. Where is $c = 0.1$? Now $k$ doubles everywhere with $j$ and $D$ unchanged. What are the new $\lambda$, $c_0$ and threshold position?
+(e) Instead, **both** $D$ and $k$ go up by a factor 1.5 (all rates faster at a higher temperature). What happens to $\lambda$, to $c_0$, and to the time the gradient needs to form?
+
+**B2. A three-node grid.** Take $L = 200$ µm, $N = 2$ ($\Delta x = 100$ µm $= \lambda$), $D = 100$, $k = 0.01$, $j = 1$.
+(a) Write the three equations for the steady state at $x_0 = 0$, $x_1 = 100$, $x_2 = 200$ µm, using the ghost points.
+(b) Solve them by hand.
+(c) Compare with the exact values $c(0) = \coth 2 = 1.0373$, $c(100) = \cosh 1/\sinh 2 = 0.4255$, $c(200) = 1/\sinh 2 = 0.2757$. How large is the relative error?
+(d) Check the mass balance $k\int c\,dx = j$ with the trapezoid rule on your three values.
+
+**B3. IMEX on one mode.** Use $G = (1 - k\Delta t)/(1 + Dq^2\Delta t)$.
+(a) With $D = 100$, $k = 0.01$, a short wave of wavelength 20 µm ($q = 2\pi/20$) and $\Delta t = 10$ min: compute $G$. What factor would a fully explicit Euler step, $1 - (Dq^2 + k)\Delta t$, give?
+(b) For the uniform mode ($q = 0$), what is the largest stable $\Delta t$? Is $\Delta t = 150$ min accurate? (Compare $G$ with $e^{-k\Delta t}$.)
+(c) A ligand binds receptors at an effective rate of 1 per s. Which $\Delta t$ does IMEX need?
+(d) The Schnakenberg reaction (below) has eigenvalues $\lambda = -0.1 \pm 0.995i$ at its steady state. For which $\Delta t$ is $|1 + \Delta t\lambda| \le 1$? (Use $|1 + \Delta t\lambda|^2 = (1 - 0.1\Delta t)^2 + 0.99\,\Delta t^2$.)
+
+**B4. When do the parts commute?** Two cells exchange morphogen at rate 1 and decay at rates $k_1$ and $k_2$: $\mathbf c' = A\mathbf c - K\mathbf c$ with $A = \begin{pmatrix} -1 & 1 \\ 1 & -1\end{pmatrix}$, $K = \begin{pmatrix} k_1 & 0 \\ 0 & k_2\end{pmatrix}$.
+(a) Compute $AK - KA$. When is it zero?
+(b) If $k_1 = k_2 = k$, show that $e^{(A - kI)t} = e^{At}e^{-kt}$, so Lie splitting with exact sub-steps has no error at all.
+(c) Which of these have a splitting error: decay with a temperature step; uniform decay with a source in cell 1; uniform decay without a source?
+
+**B5. Turing by hand.** Schnakenberg with $a = 0.1$, $b = 0.9$.
+(a) Show that $u^* = a + b$, $v^* = b/(a+b)^2$ is a steady state, and compute it.
+(b) Compute the Jacobian $J$ of $f = a - u + u^2v$, $g = b - u^2 v$ at the steady state, its trace and determinant, and its eigenvalues. Is the uniform state stable without diffusion? What kind of fixed point is it (*Equilibria, stability and the phase plane*)?
+(c) With $d = 20$, write $\det\bigl(J - q^2\,\mathrm{diag}(1, d)\bigr)$ as a polynomial in $q^2$. For which $q$ is it negative? Which wavelengths can grow?
+(d) Show that the trace of $J - q^2\,\mathrm{diag}(1, d)$ is negative for every $q$. What does that imply about how instability can arise?
+(e) Find the smallest $d$ for which some $q$ is unstable. Why can there be no pattern with $d = 1$?
+
+**B6. Artefact or pattern?**
+(a) The 2D simulation has $d = 20$ and $\Delta x = 1$. What is the largest stable step for explicit (FTCS) diffusion of $v$ in 2D, $\Delta t \le \Delta x^2/(4d)$? How many steps to $t = 200$, compared with IMEX at $\Delta t = 0.1$?
+(b) The fastest-growing wavelength is 12.9 ($q = 0.487$). The grid sees $q^2$ as $\tfrac{4}{\Delta x^2}\sin^2(q\Delta x/2)$. Compute this for $\Delta x = 2$, $1$ and $0.5$, and the relative error against $q^2 = 0.237$. How many grid points per wavelength does each grid have?
+(c) A checkerboard pattern has wavelength $2\Delta x$. With $\Delta x = 1$, is that wavelength inside the unstable band of B5(c)? What does it tell you if you see one?
+
+## In code
+
+**C1. Steady state and its order.** Write a function that solves the steady gradient for a given $N$ and returns the maximum error against the exact solution and the mass balance $k\int c\,dx$ (trapezoid rule). Use $N = 5, 10, \dots, 320$.
+(a) Read the order off the errors. Check B2 with $N = 2$ and $L = 200$ if you like.
+(b) Replace the ghost point at $x = 0$ by the one-sided condition $(c_1 - c_0)/\Delta x = -j/D$ (row 0 becomes $c_0 - c_1 = j\Delta x/D$). What happens to the order, and to the mass balance?
+
+**C2. How fast does the gradient form?** Start from $c = 0$ and take IMEX steps with $\Delta t = 0.5$ min up to $t = 1000$ min.
+(a) Compute the local accumulation time $\tau(x) = \int_0^\infty \bigl(1 - c(x,t)/c_s(x)\bigr)\,dt$ (trapezoid rule over the steps) at $x = 0$, 100 and 200 µm and compare with $(1 + x/\lambda)/(2k)$.
+(b) Run IMEX to $t = 5000$ min with $\Delta t = 1$, 10 and 50 min and compare with the steady state `cs`. Why does the step size not matter?
+
+**C3. Splitting error.** Use the exact solution of the grid ODEs, $\mathbf c(t) = \mathbf c_s + e^{Mt}(\mathbf c_0 - \mathbf c_s)$ with $M = -K_D - \mathrm{diag}(k_i)$, as reference. Do the diffusion sub-step exactly with the matrix exponential of the augmented matrix $\begin{pmatrix} -K_D & \mathbf s \\ 0 & 0\end{pmatrix}$ (it includes the influx), and the decay exactly ($c_i \to e^{-k_i\Delta t}c_i$).
+(a) With the temperature step $k = 0.01$ for $x < 250$ µm and $0.02$ beyond, the influx on and $\mathbf c_0 = 0$: errors of Lie and Strang at $t = 60$ min for $\Delta t = 20, 10, 5, 2.5, 1.25$. Orders?
+(b) Influx off, uniform $k$, start from the steady state `cs` (production has stopped). Error?
+(c) Influx off, temperature step. Error? Compare with B4.
+
+**C4. The temperature step [M1].** Assume that in the warm (27 °C) half of the embryo $k$ is twice its 20 °C value, with $D$ and $j$ unchanged. On a grid with $\Delta x = 1$ µm, find where the steady gradient crosses $c = 0.1$ (linear interpolation) for: all cold, all warm, posterior half warm, anterior half warm. Compare with B1(d). Which half sets the threshold position?
+
+**C5. Decay lengths from many embryos [M3, M4].** Twenty synthetic Fgf8-like profiles: embryo $e$ has a true $\lambda_e = 200\,(1 + 0.2 z_{e})$ µm and measured values $c(x) = e^{-x/\lambda_e}(1 + 0.2 z_{ie})$ at $x = 0, 20, \dots, 400$ µm, with $z$ uniform on $(-0.5, 0.5)$ from the generator `lcg` below (seed 2; one block of 22 numbers per embryo, the first for $\lambda_e$).
+(a) Fit $\lambda$ for each embryo by a straight line through $\log c$ against $x$. Report the mean and standard deviation of $\lambda$, and $k = D/\lambda^2$ with $D = 50$ µm²/s.
+(b) Add a constant background 0.05 to every value before fitting. What happens to $\lambda$ and $k$? Why?
+
+**C6. Dispersion relation.** For $d = 5, 10, 20$, compute the largest real part of the eigenvalues of $J - q^2\,\mathrm{diag}(1, d)$ on $q = 0, 0.001, \dots, 1.5$. Report the unstable band, the fastest-growing $q$, its wavelength and rate. Then find the threshold $d_c$ with a root finder on $\min_q \det\bigl(J - q^2\,\mathrm{diag}(1, d)\bigr)$ and compare with B5(e).
+
+**C7. A 2D Turing pattern.** Simulate Schnakenberg with $d = 20$ on a periodic $80 \times 80$ grid ($\Delta x = 1$) from $u = 1 + 0.02z$, $v = 0.9 + 0.02z$ ($z$ from `lcg`, seed 1: first $N^2$ numbers for $u$, next $N^2$ for $v$, filled column by column), IMEX with $\Delta t = 0.1$ to $t = 200$. Count the spots (grid points above the mean that are larger than all 8 neighbours). Time it.
+
+**C8. Is the pattern real?**
+(a) Repeat C7 with $\Delta x = 2$ and $0.5$ (same box, $N = 40$ and $160$).
+(b) Repeat with $\Delta t = 0.4$, $0.2$ and $0.05$.
+(c) Set $d = 5$ (no Turing instability, C6) and run to $t = 150$ with $\Delta t = 0.1$ and $0.4$. Explain the difference with the eigenvalues of $I + \Delta t\,J$ (B3(d)).
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — decay lengths (B1)"}
+$\lambda^2 = D/k$, so $k = D/\lambda^2$ and $D = \lambda^2 k$. Keep the units together: µm²/s divided by µm² gives 1/s; 1 µm²/s $= 60$ µm²/min. A threshold $c_T$ is crossed where $c_0 e^{-x/\lambda} = c_T$, i.e. $x = \lambda\ln(c_0/c_T)$. The formation time scales like $1/k$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — the grid and the ghost points (B2, C1)"}
+At node 0: $D(c_{-1} - 2c_0 + c_1)/\Delta x^2 - k c_0 = 0$ with $c_{-1} = c_1 + 2\Delta x\,j/D$ gives $(2r + k)c_0 - 2r\,c_1 = 2j/\Delta x$. At the last node use $c_{N+1} = c_{N-1}$. In B2, $r = D/\Delta x^2 = 0.01$. Solve the last equation for $c_2$ in terms of $c_1$ and work upwards. The trapezoid rule gives the end points half weight.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — IMEX and splitting (B3, B4, C2, C3)"}
+For a mode, diffusion is multiplication by $-Dq^2$; IMEX treats it implicitly (divide by $1 + Dq^2\Delta t$) and the reaction explicitly (multiply by $1 - k\Delta t$). For B4(b), $kI$ commutes with every matrix, and $e^{X+Y} = e^X e^Y$ when $XY = YX$. Matrix exponential: R [`Matrix::expm`](https://search.r-project.org/CRAN/refmans/Matrix/html/expm-methods.html), Python [`scipy.linalg.expm`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.expm.html), Rust nalgebra's `.exp()`. The augmented-matrix trick: the last component stays 1, so $e^{\Delta t\,\text{Aug}}$ applied to $(\mathbf c, 1)$ gives the solution of $\mathbf c' = -K_D\mathbf c + \mathbf s$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — dispersion relation (B5, C6)"}
+$J = \begin{pmatrix} \partial f/\partial u & \partial f/\partial v \\ \partial g/\partial u & \partial g/\partial v\end{pmatrix}$ with $\partial f/\partial u = -1 + 2uv$, $\partial f/\partial v = u^2$, $\partial g/\partial u = -2uv$, $\partial g/\partial v = -u^2$. For a 2 × 2 matrix, $\lambda = \tfrac12\bigl(\tau \pm \sqrt{\tau^2 - 4\Delta}\bigr)$. A quadratic $d\,Q^2 - \beta Q + \Delta$ in $Q = q^2$ is negative between its roots, which exist when $\beta^2 > 4d\Delta$. Code: R [`eigen`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html) and [`uniroot`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html); Python [`np.linalg.eigvals`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvals.html) and [`scipy.optimize.brentq`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — the 2D simulation (C7, C8)"}
+R: [`fft`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/fft.html) on a matrix is the 2D transform; `fft(z, inverse = TRUE)` is not normalised, so divide by $N^2$. [`outer(s, s, "+")`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/outer.html) builds $\kappa_{kl} = s_k + s_l$. Python: [`np.fft.fft2`](https://numpy.org/doc/stable/reference/generated/numpy.fft.fft2.html) and `np.fft.ifft2` (normalised), `reshape(N, N, order="F")` to fill column by column as R does, [`np.roll`](https://numpy.org/doc/stable/reference/generated/numpy.roll.html) for periodic neighbours. Rust: 1D transforms from `rustfft` along columns, then along rows; build in release mode (`cargo run --release`).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — fitting the decay length (C5)"}
+$\log c = \log c_0 - x/\lambda$ is a straight line; its slope is $-1/\lambda$. R [`lm(log(c) ~ x)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html), Python [`np.polyfit(x, np.log(c), 1)`](https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html) (slope first). A constant offset is not a straight line on the log scale: where $c$ is small, $\log(c + 0.05)$ flattens out.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $\lambda = \sqrt{100/0.01} = \sqrt{10^4} = 100$ µm. $D = 100/60 = 1.67$ µm²/s.
+(b) $k = 1/3000$ per s, so $D = \lambda^2 k = 10^4/3000 = 3.3$ µm²/s. With $D = 0.3$: $\lambda = \sqrt{0.3 \cdot 3000} = 30$ µm; with $D = 7$: $\lambda = \sqrt{21\,000} = 145$ µm. The two measured $D$ values bracket the one needed, which is one reason the mechanism of Bicoid gradient formation was debated.
+(c) $k = 50/200^2 = 1.25\times10^{-3}$ per s; lifetime $800$ s $\approx 13$ min.
+(d) $x = 100\ln 10 = 230$ µm. With $2k$: $\lambda = 100/\sqrt2 = 70.7$ µm, $c_0 = j\lambda/D = 0.707$, threshold at $70.7\ln 7.07 = 138$ µm. Faster decay shortens the gradient **and** lowers its amplitude (C4 gives 138.3 µm on the finite embryo).
+(e) $\lambda = \sqrt{1.5D/1.5k}$ is unchanged, but $c_0 = j\lambda/D = j/\sqrt{Dk}$ drops by a factor 1.5 (same influx, faster removal), so the threshold moves to $100\ln(6.67) = 190$ µm. The gradient forms 1.5 times faster (time scale $1/k$). If the influx also rose by 1.5, nothing about the steady gradient would change.
+
+**B2.**
+(a) With $r = 0.01$: $0.03c_0 - 0.02c_1 = 0.02$; $-0.01c_0 + 0.03c_1 - 0.01c_2 = 0$; $-0.02c_1 + 0.03c_2 = 0$.
+(b) Last equation: $c_2 = \tfrac23 c_1$. Middle: $0.01c_0 = 0.03c_1 - 0.00667c_1$, so $c_0 = 2.333c_1$. First: $0.07c_1 - 0.02c_1 = 0.05c_1 = 0.02$, so $c_1 = 0.4$, $c_0 = 0.9333$, $c_2 = 0.2667$.
+(c) Relative errors $10\%$, $6\%$, $3\%$: with one grid point per decay length the shape is right, the numbers are not.
+(d) $k\Delta x\,(c_0/2 + c_1 + c_2/2) = 0.01 \cdot 100 \cdot (0.4667 + 0.4 + 0.1333) = 1.000 = j$. The ghost-point scheme conserves mass exactly, even on this coarse grid.
+
+**B3.**
+(a) $q = 0.314$, $Dq^2 = 9.87$ per min. $G = 0.9/(1 + 98.7) = 0.0090$: the short wave is damped, as it should be (exactly: $e^{-98.8} \approx 0$). Explicit Euler: $1 - 98.8 = -97.8$, an explosion.
+(b) $|1 - k\Delta t| \le 1$ gives $\Delta t \le 2/k = 200$ min. At $\Delta t = 150$: $G = 1 - 1.5 = -0.5$ against $e^{-1.5} = 0.22$: stable, but the uniform part flips sign each step. Not accurate.
+(c) $k = 60$ per min: $\Delta t \le 2/60$ min $= 2$ s.
+(d) $1 - 0.2\Delta t + \Delta t^2 \le 1$ gives $\Delta t \le 0.2$.
+
+**B4.**
+(a) $AK = \begin{pmatrix} -k_1 & k_2 \\ k_1 & -k_2\end{pmatrix}$, $KA = \begin{pmatrix} -k_1 & k_1 \\ k_2 & -k_2\end{pmatrix}$, so $AK - KA = (k_2 - k_1)\begin{pmatrix} 0 & 1 \\ -1 & 0\end{pmatrix}$: zero only if $k_1 = k_2$.
+(b) $kI$ commutes with $A$, so $e^{(A - kI)t} = e^{At}e^{-kIt} = e^{At}e^{-kt}$: diffusing and then decaying is exactly the same as doing both at once.
+(c) A temperature step ($k_1 \ne k_2$) and a localised source both give a splitting error; uniform decay without a source does not. (For the source: the reaction step adds the influx and decays only what is present at that moment, so the order matters.) C3 confirms all three.
+
+**B5.**
+(a) $g = 0$: $u^2 v = b$. $f = 0$: $a - u + b = 0$, so $u^* = a + b = 1$, $v^* = b/u^{*2} = 0.9$.
+(b) $J = \begin{pmatrix} -1 + 2u^*v^* & u^{*2} \\ -2u^*v^* & -u^{*2}\end{pmatrix} = \begin{pmatrix} 0.8 & 1 \\ -1.8 & -1\end{pmatrix}$. $\tau = -0.2$, $\Delta = -0.8 + 1.8 = 1$. $\lambda = -0.1 \pm \sqrt{0.01 - 1} = -0.1 \pm 0.995i$: a **stable spiral**. Without diffusion, small perturbations die out in damped oscillations.
+(c) $\det = (0.8 - q^2)(-1 - 20q^2) + 1.8 = 20q^4 - 15q^2 + 1$. Roots in $Q = q^2$: $(15 \pm \sqrt{225 - 80})/40 = 0.0740$ and $0.6760$. Negative for $0.272 < q < 0.822$, i.e. wavelengths $2\pi/q$ between $7.6$ and $23.1$.
+(d) $\tau_q = 0.8 - 1 - q^2(1 + d) < 0$. With a negative trace, an eigenvalue with positive real part needs $\Delta_q < 0$, which makes both eigenvalues real: the growing mode does not oscillate, the pattern stands still.
+(e) $\det = d\,Q^2 - (0.8d - 1)Q + 1$ has real positive roots when $0.8d - 1 > 0$ and $(0.8d - 1)^2 > 4d$, i.e. $0.64d^2 - 5.6d + 1 > 0$, $d > (5.6 + \sqrt{28.8})/1.28 = 8.57$. With $d = 1$, $0.8d - 1 < 0$: the determinant is positive for every $q$. The substrate must diffuse much faster than the activator.
+
+**B6.**
+(a) $\Delta t \le 1/80 = 0.0125$: 16 000 steps, against 2000 for IMEX.
+(b) $\Delta x = 2$: $\sin^2(0.487) = 0.2190$, so the grid sees $q^2 = 0.219$, 7.7 % low; 6.5 points per wavelength. $\Delta x = 1$: $0.2325$, 2.0 % low; 13 points. $\Delta x = 0.5$: $0.2360$, 0.5 % low; 26 points. The error is second order ($\propto\Delta x^2$) but large on the coarse grid: the grid makes waves look longer than they are, so the fastest-growing grid mode is shorter than the true one.
+(c) Wavelength 2 is far outside $[7.6, 23.1]$: no Turing mode can be that short. A checkerboard is an unstable explicit step or a bug, never the model's pattern.
+
+**Background code.** The steady gradient is within $1.2\times10^{-3}$ of the exact solution, the mass balance holds to rounding, and after one hour of IMEX the source end is at 73 % of its steady value.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# thomas() as in the Background
+D <- 100; k <- 0.01; L <- 500; lam <- sqrt(D / k); j <- D / lam
+steady <- function(N, onesided = FALSE) {
+D <- 100; k <- 0.01; L <- 500; lam <- sqrt(D / k); j <- D / lam
+steady <- function(N, onesided = FALSE) {
+D <- 100; k <- 0.01; L <- 500; lam <- sqrt(D / k); j <- D / lam
+steady <- function(N, onesided = FALSE) {
+D <- 100; k <- 0.01; L <- 500; lam <- sqrt(D / k); j <- D / lam
+steady <- function(N, onesided = FALSE) {
+D <- 100; k <- 0.01; L <- 500; lam <- sqrt(D / k); j <- D / lam
+steady <- function(N, onesided = FALSE) {
+  dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+  lo <- c(0, rep(-r, N - 1), -2 * r); up <- c(-2 * r, rep(-r, N - 1), 0)
+  di <- rep(2 * r + k, N + 1); rhs <- c(2 * j / dx, rep(0, N))
+  if (onesided) { di[1] <- 1; up[1] <- -1; rhs[1] <- j * dx / D }  # (c1 - c0)/dx = -j/D
+  c <- thomas(lo, di, up, rhs)
+  exact <- j * lam / D * cosh((L - x) / lam) / sinh(L / lam)
+  c(max(abs(c - exact)), k * dx * (sum(c) - (c[1] + c[N + 1]) / 2))
+}
+for (N in c(5, 10, 20, 40, 80, 160, 320)) {
+  g <- steady(N); o <- steady(N, onesided = TRUE)
+  cat(sprintf("dx = %6.2f  ghost: err %.3e mass %.6f   one-sided: err %.3e mass %.6f\n",
+              L / N, g[1], g[2], o[1], o[2]))
+}
+# dx = 100.00  ghost: err 1.055e-01 mass 1.000000   one-sided: err 6.183e-01 mass 1.809211
+# dx =  50.00  ghost: err 2.985e-02 mass 1.000000   one-sided: err 2.809e-01 mass 1.320237
+# dx =  25.00  ghost: err 7.720e-03 mass 1.000000   one-sided: err 1.328e-01 mass 1.141613
+# dx =  12.50  ghost: err 1.947e-03 mass 1.000000   one-sided: err 6.446e-02 mass 1.066535
+# dx =   6.25  ghost: err 4.878e-04 mass 1.000000   one-sided: err 3.174e-02 mass 1.032245
+# dx =   3.12  ghost: err 1.220e-04 mass 1.000000   one-sided: err 1.575e-02 mass 1.015873
+# dx =   1.56  ghost: err 3.051e-05 mass 1.000000   one-sided: err 7.844e-03 mass 1.007874
+```
+
+### Python
+
+```python
+import numpy as np
+# thomas() as in the Background
+
+D, k, L = 100.0, 0.01, 500.0; lam = np.sqrt(D / k); j = D / lam
+
+def steady(N, onesided=False):
+    dx = L / N; x = np.arange(N + 1) * dx; r = D / dx**2
+    lo = np.r_[0, np.full(N - 1, -r), -2 * r]; up = np.r_[-2 * r, np.full(N - 1, -r), 0]
+    di = np.full(N + 1, 2 * r + k); rhs = np.r_[2 * j / dx, np.zeros(N)]
+    if onesided:                                   # (c1 - c0)/dx = -j/D
+        di[0] = 1; up[0] = -1; rhs[0] = j * dx / D
+    c = thomas(lo, di, up, rhs)
+    exact = j * lam / D * np.cosh((L - x) / lam) / np.sinh(L / lam)
+    return np.max(np.abs(c - exact)), k * dx * (c.sum() - (c[0] + c[N]) / 2)
+
+for N in [5, 10, 20, 40, 80, 160, 320]:
+    g = steady(N); o = steady(N, onesided=True)
+    print(f"dx = {L / N:6.2f}  ghost: err {g[0]:.3e} mass {g[1]:.6f}   "
+          f"one-sided: err {o[0]:.3e} mass {o[1]:.6f}")
+# dx = 100.00  ghost: err 1.055e-01 mass 1.000000   one-sided: err 6.183e-01 mass 1.809211
+# dx =  50.00  ghost: err 2.985e-02 mass 1.000000   one-sided: err 2.809e-01 mass 1.320237
+# dx =  25.00  ghost: err 7.720e-03 mass 1.000000   one-sided: err 1.328e-01 mass 1.141613
+# dx =  12.50  ghost: err 1.947e-03 mass 1.000000   one-sided: err 6.446e-02 mass 1.066535
+# dx =   6.25  ghost: err 4.878e-04 mass 1.000000   one-sided: err 3.174e-02 mass 1.032245
+# dx =   3.12  ghost: err 1.220e-04 mass 1.000000   one-sided: err 1.575e-02 mass 1.015873
+# dx =   1.56  ghost: err 3.051e-05 mass 1.000000   one-sided: err 7.844e-03 mass 1.007874
+```
+
+### Rust
+
+```rust
+// rust/examples/reaction_diffusion_c1.rs  —  cargo run --example reaction_diffusion_c1
+// C1: steady gradient, ghost-point vs one-sided boundary: error and mass balance.
+
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+const DD: f64 = 100.0;
+const K: f64 = 0.01;
+const L: f64 = 500.0;
+
+fn steady(n: usize, onesided: bool) -> (f64, f64) {
+    let lam = (DD / K).sqrt();
+    let j = DD / lam;
+    let dx = L / n as f64;
+    let r = DD / (dx * dx);
+    let mut lo = vec![-r; n + 1];
+    lo[0] = 0.0;
+    lo[n] = -2.0 * r;
+    let mut up = vec![-r; n + 1];
+    up[0] = -2.0 * r;
+    up[n] = 0.0;
+    let mut di = vec![2.0 * r + K; n + 1];
+    let mut rhs = vec![0.0; n + 1];
+    rhs[0] = 2.0 * j / dx;
+    if onesided { // (c1 - c0)/dx = -j/D
+        di[0] = 1.0;
+        up[0] = -1.0;
+        rhs[0] = j * dx / DD;
+    }
+    let c = thomas(&lo, &di, &up, &rhs);
+    let err = (0..=n)
+        .map(|i| {
+            let x = i as f64 * dx;
+            (c[i] - j * lam / DD * ((L - x) / lam).cosh() / (L / lam).sinh()).abs()
+        })
+        .fold(0.0, f64::max);
+    let mass = K * dx * (c.iter().sum::<f64>() - (c[0] + c[n]) / 2.0);
+    (err, mass)
+}
+
+// scientific notation as R and Python print it: 1.05e-01 rather than Rust's 1.05e-1
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn main() {
+    for n in [5, 10, 20, 40, 80, 160, 320] {
+        let (ge, gm) = steady(n, false);
+        let (oe, om) = steady(n, true);
+        println!("dx = {:6.2}  ghost: err {} mass {:.6}   one-sided: err {} mass {:.6}",
+                 L / n as f64, sci(ge, 3), gm, sci(oe, 3), om);
+    }
+}
+
+// Output:
+// dx = 100.00  ghost: err 1.055e-01 mass 1.000000   one-sided: err 6.183e-01 mass 1.809211
+// dx =  50.00  ghost: err 2.985e-02 mass 1.000000   one-sided: err 2.809e-01 mass 1.320237
+// dx =  25.00  ghost: err 7.720e-03 mass 1.000000   one-sided: err 1.328e-01 mass 1.141613
+// dx =  12.50  ghost: err 1.947e-03 mass 1.000000   one-sided: err 6.446e-02 mass 1.066535
+// dx =   6.25  ghost: err 4.878e-04 mass 1.000000   one-sided: err 3.174e-02 mass 1.032245
+// dx =   3.12  ghost: err 1.220e-04 mass 1.000000   one-sided: err 1.575e-02 mass 1.015873
+// dx =   1.56  ghost: err 3.051e-05 mass 1.000000   one-sided: err 7.844e-03 mass 1.007874
+```
+
+:::
+
+With the ghost point the error falls by 4 for every halving of $\Delta x$: order 2. The mass balance is exact to rounding on every grid (the ghost-point scheme is conservative). The one-sided boundary halves the error per halving: order 1, from a single boundary row. Its mass balance is off by 81 % at $\Delta x = 100$ and still 0.8 % at $\Delta x = 1.56$: the mass check would catch the bug without any exact solution.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses thomas, imex, lo, di, up, src, cs, x, k, L, lam, N from the Background
+f <- function(c) -k * c
+dt <- 0.5; c <- rep(0, N + 1); tau <- rep(0, N + 1)
+for (n in 1:2000) {                         # to t = 1000 min
+dt <- 0.5; c <- rep(0, N + 1); tau <- rep(0, N + 1)
+for (n in 1:2000) {                         # to t = 1000 min
+dt <- 0.5; c <- rep(0, N + 1); tau <- rep(0, N + 1)
+for (n in 1:2000) {                         # to t = 1000 min
+  cnew <- imex(c, dt, 1, f)
+  tau <- tau + dt * (1 - (c + cnew) / (2 * cs))   # trapezoid rule
+  c <- cnew
+}
+ix <- c(1, 11, 21)                          # x = 0, 100, 200 µm
+rbind(numeric = tau[ix], formula = (1 + x[ix] / lam) / (2 * k))
+#             [,1]      [,2]    [,3]
+# numeric 50.16847  99.96595 150.255
+# formula 50.00000 100.00000 150.000
+for (dt in c(1, 10, 50)) cat(dt, max(abs(imex(rep(0, N + 1), dt, 5000 / dt, f) - cs)), "\n")
+# 1 2.38698e-14 
+# 10 1.121325e-14 
+# 50 1.076916e-14 
+```
+
+### Python
+
+```python
+# uses np, thomas, imex, lo, di, up, src, cs, x, k, lam, N from the Background
+f = lambda c: -k * c
+dt = 0.5; c = np.zeros(N + 1); tau = np.zeros(N + 1)
+for n in range(2000):                              # to t = 1000 min
+    cnew = imex(c, dt, 1, f)
+    tau += dt * (1 - (c + cnew) / (2 * cs))        # trapezoid rule
+    c = cnew
+ix = [0, 10, 20]                                   # x = 0, 100, 200 µm
+print("numeric", tau[ix])
+# numeric [ 50.1684676   99.96595344 150.25501854]
+print("formula", (1 + x[ix] / lam) / (2 * k))
+# formula [ 50. 100. 150.]
+for dt in [1, 10, 50]:
+    print(dt, np.max(np.abs(imex(np.zeros(N + 1), dt, 5000 // dt, f) - cs)))
+# 1 2.3869795029440866e-14
+# 10 1.1213252548714081e-14
+# 50 1.0769163338864018e-14
+```
+
+### Rust
+
+```rust
+// rust/examples/reaction_diffusion_c2.rs  —  cargo run --example reaction_diffusion_c2
+// C2: the gradient forms (IMEX Euler); local accumulation times; the IMEX
+// steady state does not depend on dt.
+
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// The grid of the lecture: N = 50 intervals of 10 µm, ghost points at both ends.
+/// lo, di, up = the three diagonals of -D d2/dx2; src = influx j at x = 0.
+#[allow(dead_code)]
+struct Grid { n: usize, dx: f64, x: Vec<f64>, lo: Vec<f64>, di: Vec<f64>, up: Vec<f64>, src: Vec<f64> }
+
+fn grid(n: usize, dd: f64, l: f64, j: f64) -> Grid {
+    let dx = l / n as f64;
+    let r = dd / (dx * dx);
+    let mut lo = vec![-r; n + 1];
+    lo[0] = 0.0;
+    lo[n] = -2.0 * r;
+    let mut up = vec![-r; n + 1];
+    up[0] = -2.0 * r;
+    up[n] = 0.0;
+    let mut src = vec![0.0; n + 1];
+    src[0] = 2.0 * j / dx;
+    Grid { n, dx, x: (0..=n).map(|i| i as f64 * dx).collect(), lo, di: vec![2.0 * r; n + 1], up, src }
+}
+
+/// IMEX Euler: diffusion implicit (one Thomas solve), reaction f explicit.
+fn imex(c: &[f64], g: &Grid, dt: f64, nsteps: usize, f: &dyn Fn(&[f64]) -> Vec<f64>) -> Vec<f64> {
+    let a: Vec<f64> = g.lo.iter().map(|v| dt * v).collect();
+    let b: Vec<f64> = g.di.iter().map(|v| 1.0 + dt * v).collect();
+    let cc: Vec<f64> = g.up.iter().map(|v| dt * v).collect();
+    let mut c = c.to_vec();
+    for _ in 0..nsteps {
+        let fc = f(&c);
+        let rhs: Vec<f64> = (0..c.len()).map(|i| c[i] + dt * (fc[i] + g.src[i])).collect();
+        c = thomas(&a, &b, &cc, &rhs);
+    }
+    c
+}
+
+fn main() {
+    let (dd, k, l) = (100.0, 0.01, 500.0);
+    let lam: f64 = (dd / k as f64).sqrt();
+    let g = grid(50, dd, l, dd / lam);
+    let n = g.n;
+    let di_k: Vec<f64> = g.di.iter().map(|v| v + k).collect();
+    let cs = thomas(&g.lo, &di_k, &g.up, &g.src); // steady state
+    let f = |c: &[f64]| c.iter().map(|v| -k * v).collect::<Vec<f64>>();
+    let dt = 0.5;
+    let mut c = vec![0.0; n + 1];
+    let mut tau = vec![0.0; n + 1];
+    for _ in 0..2000 { // to t = 1000 min
+        let cnew = imex(&c, &g, dt, 1, &f);
+        for i in 0..=n {
+            tau[i] += dt * (1.0 - (c[i] + cnew[i]) / (2.0 * cs[i])); // trapezoid rule
+        }
+        c = cnew;
+    }
+    let ix = [0, 10, 20]; // x = 0, 100, 200 µm
+    println!("numeric {:?}", ix.map(|i| tau[i]));
+    println!("formula {:?}", ix.map(|i| (1.0 + g.x[i] / lam) / (2.0 * k)));
+    for dt in [1.0, 10.0, 50.0] {
+        let c = imex(&vec![0.0; n + 1], &g, dt, (5000.0 / dt) as usize, &f);
+        let e = c.iter().zip(&cs).map(|(p, q)| (p - q).abs()).fold(0.0, f64::max);
+        println!("{} {:e}", dt, e);
+    }
+}
+
+// Output:
+// numeric [50.168467603738826, 99.9659534429483, 150.25501854261535]
+// formula [50.0, 100.0, 150.0]
+// 1 2.3869795029440866e-14
+// 10 1.1213252548714081e-14
+// 50 1.0769163338864018e-14
+```
+
+:::
+
+(a) The numerical accumulation times agree with $(1 + x/\lambda)/(2k)$ to 0.4 %; the small differences come from the finite embryo (the formula is for an infinitely long one) and from the time step. Far from the source the gradient takes three times as long as at the source.
+(b) The IMEX fixed point satisfies $\mathbf c = (I + \Delta t K_D)^{-1}(\mathbf c + \Delta t(-k\mathbf c + \mathbf s))$, i.e. $K_D\mathbf c + k\mathbf c = \mathbf s$: $\Delta t$ cancels. Any step gives the right steady state, which is convenient, and also means that a converged steady state says nothing about whether the transient was accurate.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses thomas, imex, lo, di, up, src, cs, x, k, L, lam, N from the Background
+library(Matrix)
+m <- N + 1
+A <- -diag(di); A[cbind(2:m, 1:(m - 1))] <- -lo[-1]; A[cbind(1:(m - 1), 2:m)] <- -up[-m]
+expmat <- function(B) as.matrix(expm(Matrix(B)))
+A <- -diag(di); A[cbind(2:m, 1:(m - 1))] <- -lo[-1]; A[cbind(1:(m - 1), 2:m)] <- -up[-m]
+expmat <- function(B) as.matrix(expm(Matrix(B)))
+A <- -diag(di); A[cbind(2:m, 1:(m - 1))] <- -lo[-1]; A[cbind(1:(m - 1), 2:m)] <- -up[-m]
+expmat <- function(B) as.matrix(expm(Matrix(B)))
+split_err <- function(kx, b, c0, tend = 60, hs = c(20, 10, 5, 2.5, 1.25)) {
+  M <- A - diag(kx); cst <- -solve(M, b)
+  cref <- cst + as.vector(expmat(M * tend) %*% (c0 - cst))   # exact
+  Aug <- rbind(cbind(A, b), 0)                    # diffusion + influx, exactly
+  for (h in hs) {
+    E <- expmat(Aug * h); dif <- function(c) as.vector(E %*% c(c, 1))[1:m]
+    lie <- strang <- c0
+    for (s in seq_len(tend / h)) {
+      lie <- exp(-kx * h) * dif(lie)
+      strang <- exp(-kx * h / 2) * dif(exp(-kx * h / 2) * strang)
+    }
+    cat(sprintf("dt = %5.2f  Lie %.2e  Strang %.2e\n", h, max(abs(lie - cref)), max(abs(strang - cref))))
+  }
+}
+k_step <- ifelse(x < L / 2, 0.01, 0.02)
+split_err(k_step, src, rep(0, m))                  # (a) source on, k step
+# dt = 20.00  Lie 8.49e-02  Strang 1.75e-02
+# dt = 10.00  Lie 4.14e-02  Strang 6.38e-03
+# dt =  5.00  Lie 2.01e-02  Strang 2.23e-03
+# dt =  2.50  Lie 9.73e-03  Strang 7.34e-04
+# dt =  1.25  Lie 4.74e-03  Strang 2.21e-04
+split_err(rep(k, m), 0 * src, cs, hs = c(20, 5))   # (b) source off, uniform k
+# dt = 20.00  Lie 5.02e-15  Strang 4.97e-15
+# dt =  5.00  Lie 4.97e-15  Strang 4.69e-15
+split_err(k_step, 0 * src, cs, hs = c(20, 5, 1.25))      # (c) source off, k step
+# dt = 20.00  Lie 8.47e-03  Strang 3.24e-03
+# dt =  5.00  Lie 2.01e-03  Strang 5.98e-04
+# dt =  1.25  Lie 4.37e-04  Strang 7.74e-05
+```
+
+### Python
+
+```python
+# uses np, thomas, lo, di, up, src, cs, x, k, L, N from the Background
+from scipy.linalg import expm
+m = N + 1
+A = -np.diag(di) - np.diag(lo[1:], -1) - np.diag(up[:-1], 1)
+
+def split_err(kx, b, c0, tend=60, hs=(20, 10, 5, 2.5, 1.25)):
+    M = A - np.diag(kx); cst = -np.linalg.solve(M, b)
+    cref = cst + expm(M * tend) @ (c0 - cst)                   # exact
+    Aug = np.zeros((m + 1, m + 1)); Aug[:m, :m] = A; Aug[:m, m] = b
+    for h in hs:
+        E = expm(Aug * h); dif = lambda c: (E @ np.r_[c, 1])[:m]
+        lie = c0.copy(); strang = c0.copy()
+        for s in range(round(tend / h)):
+            lie = np.exp(-kx * h) * dif(lie)
+            strang = np.exp(-kx * h / 2) * dif(np.exp(-kx * h / 2) * strang)
+        print(f"dt = {h:5.2f}  Lie {np.max(np.abs(lie - cref)):.2e}  "
+              f"Strang {np.max(np.abs(strang - cref)):.2e}")
+
+k_step = np.where(x < L / 2, 0.01, 0.02)
+split_err(k_step, src, np.zeros(m))                    # (a) source on, k step
+# dt = 20.00  Lie 8.49e-02  Strang 1.75e-02
+# dt = 10.00  Lie 4.14e-02  Strang 6.38e-03
+# dt =  5.00  Lie 2.01e-02  Strang 2.23e-03
+# dt =  2.50  Lie 9.73e-03  Strang 7.34e-04
+# dt =  1.25  Lie 4.74e-03  Strang 2.21e-04
+split_err(np.full(m, k), 0 * src, cs, hs=(20, 5))      # (b) source off, uniform k
+# dt = 20.00  Lie 6.99e-15  Strang 6.99e-15
+# dt =  5.00  Lie 6.99e-15  Strang 7.38e-15
+split_err(k_step, 0 * src, cs, hs=(20, 5, 1.25))       # (c) source off, k step
+# dt = 20.00  Lie 8.47e-03  Strang 3.24e-03
+# dt =  5.00  Lie 2.01e-03  Strang 5.98e-04
+# dt =  1.25  Lie 4.37e-04  Strang 7.74e-05
+```
+
+### Rust
+
+```rust
+// rust/examples/reaction_diffusion_c3.rs  —  cargo run --example reaction_diffusion_c3
+// C3: Lie and Strang splitting with exact sub-steps (nalgebra's matrix
+// exponential); error against the exact solution at t = 60 min.
+use nalgebra::{DMatrix, DVector};
+
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+/// The grid of the lecture: N = 50 intervals of 10 µm, ghost points at both ends.
+/// lo, di, up = the three diagonals of -D d2/dx2; src = influx j at x = 0.
+#[allow(dead_code)]
+struct Grid { n: usize, dx: f64, x: Vec<f64>, lo: Vec<f64>, di: Vec<f64>, up: Vec<f64>, src: Vec<f64> }
+
+fn grid(n: usize, dd: f64, l: f64, j: f64) -> Grid {
+    let dx = l / n as f64;
+    let r = dd / (dx * dx);
+    let mut lo = vec![-r; n + 1];
+    lo[0] = 0.0;
+    lo[n] = -2.0 * r;
+    let mut up = vec![-r; n + 1];
+    up[0] = -2.0 * r;
+    up[n] = 0.0;
+    let mut src = vec![0.0; n + 1];
+    src[0] = 2.0 * j / dx;
+    Grid { n, dx, x: (0..=n).map(|i| i as f64 * dx).collect(), lo, di: vec![2.0 * r; n + 1], up, src }
+}
+
+fn split_err(g: &Grid, kx: &[f64], b: &[f64], c0: &[f64], hs: &[f64]) {
+    let m = g.n + 1;
+    let tend = 60.0;
+    // A = D d2/dx2 with ghost points (minus the positive operator)
+    let a = DMatrix::from_fn(m, m, |i, j| {
+        if i == j { -g.di[i] } else if i == j + 1 { -g.lo[i] } else if j == i + 1 { -g.up[i] } else { 0.0 }
+    });
+    let mm = &a - DMatrix::from_diagonal(&DVector::from_column_slice(kx));
+    let bv = DVector::from_column_slice(b);
+    let cst = -mm.clone().lu().solve(&bv).unwrap();
+    let cref = &cst + (&mm * tend).exp() * (DVector::from_column_slice(c0) - &cst); // exact
+    let mut aug = DMatrix::zeros(m + 1, m + 1); // diffusion + influx, done exactly
+    aug.view_mut((0, 0), (m, m)).copy_from(&a);
+    aug.view_mut((0, m), (m, 1)).copy_from(&bv);
+    for &h in hs {
+        let e = (&aug * h).exp();
+        let dif = |c: &DVector<f64>| -> DVector<f64> {
+            let mut ce = DVector::from_element(m + 1, 1.0);
+            ce.rows_mut(0, m).copy_from(c);
+            (&e * ce).rows(0, m).into_owned()
+        };
+        let decay = |c: &DVector<f64>, t: f64| -> DVector<f64> {
+            DVector::from_fn(m, |i, _| (-kx[i] * t).exp() * c[i])
+        };
+        let mut lie = DVector::from_column_slice(c0);
+        let mut strang = lie.clone();
+        for _ in 0..(tend / h).round() as usize {
+            lie = decay(&dif(&lie), h);
+            strang = decay(&dif(&decay(&strang, h / 2.0)), h / 2.0);
+        }
+        println!("dt = {:5.2}  Lie {}  Strang {}", h, sci((&lie - &cref).amax(), 2), sci((&strang - &cref).amax(), 2));
+    }
+}
+
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn main() {
+    let (dd, k, l) = (100.0, 0.01, 500.0);
+    let g = grid(50, dd, l, dd / (dd / k as f64).sqrt());
+    let m = g.n + 1;
+    let di_k: Vec<f64> = g.di.iter().map(|v| v + k).collect();
+    let cs = thomas(&g.lo, &di_k, &g.up, &g.src);
+    let k_step: Vec<f64> = g.x.iter().map(|&x| if x < l / 2.0 { 0.01 } else { 0.02 }).collect();
+    let none = vec![0.0; m];
+    split_err(&g, &k_step, &g.src, &vec![0.0; m], &[20.0, 10.0, 5.0, 2.5, 1.25]); // (a)
+    split_err(&g, &vec![k; m], &none, &cs, &[20.0, 5.0]);                         // (b)
+    split_err(&g, &k_step, &none, &cs, &[20.0, 5.0, 1.25]);                       // (c)
+}
+
+// Output:
+// dt = 20.00  Lie 8.49e-02  Strang 1.75e-02
+// dt = 10.00  Lie 4.14e-02  Strang 6.38e-03
+// dt =  5.00  Lie 2.01e-02  Strang 2.23e-03
+// dt =  2.50  Lie 9.73e-03  Strang 7.34e-04
+// dt =  1.25  Lie 4.74e-03  Strang 2.21e-04
+// dt = 20.00  Lie 3.11e-15  Strang 2.94e-15
+// dt =  5.00  Lie 2.94e-15  Strang 2.55e-15
+// dt = 20.00  Lie 8.47e-03  Strang 3.24e-03
+// dt =  5.00  Lie 2.01e-03  Strang 5.98e-04
+// dt =  1.25  Lie 4.37e-04  Strang 7.74e-05
+```
+
+:::
+
+(a) Lie: the error halves with $\Delta t$, order 1. Strang: the ratio grows from 2.7 to 3.3 per halving, approaching 4 (order 2) for small steps; at large steps the stiff diffusion modes and the boundary source reduce the order. (b) No source and uniform $k$: the error is at rounding level for any $\Delta t$, because the parts commute (B4(b)). (c) With the temperature step and no source: a real splitting error, order 1 for Lie. The exact digits of the rounding-level errors in (b) differ between R, Python and Rust (they use different `expm` algorithms).
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# thomas() as in the Background
+D <- 100; L <- 500; j <- 1                      # same influx as before
+N <- 500; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+D <- 100; L <- 500; j <- 1                      # same influx as before
+N <- 500; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+D <- 100; L <- 500; j <- 1                      # same influx as before
+N <- 500; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+lo <- c(0, rep(-r, N - 1), -2 * r); di <- rep(2 * r, N + 1)
+N <- 500; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+lo <- c(0, rep(-r, N - 1), -2 * r); di <- rep(2 * r, N + 1)
+N <- 500; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+lo <- c(0, rep(-r, N - 1), -2 * r); di <- rep(2 * r, N + 1)
+N <- 500; dx <- L / N; x <- (0:N) * dx; r <- D / dx^2
+lo <- c(0, rep(-r, N - 1), -2 * r); di <- rep(2 * r, N + 1)
+up <- c(-2 * r, rep(-r, N - 1), 0); src <- c(2 * j / dx, rep(0, N))
+lo <- c(0, rep(-r, N - 1), -2 * r); di <- rep(2 * r, N + 1)
+up <- c(-2 * r, rep(-r, N - 1), 0); src <- c(2 * j / dx, rep(0, N))
+x_threshold <- function(c, thr = 0.1) {         # first crossing, linear interpolation
+up <- c(-2 * r, rep(-r, N - 1), 0); src <- c(2 * j / dx, rep(0, N))
+x_threshold <- function(c, thr = 0.1) {         # first crossing, linear interpolation
+  i <- which(c < thr)[1]
+  x[i - 1] + (c[i - 1] - thr) / (c[i - 1] - c[i]) * dx
+}
+cases <- list(cold = rep(0.01, N + 1), warm = rep(0.02, N + 1),
+              posterior_warm = ifelse(x < L / 2, 0.01, 0.02),
+              anterior_warm = ifelse(x < L / 2, 0.02, 0.01))
+for (nm in names(cases)) {
+  c <- thomas(lo, di + cases[[nm]], up, src)
+  cat(sprintf("%-15s c(0) = %.3f  c(250) = %.4f  x(c = 0.1) = %.1f µm\n", nm, c[1], c[251], x_threshold(c)))
+}
+# cold            c(0) = 1.000  c(250) = 0.0826  x(c = 0.1) = 230.7 µm
+# warm            c(0) = 0.707  c(250) = 0.0206  x(c = 0.1) = 138.3 µm
+# posterior_warm  c(0) = 0.998  c(250) = 0.0678  x(c = 0.1) = 220.2 µm
+# anterior_warm   c(0) = 0.707  c(250) = 0.0243  x(c = 0.1) = 138.9 µm
+```
+
+### Python
+
+```python
+import numpy as np
+# thomas() as in the Background
+
+D, L, j = 100.0, 500.0, 1.0
+N = 500; dx = L / N; x = np.arange(N + 1) * dx; r = D / dx**2
+lo = np.r_[0, np.full(N - 1, -r), -2 * r]; di = np.full(N + 1, 2 * r)
+up = np.r_[-2 * r, np.full(N - 1, -r), 0]; src = np.r_[2 * j / dx, np.zeros(N)]
+
+def x_threshold(c, thr=0.1):                       # first crossing, linear interpolation
+    i = np.argmax(c < thr)
+    return x[i - 1] + (c[i - 1] - thr) / (c[i - 1] - c[i]) * dx
+
+cases = {"cold": np.full(N + 1, 0.01), "warm": np.full(N + 1, 0.02),
+         "posterior_warm": np.where(x < L / 2, 0.01, 0.02),
+         "anterior_warm": np.where(x < L / 2, 0.02, 0.01)}
+for nm, kx in cases.items():
+    c = thomas(lo, di + kx, up, src)
+    print(f"{nm:<15} c(0) = {c[0]:.3f}  c(250) = {c[250]:.4f}  x(c = 0.1) = {x_threshold(c):.1f} µm")
+# cold            c(0) = 1.000  c(250) = 0.0826  x(c = 0.1) = 230.7 µm
+# warm            c(0) = 0.707  c(250) = 0.0206  x(c = 0.1) = 138.3 µm
+# posterior_warm  c(0) = 0.998  c(250) = 0.0678  x(c = 0.1) = 220.2 µm
+# anterior_warm   c(0) = 0.707  c(250) = 0.0243  x(c = 0.1) = 138.9 µm
+```
+
+### Rust
+
+```rust
+// rust/examples/reaction_diffusion_c4.rs  —  cargo run --example reaction_diffusion_c4
+// C4: the temperature step (assumed: k doubles in the warm half).
+
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+fn main() {
+    let (dd, l, j) = (100.0_f64, 500.0_f64, 1.0_f64);
+    let n = 500;
+    let dx = l / n as f64;
+    let r = dd / (dx * dx);
+    let x: Vec<f64> = (0..=n).map(|i| i as f64 * dx).collect();
+    let mut lo = vec![-r; n + 1];
+    lo[0] = 0.0;
+    lo[n] = -2.0 * r;
+    let mut up = vec![-r; n + 1];
+    up[0] = -2.0 * r;
+    up[n] = 0.0;
+    let mut src = vec![0.0; n + 1];
+    src[0] = 2.0 * j / dx;
+    // first crossing of the threshold, linear interpolation
+    let x_threshold = |c: &[f64], thr: f64| -> f64 {
+        let i = c.iter().position(|&v| v < thr).unwrap();
+        x[i - 1] + (c[i - 1] - thr) / (c[i - 1] - c[i]) * dx
+    };
+    let cases: [(&str, Box<dyn Fn(f64) -> f64>); 4] = [
+        ("cold", Box::new(|_| 0.01)),
+        ("warm", Box::new(|_| 0.02)),
+        ("posterior_warm", Box::new(move |x| if x < l / 2.0 { 0.01 } else { 0.02 })),
+        ("anterior_warm", Box::new(move |x| if x < l / 2.0 { 0.02 } else { 0.01 })),
+    ];
+    for (nm, kf) in cases.iter() {
+        let di: Vec<f64> = x.iter().map(|&xi| 2.0 * r + kf(xi)).collect();
+        let c = thomas(&lo, &di, &up, &src);
+        println!("{:<15} c(0) = {:.3}  c(250) = {:.4}  x(c = 0.1) = {:.1} µm", nm, c[0], c[250], x_threshold(&c, 0.1));
+    }
+}
+
+// Output:
+// cold            c(0) = 1.000  c(250) = 0.0826  x(c = 0.1) = 230.7 µm
+// warm            c(0) = 0.707  c(250) = 0.0206  x(c = 0.1) = 138.3 µm
+// posterior_warm  c(0) = 0.998  c(250) = 0.0678  x(c = 0.1) = 220.2 µm
+// anterior_warm   c(0) = 0.707  c(250) = 0.0243  x(c = 0.1) = 138.9 µm
+```
+
+:::
+
+All warm agrees with B1(d) (138.3 µm). The threshold is set by the **anterior** half, where the concentration is high: warming the posterior moves it by only 10 µm, warming the anterior by 92 µm. In this model a temperature step matters most where the gradient is being read. (The real embryo has many more layers of regulation; see [M1].)
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+lcg <- function(n, seed = 1) {                  # Park-Miller generator, same in Python/Rust
+  z <- numeric(n); s <- seed
+  for (i in seq_len(n)) { s <- (16807 * s) %% 2147483647; z[i] <- s / 2147483647 }
+  z
+}
+D <- 50                                          # µm^2/s (approximate FCS value)
+x <- seq(0, 400, by = 20); nx <- length(x)       # 21 positions
+z <- matrix(lcg(20 * (nx + 1), seed = 2) - 0.5, ncol = 20)   # one column per embryo
+x <- seq(0, 400, by = 20); nx <- length(x)       # 21 positions
+z <- matrix(lcg(20 * (nx + 1), seed = 2) - 0.5, ncol = 20)   # one column per embryo
+fit_lambda <- function(bg) sapply(1:20, function(e) {
+  lam_true <- 200 * (1 + 0.2 * z[1, e])          # embryo-to-embryo spread +-10 %
+  c <- exp(-x / lam_true) * (1 + 0.2 * z[-1, e]) + bg   # +-10 % imaging noise
+  -1 / unname(coef(lm(log(c) ~ x))[2])           # slope of log c is -1/lambda
+})
+for (bg in c(0, 0.05)) {
+  lf <- fit_lambda(bg)
+  cat(sprintf("background %.2f: lambda = %.1f +- %.1f µm, k = %.2e /s, lifetime %.1f min\n",
+              bg, mean(lf), sd(lf), mean(D / lf^2), mean(lf^2 / D) / 60))
+}
+# background 0.00: lambda = 200.3 +- 12.2 µm, k = 1.26e-03 /s, lifetime 13.4 min
+# background 0.05: lambda = 229.9 +- 12.1 µm, k = 9.53e-04 /s, lifetime 17.7 min
+```
+
+### Python
+
+```python
+import numpy as np
+
+def lcg(n, seed=1):                                # Park-Miller generator, same in R/Rust
+    z = np.empty(n); s = seed
+    for i in range(n):
+        s = (16807 * s) % 2147483647; z[i] = s / 2147483647
+    return z
+
+D = 50.0                                           # µm^2/s (approximate FCS value)
+x = np.arange(0, 401, 20.0); nx = len(x)           # 21 positions
+z = lcg(20 * (nx + 1), seed=2).reshape(nx + 1, 20, order="F") - 0.5   # column = embryo
+
+def fit_lambda(bg):
+    lf = np.empty(20)
+    for e in range(20):
+        lam_true = 200 * (1 + 0.2 * z[0, e])       # embryo-to-embryo spread +-10 %
+        c = np.exp(-x / lam_true) * (1 + 0.2 * z[1:, e]) + bg   # +-10 % imaging noise
+        lf[e] = -1 / np.polyfit(x, np.log(c), 1)[0]   # slope of log c is -1/lambda
+    return lf
+
+for bg in [0, 0.05]:
+    lf = fit_lambda(bg)
+    print(f"background {bg:.2f}: lambda = {lf.mean():.1f} +- {lf.std(ddof=1):.1f} µm, "
+          f"k = {np.mean(D / lf**2):.2e} /s, lifetime {np.mean(lf**2 / D) / 60:.1f} min")
+# background 0.00: lambda = 200.3 +- 12.2 µm, k = 1.26e-03 /s, lifetime 13.4 min
+# background 0.05: lambda = 229.9 +- 12.1 µm, k = 9.53e-04 /s, lifetime 17.7 min
+```
+
+### Rust
+
+```rust
+// rust/examples/reaction_diffusion_c5.rs  —  cargo run --example reaction_diffusion_c5
+// C5: decay lengths from 20 synthetic Fgf8-like profiles (one per embryo),
+// fitted by a straight line through log c; then k = D / lambda^2.
+
+/// Park-Miller generator, the same numbers as in R and Python.
+fn lcg(n: usize, seed: u64) -> Vec<f64> {
+    let mut s = seed;
+    (0..n).map(|_| { s = (16807 * s) % 2147483647; s as f64 / 2147483647.0 }).collect()
+}
+
+/// Least-squares slope of y against x.
+fn slope(x: &[f64], y: &[f64]) -> f64 {
+    let n = x.len() as f64;
+    let (mx, my) = (x.iter().sum::<f64>() / n, y.iter().sum::<f64>() / n);
+    let sxy: f64 = x.iter().zip(y).map(|(a, b)| (a - mx) * (b - my)).sum();
+    let sxx: f64 = x.iter().map(|a| (a - mx) * (a - mx)).sum();
+    sxy / sxx
+}
+
+// scientific notation as R and Python print it: 1.26e-03 rather than Rust's 1.26e-3
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn main() {
+    let dd = 50.0; // µm^2/s (approximate FCS value)
+    let x: Vec<f64> = (0..=20).map(|i| 20.0 * i as f64).collect(); // 21 positions
+    let nx = x.len();
+    let z: Vec<f64> = lcg(20 * (nx + 1), 2).iter().map(|v| v - 0.5).collect();
+    for bg in [0.0, 0.05] {
+        let lf: Vec<f64> = (0..20).map(|e| {
+            let ze = &z[e * (nx + 1)..(e + 1) * (nx + 1)]; // column e
+            let lam_true = 200.0 * (1.0 + 0.2 * ze[0]);
+            let logc: Vec<f64> = (0..nx)
+                .map(|i| ((-x[i] / lam_true).exp() * (1.0 + 0.2 * ze[i + 1]) + bg).ln())
+                .collect();
+            -1.0 / slope(&x, &logc)
+        }).collect();
+        let mean = lf.iter().sum::<f64>() / 20.0;
+        let sd = (lf.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / 19.0).sqrt();
+        let kmean = lf.iter().map(|v| dd / (v * v)).sum::<f64>() / 20.0;
+        let life = lf.iter().map(|v| v * v / dd).sum::<f64>() / 20.0 / 60.0;
+        println!("background {:.2}: lambda = {:.1} +- {:.1} µm, k = {} /s, lifetime {:.1} min",
+                 bg, mean, sd, sci(kmean, 2), life);
+    }
+}
+
+// Output:
+// background 0.00: lambda = 200.3 +- 12.2 µm, k = 1.26e-03 /s, lifetime 13.4 min
+// background 0.05: lambda = 229.9 +- 12.1 µm, k = 9.53e-04 /s, lifetime 17.7 min
+```
+
+:::
+
+(a) The fit recovers the mean $\lambda$ of 200 µm; the spread of 12 µm is the embryo-to-embryo variation we put in (about $\pm 10$ % uniform) plus fitting noise. $k \approx 1.3\times10^{-3}$ per s, a lifetime of about 13 min, as in B1(c). (b) The background lifts the tail, the log profile bends upwards, and the straight-line fit returns a longer $\lambda$ (230 µm) and a smaller $k$ (lifetime 18 min instead of 13): a 15 % bias in $\lambda$ from an offset of 5 % of the peak. Subtract the background first, or fit $c_0e^{-x/\lambda} + b$ by nonlinear least squares (*Nonlinear least squares and ODE fitting*).
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+a <- 0.1; b <- 0.9
+us <- a + b; vs <- b / us^2                       # uniform steady state (1, 0.9)
+a <- 0.1; b <- 0.9
+us <- a + b; vs <- b / us^2                       # uniform steady state (1, 0.9)
+J <- matrix(c(-1 + 2 * us * vs, -2 * us * vs,     # column-wise: df/du, dg/du,
+us <- a + b; vs <- b / us^2                       # uniform steady state (1, 0.9)
+J <- matrix(c(-1 + 2 * us * vs, -2 * us * vs,     # column-wise: df/du, dg/du,
+              us^2, -us^2), 2)                    #              df/dv, dg/dv
+growth <- function(q, d) max(Re(eigen(J - q^2 * diag(c(1, d)))$values))
+q <- seq(0, 1.5, by = 0.001)
+for (d in c(5, 10, 20)) {
+  g <- sapply(q, growth, d = d)
+  if (max(g) <= 0) { cat(sprintf("d = %2d: stable at every q (max growth %.3f)\n", d, max(g))); next }
+  qb <- range(q[g > 0]); qm <- q[which.max(g)]
+  cat(sprintf("d = %2d: unstable for q in [%.3f, %.3f], fastest q = %.3f (wavelength %.2f), rate %.4f\n",
+              d, qb[1], qb[2], qm, 2 * pi / qm, max(g)))
+}
+# d =  5: stable at every q (max growth -0.100)
+# d = 10: unstable for q in [0.448, 0.707], fastest q = 0.564 (wavelength 11.14), rate 0.0572
+# d = 20: unstable for q in [0.272, 0.822], fastest q = 0.487 (wavelength 12.90), rate 0.2632
+# Turing threshold: the smallest det(J - q^2 diag(1, d)) over q touches 0
+min_det <- function(d) min(sapply(q, function(qq) det(J - qq^2 * diag(c(1, d)))))
+uniroot(min_det, c(5, 20), tol = 1e-10)$root
+# [1] 8.567646
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import brentq
+
+a, b = 0.1, 0.9
+us = a + b; vs = b / us**2                         # uniform steady state (1, 0.9)
+J = np.array([[-1 + 2 * us * vs, us**2],
+              [-2 * us * vs, -us**2]])
+growth = lambda q, d: np.max(np.linalg.eigvals(J - q**2 * np.diag([1, d])).real)
+q = np.arange(0, 1.5005, 0.001)
+for d in [5, 10, 20]:
+    g = np.array([growth(qq, d) for qq in q])
+    if g.max() <= 0:
+        print(f"d = {d:2d}: stable at every q (max growth {g.max():.3f})"); continue
+    qb = q[g > 0]; qm = q[np.argmax(g)]
+    print(f"d = {d:2d}: unstable for q in [{qb.min():.3f}, {qb.max():.3f}], fastest q = {qm:.3f} "
+          f"(wavelength {2 * np.pi / qm:.2f}), rate {g.max():.4f}")
+# d =  5: stable at every q (max growth -0.100)
+# d = 10: unstable for q in [0.448, 0.707], fastest q = 0.564 (wavelength 11.14), rate 0.0572
+# d = 20: unstable for q in [0.272, 0.822], fastest q = 0.487 (wavelength 12.90), rate 0.2632
+# Turing threshold: the smallest det(J - q^2 diag(1, d)) over q touches 0
+min_det = lambda d: min(np.linalg.det(J - qq**2 * np.diag([1, d])) for qq in q)
+print(brentq(min_det, 5, 20, xtol=1e-10))
+# 8.567646123325838
+```
+
+### Rust
+
+```rust
+// rust/examples/reaction_diffusion_c6.rs  —  cargo run --example reaction_diffusion_c6
+// C6: dispersion relation of the Schnakenberg model; Turing threshold d_c.
+
+fn main() {
+    let (a, b) = (0.1_f64, 0.9_f64);
+    let (us, vs) = (a + b, b / ((a + b) * (a + b))); // uniform steady state (1, 0.9)
+    let (fu, fv, gu, gv) = (-1.0 + 2.0 * us * vs, us * us, -2.0 * us * vs, -us * us);
+    // J_q = J - q^2 diag(1, d); 2 x 2, so use trace and determinant
+    let tr = |q: f64, d: f64| fu + gv - q * q * (1.0 + d);
+    let det = |q: f64, d: f64| (fu - q * q) * (gv - d * q * q) - fv * gu;
+    let growth = |q: f64, d: f64| {
+        let (t, dt) = (tr(q, d), det(q, d));
+        let disc = t * t - 4.0 * dt;
+        if disc < 0.0 { t / 2.0 } else { (t + disc.sqrt()) / 2.0 } // largest Re(lambda)
+    };
+    let q: Vec<f64> = (0..=1500).map(|i| i as f64 * 0.001).collect();
+    for d in [5.0, 10.0, 20.0] {
+        let g: Vec<f64> = q.iter().map(|&qq| growth(qq, d)).collect();
+        let (im, gmax) = g.iter().enumerate().fold((0, f64::MIN), |m, (i, &v)| if v > m.1 { (i, v) } else { m });
+        if gmax <= 0.0 {
+            println!("d = {:2}: stable at every q (max growth {:.3})", d, gmax);
+            continue;
+        }
+        let pos: Vec<f64> = q.iter().zip(&g).filter(|(_, v)| **v > 0.0).map(|(qq, _)| *qq).collect();
+        println!("d = {:2}: unstable for q in [{:.3}, {:.3}], fastest q = {:.3} (wavelength {:.2}), rate {:.4}",
+                 d, pos[0], pos[pos.len() - 1], q[im], 2.0 * std::f64::consts::PI / q[im], gmax);
+    }
+    // Turing threshold: the smallest det over q touches 0. Bisection on d.
+    let min_det = |d: f64| q.iter().map(|&qq| det(qq, d)).fold(f64::MAX, f64::min);
+    let (mut lo, mut hi) = (5.0, 20.0);
+    while hi - lo > 1e-10 {
+        let mid = 0.5 * (lo + hi);
+        if min_det(mid) > 0.0 { lo = mid } else { hi = mid }
+    }
+    println!("{}", 0.5 * (lo + hi));
+}
+
+// Output:
+// d =  5: stable at every q (max growth -0.100)
+// d = 10: unstable for q in [0.448, 0.707], fastest q = 0.564 (wavelength 11.14), rate 0.0572
+// d = 20: unstable for q in [0.272, 0.822], fastest q = 0.487 (wavelength 12.90), rate 0.2632
+// 8.567646123328814
+```
+
+:::
+
+The band for $d = 20$ matches B5(c); the threshold matches B5(e) ($d_c = 8.5676$; the last digits differ because the minimum is taken on a grid of $q$). The fastest-growing wavelength, 12.9, is what the 2D simulation should show at early times. For $d = 5$ the largest growth rate is $-0.1$, at $q = 0$: the uniform mode, which decays with the real part of the reaction eigenvalues.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+lcg <- function(n, seed = 1) {
+  z <- numeric(n); s <- seed
+  for (i in seq_len(n)) { s <- (16807 * s) %% 2147483647; z[i] <- s / 2147483647 }
+  z
+}
+schnak <- function(N, dt, tend, d = 20, Lbox = 80, a = 0.1, b = 0.9) {
+  dx <- Lbox / N
+  s <- 4 / dx^2 * sin(pi * (0:(N - 1)) / N)^2     # 1D: -eigenvalues of (1,-2,1)/dx^2
+  kap <- outer(s, s, "+")                          # 2D five-point Laplacian, periodic
+  z <- lcg(2 * N^2) - 0.5
+  u <- matrix(1 + 0.02 * z[1:N^2], N)              # uniform state + 1 % noise
+  v <- matrix(0.9 + 0.02 * z[-(1:N^2)], N)
+  solve_diff <- function(w, Dw) Re(fft(fft(w) / (1 + dt * Dw * kap), inverse = TRUE)) / N^2
+  for (n in seq_len(round(tend / dt))) {
+    f <- a - u + u^2 * v; g <- b - u^2 * v         # reaction: explicit
+    u <- solve_diff(u + dt * f, 1)                 # diffusion: implicit
+    v <- solve_diff(v + dt * g, d)
+  }
+  u
+}
+spots <- function(u) {                             # local maxima above the mean
+  N <- nrow(u); ismax <- u > mean(u)
+  for (i in -1:1) for (j in -1:1) if (i != 0 || j != 0)
+    ismax <- ismax & u > u[(0:(N - 1) + i) %% N + 1, (0:(N - 1) + j) %% N + 1]
+  sum(ismax)
+}
+system.time(u <- schnak(N = 80, dt = 0.1, tend = 200))[["elapsed"]]
+# [1] 1.888
+cat(sprintf("spots %d, u from %.6f to %.6f, mean %.6f\n", spots(u), min(u), max(u), mean(u)))
+# spots 47, u from 0.201175 to 3.060050, mean 1.000009
+```
+
+### Python
+
+```python
+import numpy as np
+
+def lcg(n, seed=1):
+    z = np.empty(n); s = seed
+    for i in range(n):
+        s = (16807 * s) % 2147483647; z[i] = s / 2147483647
+    return z
+
+def schnak(N, dt, tend, d=20.0, Lbox=80.0, a=0.1, b=0.9):
+    dx = Lbox / N
+    s = 4 / dx**2 * np.sin(np.pi * np.arange(N) / N)**2   # 1D: -eigenvalues of (1,-2,1)/dx^2
+    kap = s[:, None] + s[None, :]                  # 2D five-point Laplacian, periodic
+    z = lcg(2 * N * N) - 0.5
+    u = 1 + 0.02 * z[:N * N].reshape(N, N, order="F")     # same layout as R's matrix()
+    v = 0.9 + 0.02 * z[N * N:].reshape(N, N, order="F")
+    solve_diff = lambda w, Dw: np.fft.ifft2(np.fft.fft2(w) / (1 + dt * Dw * kap)).real
+    for n in range(round(tend / dt)):
+        f = a - u + u**2 * v; g = b - u**2 * v     # reaction: explicit
+        u = solve_diff(u + dt * f, 1.0)            # diffusion: implicit
+        v = solve_diff(v + dt * g, d)
+    return u
+
+def spots(u):                                      # local maxima above the mean
+    ismax = u > u.mean()
+    for i in (-1, 0, 1):
+        for j in (-1, 0, 1):
+            if i or j:
+                ismax &= u > np.roll(np.roll(u, -i, axis=0), -j, axis=1)
+    return int(ismax.sum())
+
+import time
+t0 = time.time()
+u = schnak(N=80, dt=0.1, tend=200)
+print(f"{time.time() - t0:.2f} s")
+# 1.81 s
+print(f"spots {spots(u)}, u from {u.min():.6f} to {u.max():.6f}, mean {u.mean():.6f}")
+# spots 47, u from 0.201175 to 3.060050, mean 1.000009
+```
+
+### Rust
+
+```rust
+// rust/examples/reaction_diffusion_c7.rs  —  cargo run --release --example reaction_diffusion_c7
+// C7: a 2D Turing pattern (Schnakenberg), IMEX Euler with FFT for diffusion.
+use rustfft::{num_complex::Complex, FftPlanner};
+
+/// Park-Miller generator, the same numbers as in R and Python.
+fn lcg(n: usize, seed: u64) -> Vec<f64> {
+    let mut s = seed;
+    (0..n).map(|_| { s = (16807 * s) % 2147483647; s as f64 / 2147483647.0 }).collect()
+}
+
+/// 2D FFT of an N x N grid stored column by column (w[i + n*j]): rows, then columns.
+fn fft2(w: &mut [Complex<f64>], n: usize, planner: &mut FftPlanner<f64>, inverse: bool) {
+    let fft = if inverse { planner.plan_fft_inverse(n) } else { planner.plan_fft_forward(n) };
+    for col in w.chunks_mut(n) { fft.process(col); } // along i, for each j
+    let mut tmp = vec![Complex::new(0.0, 0.0); n];
+    for i in 0..n { // along j, for each i
+        for j in 0..n { tmp[j] = w[i + n * j]; }
+        fft.process(&mut tmp);
+        for j in 0..n { w[i + n * j] = tmp[j]; }
+    }
+}
+
+/// Schnakenberg on an N x N periodic grid of side 80: IMEX Euler, the implicit
+/// five-point diffusion solved by FFT. Returns u (column by column).
+fn schnak(n: usize, dt: f64, tend: f64, d: f64) -> Vec<f64> {
+    let (a, b, lbox) = (0.1, 0.9, 80.0);
+    let dx = lbox / n as f64;
+    let s: Vec<f64> = (0..n)
+        .map(|i| 4.0 / (dx * dx) * (std::f64::consts::PI * i as f64 / n as f64).sin().powi(2))
+        .collect();
+    let kap: Vec<f64> = (0..n * n).map(|idx| s[idx % n] + s[idx / n]).collect();
+    let z = lcg(2 * n * n, 1);
+    let mut u: Vec<f64> = (0..n * n).map(|i| 1.0 + 0.02 * (z[i] - 0.5)).collect();
+    let mut v: Vec<f64> = (0..n * n).map(|i| 0.9 + 0.02 * (z[n * n + i] - 0.5)).collect();
+    let mut planner = FftPlanner::new();
+    let mut solve_diff = |w: &[f64], dw: f64| -> Vec<f64> {
+        let mut c: Vec<Complex<f64>> = w.iter().map(|&x| Complex::new(x, 0.0)).collect();
+        fft2(&mut c, n, &mut planner, false);
+        for (ci, k) in c.iter_mut().zip(&kap) { *ci /= 1.0 + dt * dw * k; }
+        fft2(&mut c, n, &mut planner, true);
+        c.iter().map(|x| x.re / (n * n) as f64).collect()
+    };
+    for _ in 0..(tend / dt).round() as usize {
+        let mut ru = vec![0.0; n * n];
+        let mut rv = vec![0.0; n * n];
+        for i in 0..n * n {
+            let uuv = u[i] * u[i] * v[i];
+            ru[i] = u[i] + dt * (a - u[i] + uuv); // reaction: explicit
+            rv[i] = v[i] + dt * (b - uuv);
+        }
+        u = solve_diff(&ru, 1.0); // diffusion: implicit
+        v = solve_diff(&rv, d);
+    }
+    u
+}
+
+/// Number of local maxima (8 neighbours, periodic) above the mean.
+fn spots(u: &[f64], n: usize) -> usize {
+    let mean = u.iter().sum::<f64>() / (n * n) as f64;
+    let mut count = 0;
+    for j in 0..n {
+        for i in 0..n {
+            let c = u[i + n * j];
+            let mut ismax = c > mean;
+            for di in [n - 1, 0, 1] {
+                for dj in [n - 1, 0, 1] {
+                    if di == 0 && dj == 0 { continue; }
+                    if !(c > u[(i + di) % n + n * ((j + dj) % n)]) { ismax = false; }
+                }
+            }
+            if ismax { count += 1; }
+        }
+    }
+    count
+}
+
+fn main() {
+    let t0 = std::time::Instant::now();
+    let n = 80;
+    let u = schnak(n, 0.1, 200.0, 20.0);
+    println!("{:.2} s", t0.elapsed().as_secs_f64());
+    let (umin, umax) = u.iter().fold((f64::MAX, f64::MIN), |m, &x| (m.0.min(x), m.1.max(x)));
+    let mean = u.iter().sum::<f64>() / (n * n) as f64;
+    println!("spots {}, u from {:.6} to {:.6}, mean {:.6}", spots(&u, n), umin, umax, mean);
+}
+
+// Output:
+// 0.66 s
+// spots 47, u from 0.201175 to 3.060050, mean 1.000009
+```
+
+:::
+
+47 spots; with a box of side 80 that is a spacing of about 12, close to the linear prediction 12.9 (the final spacing is selected by the nonlinear dynamics, so it need not be equal). R takes about 2 s, numpy about 2 s, Rust in release mode well under 1 s. All three give the same pattern to 6 digits, because they start from the same `lcg` numbers.
+
+**C8.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses lcg, schnak, spots from C7
+for (N in c(40, 80, 160)) {                        # (a) grid: dx = 2, 1, 0.5
+  u <- schnak(N, 0.1, 200); cat(sprintf("dx = %.1f, dt = 0.1:  %d spots, max u %.3f\n", 80 / N, spots(u), max(u)))
+}
+# dx = 2.0, dt = 0.1:  63 spots, max u 3.117
+# dx = 1.0, dt = 0.1:  47 spots, max u 3.060
+# dx = 0.5, dt = 0.1:  46 spots, max u 3.064
+for (dt in c(0.4, 0.2, 0.05)) {                    # (b) time step
+  u <- schnak(80, dt, 200); cat(sprintf("dx = 1.0, dt = %.2f: %d spots, max u %.3f\n", dt, spots(u), max(u)))
+}
+# dx = 1.0, dt = 0.40: 48 spots, max u 3.060
+# dx = 1.0, dt = 0.20: 48 spots, max u 3.048
+# dx = 1.0, dt = 0.05: 47 spots, max u 3.054
+for (dt in c(0.1, 0.4)) {                          # (c) d = 5: no Turing instability
+  u <- schnak(80, dt, 150, d = 5); cat(sprintf("d = 5, dt = %.1f: u from %.4f to %.4f\n", dt, min(u), max(u)))
+}
+# d = 5, dt = 0.1: u from 1.0000 to 1.0000
+# d = 5, dt = 0.4: u from 1.0017 to 1.4318
+J <- matrix(c(0.8, -1.8, 1, -1), 2)                # reaction Jacobian at (1, 0.9)
+for (dt in c(0.1, 0.2, 0.4))                       # Euler factor of the q = 0 mode
+  cat(sprintf("dt = %.1f: |eigenvalues of I + dt J| = %.5f\n", dt, max(Mod(eigen(diag(2) + dt * J)$values))))
+# dt = 0.1: |eigenvalues of I + dt J| = 0.99499
+# dt = 0.2: |eigenvalues of I + dt J| = 1.00000
+# dt = 0.4: |eigenvalues of I + dt J| = 1.03923
+```
+
+### Python
+
+```python
+import numpy as np
+# uses lcg, schnak, spots from C7
+
+for N in [40, 80, 160]:                            # (a) grid: dx = 2, 1, 0.5
+    u = schnak(N, 0.1, 200); print(f"dx = {80 / N:.1f}, dt = 0.1:  {spots(u)} spots, max u {u.max():.3f}")
+# dx = 2.0, dt = 0.1:  63 spots, max u 3.117
+# dx = 1.0, dt = 0.1:  47 spots, max u 3.060
+# dx = 0.5, dt = 0.1:  46 spots, max u 3.064
+for dt in [0.4, 0.2, 0.05]:                        # (b) time step
+    u = schnak(80, dt, 200); print(f"dx = 1.0, dt = {dt:.2f}: {spots(u)} spots, max u {u.max():.3f}")
+# dx = 1.0, dt = 0.40: 48 spots, max u 3.060
+# dx = 1.0, dt = 0.20: 48 spots, max u 3.048
+# dx = 1.0, dt = 0.05: 47 spots, max u 3.054
+for dt in [0.1, 0.4]:                              # (c) d = 5: no Turing instability
+    u = schnak(80, dt, 150, d=5.0); print(f"d = 5, dt = {dt:.1f}: u from {u.min():.4f} to {u.max():.4f}")
+# d = 5, dt = 0.1: u from 1.0000 to 1.0000
+# d = 5, dt = 0.4: u from 1.0017 to 1.4318
+J = np.array([[0.8, 1.0], [-1.8, -1.0]])           # reaction Jacobian at (1, 0.9)
+for dt in [0.1, 0.2, 0.4]:                         # Euler factor of the q = 0 mode
+    print(f"dt = {dt:.1f}: |eigenvalues of I + dt J| = {np.abs(np.linalg.eigvals(np.eye(2) + dt * J)).max():.5f}")
+# dt = 0.1: |eigenvalues of I + dt J| = 0.99499
+# dt = 0.2: |eigenvalues of I + dt J| = 1.00000
+# dt = 0.4: |eigenvalues of I + dt J| = 1.03923
+```
+
+### Rust
+
+```rust
+// rust/examples/reaction_diffusion_c8.rs  —  cargo run --release --example reaction_diffusion_c8
+// C8: is the pattern real? Refine the grid and the time step; a case
+// without Turing instability (d = 5); the Euler factor of the q = 0 mode.
+use rustfft::{num_complex::Complex, FftPlanner};
+
+/// Park-Miller generator, the same numbers as in R and Python.
+fn lcg(n: usize, seed: u64) -> Vec<f64> {
+    let mut s = seed;
+    (0..n).map(|_| { s = (16807 * s) % 2147483647; s as f64 / 2147483647.0 }).collect()
+}
+
+/// 2D FFT of an N x N grid stored column by column (w[i + n*j]): rows, then columns.
+fn fft2(w: &mut [Complex<f64>], n: usize, planner: &mut FftPlanner<f64>, inverse: bool) {
+    let fft = if inverse { planner.plan_fft_inverse(n) } else { planner.plan_fft_forward(n) };
+    for col in w.chunks_mut(n) { fft.process(col); } // along i, for each j
+    let mut tmp = vec![Complex::new(0.0, 0.0); n];
+    for i in 0..n { // along j, for each i
+        for j in 0..n { tmp[j] = w[i + n * j]; }
+        fft.process(&mut tmp);
+        for j in 0..n { w[i + n * j] = tmp[j]; }
+    }
+}
+
+/// Schnakenberg on an N x N periodic grid of side 80: IMEX Euler, the implicit
+/// five-point diffusion solved by FFT. Returns u (column by column).
+fn schnak(n: usize, dt: f64, tend: f64, d: f64) -> Vec<f64> {
+    let (a, b, lbox) = (0.1, 0.9, 80.0);
+    let dx = lbox / n as f64;
+    let s: Vec<f64> = (0..n)
+        .map(|i| 4.0 / (dx * dx) * (std::f64::consts::PI * i as f64 / n as f64).sin().powi(2))
+        .collect();
+    let kap: Vec<f64> = (0..n * n).map(|idx| s[idx % n] + s[idx / n]).collect();
+    let z = lcg(2 * n * n, 1);
+    let mut u: Vec<f64> = (0..n * n).map(|i| 1.0 + 0.02 * (z[i] - 0.5)).collect();
+    let mut v: Vec<f64> = (0..n * n).map(|i| 0.9 + 0.02 * (z[n * n + i] - 0.5)).collect();
+    let mut planner = FftPlanner::new();
+    let mut solve_diff = |w: &[f64], dw: f64| -> Vec<f64> {
+        let mut c: Vec<Complex<f64>> = w.iter().map(|&x| Complex::new(x, 0.0)).collect();
+        fft2(&mut c, n, &mut planner, false);
+        for (ci, k) in c.iter_mut().zip(&kap) { *ci /= 1.0 + dt * dw * k; }
+        fft2(&mut c, n, &mut planner, true);
+        c.iter().map(|x| x.re / (n * n) as f64).collect()
+    };
+    for _ in 0..(tend / dt).round() as usize {
+        let mut ru = vec![0.0; n * n];
+        let mut rv = vec![0.0; n * n];
+        for i in 0..n * n {
+            let uuv = u[i] * u[i] * v[i];
+            ru[i] = u[i] + dt * (a - u[i] + uuv); // reaction: explicit
+            rv[i] = v[i] + dt * (b - uuv);
+        }
+        u = solve_diff(&ru, 1.0); // diffusion: implicit
+        v = solve_diff(&rv, d);
+    }
+    u
+}
+
+/// Number of local maxima (8 neighbours, periodic) above the mean.
+fn spots(u: &[f64], n: usize) -> usize {
+    let mean = u.iter().sum::<f64>() / (n * n) as f64;
+    let mut count = 0;
+    for j in 0..n {
+        for i in 0..n {
+            let c = u[i + n * j];
+            let mut ismax = c > mean;
+            for di in [n - 1, 0, 1] {
+                for dj in [n - 1, 0, 1] {
+                    if di == 0 && dj == 0 { continue; }
+                    if !(c > u[(i + di) % n + n * ((j + dj) % n)]) { ismax = false; }
+                }
+            }
+            if ismax { count += 1; }
+        }
+    }
+    count
+}
+
+fn main() {
+    for n in [40, 80, 160] { // (a) grid: dx = 2, 1, 0.5
+        let u = schnak(n, 0.1, 200.0, 20.0);
+        let umax = u.iter().cloned().fold(f64::MIN, f64::max);
+        println!("dx = {:.1}, dt = 0.1:  {} spots, max u {:.3}", 80.0 / n as f64, spots(&u, n), umax);
+    }
+    for dt in [0.4, 0.2, 0.05] { // (b) time step
+        let u = schnak(80, dt, 200.0, 20.0);
+        let umax = u.iter().cloned().fold(f64::MIN, f64::max);
+        println!("dx = 1.0, dt = {:.2}: {} spots, max u {:.3}", dt, spots(&u, 80), umax);
+    }
+    for dt in [0.1, 0.4] { // (c) d = 5: no Turing instability
+        let u = schnak(80, dt, 150.0, 5.0);
+        let (umin, umax) = u.iter().fold((f64::MAX, f64::MIN), |m, &x| (m.0.min(x), m.1.max(x)));
+        println!("d = 5, dt = {:.1}: u from {:.4} to {:.4}", dt, umin, umax);
+    }
+    // reaction Jacobian at (1, 0.9): trace -0.2, det 1; I + dt J has
+    // eigenvalues 1 + dt * lambda with lambda = -0.1 +- i sqrt(0.99)
+    for dt in [0.1_f64, 0.2, 0.4] {
+        let m = ((1.0 - 0.1 * dt).powi(2) + 0.99 * dt * dt).sqrt();
+        println!("dt = {:.1}: |eigenvalues of I + dt J| = {:.5}", dt, m);
+    }
+}
+
+// Output:
+// dx = 2.0, dt = 0.1:  63 spots, max u 3.117
+// dx = 1.0, dt = 0.1:  47 spots, max u 3.060
+// dx = 0.5, dt = 0.1:  46 spots, max u 3.064
+// dx = 1.0, dt = 0.40: 48 spots, max u 3.060
+// dx = 1.0, dt = 0.20: 48 spots, max u 3.048
+// dx = 1.0, dt = 0.05: 47 spots, max u 3.054
+// d = 5, dt = 0.1: u from 1.0000 to 1.0000
+// d = 5, dt = 0.4: u from 1.0017 to 1.4318
+// dt = 0.1: |eigenvalues of I + dt J| = 0.99499
+// dt = 0.2: |eigenvalues of I + dt J| = 1.00000
+// dt = 0.4: |eigenvalues of I + dt J| = 1.03923
+```
+
+:::
+
+(a) $\Delta x = 1$ and $0.5$ agree (47 and 46 spots: the noise is laid out differently on a different grid, so the exact count wanders by one). $\Delta x = 2$ gives 63 spots: about 6 points per wavelength is too coarse (B6(b)). (b) The time step hardly matters for $d = 20$ between 0.05 and 0.4. (c) With $d = 5$ there is no Turing instability, and $\Delta t = 0.1$ correctly stays uniform. $\Delta t = 0.4$ makes $|1 + \Delta t\lambda| = 1.039 > 1$: Euler on the reaction amplifies the long waves (which implicit diffusion hardly damps) by 4 % per step, and a large, oscillating "pattern" appears. A pattern that exists only for some $\Delta t$, or whose spacing follows $\Delta x$, is a numerical artefact.
+:::
+
+## Where this leads
+
+- This is the last core unit. *Beyond rectangles: finite elements and flow* (Part 11, optional) shows how real tissue and chip geometries are meshed, and *Iterative linear solvers in depth* (Part 11, optional) how the implicit step is done when the grid is too large for a direct or FFT solve.
+- Fitting a reaction–diffusion model to real gradient data uses the tools of *Nonlinear least squares and ODE fitting* and *Identifiability and uncertainty of fitted parameters* (Part 9): with only a steady profile, $D$ and $k$ appear only as the ratio $\lambda^2 = D/k$ and are not separately identifiable; a time course or an FCS measurement of $D$ breaks the tie.
+- We used IMEX Euler (order 1). Production codes use higher-order IMEX schemes, Strang splitting with a stiff ODE solver for the reaction, or adaptive method-of-lines solvers (*Implicit schemes and the method of lines*).

@@ -156,20 +156,20 @@ export function sseKaKe(ts: number[], ys: number[], ka: number, ke: number): num
   return s;
 }
 
-/** Profile of ka: min over (ke, V) of the SSE with ka fixed. A coarse scan of ke (V in
- *  closed form) picks the start, then LM on (log ke, log V). */
+/** Profile of ka: min over (ke, V) of the SSE with ka fixed. V is eliminated in closed
+ *  form (sseKaKe); a coarse scan of log ke picks the well (and so finds the flip-flop
+ *  branch when ka < ke), then golden-section search refines ke inside it. */
 export function profileKa(ts: number[], ys: number[], ka: number): number {
-  let best = Infinity, lkeBest = Math.log(0.2);
-  for (let i = 0; i <= 50; i++) {
-    const lke = Math.log(0.005) + i * (Math.log(20) - Math.log(0.005)) / 50;
-    const v = sseKaKe(ts, ys, ka, Math.exp(lke));
-    if (v < best) { best = v; lkeBest = lke; }
+  const L0 = Math.log(0.005), L1 = Math.log(20), N = 40, h = (L1 - L0) / N;
+  const f = (lke: number) => sseKaKe(ts, ys, ka, Math.exp(lke));
+  let best = Infinity, iBest = 0;
+  for (let i = 0; i <= N; i++) { const v = f(L0 + i * h); if (v < best) { best = v; iBest = i; } }
+  let a = L0 + Math.max(0, iBest - 1) * h, b = L0 + Math.min(N, iBest + 1) * h;
+  const g = (Math.sqrt(5) - 1) / 2;
+  let x1 = b - g * (b - a), x2 = a + g * (b - a), f1 = f(x1), f2 = f(x2);
+  for (let it = 0; it < 32; it++) {
+    if (f1 < f2) { b = x2; x2 = x1; f2 = f1; x1 = b - g * (b - a); f1 = f(x1); }
+    else { a = x1; x1 = x2; f1 = f2; x2 = a + g * (b - a); f2 = f(x2); }
   }
-  // V for the start: closed form at the best ke
-  const g = ts.map(t => shape(t, ka, Math.exp(lkeBest)));
-  const a = g.reduce((s, v, i) => s + v * ys[i], 0) / Math.max(1e-300, g.reduce((s, v) => s + v * v, 0));
-  const lV0 = a > 0 ? Math.log(DOSE / a) : Math.log(20);
-  const model = (q: number[]) => ts.map(t => pk(t, ka, Math.exp(q[0]), Math.exp(q[1])));
-  const f = lm(model, ys, [lkeBest, lV0], 40);
-  return Math.min(f.S, best);
+  return Math.min(best, f1, f2);
 }

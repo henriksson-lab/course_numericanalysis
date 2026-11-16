@@ -34,7 +34,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 29 | identifiability | done | running | |
 | 30 | constrained-lp | done | done | done |
 | 31 | diffusion-explicit | done | running | |
-| 32 | diffusion-implicit | running | | |
+| 32 | diffusion-implicit | done | running | |
 | 33 | steady-state-2d | done | running | |
 | 34 | advection-diffusion | running | | |
 | 35 | reaction-diffusion | running | | |
@@ -72,3 +72,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - identifiability: pk(t, ka, ke, V, D=100) vs NLS unit's bateman() naming — reconcile in pass 2. From memory: Raue 2009, Gutenkunst 2007, DAISY, StructuralIdentifiability.jl. Slides not screenshotted.
 - constrained-lp demo: edge rate at optimum −2/−1 per freed variable vs lecture slide '−3 per unit x₂' — same edge, different unit; consider aligning slide wording.
 - steady-state-2d: [B1] 'mechanics not nutrients' claim from contentplan, not read — verify. Grid conventions: x_i = i h, µm/s/µM, ghost points, k = i + (j−1)nx — reconcile with diffusion-implicit in pass 2.
+- diffusion-implicit: R/Python solution tabs rely on Background-defined helpers (thomas, be_step, cn_step, exact) — decide self-contained convention in audit. h = 10 W/(m²K) from memory. Read [M2], [H1] full text (agent fetched before no-network rule); [M1], [H2] headline only. Embryo 1D model is our own.

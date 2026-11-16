@@ -187,6 +187,46 @@ fn main() {
 (b) Integrate $g(\lambda) = e^{\ell(\lambda) - \ell(\hat\lambda)}$ instead. Report $Z_g$, $\log Z = \ell(\hat\lambda) + \log Z_g$, and the posterior mean $\int \lambda\,g(\lambda)\,d\lambda / Z_g$.
 (c) With 10 000 cells (every count multiplied by 100: $\ell$ times 100, same $\hat\lambda$, standard error 10 times smaller), integrate the scaled $g$ over $(0, b)$ for $b = 10, 100, \infty$, and over $\hat\lambda \pm 10$ standard errors. Which answers can you trust?
 
+## Explore {#explore}
+
+The demo below runs the rules of this exercise in your browser. Tab **(a) Rules and order** draws an integrand with the panels of the chosen rule (for Gauss–Legendre, each bar is as wide as its weight) and plots $|\text{error}|$ against $n$ for all five rules on log–log axes, with dashed reference lines of slope $-2$ and $-4$; the readout gives the estimate, the error, and the order measured from $n$ to $2n$, $\log_2\big(\text{err}(n)/\text{err}(2n)\big)$. The integrands are the lecture's PK model on $[0, 6]$ h (exact AUC 32.624), a chromatography peak with $\sigma = 3$ s, a one-hour constant-rate infusion (500 mg, $V = 50$ L, $k_e = 0.2$/h) whose concentration has a kink at 1 h, $\sqrt{x}$, and the 10 blood samples of the Background. Tab **(b) Adaptive quadrature** runs the adaptive Simpson routine of C4 (tolerance $10^{-6}$) or a 21-point Gauss–Kronrod routine that follows QUADPACK, the library behind `integrate` and `quad` (R's default tolerances; it reproduces R's output for `dnorm` digit for digit). Ticks under the axis are the evaluation points, bars are the pieces; **start over** and **step** show the subdivision one step at a time, **run** animates it.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="quadlab" data-fn="pk" data-rule="trap" data-n="4" data-afn="pk" data-method="simpson"></div>
+<script src="../demos/dist/quadlab.js"></script>
+```
+
+**E1. (orders on the PK curve)** With the PK curve and the **trapezoid** rule, set $n = 4, 8, 16, 32$ and note the error and the measured order. Repeat with **Simpson**. Then click **Gauss–Legendre** and try $n = 4$ and $8$. Compare with B3 and C1. How many function values does each rule need for an error below $10^{-6}$?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Trapezoid: errors 2.7, 0.72, 0.18, 0.046, measured orders 1.91, 1.98, 1.99, 2.00: order 2, as in B3. Simpson: 0.66, 0.059, 0.0041, 0.00026, orders 3.49, 3.85, 3.96, 3.99: order 4, reached only once $h$ is small compared with the absorption phase. On the log–log plot the trapezoid points follow the slope-$-2$ line, the Simpson points the slope-$-4$ line. Gauss–Legendre: $n = 4$ gives $0.030$, $n = 8$ gives $3.2\times10^{-8}$, and from $n = 16$ on the error sits at the rounding level ($7\times10^{-15}$): no straight line, the error falls faster than any power of $n$. For $10^{-6}$: trapezoid about $2\,900$ intervals (extrapolating $0.046\cdot(32/n)^2$; off the plot), Simpson $n = 128$ (129 values, error $1.0\times10^{-6}$), Gauss 8 values.
+:::
+
+**E2. (smoothness and order)** Choose the **infusion** integrand and **Simpson**. Read the measured order at $n = 16, 32, 64$, and look at how the parabolas cross the kink at $n = 16$. Then set $n = 12$ and $n = 24$. Check **Gauss–Legendre** at $n = 8, 16, 32, 64$, and Simpson on $\sqrt{x}$. Finally pick the **peak** and compare the trapezoid rule with Simpson at $n = 16$ and $n = 20$ ($h = 3.75$ s and $3$ s).
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Infusion, Simpson: orders 3.06, 2.97, 3.01 (errors $2.7\times10^{-3}$, $3.2\times10^{-4}$, $4.1\times10^{-5}$): the kink lowers the order from 4 to 3, because the parabola across the kink cannot bend sharply and its error dominates. At $n = 12$ and $24$ a grid point sits on the kink ($h = 0.5$ and $0.25$ h; the readout says so): errors $9.3\times10^{-6}$ and $5.8\times10^{-7}$, order 4.00 again, 300 times smaller than with $n = 16$. Putting a point at the kink (splitting there) restores the order. Gauss–Legendre: $0.28$, $0.046$, $0.028$, $0.0049$, erratic and slow, no better than the trapezoid. On $\sqrt{x}$ Simpson measures 1.50, as in C2. The peak goes the other way: the trapezoid errors are $4.9\times10^{-2}$ and $4.0\times10^{-5}$ (relative $5\times10^{-9}$, as in the lecture), Simpson's $2.1\times10^2$ and $36$. Simpson is $(4T(h/2) - T(h))/3$ and so carries the error of the coarse $T(h)$; for a peak that starts and ends at the baseline the trapezoid error is not $C h^2$ but falls faster than any power of $h$, so the extrapolation that assumes $C h^2$ makes it worse.
+:::
+
+**E3. (AUC from the 10 samples)** Click **PK: 10 samples**. Compare the **linear trapezoid** and **linear-up / log-down** on the left panel, also with **log scale** on, and read the per-interval errors in panel (b). Which interval causes the 4 % bias? Where are the remaining errors of the log-down rule? Finally read $\lambda_z$, the extrapolated tail and $\mathrm{AUC}_{0-\infty}$ for each rule, and compare with the model value 50.
+
+::: {.callout-note collapse="true" title="Answer E3"}
+Linear: 51.6175 (+4.2 %), log-down: 48.91575 (−1.2 %), true 49.52521. The 12–24 h interval alone contributes $+2.08$ of the linear rule's $+2.09$ total: a straight line over a 12 h gap on an exponential decline. On the log scale the elimination phase is a straight line, and the log-down segments follow it; the bar for 12–24 h drops to $-0.07$. The log-down rule's remaining errors are in the first three intervals ($-0.18$, $-0.09$, $-0.21$ mg·h/L), where the curve rises and is concave and both rules use straight lines: more early samples would help, not another rule. $\lambda_z = 0.2037$/h, tail $C_\text{last}/\lambda_z = 0.442$ (under 1 % of the total), $\mathrm{AUC}_{0-\infty} = 52.06$ (linear) and $49.36$ (log-down) against $\text{Dose}/(V k_e) = 50$.
+:::
+
+**E4. (watching adaptive quadrature)** Open tab **(b)**. With the PK model and **adaptive Simpson**, click **start over**, then **step** a few times, then **run**. Where do the pieces end up? Read the final evaluations and the error. Now choose the **chromatogram peak** (at 340 s, $\sigma = 3$ s). What does adaptive Simpson return, after how many evaluations? Move the peak to 300 s; then back to 340 s with **initial pieces** 60. Finally try **Gauss–Kronrod 21** on the peak at 340 s.
+
+::: {.callout-note collapse="true" title="Answer E4"}
+The first step compares one Simpson panel on $[0, 24]$ (estimate 17.1) with two, disagrees and splits; the pieces then shrink near the absorption peak (widths down to 0.047 h) and stay wide in the tail (up to 1.5 h): 269 evaluations, 67 pieces, error $9.0\times10^{-10}$, as in fig05 and C4. On the chromatogram adaptive Simpson stops after **5 evaluations** with $2\times10^{-34}$ and an error estimate of $5\times10^{-35}$, while the true area is 7519.885: the points 0, 150, 300, 450, 600 s all see baseline, the two Simpson estimates agree, and the piece is accepted. The demo flags it as a silent failure. With the peak at 300 s the middle point hits it and the routine refines (2689 evaluations, exact to 9 digits). Sixty initial pieces of 10 s fix it at 340 s (2905 evaluations), as in C4(c). Gauss–Kronrod finds the peak at 340 s with 273 evaluations, because one of its 21 points lies at 344.7 s, within 2σ.
+:::
+
+**E5. (why `integrate(dnorm, 0, 20000)` is 0)** Choose **dnorm on [0, L]** with **Gauss–Kronrod 21**. Click the presets $L = 2000, 2300, 4300, 4400, 5000, 20000$ and record the first-pass result, the final estimate, the error estimate and the number of evaluations. Compare with B5 and C5. Then, at $L = 20000$, tick **split at x = 10**; and switch to **adaptive Simpson** without the split. Why does adaptive Simpson succeed here but fail on the chromatogram?
+
+::: {.callout-note collapse="true" title="Answer E5"}
+At $L = 20000$ the 21 points start at 43.4, all values are exactly 0, the error estimate is 0 and the routine stops at once: **0 with error estimate 0**, as in R. At 5000 the first pass gives $3\times10^{-25}$; QUADPACK distrusts a first-pass estimate that is as large as the variation of the integrand itself and bisects once, but the left half $[0, 2500]$ is missed too: $2.3\times10^{-6} \pm 4.6\times10^{-6}$ after 63 evaluations, R's output for C5. At 4400: $5.7\times10^{-5} \pm 1.1\times10^{-4}$ (the half $[0, 2200]$ just misses). At 4300 the half $[0, 2150]$ has a point at 4.7, the routine sees the peak and returns 0.5 after 399 evaluations. At 2000 and 2300 the first pass is already non-zero ($3.7\times10^{-4}$ and $2.1\times10^{-5}$) and the answer is 0.5 (357 evaluations). So B5's rule of thumb (closest point within $5\sigma$, $L \lesssim 2300$) predicts the first pass; the one bisection that QUADPACK does on a "saturated" estimate stretches the working range to about 4300. Splitting at 10 gives 0.5 with 42 evaluations. Adaptive Simpson returns 0.5 for every $L$ (509 evaluations at 20000), because its first three points include the endpoint 0, where the peak is. On the chromatogram the peak sits between its first points. Every rule misses something; plot the integrand and give the routine the scale.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint B1–B4 — the rules by hand"}
