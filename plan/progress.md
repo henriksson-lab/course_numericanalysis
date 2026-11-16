@@ -21,7 +21,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 16 | splines | done | done | done |
 | 17 | fourier-fft | done | done | done |
 | 18 | finite-differences | done | done | done |
-| 19 | quadrature | running | | |
+| 19 | quadrature | done | running | |
 | 20 | monte-carlo | done | done | done |
 | 21 | euler | done | done | done |
 | 22 | runge-kutta | done | done | done |
@@ -67,3 +67,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - gillespie: gene params differ from euler's (10/min, 0.2/min) — noted in slide notes; reconcile wording in pass 2. Adds SIR early-extinction (2 slides). Only 2 slides screenshotted.
 - stiffness: deSolve ode45 quirks on Robertson stated on slides; wall times machine-specific. Stray Chrome profile dir at /big/henriksson/temp/claude-tmp/claude-1001/chr1 (outside scratchpad) — clean up when user present.
 - nonlinear-least-squares: install minpack.lm. fig06 zigzag is real (FD step vs ODE tol).
+- quadrature: from memory — bioequivalence 80–125 %, regulators accept sampled AUC, WinNonlin/PKNCA rules. Romberg recap assumes Richardson (4D(h/2)−D(h))/3 form — check vs finite-differences in pass 2.
