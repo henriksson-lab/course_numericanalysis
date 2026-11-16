@@ -148,7 +148,7 @@ Biology pairing in *italics*. Slugs are the planned folder names.
     algorithm in outline, symmetric vs nonsymmetric, sensitivity of
     eigenvalues; Krylov/Lanczos methods for a few eigenpairs of a large sparse
     matrix (`irlba`, `scipy.sparse.linalg.eigsh`).
-    *PCA of a 100 000-cell single-cell dataset without forming the covariance
+    *PCA of a 20 000-cell single-cell dataset without forming the covariance
     matrix.*
 
 ### Part 6 — Interpolation and approximation

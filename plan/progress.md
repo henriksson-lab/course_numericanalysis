@@ -39,7 +39,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 34 | advection-diffusion | done | done | done |
 | 35 | reaction-diffusion | done | running | |
 | 36 | fem-outlook | done | (no demo: further reading) | done |
-| 37 | iterative-solvers | running | (no demo) | |
+| 37 | iterative-solvers | done | (no demo) | done |
 
 ## Audit notes (pass 3)
 
@@ -57,7 +57,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - monte-carlo: from memory — RANDU history, R 3.6 sample() change, ChaCha12 as StdRng, Bellman 'curse of dimensionality', bedtools shuffle / GAT / regioneR. Slides 13–18 figures not seen in browser.
 - polynomial-interpolation: figure slides not screenshotted (Chrome hung) — check overflow.
 - euler: slides not screenshotted; densest 'Why global error is O(h)', 'Euler by hand'. SIR = N 10000, β .3, γ .1, (9990,10,0), 160 d; runge-kutta told to match.
-- eigen-algorithms: install irlba, RSpectra. Timings typed into fig script (single run, 1 thread). Matrix 20 000 cells (contentplan says 100 000) — align plan text.
+- eigen-algorithms: install irlba, RSpectra. Timings typed into fig script (single run, 1 thread). Matrix 20 000 cells (contentplan updated).
 - phase-plane: oscillator = Sel'kov (no repressilator xref existed); runge-kutta may define repressilator — reconcile in pass 2 (fine to have both). Slides not screenshotted; densest separatrix slide, 'Failure: Re λ ≈ 0'. Install: rootSolve.
 - runge-kutta: Python C2/C3/C5/C6 tabs import C1/C4 functions from local files (not self-contained) — make self-contained in audit. Repressilator params α=216, α0=0.216, β=5, n=2 unverified vs Elowitz & Leibler. ode_solvers Dopri5 dense-output end-point bug noted.
 - fourier-fft: from memory — 4.8-h ultradian example, p53 ~5.5 h, Hes1 ~2 h periods, 'sample every 2 h' guideline. R fft prime-length slowness claim measured here.
@@ -82,3 +82,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - advection-diffusion: deck now 29 slides. Mixing length: demo 3.1 mm (Poiseuille, 1 % criterion) vs lecture note '4–5 mm'/4.2 mm plug flow — align wording. E4 uses central-explicit stability C ≤ 2/P (not stated in unit).
 - reaction-diffusion: time in minutes vs seconds in diffusion-explicit — reconcile. 2D uses periodic FFT diffusion, not Kronecker Laplacian. From memory: Bicoid λ≈100 µm, D FRAP 0.3 / FCS 7 µm²/s; Fgf8 D≈50, λ≈200 µm; Gregor 2007, Abu-Arish 2010, Berezhkovskii 2010 (notes only). Slides not screenshotted.
 - Overflow probe (first run, docs as of pass 1): stiffness slide 9 "Try it: the fast eigenvalue sets the step" overflows (741/720 px). 16 decks gave no result (Chrome timeouts under load) — rerun serially in audit: advection-diffusion, convergence-cost, diffusion-explicit, diffusion-implicit, fem-outlook, floating-point, gradient-methods, identifiability, intro, iterative-solvers, least-squares-qr, lu, newton-systems, optimisation-1d, quadrature, reaction-diffusion, runge-kutta.
+- iterative-solvers: built its own oxygen-in-gel chamber (Φ = 12) because steady-state-2d didn't exist yet — align with steady-state-2d in pass 2 or state difference.
