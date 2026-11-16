@@ -30,7 +30,7 @@ So far in Part 10 molecules only **moved**. In an embryo they are also **made** 
 - Biology: the **Bicoid** gradient and the temperature-step experiment [M1]; embryo trap arrays [M3]; **Fgf8** in zebrafish [M4].
 
 ::: notes
-The last core unit of the course, and the one that uses the most earlier material: the tridiagonal Thomas solver (Part 3), stiffness and implicit steps (Part 8), eigenvalues and the phase plane (Parts 5 and 8), the FFT (Part 6). Time units in this lecture are minutes, to match the morphogen in a row of cells from Structure: symmetric, banded, sparse; lengths are µm. All data are synthetic: the model plus noise. Literature values are quoted as approximate orders of magnitude; check them against the papers before using them.
+The last core unit of the course, and the one that uses the most earlier material: the tridiagonal Thomas solver ([*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd), Part 3), stiffness and implicit steps ([*Stiffness and implicit methods*](../stiffness/lec.qmd), Part 8), eigenvalues and the phase plane ([*Power iteration and friends*](../power-iteration/lec.qmd), Part 5; [*Equilibria, stability and the phase plane*](../phase-plane/lec.qmd), Part 8), the FFT ([*Fourier series and the FFT*](../fourier-fft/lec.qmd), Part 6). Time units in this lecture are minutes, to match the morphogen in a row of cells from Structure: symmetric, banded, sparse; lengths are µm. The earlier Part 10 units worked in seconds; 100 µm²/min is 1.7 µm²/s. All data are synthetic: the model plus noise. Literature values are quoted as approximate orders of magnitude; check them against the papers before using them.
 :::
 
 ## Biology: the Bicoid gradient {.smaller}
@@ -48,14 +48,14 @@ Bicoid is the textbook morphogen. The decay length of about 100 µm (roughly 20 
 
 :::: {.columns}
 ::: {.column width="50%"}
-**Morphogen in a row of cells** (*Structure: symmetric, banded, sparse*):
+**Morphogen in a row of cells** ([*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd)):
 
 - exchange rate 1 per min, decay $k = 0.01$ per min, source in cell 1,
 - a tridiagonal system, solved by `thomas(a, b, c, d)` in $O(n)$,
 - decay length $\sqrt{D/k} = 10$ cells.
 :::
 ::: {.column width="50%"}
-**Diffusion on a grid** (*The diffusion (heat) equation by finite differences*, *Implicit schemes and the method of lines*):
+**Diffusion on a grid** ([*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd), [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd)):
 
 - nodes $x_i = i\,\Delta x$, stencil $(1, -2, 1)/\Delta x^2$, **ghost points** for no flux,
 - FTCS needs $D\,\Delta t/\Delta x^2 \le 1/2$,
@@ -76,12 +76,12 @@ Mass balance per slice, now with production and decay:
 $$\frac{\partial c}{\partial t} = \underbrace{D\,\frac{\partial^2 c}{\partial x^2}}_{\text{diffusion}} \; \underbrace{-\,k\,c}_{\text{decay}}, \qquad 0 < x < L$$
 
 - **Source**: an influx $j$ at the anterior pole, $-D\,\partial c/\partial x = j$ at $x = 0$. **Wall** at the posterior pole: $\partial c/\partial x = 0$ at $x = L$.
-- Numbers: $D = 100$ µm²/min, $k = 0.01$ per min, $L = 500$ µm; $j$ is chosen so that $c(0) \approx 1$.
+- Numbers: $D = 100$ µm²/min, $k = 0.01$ per min, $L = 500$ µm; $j$ is chosen so that $c(0) \approx 1$. Time is in **minutes** here (as in the row of cells), not the seconds of the earlier Part 10 units.
 - Steady state: $D\,c'' = k\,c$. Solutions $e^{\pm x/\lambda}$ with
 $$\lambda = \sqrt{D/k} = \sqrt{100/0.01} = 100 \ \text{µm}.$$
 
 ::: notes
-The reaction term is local: it involves only c at the same point. Diffusion couples neighbours; reaction does not. That difference is what IMEX and splitting exploit later. Exact steady state with these boundary conditions: c(x) = (j lambda / D) cosh((L - x)/lambda) / sinh(L/lambda). With j = D/lambda = 1 µm/min (in units of concentration) this gives c(0) = coth(5) = 1.0001. In the infinite embryo it is simply e^{-x/lambda}. Students who did the exercise in Structure: symmetric, banded, sparse saw the discrete version: c[11]/c[1] = 0.368, one decay length.
+The reaction term is local: it involves only c at the same point. Diffusion couples neighbours; reaction does not. That difference is what IMEX and splitting exploit later. Exact steady state with these boundary conditions: c(x) = (j lambda / D) cosh((L - x)/lambda) / sinh(L/lambda). With j = D/lambda = 1 µm/min (in units of concentration) this gives c(0) = coth(5) = 1.0001. In the infinite embryo it is simply e^{-x/lambda}. Students who did the exercise in [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd) saw the discrete version: c[11]/c[1] = 0.368, one decay length.
 :::
 
 ## The decay length $\lambda = \sqrt{D/k}$ {.smaller}
@@ -120,7 +120,7 @@ max(abs(cs - exact))
 - Ghost point at $x = 0$: $c_{-1} = c_1 + 2\Delta x\, j/D$ (the slope is $-j/D$). At $x = L$: $c_{N+1} = c_{N-1}$.
 
 ::: notes
-The same three-diagonal layout as in Implicit schemes and the method of lines: lo, di, up are the diagonals of minus D times the second difference, so a steady solve adds k to the diagonal and an implicit step uses 1 + dt times the diagonals. The ghost point at the source end: the central difference (c_1 - c_{-1})/(2 dx) = -j/D gives c_{-1}; substituting into the stencil at node 0 doubles the coupling to c_1 and adds 2 j / dx to the right-hand side. thomas() is the function from Structure: symmetric, banded, sparse, unchanged. The matrix is not symmetric (the 2 in the end rows), but it is diagonally dominant, so Thomas without pivoting is safe.
+The same thomas(a, b, c, d) call as in [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd), with the three diagonals named lo, di, up: they hold minus D times the second difference, so a steady solve adds k to the diagonal and an implicit step uses 1 + dt times the diagonals. The ghost point at the source end: the central difference (c_1 - c_{-1})/(2 dx) = -j/D gives c_{-1}; substituting into the stencil at node 0 doubles the coupling to c_1 and adds 2 j / dx to the right-hand side. thomas() is the function from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd), unchanged. The matrix is not symmetric (the 2 in the end rows), but it is diagonally dominant, so Thomas without pivoting is safe.
 :::
 
 ## Check against the exact solution {.smaller}
@@ -131,7 +131,7 @@ The same three-diagonal layout as in Implicit schemes and the method of lines: l
 - **Failure:** the one-sided boundary $(c_1 - c_0)/\Delta x = -j/D$ is only **first order**, and it breaks the **mass balance**: $k\int c\,dx$ should equal $j$; at $\Delta x = 50$ µm it is $1.32\,j$.
 
 ::: notes
-Two independent checks, as in Structure: symmetric, banded, sparse. The convergence check needs an exact solution, which we have here and rarely have in practice. The mass balance does not: at steady state everything that comes in must be degraded, k times the integral of c (trapezoid rule) equals j. With the ghost point this holds to rounding error on every grid; with the one-sided boundary it is off by 81 % at dx = 100 and 32 % at dx = 50. The lesson generalises: one sloppy first-order boundary row spoils a second-order scheme everywhere. A grid with dx = lambda is far too coarse for a quantitative answer, but it still gives the shape: the decay length sets the resolution needed, as the wavelength will for Turing patterns.
+Two independent checks, as in [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd) (residual and mass balance there). The convergence check needs an exact solution, which we have here and rarely have in practice. The mass balance does not: at steady state everything that comes in must be degraded, k times the integral of c (trapezoid rule) equals j. With the ghost point this holds to rounding error on every grid; with the one-sided boundary it is off by 81 % at dx = 100 and 32 % at dx = 50. The lesson generalises: one sloppy first-order boundary row spoils a second-order scheme everywhere. A grid with dx = lambda is far too coarse for a quantitative answer, but it still gives the shape: the decay length sets the resolution needed, as the wavelength will for Turing patterns.
 :::
 
 ## How fast does the gradient form? {.smaller}
@@ -155,12 +155,12 @@ Euler on the method-of-lines system $\mathbf c' = -K_D\mathbf c - k\,\mathbf c +
 | decay | $k$ | $\Delta t \le 2/k$ | 200 min |
 | fast receptor binding | $\approx 1$ per s | $\Delta t \le 2$ s | |
 
-- Diffusion on a fine grid is **stiff** (*Stiffness and implicit methods*): treat it implicitly. That is a **linear**, tridiagonal solve.
+- Diffusion on a fine grid is **stiff** ([*Stiffness and implicit methods*](../stiffness/lec.qmd)): treat it implicitly. That is a **linear**, tridiagonal solve.
 - Reactions are often **nonlinear** (Hill functions, $u^2v$) but **local**. Fully implicit means a Newton solve with the coupled Jacobian every step.
 - Idea: implicit where it is cheap and needed, explicit where it is not.
 
 ::: notes
-K_D is the positive diffusion matrix (lo, di, up). The table is the stability limit of Euler, h |lambda| <= 2, for each part separately. For the Bicoid model the reaction is slow and linear, so it would be fine to do everything implicitly (backward Euler with k on the diagonal, as in Implicit schemes and the method of lines). The point is the general case: with a nonlinear reaction, backward Euler on the whole system needs Newton for systems of equations at every step, with a Jacobian that couples the diffusion band and the reaction. The receptor-binding row is an order of magnitude only: binding to abundant receptors can be much faster than degradation, and then the reaction is the stiff part.
+K_D is the positive diffusion matrix (lo, di, up). The table is the stability limit of Euler, h |lambda| <= 2, for each part separately. For the Bicoid model the reaction is slow and linear, so it would be fine to do everything implicitly (backward Euler with k on the diagonal, as in [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd)). The point is the general case: with a nonlinear reaction, backward Euler on the whole system needs [*Newton for systems of equations*](../newton-systems/lec.qmd) at every step, with a Jacobian that couples the diffusion band and the reaction. The receptor-binding row is an order of magnitude only: binding to abundant receptors can be much faster than degradation, and then the reaction is the stiff part.
 :::
 
 ## IMEX Euler: diffusion implicit, reaction explicit {.smaller}
@@ -184,7 +184,7 @@ for (dt in c(1, 10, 50))                      # run to t = 5000 min, compare wit
 - One Thomas solve per step, any $f$, no Newton; order 1. The steady state is **exact** for every $\Delta t$ ($\Delta t$ cancels at a fixed point).
 
 ::: notes
-The left-hand matrix is the same as for backward Euler on pure diffusion, so the Thomas call is the one from Implicit schemes and the method of lines. The reaction only enters the right-hand side, evaluated at the old values, so it can be anything: a Hill function, a two-species reaction, a lookup table. In the loop, the IMEX run to t = 5000 min reaches the steady state of the grid to rounding error, with a step of 1, 10 or even 50 minutes. That is a useful property (the long-time answer does not depend on the step), but it also means a large step can hide a wrong transient. IMEX stands for implicit-explicit; higher-order versions (IMEX Runge–Kutta, SBDF2) exist.
+The left-hand matrix is the same as for backward Euler on pure diffusion, so the Thomas call is the one from [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd). The reaction only enters the right-hand side, evaluated at the old values, so it can be anything: a Hill function, a two-species reaction, a lookup table. In the loop, the IMEX run to t = 5000 min reaches the steady state of the grid to rounding error, with a step of 1, 10 or even 50 minutes. That is a useful property (the long-time answer does not depend on the step), but it also means a large step can hide a wrong transient. IMEX stands for implicit-explicit; higher-order versions (IMEX Runge–Kutta, SBDF2) exist.
 :::
 
 ## When IMEX fails {.smaller}
@@ -219,7 +219,7 @@ for (s in 1:nsteps) {                     # both parts done exactly here
 - Each sub-problem gets its best solver: diffusion by a tridiagonal solve (or FFT), the decay **exactly**, a stiff reaction by an ODE solver per grid point.
 
 ::: notes
-kx is the decay rate at each grid point (it varies along the embryo later). diffuse(c, dt) solves the pure diffusion problem with the influx for time dt. To see the splitting error alone, we do it exactly here with the matrix exponential of the 51 x 51 diffusion matrix (Matrix::expm in R, scipy.linalg.expm, nalgebra's exp in the exercise); in practice it is a backward Euler or Crank–Nicolson step with Thomas. The reaction step is a set of independent scalar ODEs, one per grid point; for c' = -k c it is a multiplication by exp(-k dt). Splitting is how many large simulation codes are organised: diffusion, reaction, and in Flow plus diffusion also advection, each by its own method.
+kx is the decay rate at each grid point (it varies along the embryo later). diffuse(c, dt) solves the pure diffusion problem with the influx for time dt. To see the splitting error alone, we do it exactly here with the matrix exponential of the 51 x 51 diffusion matrix (Matrix::expm in R, scipy.linalg.expm, nalgebra's exp in the exercise); in practice it is a backward Euler or Crank–Nicolson step with Thomas. The reaction step is a set of independent scalar ODEs, one per grid point; for c' = -k c it is a multiplication by exp(-k dt). Splitting is how many large simulation codes are organised: diffusion, reaction, and in [*Flow plus diffusion*](../advection-diffusion/lec.qmd) also advection, each by its own method.
 :::
 
 ## The splitting error {.smaller}
@@ -255,7 +255,7 @@ Lucchetta et al. held a Drosophila embryo between two laminar streams at differe
 ::::
 
 ::: notes
-The experiment is described in Implicit schemes and the method of lines, which computes the temperature inside the embryo: the step is sharp, so modelling k as a step function is reasonable. The factor 2 for k over 7 degrees is an assumption (a Q10 of about 2.7), not a measurement, and we ignore the smaller change of D (about 20 % from the lower viscosity of warm water). In this toy model the threshold position is set almost entirely by the anterior half, where the gradient is high: warming the posterior moves it by 10 µm, warming the anterior by 92 µm. What the real embryo does, and how the patterning network compensates, is the subject of the paper [M1]; our model only shows how to ask the question quantitatively. The steady solve is the same Thomas call with a k vector on the diagonal.
+The experiment is described in [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd), which computes the temperature inside the embryo: the step is about 130 µm wide, narrow compared with the 500 µm embryo, so modelling k as a step function is a reasonable first approximation. The factor 2 for k over 7 degrees is an assumption (a Q10 of about 2.7), not a measurement, and we ignore the smaller change of D (about 20 % from the lower viscosity of warm water). In this toy model the threshold position is set almost entirely by the anterior half, where the gradient is high: warming the posterior moves it by 10 µm, warming the anterior by 92 µm. What the real embryo does, and how the patterning network compensates, is the subject of the paper [M1]; our model only shows how to ask the question quantitatively. The steady solve is the same Thomas call with a k vector on the diagonal.
 :::
 
 ## Measuring gradients in many embryos {.smaller}
@@ -265,7 +265,7 @@ The experiment is described in Implicit schemes and the method of lines, which c
 - Exercise (synthetic): fit $\lambda$ to 20 noisy profiles by a straight line through $\log c$: $200.3 \pm 12.2$ µm. With a background of 0.05 added: **229.9** µm. The log fit is biased by any offset.
 
 ::: notes
-Both papers are on our source list but were only read at abstract level; quote the numbers as orders of magnitude. The trap array paper [M3] imaged the Dorsal nuclear gradient, which is formed by a different mechanism (nuclear import downstream of Toll signalling), so the SDD model does not apply directly; the point here is the data: one profile per embryo, many embryos, and the need to fit each one. The circumference is a ring, so a model of it would use periodic boundary conditions, as the 2D Turing simulation below does. For Fgf8, the source-sink picture is: freely diffusing molecules from a local source, removed by receptor-mediated endocytosis in the target cells. The fit in the exercise is linear least squares from Part 4; the bias from a background offset is a classic failure: always subtract the background (or fit it as a parameter, Part 9) before taking logs.
+Both papers are on our source list but were only read at abstract level; quote the numbers as orders of magnitude. The trap array paper [M3] imaged the Dorsal nuclear gradient, which is formed by a different mechanism (nuclear import downstream of Toll signalling), so the SDD model does not apply directly; the point here is the data: one profile per embryo, many embryos, and the need to fit each one. The circumference is a ring, so a model of it would use periodic boundary conditions, as the 2D Turing simulation below does. For Fgf8, the source-sink picture is: freely diffusing molecules from a local source, removed by receptor-mediated endocytosis in the target cells. The fit in the exercise is linear least squares ([*Least squares: normal equations vs QR*](../least-squares-qr/lec.qmd), Part 4); the bias from a background offset is a classic failure: always subtract the background (or fit it as a parameter, [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd), Part 9) before taking logs.
 :::
 
 ## Turing's idea: diffusion can destabilise {.smaller}
@@ -275,7 +275,7 @@ Two species, an activator $u$ and a substrate $v$ (Schnakenberg model, dimension
 $$\frac{\partial u}{\partial t} = a - u + u^2 v + \nabla^2 u, \qquad \frac{\partial v}{\partial t} = b - u^2 v + d\,\nabla^2 v$$
 
 - $a = 0.1$, $b = 0.9$: uniform steady state $u^* = a + b = 1$, $v^* = b/(a+b)^2 = 0.9$.
-- Without diffusion it is **stable**: Jacobian $J = \begin{pmatrix} 0.8 & 1 \\ -1.8 & -1 \end{pmatrix}$, trace $-0.2$, det $1$ (*Equilibria, stability and the phase plane*).
+- Without diffusion it is **stable**: Jacobian $J = \begin{pmatrix} 0.8 & 1 \\ -1.8 & -1 \end{pmatrix}$, trace $-0.2$, det $1$ ([*Equilibria, stability and the phase plane*](../phase-plane/lec.qmd)).
 - With $v$ diffusing $d$ times faster than $u$: some wavelengths **grow**. Spots or stripes appear from noise.
 
 ::: notes
@@ -302,7 +302,7 @@ range(q[g > 0]); q[which.max(g)]; 2 * pi / q[which.max(g)]
 - Unstable for $0.272 < q < 0.822$; fastest growth at wavelength $\approx 12.9$, rate 0.263.
 
 ::: notes
-cos(qx) is an eigenfunction of the second derivative with eigenvalue -q^2, so each wavelength evolves independently in the linearised problem, the same idea as the Fourier modes of the diffusion equation in The diffusion (heat) equation by finite differences. For each q we need the eigenvalues of a 2 x 2 matrix: exactly the phase-plane test from Equilibria, stability and the phase plane, now repeated for every wavelength. The curve of the largest real part against q is the dispersion relation. The pattern that emerges from small random noise is dominated, at first, by the fastest-growing wavelength. Python: numpy.linalg.eigvals; in the exercise Rust uses the trace-determinant formula.
+cos(qx) is an eigenfunction of the second derivative with eigenvalue -q^2, so each wavelength evolves independently in the linearised problem, the same idea as the Fourier modes of the diffusion equation in [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd). For each q we need the eigenvalues of a 2 x 2 matrix: exactly the phase-plane test from [*Equilibria, stability and the phase plane*](../phase-plane/lec.qmd), now repeated for every wavelength. The curve of the largest real part against q is the dispersion relation. The pattern that emerges from small random noise is dominated, at first, by the fastest-growing wavelength. Python: numpy.linalg.eigvals; in the exercise Rust uses the trace-determinant formula.
 :::
 
 ## The dispersion relation {.smaller}
@@ -319,7 +319,7 @@ cos(qx) is an eigenfunction of the second derivative with eigenvalue -q^2, so ea
 ::::
 
 ::: notes
-Trace-determinant classification from Equilibria, stability and the phase plane: with negative trace, the only way to an unstable eigenvalue is a negative determinant, which makes one eigenvalue real and positive: a saddle in the (delta_u, delta_v) plane for that wavelength. The kinks in the curves are where the two eigenvalues change from a complex pair to two real ones. The determinant is a quadratic in q^2; its minimum is negative when (0.8 d - 1)^2 > 4 d, i.e. d > 8.57 (exercise B5). So the substrate must diffuse at least 8.6 times faster than the activator: the classic difficulty of Turing models, since similar-sized proteins diffuse at similar rates.
+Trace-determinant classification from [*Equilibria, stability and the phase plane*](../phase-plane/lec.qmd): with negative trace, the only way to an unstable eigenvalue is a negative determinant, which makes one eigenvalue real and positive: a saddle in the (delta_u, delta_v) plane for that wavelength. The kinks in the curves are where the two eigenvalues change from a complex pair to two real ones. The determinant is a quadratic in q^2; its minimum is negative when (0.8 d - 1)^2 > 4 d, i.e. d > 8.57 (exercise B5). So the substrate must diffuse at least 8.6 times faster than the activator: the classic difficulty of Turing models, since similar-sized proteins diffuse at similar rates.
 :::
 
 ## A 2D simulation: IMEX with the FFT
@@ -341,7 +341,7 @@ for (n in 1:2000) {                  # to t = 200
 - Periodic grid: [`fft`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/fft.html) diagonalises the five-point Laplacian, so the implicit solve is a **division**. 2 s in R.
 
 ::: notes
-The same IMEX Euler as in 1D; only the linear solve differs. On a periodic grid the eigenvectors of the five-point Laplacian (Steady state in two dimensions) are the 2D Fourier modes, with eigenvalues -(4/dx^2)(sin^2(pi k/N) + sin^2(pi l/N)): that is kap. So: transform, divide each coefficient by 1 + dt D kap, transform back. Cost O(N^2 log N) per step, much cheaper than a sparse solve. With walls instead of periodic edges one would use a sparse direct solve (Steady state in two dimensions) or a cosine transform. Explicit FTCS would need dt <= dx^2/(4 d) = 0.0125 for v: 16 000 steps instead of 2000. lcg is a tiny random number generator (Park–Miller) defined in the exercise so that all three languages start from the same noise; R's runif would do as well. fft in R does the 2D transform of a matrix; Python numpy.fft.fft2.
+The same IMEX Euler as in 1D; only the linear solve differs. Why periodic and FFT, and not the sparse Kronecker Laplacian of [*Steady state in two dimensions*](../steady-state-2d/lec.qmd): a periodic box stands for a small patch of a large tissue without edge effects, and on a periodic grid the five-point Laplacian is diagonalised by the FFT ([*Fourier series and the FFT*](../fourier-fft/lec.qmd)), so each implicit step is a division instead of a sparse solve. The eigenvectors of the five-point Laplacian are then the 2D Fourier modes, with eigenvalues -(4/dx^2)(sin^2(pi k/N) + sin^2(pi l/N)): that is kap. So: transform, divide each coefficient by 1 + dt D kap, transform back. Cost O(N^2 log N) per step, much cheaper than a sparse solve. With walls instead of periodic edges one would use the sparse Kronecker matrix and a sparse direct solve, as in Steady state in two dimensions, or a cosine transform. Explicit FTCS would need dt <= dx^2/(4 d) = 0.0125 for v: 16 000 steps instead of 2000. lcg is a tiny random number generator (Park–Miller) defined in the exercise so that all three languages start from the same noise; R's runif would do as well. fft in R does the 2D transform of a matrix; Python numpy.fft.fft2.
 :::
 
 ## The pattern forms
@@ -375,7 +375,7 @@ for (dt in c(0.1, 0.2, 0.4))                  # Euler factor of the q = 0 mode
 # [1] 1.03923
 ```
 
-- The reaction Jacobian has eigenvalues $-0.1 \pm 0.995i$: a weakly damped oscillator. Euler is stable on it only for $\Delta t < 0.2$ (*Initial value problems and Euler's method*).
+- The reaction Jacobian has eigenvalues $-0.1 \pm 0.995i$: a weakly damped oscillator. Euler is stable on it only for $\Delta t < 0.2$ ([*Initial value problems and Euler's method*](../euler/lec.qmd)).
 - Long waves get almost no damping from implicit diffusion, so they grow by 4 % per step: the "pattern" is the **time step**.
 - **Check:** the pattern must not change when $\Delta t$ is halved, and $|1 + \Delta t\lambda| \le 1$ for the reaction eigenvalues. (For $d = 20$: 48, 48, 47, 47 spots at $\Delta t = 0.4, 0.2, 0.1, 0.05$.)
 
@@ -405,7 +405,7 @@ The same Schnakenberg model, IMEX-FFT step and lcg noise as the code on the prev
 - **Splitting**: Lie is first order even with exact sub-steps; prefer Strang, or check with a smaller $\Delta t$.
 
 ::: notes
-These are the checks of the unit, collected. Most need no exact solution: mass balance, refinement in dx and dt, and comparison with linear theory. The linear theory check is the reaction-diffusion version of "check against a simpler model": the dispersion relation is cheap (2 x 2 eigenvalues) and tells you which wavelengths can grow at all. A grid-scale checkerboard (wavelength 2 dx) is the signature of an unstable explicit diffusion step, as in The diffusion (heat) equation by finite differences; the right panel of the artefact slide shows that a too-large reaction step can produce smooth, convincing-looking structures instead.
+These are the checks of the unit, collected. Most need no exact solution: mass balance, refinement in dx and dt, and comparison with linear theory. The linear theory check is the reaction-diffusion version of "check against a simpler model": the dispersion relation is cheap (2 x 2 eigenvalues) and tells you which wavelengths can grow at all. A grid-scale checkerboard (wavelength 2 dx) is the signature of an unstable explicit diffusion step, as in [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd); the right panel of the artefact slide shows that a too-large reaction step can produce smooth, convincing-looking structures instead.
 :::
 
 ## Summary {.smaller}
@@ -423,14 +423,14 @@ The technical summary of the unit. Every item has a check attached; the artefact
 
 ## What you can now do {.smaller}
 
-- **Numbers** (Part 1): predict rounding, overflow and cancellation; read the order of a method off a log–log error plot.
-- **Equations** (Parts 2–4): solve nonlinear equations and linear systems, use structure (banded, sparse), know when a fit or a solve is ill-conditioned.
-- **Eigenvalues and approximation** (Parts 5–7): compute eigenvalues and the SVD, interpolate, differentiate and integrate numerically, use the FFT.
-- **Dynamics** (Part 8): integrate ODEs with step-size control, recognise stiffness, classify steady states.
-- **Fitting** (Part 9): optimise, fit models to data, and ask whether the parameters are identifiable.
-- **Space** (Part 10): turn a PDE into a grid, choose explicit or implicit time stepping, and check the result.
+- **Numbers** (Part 1): predict rounding, overflow and cancellation; tell a badly conditioned problem from an unstable method; read the order of a method off a log–log error plot.
+- **Equations** (Parts 2–3): solve nonlinear equations and linear systems, use structure (banded, sparse), know when a solve is ill-conditioned.
+- **Data and approximation** (Parts 4–7): least squares and the SVD, eigenvalues, interpolation and splines, the FFT, numerical derivatives and integrals, Monte Carlo.
+- **Dynamics** (Part 8): integrate ODEs with step-size control, recognise stiffness, classify steady states, simulate stochastic models.
+- **Fitting** (Part 9): optimise, fit models to data, ask whether the parameters are identifiable, handle constraints.
+- **Space** (Part 10): turn diffusion, flow and reaction into a grid, choose explicit or implicit time stepping, solve 2D steady states, and check the result.
 - Above all: **every method can fail**, and you know the check that catches it: an exact case, a refinement, an invariant, a second method.
 
 ::: notes
-A one-slide wrap-up of the whole course. The common thread is the last bullet: each unit paired a method with a biological problem, showed it working, showed it failing, and gave the check. That habit transfers to any numerical tool, including ones this course did not cover. Part 11 (Further reading) has two optional decks for those who want to go further: Beyond rectangles: finite elements and flow, and Iterative linear solvers in depth.
+A one-slide wrap-up of the whole course. The common thread is the last bullet: each unit paired a method with a biological problem, showed it working, showed it failing, and gave the check. That habit transfers to any numerical tool, including ones this course did not cover. Part 11 (Further reading) has two optional decks for those who want to go further: [*Beyond rectangles: finite elements and flow*](../fem-outlook/lec.qmd), and [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd).
 :::

@@ -70,7 +70,11 @@ No code outputs changed, so nothing was re-run and no figures were regenerated. 
 
 ## Renders
 
-All 12 pages were re-rendered after the edits (glob/site_libs errors retried).
+Every edited page rendered without errors: all four decks, all four exercises and the optimisation-1d quiz. Glob and
+site_libs errors were retried. The stiffness, phase-plane and gillespie quizzes were not changed. A headless overflow
+probe of all four decks finds no slide over 720 px. Slide counts: stiffness 26, phase-plane 26, gillespie 27,
+optimisation-1d 28. The coordinator's extra item (optimisation-1d lec notes about line 482, the false "decay fit
+returns with two parameters in NLS") is done; see the optimisation-1d section.
 
 ## Needed outside this group
 

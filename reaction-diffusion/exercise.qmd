@@ -25,16 +25,16 @@ The by-hand part needs pen, paper and a calculator. The code part checks the han
 
 **Facts used below:**
 
-1. **Synthesis–diffusion–degradation** (units µm and min): $\partial c/\partial t = D\,\partial^2 c/\partial x^2 - k\,c$ on $0 < x < L$, influx $j$ at $x = 0$ ($-D\,\partial c/\partial x = j$), wall at $x = L$ ($\partial c/\partial x = 0$). We use $D = 100$ µm²/min, $k = 0.01$ per min, $L = 500$ µm, $j = D/\lambda = 1$.
+1. **Synthesis–diffusion–degradation** (units µm and **min**, as for the morphogen in a row of cells; the earlier Part 10 units used seconds): $\partial c/\partial t = D\,\partial^2 c/\partial x^2 - k\,c$ on $0 < x < L$, influx $j$ at $x = 0$ ($-D\,\partial c/\partial x = j$), wall at $x = L$ ($\partial c/\partial x = 0$). We use $D = 100$ µm²/min, $k = 0.01$ per min, $L = 500$ µm, $j = D/\lambda = 1$.
 2. **Steady state**: $c(x) = \dfrac{j\lambda}{D}\,\dfrac{\cosh\bigl((L - x)/\lambda\bigr)}{\sinh(L/\lambda)}$ with $\lambda = \sqrt{D/k}$; in a long embryo simply $c(x) = \tfrac{j\lambda}{D}e^{-x/\lambda}$. Mass balance: $k\int_0^L c\,dx = j$.
 3. **Grid**: nodes $x_i = i\,\Delta x$, $i = 0, \dots, N$. Ghost points: $c_{-1} = c_1 + 2\Delta x\,j/D$ and $c_{N+1} = c_{N-1}$. With $r = D/\Delta x^2$, the operator $-D\,c''$ becomes a tridiagonal matrix $K_D$ with diagonal $2r$, off-diagonals $-r$, and $-2r$ in the first row (above the diagonal) and in the last row (below the diagonal); the influx gives the right-hand side $2j/\Delta x$ in row 0.
 4. **IMEX Euler**: $(I + \Delta t\,K_D)\,\mathbf c^{n+1} = \mathbf c^n + \Delta t\,\bigl(\mathbf f(\mathbf c^n) + \mathbf s\bigr)$. On one Fourier mode with $f = -kc$ it multiplies by $G = (1 - k\Delta t)/(1 + Dq^2\Delta t)$.
 5. **Splitting**: Lie does $\Delta t$ of diffusion, then $\Delta t$ of reaction; Strang does $\Delta t/2$ reaction, $\Delta t$ diffusion, $\Delta t/2$ reaction. With exact sub-steps the error comes from $\mathcal{AB} - \mathcal{BA}$: Lie is order 1, Strang order 2.
 6. **Schnakenberg model** (dimensionless): $u_t = a - u + u^2 v + \nabla^2 u$, $v_t = b - u^2 v + d\,\nabla^2 v$, with $a = 0.1$, $b = 0.9$. A perturbation $\boldsymbol\delta\cos(qx)$ of the uniform state grows or decays with the eigenvalues of $J - q^2\,\mathrm{diag}(1, d)$, $J$ = Jacobian of the reaction.
-7. **Periodic 2D grid**: the five-point Laplacian has eigenvalues $-\kappa_{kl}$ with $\kappa_{kl} = \frac{4}{\Delta x^2}\bigl(\sin^2\frac{\pi k}{N} + \sin^2\frac{\pi l}{N}\bigr)$ on the 2D Fourier modes, so an implicit diffusion step is: FFT, divide by $1 + \Delta t\,D\,\kappa$, inverse FFT.
+7. **Periodic 2D grid** (a patch of a large tissue without edges; with walls one would use the sparse Kronecker matrix of [*Steady state in two dimensions*](../steady-state-2d/lec.qmd) instead): the five-point Laplacian has eigenvalues $-\kappa_{kl}$ with $\kappa_{kl} = \frac{4}{\Delta x^2}\bigl(\sin^2\frac{\pi k}{N} + \sin^2\frac{\pi l}{N}\bigr)$ on the 2D Fourier modes, so an implicit diffusion step is: FFT, divide by $1 + \Delta t\,D\,\kappa$, inverse FFT.
 8. **Euler stability** for a reaction eigenvalue $\lambda$: $|1 + \Delta t\,\lambda| \le 1$.
 
-The set-up in each language. `thomas()` is the function from *Structure: symmetric, banded, sparse* (Python: it copies `b` and `d`). The variables `lo`, `di`, `up` (diagonals of $K_D$), `src`, `cs` (steady state) and the function `imex()` are used again in C2 and C3.
+The set-up in each language. `thomas()` is the function from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd) (Python: it copies `b` and `d`). The variables `lo`, `di`, `up` (diagonals of $K_D$), `src`, `cs` (steady state) and the function `imex()` are used again in C2 and C3.
 
 ::: {.panel-tabset group="language"}
 
@@ -226,7 +226,7 @@ Rust prints numbers in its own format (e.g. `1e-3` rather than `1e-03`); where i
 
 **B5. Turing by hand.** Schnakenberg with $a = 0.1$, $b = 0.9$.
 (a) Show that $u^* = a + b$, $v^* = b/(a+b)^2$ is a steady state, and compute it.
-(b) Compute the Jacobian $J$ of $f = a - u + u^2v$, $g = b - u^2 v$ at the steady state, its trace and determinant, and its eigenvalues. Is the uniform state stable without diffusion? What kind of fixed point is it (*Equilibria, stability and the phase plane*)?
+(b) Compute the Jacobian $J$ of $f = a - u + u^2v$, $g = b - u^2 v$ at the steady state, its trace and determinant, and its eigenvalues. Is the uniform state stable without diffusion? What kind of fixed point is it ([*Equilibria, stability and the phase plane*](../phase-plane/lec.qmd))?
 (c) With $d = 20$, write $\det\bigl(J - q^2\,\mathrm{diag}(1, d)\bigr)$ as a polynomial in $q^2$. For which $q$ is it negative? Which wavelengths can grow?
 (d) Show that the trace of $J - q^2\,\mathrm{diag}(1, d)$ is negative for every $q$. What does that imply about how instability can arise?
 (e) Find the smallest $d$ for which some $q$ is unstable. Why can there be no pattern with $d = 1$?
@@ -1103,7 +1103,7 @@ fn main() {
 
 :::
 
-(a) The fit recovers the mean $\lambda$ of 200 µm; the spread of 12 µm is the embryo-to-embryo variation we put in (about $\pm 10$ % uniform) plus fitting noise. $k \approx 1.3\times10^{-3}$ per s, a lifetime of about 13 min, as in B1(c). (b) The background lifts the tail, the log profile bends upwards, and the straight-line fit returns a longer $\lambda$ (230 µm) and a smaller $k$ (lifetime 18 min instead of 13): a 15 % bias in $\lambda$ from an offset of 5 % of the peak. Subtract the background first, or fit $c_0e^{-x/\lambda} + b$ by nonlinear least squares (*Nonlinear least squares and ODE fitting*).
+(a) The fit recovers the mean $\lambda$ of 200 µm; the spread of 12 µm is the embryo-to-embryo variation we put in (about $\pm 10$ % uniform) plus fitting noise. $k \approx 1.3\times10^{-3}$ per s, a lifetime of about 13 min, as in B1(c). (b) The background lifts the tail, the log profile bends upwards, and the straight-line fit returns a longer $\lambda$ (230 µm) and a smaller $k$ (lifetime 18 min instead of 13): a 15 % bias in $\lambda$ from an offset of 5 % of the peak. Subtract the background first, or fit $c_0e^{-x/\lambda} + b$ by nonlinear least squares ([*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd)).
 
 **C6.**
 
@@ -1578,6 +1578,6 @@ fn main() {
 
 ## Where this leads
 
-- This is the last core unit. *Beyond rectangles: finite elements and flow* (Part 11, optional) shows how real tissue and chip geometries are meshed, and *Iterative linear solvers in depth* (Part 11, optional) how the implicit step is done when the grid is too large for a direct or FFT solve.
-- Fitting a reaction–diffusion model to real gradient data uses the tools of *Nonlinear least squares and ODE fitting* and *Identifiability and uncertainty of fitted parameters* (Part 9): with only a steady profile, $D$ and $k$ appear only as the ratio $\lambda^2 = D/k$ and are not separately identifiable; a time course or an FCS measurement of $D$ breaks the tie.
-- We used IMEX Euler (order 1). Production codes use higher-order IMEX schemes, Strang splitting with a stiff ODE solver for the reaction, or adaptive method-of-lines solvers (*Implicit schemes and the method of lines*).
+- This is the last core unit. [*Beyond rectangles: finite elements and flow*](../fem-outlook/lec.qmd) (Part 11, optional) shows how real tissue and chip geometries are meshed, and [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (Part 11, optional) how the implicit step is done when the grid is too large for a direct or FFT solve.
+- Fitting a reaction–diffusion model to real gradient data uses the tools of [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd) and [*Identifiability and uncertainty of fitted parameters*](../identifiability/lec.qmd) (Part 9): with only a steady profile, $D$ and $k$ appear only as the ratio $\lambda^2 = D/k$ and are not separately identifiable; a time course or an FCS measurement of $D$ breaks the tie.
+- We used IMEX Euler (order 1). Production codes use higher-order IMEX schemes, Strang splitting with a stiff ODE solver for the reaction, or adaptive method-of-lines solvers ([*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd)).

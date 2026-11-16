@@ -94,7 +94,7 @@ Brief: plan/xref-brief.md. Reports: plan/pass2/<group>.md.
 | parts3-4 | 8–12 | running |
 | parts5-6 | 13–17 | done |
 | parts7-8a | 18–22 | running |
-| parts8b-9a | 23–26 | running |
+| parts8b-9a | 23–26 | done |
 | part9b | 27–30 | done |
 | part10a | 31–34 | done |
 | part10b-11 | 35–37 | running |
