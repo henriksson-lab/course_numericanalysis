@@ -122,6 +122,8 @@ build in the same Cargo project concurrently; a build lock wait is normal.
 
 ## Check before reporting
 
+- Never kill processes you did not start (no `pkill`/`killall`): other workers run Chrome and builds too.
+
 - `quarto render <slug>/lec.qmd`, `quarto render <slug>/exercise.qmd`,
   `quarto render <slug>/quiz.qmd` from the project root all succeed
   (if a render collides with another one running, wait and retry).

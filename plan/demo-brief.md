@@ -57,6 +57,7 @@ do not promise bit-identical agreement with R output on the page.
   error). Use a fresh `--user-data-dir=$(mktemp -d)` per Chrome call and do
   NOT use `--virtual-time-budget` (it hangs here); wrap in `timeout 60`.
   Screenshots via `--screenshot` are optional; retry once on an empty result.
+- Never kill processes you did not start (no `pkill`/`killall`): other workers run Chrome too.
 - Other workers render and build concurrently; retry a failed `quarto render`
   once before investigating.
 - Only touch: `demos/src/<name>/`, `demos/dist/<name>.js` (built),

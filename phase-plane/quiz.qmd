@@ -1,0 +1,143 @@
+---
+title: "Quiz: equilibria, stability and the phase plane"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of nullclines, linearisation, eigenvalues and limit cycles. The toggle switch is $\dot u = \dfrac{3}{1+v^2} - u$, $\dot v = \dfrac{3}{1+u^2} - v$, with steady states U on $(2.618, 0.382)$, middle $(1.213, 1.213)$ and V on $(0.382, 2.618)$. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** A population follows $\dot N = f(N)$ with a fixed point at $N^* = 5$ and $f'(5) = -0.2$ per day. Is $N^*$ stable? Roughly how long does a small perturbation take to halve?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Near $N^*$, $\delta(t) \approx \delta_0 e^{f'(N^*)t}$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Stable, because $f'(5) < 0$. The perturbation halves when $e^{-0.2t} = 1/2$, i.e. after $\ln 2/0.2 \approx 3.5$ days.
+:::
+
+---
+
+**Q2.** On the u-nullcline of the toggle switch, in which direction does the flow point, and why?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is $du/dt$ on the u-nullcline?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Vertically (straight up or down): on the u-nullcline $du/dt = 0$, so only $v$ changes. Whether it is up or down depends on the sign of $dv/dt$ there, i.e. on which side of the v-nullcline the point lies.
+:::
+
+---
+
+**Q3.** A Jacobian at a fixed point has trace $\tau = 1$ and determinant $\Delta = -2$. Classify the fixed point without computing the eigenvalues.
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\Delta$ is the product of the two eigenvalues.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A **saddle** (unstable): a negative product means one positive and one negative real eigenvalue. The trace does not matter. (They are $2$ and $-1$.)
+:::
+
+---
+
+**Q4.** At the "U on" state the eigenvalues of $J$ are $-5/3$ and $-1/3$. Which one decides how long the cell takes to recover from a small push, and how long is that roughly?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Each eigen-component decays like $e^{\lambda t}$. Which one is still there after a while?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The eigenvalue closest to zero, $-1/3$: the $e^{-5t/3}$ part is gone quickly, and what remains decays like $e^{-t/3}$, a time constant of 3 protein lifetimes (half-life $3\ln 2 \approx 2.1$). The eigenvalue largest in **size** ($-5/3$) is the less important one.
+:::
+
+---
+
+**Q5.** Newton found the middle state of the toggle switch from 57 % of starts in $[0, 4]^2$. Why does no cell ever sit there, and what number shows it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Newton finds roots of $\mathbf F$; stability is a property of $J$ at the root.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The middle state is a **saddle**: $J$ there has eigenvalues $0.19$ and $-2.19$. The positive one means a small imbalance between U and V (direction $(1, -1)$) grows like $e^{0.19t}$, so molecular noise always pushes a cell off it. Newton does not care about stability: it converges to unstable roots as happily as to stable ones.
+:::
+
+---
+
+**Q6.** You want the stability of a steady state of a 10 000-gene model. You run 100 steps of power iteration on its Jacobian and get $\lambda = -4.2$. Can you conclude the state is stable?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which eigenvalue does power iteration find, and which one decides stability?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. Power iteration finds the eigenvalue of largest **modulus**; stability depends on the eigenvalue with the largest **real part**. Another eigenvalue could be $+0.01$. Shift first ($J + cI$ with $c$ large enough that the rightmost eigenvalue becomes the largest), or use an Arnoldi-type routine that asks for the largest real part (`RSpectra::eigs(J, k = 1, which = "LR")`, `scipy.sparse.linalg.eigs(J, k=1, which="LR")`).
+:::
+
+---
+
+**Q7.** Why is the separatrix computed by integrating **backwards** in time from next to the saddle, rather than forwards?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What do the eigenvalues of $-J$ look like?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The separatrix is the saddle's **stable** manifold: forwards in time, points on it approach the saddle, and any small error is amplified by the unstable eigenvalue, so a forward run cannot stay on it. Backwards in time the eigenvalues change sign, the stable direction becomes repelling, and a start $10^{-6}$ away along $\mathbf v_{\text{stable}}$ runs out along the separatrix.
+:::
+
+---
+
+**Q8.** A student simulates the symmetric toggle switch from $u_0 = v_0 = 2$ to $t = 100$, finds $(1.213412, 1.213412)$, and reports it as "the steady state the cell reaches". What went wrong, and what check would have caught it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Where does a start with $u_0 = v_0$ go in a symmetric model?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The diagonal $u = v$ is invariant and is exactly the separatrix, so the run converges to the **saddle**, which no real cell can sit at. Checks: compute the eigenvalues of $J$ at the end point (one is $+0.19$); or restart from a slightly perturbed end point, e.g. $(1.2134, 1.2135)$, and see it leave.
+:::
+
+---
+
+**Q9.** In the Sel'kov model the fixed point has eigenvalues $0.098 \pm 0.656i$. What do the real and the imaginary part tell you, and why does $u$ not grow for ever?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$e^{(a + ib)t} = e^{at}(\cos bt + i \sin bt)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Real part $> 0$: small perturbations **grow** (unstable spiral). Imaginary part: they rotate with angular frequency $0.656$, a period of about $2\pi/0.656 \approx 9.6$ near the fixed point. The linearisation only holds close to the fixed point; further out the nonlinear terms (substrate depletion) stop the growth, and trajectories settle on a **limit cycle** (period 9.62).
+:::
+
+---
+
+**Q10.** A computed eigenvalue at a steady state is $\lambda_{\max} = -3\times10^{-9}$, from a finite-difference Jacobian. Is the state stable?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How accurate is a forward-difference Jacobian?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+You cannot tell. A forward-difference Jacobian has errors of about $\sqrt\varepsilon \approx 10^{-8}$, larger than $|\lambda_{\max}|$, so even the sign is not reliable. This happens at a **bifurcation** (the toggle at $\alpha = 2$, where the true value is 0). Use an exact Jacobian; if $\lambda_{\max}$ is still $\approx 0$, linearisation cannot decide and the nonlinear terms (or a long simulation) must.
+:::
+
+---
+
+**Q11.** The toggle switch is bistable for $\alpha > 2$. In a bifurcation diagram of $u^*$ against $\alpha$, what happens at $\alpha = 2$, and what does a continuation method do there?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at the eigenvalues of the middle state on either side of $\alpha = 2$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+For $\alpha < 2$ there is one stable steady state. At $\alpha = 2$ its largest eigenvalue crosses 0: it becomes a saddle and two new stable branches (U on, V on) split off (a pitchfork). A continuation method steps $\alpha$, predicts the new steady state from the old one, corrects it with Newton, computes the eigenvalues and flags the step where $\mathrm{Re}\,\lambda_{\max}$ changes sign.
+:::

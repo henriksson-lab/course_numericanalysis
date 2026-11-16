@@ -180,6 +180,48 @@ For $d = 1, 2, 3, 4, 6, 8, 10$ print $n$, $n^d$, the relative errors of both, an
 (b) Use importance sampling with proposals $N(3, 1)$, $N(5, 1)$ and $N(7, 1)$. Report each estimate with its relative SE. Which proposal is best, and why?
 (c) **Failure:** estimate $\int \phi(x)\,dx = 1$ with $w = \phi(x)/g(x)$ for proposals $g = N(0, s^2)$ with $s = 0.5, 1, 2, 5$. Print the estimate, SE, ESS and the largest weight's share of the total. Which proposal is dangerous, and which number tells you?
 
+## Explore {#explore}
+
+The demo below runs Monte Carlo in your browser on three problems with a known answer: the area under the OD curve on $[0, 10]$ h (exact $7.2444$, C4), the motif-overlap p-value $P(K \ge 18)$ for 200 randomly placed hits (exact $0.01314$, B6 and C7; each draw places 200 hits and counts the overlaps), and the rare-event probability $P(X > 5)$ (exact $2.867\times10^{-7}$, B7 and C8), plain or by importance sampling from $N(5, 1)$. The buttons add draws to the running sample. Panel (a) shows the running estimate with its $\pm 2$ SE band and the exact value; panel (b) shows the relative error of this run against $N$ on log–log axes, with the dashed line $\sigma/\sqrt N$ (the true SE, slope $-\tfrac12$). The second tab, **Curse of dimensionality**, is the toy marginal likelihood of C6: a grid at the prior quantiles against Monte Carlo with the same budget, and the number of evaluations each needs for 1 % error.
+
+The demo uses its own seeded generator, so its numbers differ from those of R, Python and Rust in the solutions, but they agree within the standard errors. All numbers below are for **seed 1**; the draws come in the same order however you click, so the readout depends only on $N$ and the seed.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="mclab" data-problem="auc" data-seed="1"></div>
+<script src="../demos/dist/mclab.js"></script>
+```
+
+**E1. (the $1/\sqrt N$ law)** With **OD-curve area**, click **+100** and write down the estimate, the SE and the error. Click **+10 000** ($N = 10\,100$) and then **+100 000** ($N = 110\,100$) and do the same. By what factor does the SE shrink per factor 100 in $N$? In panel (b), how do the error dots relate to the dashed line, and why do they scatter around it?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+$N = 100$: $6.929 \pm 0.85$, SE $0.426$, error $-0.32$ (4.3 %). $N = 10\,100$: $7.230 \pm 0.083$, SE $0.0415$, error $-0.015$ (0.20 %). $N = 110\,100$: $7.232 \pm 0.025$, SE $0.0125$, error $-0.013$ (0.18 %). From $N = 100$ to $10\,100$ the SE falls by $0.426/0.0415 = 10.3 \approx \sqrt{101}$: 100 times more draws for one more digit. The dots in panel (b) follow the dashed line $\sigma/\sqrt N$ ($\sigma = 4.16$) with slope $-\tfrac12$, but the actual error is random: sometimes the running mean crosses the exact value and the error dips far below the line (around $N = 10^4$ to $10^5$ here, which is why the error barely changed between the last two steps), and it never stays far above it for long. The SE describes the typical size of the error, not the error of one run.
+:::
+
+**E2. (is the error bar honest?)** Stay with the OD-curve area. For seeds 1 to 10, move the seed slider and click **+1000** once each time. Note the estimate and whether the exact value is inside $\pm 2$ SE. How often does the band miss, and how often should it?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+All ten SEs are about $0.13$ ($4.16/\sqrt{1000} = 0.132$), so the band is $\pm 0.26$ every time. The estimates are 7.141, 7.242, 7.320, 7.485, 6.989, 7.200, 7.554, 7.243, 7.287, 7.286. Only **seed 7** misses: $7.554 \pm 0.26$ ends at $7.29$, just above the exact $7.244$ (seeds 4 and 5 are close to the edge). A $\pm 2$ SE band is a 95 % interval, so about 1 run in 20 should miss; 1 in 10 is within chance. This is why a single seed that "looks good" proves nothing, and why the SE, not the agreement of one run with a known answer, is what you report.
+:::
+
+**E3. (the motif test)** Click **motif overlap P(K ≥ 18)**, then **+10 000**. Compare the simulated p-value, its SE and the number of placements with $K \ge 18$ with the lecture (122 of 10 000 in R) and with the exact $0.01314$. What is the relative SE, and how many placements would you need for 10 % relative SE? Click **+100 000** and check.
+
+::: {.callout-note collapse="true" title="Answer E3"}
+$N = 10\,000$: 143 placements with $K \ge 18$, estimate $0.0143 \pm 0.0024$, SE $0.00119$, error $0.0012$ (8.8 %); the exact value is inside the band. R's 122 and the demo's 143 differ by about 1.8 SE: two different streams, both honest. The relative SE is $0.00119/0.0143 \approx 8\%$, so $10\,000 \approx 100/p$ placements already give about 10 % (B6c: $B \approx 100/p \approx 7\,600$). At $N = 110\,000$: 1 482 hits, $0.01347 \pm 0.0007$, SE $0.00035$ (2.6 %): 11 times more draws, $\sqrt{11} = 3.3$ times smaller SE.
+:::
+
+**E4. (rare event and importance sampling)** Click **rare event P(X > 5)** with importance sampling **off**, then **+100 000**. What do the estimate, the SE and the readout say? Where are the error dots in panel (b), and where is the dashed line? Now tick **importance sampling** (this restarts the run), click **+1000**, then **+100 000** ($N = 101\,000$). Read the estimate, the relative SE and the number of draws above 5.
+
+::: {.callout-note collapse="true" title="Answer E4"}
+Plain: 0 draws above 5, estimate $0 \pm 0$, SE 0, error 100 %; the readout warns that SE = 0 claims certainty. In panel (b) the error is stuck at 1 (100 %) for every $N$, and the dashed true SE $\sqrt{p(1-p)}/(p\sqrt N)$ lies **above** it (5.9 at $N = 10^5$): the true uncertainty is larger than the answer, but the sample cannot show it. With importance sampling: at $N = 1000$, 509 draws above 5 and $2.69\times10^{-7} \pm 4.1\times10^{-8}$ (SE 7.7 %); at $N = 101\,000$, 50 582 draws above 5 and $2.878\times10^{-7} \pm 4.3\times10^{-9}$, relative SE $0.75\%$, error $0.39\%$, as in the lecture. The relative sd of one draw drops from $\sqrt{(1-p)/p} = 1868$ to $2.38$: the variance falls by a factor $(1868/2.38)^2 \approx 6\times10^5$, so plain Monte Carlo would need about 600 000 times more draws for the same SE.
+:::
+
+**E5. (the curse of dimensionality)** Open **Curse of dimensionality** (budget $10^5$, seed 1). Move $d$ from 1 to 10 and read the grid error, the expected Monte Carlo SE and the error of the Monte Carlo run. Where does Monte Carlo start to win? Then read panel (d) and the second readout line at $d = 10$ and $d = 20$: how many evaluations does each method need for 1 % error, and how long is that at 1 µs per evaluation?
+
+::: {.callout-note collapse="true" title="Answer E5"}
+Grid errors: $< 10^{-8}$ ($d = 1$), 0.016 % ($d = 2$), 0.49 % ($d = 3$), 2.8 % ($d = 4$), 18 % ($d = 6$), 78 % ($d = 10$, 3 points per axis), the numbers of C6. The expected Monte Carlo SE grows only slowly: 0.19 %, 0.29 %, 0.39 %, 0.50 %, 0.74 %, 1.5 %; the seed-1 run has error 1.2 % at $d = 10$. The grid wins at $d = 1, 2$, the two are level at $d = 3$, and Monte Carlo wins from $d = 4$, as B5(c) predicted for a second-order rule. For 1 % at $d = 10$ the grid needs 65 points per axis, about $10^{18}$ evaluations (43 000 years), Monte Carlo 213 110 draws (0.2 s). At $d = 20$: grid 101 per axis, $10^{40}$ evaluations (far beyond the age of the universe); Monte Carlo about 5 million draws (5 s). Monte Carlo's cost also grows with $d$, like $1.364^d$, because the likelihood becomes more peaked relative to the prior, but exponentially more slowly than the grid's.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — random numbers and seeds (B1, C1)"}

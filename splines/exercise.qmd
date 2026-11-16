@@ -216,6 +216,40 @@ The true growth rate at 3.1 h is 0.216 OD/h: the interpolating spline's slope (0
 
 **C6. A gene along pseudotime: choosing $\lambda$.** Expression of one gene in 40 cells ordered by pseudotime (data in the solution below; copy them from there). Fit smoothing splines with $\lambda$ chosen (i) by GCV, (ii) by leave-one-out CV, and with fixed (iii) `lam = 1e-6` and (iv) `lam = 1e-2` (Python units). For each, report $\lambda$ and df, the pseudotime of the peak and its height (true: 0.6 and 3.0), and the **lag-1 correlation** of the residuals (sorted by pseudotime). Which fits does the residual check flag, and in which direction? (Python has no df or CV output: build the hat matrix column by column, by smoothing the unit vectors $\mathbf e_j$, and use Fact 8.)
 
+## Explore {#explore}
+
+The demo below computes everything in your browser: piecewise linear interpolation, the natural and the not-a-knot cubic spline (each by one tridiagonal Thomas solve), a monotone cubic (PCHIP, as Python's `PchipInterpolator`), the polynomial of degree $n - 1$ through all points, and the smoothing spline (the Reinsch system of Hint 7) with $\lambda$ from the slider or chosen by **GCV**. The four data sets are the ones of this page: the immediate-early gene (C4), 11 exact OD values ($h = 1$ h), the 41 noisy OD reads (C5) and the gene along pseudotime (C6). Drag a point up or down, or select it with ◀ ▶ and move it in fixed steps with − / +. Panel (b) shows either the slope $S'(t)$ (with the true growth rate dashed) or the **change** $|\Delta S(t)|$ since the preset data on a log axis. Click either panel to move the probe time $t^*$; the table gives each curve's value, slope and change at $t^*$, its minimum, and its largest slope. The slider is $\log_{10}$ of R's $\lambda$ ($t$ rescaled to $[0, 1]$); the readout also gives Python's `lam`.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="splinelab" data-set="od"></div>
+<script src="../demos/dist/splinelab.js"></script>
+```
+
+**E1. (local versus global)** With **OD, 11 exact values**, untick *not-a-knot*, tick *polynomial* (degree 10) and switch panel (b) to **change**. The selected point is $t = 5$; press **+** once (the read rises by 0.05). Click near the middle of the intervals at $t^* \approx 4.5, 3.5, 2.5, 1.5, 0.5$ and write down the change of the natural spline and of the polynomial. By what factor does the spline's change shrink per interval? Where is the polynomial's change largest?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Natural spline: $0.030$, $-0.0064$, $0.0017$, $-4.7\times10^{-4}$, $1.6\times10^{-4}$. The sign alternates and the size falls by a factor of about 4 per interval (4.7, 3.7, 3.6, 2.9; the last one is affected by the natural end). That is the factor $2 + \sqrt3 \approx 3.7$ of the lecture: the ratio of diagonal to off-diagonal in the tridiagonal system. On the log axis of panel (b) the spline's change is a V of straight lines around $t = 5$ (the dips are where it changes sign). Polynomial: $0.033$, $-0.016$, $0.021$, $-0.050$, $0.247$: the change **grows** towards the ends, and at $t = 0.5$ it is five times as large as the move itself (the same $0.247$ at $t = 9.5$). Every coefficient of the polynomial depends on every point; each piece of the spline depends mostly on its neighbours. Piecewise linear (tick it) changes only on $[4, 6]$ and is exactly 0 elsewhere.
+:::
+
+**E2. (overshoot and end conditions)** Click **gene time course** (probe at $t^* = 3$ h). Tick *not-a-knot* and *monotone (PCHIP)*. Read $S(3)$ and the minimum for every curve. Which give negative expression? Compare with C4.
+
+::: {.callout-note collapse="true" title="Answer E2"}
+At 3 h: piecewise linear $3.5$, natural $-1.083$ (minimum $-1.10$), not-a-knot $-1.727$ (minimum $-1.73$), PCHIP $2.311$ (minimum $0.5$), polynomial $10.37$, but its minimum is $-1.63\times10^5$ (near 21 h). The natural, not-a-knot and polynomial interpolants go negative; R's default `fmm` gives $-1.645$ (C4), between natural and not-a-knot, since it is another way to fill in the two missing end equations. Piecewise linear and PCHIP stay between neighbouring data values by construction. The price is visible in panel (b), **slope**: the linear slope is a staircase, and PCHIP's slope is continuous but its curvature is not.
+:::
+
+**E3. (noise in the slope)** Click **OD, 41 noisy reads** (natural spline and smoothing spline at the GCV choice, panel (b) slope). Read $\lambda$, df and the largest slope for both curves and for the truth. Then set $\log_{10}\lambda$ to $-7$, $-5.5$, $-2.5$ and $-1$ and record df and the largest slope each time. Which setting is too rough and which too stiff?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+GCV: $\lambda = 1.35\times10^{-4}$ (Python `lam` $0.135$), df $= 9.42$, GCV $= 8.44\times10^{-5}$, as `smooth.spline` in C5. Largest slope $0.2388$ at $t = 4.0$ h; truth $0.24$ at $3.92$ h. The interpolating natural spline's largest slope is $0.328$ at $4.35$ h, 37 % too high: it bends to hit every noisy read. $\log_{10}\lambda = -7$: df $38.1$, max slope $0.319$ (almost interpolation). $-5.5$: df $22.1$, $0.271$. $-2.5$: df $4.84$, $0.212$ at $3.96$ h. $-1$: df $2.62$, $0.161$ at $2.53$ h, and the curve goes below 0 at the start ($-0.026$). Small $\lambda$ (df above about 20) follows the noise: variance. Large $\lambda$ (df below about 5) flattens the peak: bias. On the OD panel all of them look acceptable; only the slope panel shows the difference.
+:::
+
+**E4. (one outlier cell)** Click **pseudotime, 40 cells** and note df and the peak of the smoothing spline. Switch panel (b) to **change**. The selected cell is at pseudotime $0.6$ (3.24); press **+** four times (+1.0). Read the change at $t^* = 0.6$, $0.5$ and $0.8$ for both curves. Then press **GCV** again. What happens to df and to the curve?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+Before: df $9.36$, $\lambda = 1.19\times10^{-4}$, $S(0.6) = 2.97$ (truth 3.0); the interpolating spline meanwhile swings to $-1.19$ and has slopes up to 332. After the move, at $0.6$: natural $1$ (it must pass through the point), smoothing $0.242$: this is the leverage $A_{ii}$ of that cell, the fraction of a change in $y_i$ that reaches $\hat y_i$. At $0.5$: natural $-0.0046$, smoothing $0.067$; at $0.8$: natural $2\times10^{-7}$, smoothing $-0.009$. The smoothing spline spreads a smaller change over a wider window, of the order of the distance over which it averages. Pressing **GCV** with the outlier present moves df from $9.36$ to $26.2$: the curve now chases the outlier (change $0.86$ at $0.6$, largest slope 55 instead of 12). GCV assumes independent noise of one size and is not robust to a single outlier; look at the residuals, and compare df with and without suspicious points.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — piecewise linear (B1, C1)"}

@@ -86,8 +86,8 @@ lines(ref[-1, "time"], 10 * ref[-1, "C"], lwd = 4, col = oi["red"])
 rect(1e-5, -1, 5e-3, 11, col = adjustcolor(oi["orange"], 0.12), border = NA)
 text(7e-5, 6.2, "fast: binding\n(~1 ms)", cex = 1.4, col = oi["orange"])
 text(1.2, 6.2, "slow: catalysis\n(~10 s)", cex = 1.4, col = "grey30")
-legend("left", c("substrate S", "complex C  (x10)", "product P"), lwd = 4,
-       col = oi[c("blue", "red", "green")], cex = 1.3, bty = "n", inset = c(0, -0.15))
+legend(5e-3, 7.5, c("substrate S", "complex C  (x10)", "product P"), lwd = 4,
+       col = oi[c("blue", "red", "green")], cex = 1.3, bty = "n")
 dev.off()
 
 ## ---- fig02: full model vs QSSA -------------------------------------------------
@@ -108,24 +108,28 @@ dev.off()
 
 ## ---- fig03: stability regions -----------------------------------------------------
 
-xs <- seq(-5, 3, length.out = 601); ys <- seq(-4, 4, length.out = 601)
+xs <- seq(-5, 3, length.out = 401); ys <- seq(-4, 4, length.out = 401)
 z <- outer(xs, ys, function(a, b) complex(real = a, imaginary = b))
 R_euler <- Mod(1 + z)
 R_rk4 <- Mod(1 + z + z^2 / 2 + z^3 / 6 + z^4 / 24)
 R_be <- Mod(1 / (1 - z))
 svg("fig03-stability.svg", width = 13, height = 5)
 par(mfrow = c(1, 3), mar = c(4.5, 4.5, 3, 1), cex.lab = 1.6, cex.axis = 1.4, cex.main = 1.8)
-panel <- function(R, main, col) {
-  image(xs, ys, (R <= 1) + 0, col = c("white", adjustcolor(col, 0.45)), asp = 1,
-        xlab = expression("Re " * z), ylab = expression("Im " * z), main = main, las = 1)
-  contour(xs, ys, R, levels = 1, drawlabels = FALSE, add = TRUE, lwd = 2.5, col = col)
+panel <- function(R, main, col, outside = FALSE) {
+  plot(NA, xlim = range(xs), ylim = range(ys), asp = 1, xlab = expression("Re " * z),
+       ylab = expression("Im " * z), main = main, las = 1)
+  fill <- adjustcolor(col, 0.45)
+  if (outside) rect(-10, -10, 10, 10, col = fill, border = NA)   # stable outside the curve
+  for (cl in contourLines(xs, ys, R, levels = 1))
+    polygon(cl$x, cl$y, col = if (outside) "white" else fill, border = col, lwd = 2.5)
   abline(h = 0, v = 0, col = oi["grey"])
+  box()
 }
 panel(R_euler, "Euler: |1 + z| ≤ 1", oi["blue"])
-text(-2, -0.45, "-2", cex = 1.5)
+text(-2.3, -0.5, "-2", cex = 1.5)
 panel(R_rk4, "RK4", oi["green"])
-text(-2.785, -0.45, "-2.79", cex = 1.5)
-panel(R_be, "backward Euler: |1/(1 - z)| ≤ 1", oi["red"])
+text(-3.4, -0.5, "-2.79", cex = 1.5)
+panel(R_be, "backward Euler: |1/(1 - z)| ≤ 1", oi["red"], outside = TRUE)
 text(-2.5, 2.5, "whole left\nhalf-plane", cex = 1.5)
 dev.off()
 
@@ -168,10 +172,10 @@ plot(run$t[-1], run$h, log = "y", type = "l", col = oi["blue"], lwd = 1.5,
 axis(2, at = 10^(-4:0), labels = c("1e-4", "0.001", "0.01", "0.1", "1"), las = 1)
 lines(seq(0, 30, by = 0.1), 3.3 / abs(lam_fast), lwd = 3, lty = 2, col = oi["red"])
 abline(h = 0.5, lwd = 3, lty = 3, col = oi["green"])
-text(15, 0.9, "steps the slow curve would allow (~0.5 s, accuracy)", cex = 1.3, col = oi["green"])
+text(15, 0.3, "step the slow curve would allow for accuracy (~0.5 s)", cex = 1.3, col = oi["green"])
 text(15, 1.5e-4, paste0("RK45: ", length(run$h), " accepted + ", run$nrej,
                         " rejected steps"), cex = 1.3, col = oi["blue"])
-legend("topleft", c("RK45 step size", "stability limit 3.3 / |fast eigenvalue|"),
+legend(0, 0.12, c("RK45 step size", "stability limit 3.3 / |fast eigenvalue|"),
        lwd = c(2, 3), lty = c(1, 2), col = oi[c("blue", "red")], cex = 1.3, bty = "n")
 dev.off()
 
@@ -184,40 +188,43 @@ svg("fig05-euler-vs-beuler.svg", width = 10, height = 5.5)
 par(mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
 plot(tl, full[, "C"], type = "l", lwd = 5, col = oi["grey"], xlim = c(0, 3), ylim = c(-0.5, 1.5),
      xlab = "time t (s)", ylab = expression("complex C (" * mu * "M)"), las = 1)
-lines((0:3000) * 1e-3, e1[, 3], lwd = 2, col = oi["blue"])
+lines((0:3000) * 1e-3, e1[, 3], lwd = 2.5, lty = 2, col = oi["blue"])
 ok <- is.finite(e3[, 3]) & abs(e3[, 3]) < 5
 lines(((0:1000) * 3e-3)[ok], e3[ok, 3], lwd = 2, col = oi["red"])
 points((0:30) * 0.1, be[, 3], pch = 19, cex = 1.3, col = oi["green"])
 legend("topright", c("reference", "Euler, h = 1 ms (3000 steps)", "Euler, h = 3 ms: blows up",
                      "backward Euler, h = 0.1 s (30 steps)"),
-       lwd = c(5, 2, 2, NA), pch = c(NA, NA, NA, 19), col = oi[c("grey", "blue", "red", "green")],
+       lwd = c(5, 2.5, 2, NA), lty = c(1, 2, 1, NA), pch = c(NA, NA, NA, 19), col = oi[c("grey", "blue", "red", "green")],
        cex = 1.3, bty = "n")
 dev.off()
 
 ## ---- fig06: error vs h ----------------------------------------------------------
 
-Pref <- full[full[, "time"] == 10, "P"]
-hs_imp <- c(0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001)
-err_be <- sapply(hs_imp, function(h) abs(beuler(f, jac, unname(y0), h, round(10 / h))[round(10 / h) + 1, 4] - Pref))
-err_b2 <- sapply(hs_imp, function(h) {               # second start value from the reference
-  y1 <- ode(y0, c(0, h), enzyme, NULL, method = "lsoda", rtol = 1e-12, atol = 1e-14)[2, -1]
-  abs(bdf2(f, jac, unname(y0), unname(y1), h, round(10 / h))[round(10 / h) + 1, 4] - Pref)
-})
-hs_ex <- c(0.0016, 0.001, 5e-4, 2e-4, 1e-4)
-err_ex <- sapply(hs_ex, function(h) abs(euler(f, unname(y0), h, round(10 / h))[round(10 / h) + 1, 4] - Pref))
+## Start after the binding transient (t = 0.1 s, from the reference), integrate 10 s:
+## the solution is smooth there but the problem is still stiff.
+refy <- function(t) unname(ode(y0, c(0, t), enzyme, NULL, method = "lsoda", rtol = 1e-12, atol = 1e-14)[2, -1])
+ys <- refy(0.1); Pref <- refy(10.1)[4]
+lam_s <- min(Re(eigen(jac(ys))$values))
+cat("fast eigenvalue at t = 0.1 s:", lam_s, " Euler limit 2/|lambda| =", 2 / abs(lam_s), "\n")
+hs_imp <- c(0.5, 0.2, 0.1, 0.05, 0.02, 0.01)
+err_be <- sapply(hs_imp, function(h) abs(beuler(f, jac, ys, h, round(10 / h))[round(10 / h) + 1, 4] - Pref))
+err_b2 <- sapply(hs_imp, function(h)                  # second start value from the reference
+  abs(bdf2(f, jac, ys, refy(0.1 + h), h, round(10 / h))[round(10 / h) + 1, 4] - Pref))
+hs_ex <- c(0.0015, 0.001, 5e-4, 2e-4, 1e-4)
+err_ex <- sapply(hs_ex, function(h) abs(euler(f, ys, h, round(10 / h))[round(10 / h) + 1, 4] - Pref))
 print(rbind(hs_imp, err_be, err_b2)); print(rbind(hs_ex, err_ex))
 svg("fig06-order.svg", width = 10, height = 5.5)
 par(mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
 plot(hs_imp, err_be, log = "xy", type = "o", pch = 19, lwd = 3, cex = 1.3, col = oi["red"],
-     xlim = c(1e-4, 0.5), ylim = c(1e-7, 1), xlab = "step size h (s)",
-     ylab = "error in P(10 s)", las = 1, xaxt = "n", yaxt = "n")
+     xlim = c(1e-4, 0.5), ylim = c(1e-8, 1), xlab = "step size h (s)",
+     ylab = "error in P after 10 s", las = 1, xaxt = "n", yaxt = "n")
 axis(1, at = 10^(-4:0), labels = c("1e-4", "0.001", "0.01", "0.1", "1"))
-axis(2, at = 10^(-7:0), labels = parse(text = paste0("10^", -7:0)), las = 1)
+axis(2, at = 10^(-8:0), labels = parse(text = paste0("10^", -8:0)), las = 1)
 lines(hs_imp, err_b2, type = "o", pch = 17, lwd = 3, cex = 1.3, col = oi["green"])
 lines(hs_ex, err_ex, type = "o", pch = 15, lwd = 3, cex = 1.3, col = oi["blue"])
-abline(v = 2 / 1201, lty = 2, col = oi["blue"], lwd = 2)
-text(2 / 1201, 3e-7, "  Euler stability limit", adj = 0, cex = 1.2, col = oi["blue"])
-legend("bottomright", c("explicit Euler (slope 1, only left of the limit)",
+abline(v = 2 / abs(lam_s), lty = 2, col = oi["blue"], lwd = 2)
+text(2 / abs(lam_s), 1e-7, "  Euler stability limit", adj = 0, cex = 1.2, col = oi["blue"])
+legend("topleft", c("explicit Euler (slope 1, only left of the limit)",
                         "backward Euler (slope 1)", "BDF2 (slope 2)"),
        lwd = 3, pch = c(15, 19, 17), col = oi[c("blue", "red", "green")], cex = 1.2, bty = "n")
 dev.off()
@@ -257,7 +264,7 @@ plot(th, cos(w * th), type = "l", lwd = 4, col = oi["grey"], ylim = c(-1.1, 1.4)
 axis(1, at = seq(0, 96, by = 24))
 lines(th, b01[, 1], lwd = 2.5, col = oi["orange"])
 lines(0:96, b1[, 1], type = "o", pch = 19, cex = 0.8, lwd = 2.5, col = oi["red"])
-legend("top", c("exact cos(wt)", "backward Euler, h = 0.1 h", "backward Euler, h = 1 h"),
+legend("top", c("exact cos(ωt)", "backward Euler, h = 0.1 h", "backward Euler, h = 1 h"),
        lwd = c(4, 2.5, 2.5), pch = c(NA, NA, 19), col = oi[c("grey", "orange", "red")],
        cex = 1.3, bty = "n", horiz = FALSE, ncol = 3, x.intersp = 0.5)
 dev.off()

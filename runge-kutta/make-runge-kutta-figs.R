@@ -96,8 +96,12 @@ lv <- function(t, y) c(a * y[1] - b * y[1] * y[2], c * y[1] * y[2] - d * y[2])
 V <- function(x, y) c * x - d * log(x) + b * y - a * log(y)
 lv0 <- c(10, 5)
 
-beta <- 0.3; gamma <- 0.1                       # SIR, fractions of the population
-sir <- function(t, y) c(-beta * y[1] * y[2], beta * y[1] * y[2] - gamma * y[2], gamma * y[2])
+beta <- 0.3; gamma <- 0.1; Npop <- 10000        # SIR as in the euler unit, people
+sir <- function(t, y) {
+  S <- y[1]; I <- y[2]
+  c(-beta * S * I / Npop, beta * S * I / Npop - gamma * I, gamma * I)
+}
+sir0 <- c(9990, 10, 0)
 
 alpha <- 216; alpha0 <- 0.216; bet <- 5; nH <- 2  # repressilator, dimensionless
 repress <- function(t, y) {
@@ -267,44 +271,46 @@ dev.off()
 
 ## ---- fig08: tolerance: achieved error vs rtol, and the atol floor ------------
 
-I0 <- 1e-6; s0 <- c(1 - I0, I0, 0)
-ref <- dp5(sir, 0, s0, 60, rtol = 1e-13, atol = 1e-16)
+ref <- dp5(sir, 0, sir0, 60, rtol = 1e-13, atol = 1e-12)
 Iref <- ref$y[nrow(ref$y), 2]
-rts <- 10^-(2:10)
-ach <- sapply(c(1e-6, 1e-16), function(at) sapply(rts, function(rt) {
-  so <- dp5(sir, 0, s0, 60, rtol = rt, atol = at)
+rts <- 10^-(2:9)
+ach <- sapply(c(10, 1, 1e-6), function(at) sapply(rts, function(rt) {
+  so <- dp5(sir, 0, sir0, 60, rtol = rt, atol = at)
   abs(so$y[nrow(so$y), 2] - Iref) / Iref
 }))
 svg("fig08-tolerance.svg", width = 9, height = 5.8)
 par(mar = c(5, 6, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
-plot(rts, ach[, 2], log = "xy", type = "o", pch = 19, lwd = 3, cex = 1.2, col = oi["blue"],
-     ylim = c(1e-11, 1), xlab = "rtol", ylab = "", axes = FALSE)
+plot(rts, ach[, 3], log = "xy", type = "o", pch = 19, lwd = 3, cex = 1.2, col = oi["blue"],
+     ylim = c(1e-9, 1), xlab = "rtol", ylab = "", axes = FALSE)
 title(ylab = "relative error in I(60)", line = 4.5)
-axis(1, at = 10^c(-10, -8, -6, -4, -2), labels = c("1e-10", "1e-8", "1e-6", "1e-4", "0.01"))
-axis(2, at = 10^c(-10, -8, -6, -4, -2, 0), labels = c("1e-10", "1e-8", "1e-6", "1e-4", "0.01", "1"), las = 1); box()
+axis(1, at = 10^c(-9, -7, -5, -3), labels = c("1e-9", "1e-7", "1e-5", "0.001"))
+axis(2, at = 10^c(-8, -6, -4, -2, 0), labels = c("1e-8", "1e-6", "1e-4", "0.01", "1"), las = 1); box()
+lines(rts, ach[, 2], type = "o", pch = 15, lwd = 3, cex = 1.3, col = oi["orange"])
 lines(rts, ach[, 1], type = "o", pch = 17, lwd = 3, cex = 1.3, col = oi["red"])
 lines(rts, rts, lty = 2, lwd = 2, col = oi["grey"])
-text(3e-9, 1.2e-9, "error = rtol", col = oi["grey"], cex = 1.2, pos = 4)
-legend("topleft", c("atol = 1e-16", "atol = 1e-6  (= I at t = 0)"), col = oi[c("blue", "red")],
-       pch = c(19, 17), lwd = 3, cex = 1.3, bty = "n")
+text(1e-6, 3e-7, "error = rtol", col = oi["grey"], cex = 1.2, pos = 4)
+legend("topleft", c("atol = 10 people  (= I at t = 0)", "atol = 1 person", "atol = 1e-6 people"),
+       col = oi[c("red", "orange", "blue")], pch = c(17, 15, 19), lwd = 3, cex = 1.3, bty = "n")
 dev.off()
+print(signif(ach, 2))
 
 ## ---- fig09: dense output ---------------------------------------------------
 
-y0s <- c(0.999, 0.001, 0)
-s <- dp5(sir, 0, y0s, 120, rtol = 1e-4, atol = 1e-8)
+y0s <- sir0
+s <- dp5(sir, 0, y0s, 120, rtol = 1e-4, atol = 1e-4)
 svg("fig09-dense-output.svg", width = 11, height = 5.5)
 par(mar = c(5, 6.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
-fine <- dp5(sir, 0, y0s, 120, rtol = 1e-10, atol = 1e-12)
+fine <- dp5(sir, 0, y0s, 120, rtol = 1e-10, atol = 1e-8)
 plot(fine$t, fine$y[, 2], type = "l", lwd = 6, col = oi["grey"], las = 1,
      xlab = "time (days)", ylab = "")
-title(ylab = "infected fraction I", line = 4.5)
+title(ylab = "infected I (people)", line = 4.5)
 lines(s$t, s$y[, 2], lwd = 2, lty = 2, col = oi["red"])
 tq <- seq(0, 120, by = 0.25)
 iq <- findInterval(tq, s$t, rightmost.closed = TRUE)
 dq <- hermite(tq, s$t[iq], s$t[iq + 1], s$y[iq, 2], s$y[iq + 1, 2], s$f[iq, 2], s$f[iq + 1, 2])
 lines(tq, dq, lwd = 2.5, col = oi["blue"])
 points(s$t, s$y[, 2], pch = 19, cex = 1.4, col = oi["red"])
+cat("fig09 steps:", length(s$h), "\n")
 legend("topright", c("exact", sprintf("solver steps (%d steps), joined by lines", length(s$h)),
                      "dense output between the steps"),
        col = oi[c("grey", "red", "blue")], lwd = c(6, 2, 2.5), lty = c(1, 2, 1),
@@ -315,20 +321,20 @@ dev.off()
 
 svg("fig10-events.svg", width = 12, height = 5.3)
 par(mfrow = c(1, 2), mar = c(5, 6.8, 2.5, 1), cex.lab = 1.5, cex.axis = 1.3, cex.main = 1.4)
-g <- beta * fine$y[, 1] - gamma
+g <- beta * fine$y[, 1] / Npop - gamma
 plot(fine$t, g, type = "l", lwd = 4, col = oi["grey"], xlim = c(20, 60), ylim = c(-0.1, 0.2),
      las = 1, xlab = "time (days)", ylab = "", main = "peak of I: g changes sign")
-title(ylab = expression(g == beta * S - gamma), line = 4.8)
+title(ylab = expression(g == beta * S / N - gamma), line = 4.8)
 abline(h = 0, lty = 3)
-gs <- beta * s$y[, 1] - gamma
+gs <- beta * s$y[, 1] / Npop - gamma
 points(s$t, gs, pch = 19, cex = 1.4, col = oi["red"])
 i <- which(gs[-1] < 0 & gs[-length(gs)] > 0)
 tq <- seq(s$t[i], s$t[i + 1], length.out = 50)
-lines(tq, beta * hermite(tq, s$t[i], s$t[i + 1], s$y[i, 1], s$y[i + 1, 1], s$f[i, 1], s$f[i + 1, 1]) - gamma,
+lines(tq, beta * hermite(tq, s$t[i], s$t[i + 1], s$y[i, 1], s$y[i + 1, 1], s$f[i, 1], s$f[i + 1, 1]) / Npop - gamma,
       lwd = 3, col = oi["blue"])
 tpk <- uniroot(function(t) beta * hermite(t, s$t[i], s$t[i + 1], s$y[i, 1], s$y[i + 1, 1],
-                                          s$f[i, 1], s$f[i + 1, 1]) - gamma, c(s$t[i], s$t[i + 1]))$root
-points(tpk, 0, pch = 4, cex = 2.2, lwd = 3)
+                                          s$f[i, 1], s$f[i + 1, 1]) / Npop - gamma, c(s$t[i], s$t[i + 1]))$root
+points(tpk, 0, pch = 4, cex = 2.2, lwd = 3); cat("fig10 root:", tpk, "\n")
 text(tpk, 0.02, sprintf("t = %.2f", tpk), cex = 1.3, pos = 4)
 legend("topright", c("solver steps", "dense output in the step", "root of g"),
        col = c(oi[c("red", "blue")], "black"), pch = c(19, NA, 4), lwd = c(NA, 3, 3), cex = 1.15, bty = "n")

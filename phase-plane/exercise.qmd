@@ -1,0 +1,1258 @@
+---
+title: "Exercise: equilibria, stability and the phase plane"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- decide whether a fixed point of a one-variable ODE is stable from the sign of $f'(x^*)$,
+- sketch the **nullclines** of a two-variable model and read the direction of the flow from them,
+- **linearise** an ODE at a fixed point, $\dot{\boldsymbol\delta} \approx J\boldsymbol\delta$, and classify the fixed point (node, saddle, spiral, centre) from the **eigenvalues** of $J$, by hand for $2\times2$ and with `eigen` / `np.linalg.eigvals` / `nalgebra` in code,
+- simulate trajectories with a library solver (`deSolve::ode`, `scipy.integrate.solve_ivp`, the `ode_solvers` crate) and find where each start ends,
+- compute the **separatrix** between two basins by integrating **backwards in time** from a saddle, and check it with forward runs,
+- detect a **limit cycle** and measure its period and amplitude,
+- recognise the two classic failures: a simulation that stops at a **saddle**, and an eigenvalue with **real part near 0** that the numerics cannot classify.
+
+The by-hand part needs pen, paper and a calculator. The code part checks your hand answers and then works where only code works.
+
+## Background
+
+**The toggle switch** (from *Newton for systems of equations*). Two genes repress each other:
+
+$$\frac{du}{dt} = \frac{\alpha}{1 + v^{n}} - u, \qquad \frac{dv}{dt} = \frac{\alpha}{1 + u^{n}} - v, \qquad \alpha = 3,\ n = 2.$$
+
+Steady states: **U on** $= \big((3+\sqrt5)/2,\ (3-\sqrt5)/2\big) = (2.618034, 0.381966)$, **middle** $= (1.213412, 1.213412)$, **V on** $= (0.381966, 2.618034)$. The **biased switch** has a 3 % weaker promoter for V: $\alpha_u = 3$ in the first equation, $\alpha_v = 2.9$ in the second.
+
+**The Sel'kov model of glycolytic oscillations** ($u$ = ADP, $v$ = fructose-6-phosphate):
+
+$$\frac{du}{dt} = -u + a v + u^2 v, \qquad \frac{dv}{dt} = b - a v - u^2 v, \qquad a = 0.08,\ b = 0.6.$$
+
+**Facts used below:**
+
+1. **Fixed point** $\mathbf x^*$: $\mathbf F(\mathbf x^*) = \mathbf 0$. In one variable it is **stable** if $f'(x^*) < 0$ and **unstable** if $f'(x^*) > 0$; a small perturbation behaves like $\delta_0 e^{f'(x^*)t}$.
+2. **Nullclines**: the curve $\dot u = 0$ (there the flow is vertical) and the curve $\dot v = 0$ (flow horizontal). Fixed points are where they cross.
+3. **Linearisation**: $\dot{\boldsymbol\delta} \approx J(\mathbf x^*)\,\boldsymbol\delta$ with the Jacobian $J_{ij} = \partial F_i/\partial x_j$. If $J\mathbf v = \lambda \mathbf v$, then $\boldsymbol\delta(t) = c\,e^{\lambda t}\mathbf v$; a general start is a sum of such terms.
+4. **Stability**: stable if **all** eigenvalues have $\mathrm{Re}\,\lambda < 0$; unstable if **any** has $\mathrm{Re}\,\lambda > 0$; undecided by linearisation if the largest real part is $0$.
+5. **$2\times2$ shortcut**: with $\tau = \operatorname{tr} J$, $\Delta = \det J$: $\lambda = \big(\tau \pm \sqrt{\tau^2 - 4\Delta}\big)/2$. $\Delta < 0$: **saddle**. $\Delta > 0$: stable if $\tau < 0$, unstable if $\tau > 0$; a **spiral** if $\tau^2 < 4\Delta$, otherwise a **node**. $\tau = 0 < \Delta$: **centre** (undecided). An eigenvector for $\lambda$ is $\mathbf v = (J_{12},\ \lambda - J_{11})$ (if $J_{12} \ne 0$).
+6. **Separatrix**: the stable direction of a saddle continues as a curve that separates the basins of attraction. Running the ODE **backwards in time** (`times` decreasing, or the right-hand side multiplied by $-1$) from $\mathbf x^* \pm \varepsilon\,\mathbf v_{\text{stable}}$ traces it out.
+7. **Limit cycle**: an isolated closed orbit. In two variables, an unstable fixed point inside a region that trajectories cannot leave forces one.
+8. **Library routines.** Trajectories: R [`deSolve::ode`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) (default `lsoda`), Python [`scipy.integrate.solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) (default `RK45`), Rust [`ode_solvers::Dopri5`](https://docs.rs/ode_solvers/latest/ode_solvers/dopri5/struct.Dopri5.html). Eigenvalues: R [`eigen`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html), Python [`np.linalg.eigvals`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvals.html) and [`np.linalg.eig`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eig.html), Rust [`nalgebra`'s `complex_eigenvalues`](https://docs.rs/nalgebra/latest/nalgebra/base/struct.Matrix.html#method.complex_eigenvalues). For a non-symmetric matrix `eigen` sorts by **modulus**, `eigvals` and `nalgebra` do not sort at all: never read stability from the first entry.
+
+The toggle switch as an ODE, one trajectory, and the eigenvalues at U on, in each language. We use tight tolerances (`rtol = 1e-10`, `atol = 1e-12`) on this page so that the three solvers print the same digits:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(deSolve)
+alpha <- 3; n <- 2
+toggle <- function(t, x, parms) {        # deSolve wants func(t, x, parms) -> list
+  u <- x[1]; v <- x[2]
+  list(c(alpha / (1 + v^n) - u,          # du/dt
+         alpha / (1 + u^n) - v))         # dv/dt
+}
+J <- function(x) {                       # Jacobian, as in Newton for systems
+  u <- x[1]; v <- x[2]
+  matrix(c(-1, -alpha * n * v^(n - 1) / (1 + v^n)^2,
+           -alpha * n * u^(n - 1) / (1 + u^n)^2, -1),
+         nrow = 2, byrow = TRUE)
+}
+out <- ode(y = c(u = 0.5, v = 0.3), times = c(0, 1, 5, 20), func = toggle,
+           parms = NULL, rtol = 1e-10, atol = 1e-12)
+for (i in 1:nrow(out)) cat(sprintf("t = %4.1f   u = %.6f   v = %.6f\n", out[i, 1], out[i, 2], out[i, 3]))
+x_on <- c((3 + sqrt(5)) / 2, (3 - sqrt(5)) / 2)   # "U on", exact
+eigen(J(x_on))$values
+
+# Output:
+# t =  0.0   u = 0.500000   v = 0.300000
+# t =  1.0   u = 1.323446   v = 0.968978
+# t =  5.0   u = 1.628535   v = 0.872293
+# t = 20.0   u = 2.587075   v = 0.393849
+# [1] -1.6666667 -0.3333333
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.integrate import solve_ivp
+
+alpha, n = 3.0, 2.0
+
+def toggle(t, x):                        # solve_ivp wants fun(t, x) -> derivatives
+    u, v = x
+    return [alpha / (1 + v**n) - u,      # du/dt
+            alpha / (1 + u**n) - v]      # dv/dt
+
+def J(x):                                # Jacobian, as in Newton for systems
+    u, v = x
+    return np.array([[-1, -alpha * n * v**(n - 1) / (1 + v**n)**2],
+                     [-alpha * n * u**(n - 1) / (1 + u**n)**2, -1]])
+
+sol = solve_ivp(toggle, (0, 20), [0.5, 0.3], t_eval=[0, 1, 5, 20],
+                rtol=1e-10, atol=1e-12)
+for t, u, v in zip(sol.t, *sol.y):
+    print(f"t = {t:4.1f}   u = {u:.6f}   v = {v:.6f}")
+x_on = np.array([(3 + np.sqrt(5)) / 2, (3 - np.sqrt(5)) / 2])   # "U on", exact
+print(np.linalg.eigvals(J(x_on)))
+
+# Output:
+# t =  0.0   u = 0.500000   v = 0.300000
+# t =  1.0   u = 1.323446   v = 0.968978
+# t =  5.0   u = 1.628535   v = 0.872293
+# t = 20.0   u = 2.587075   v = 0.393849
+# [-0.33333333 -1.66666667]
+```
+
+### Rust
+
+```rust
+// rust/examples/phase_plane_background.rs  —  cargo run --example phase_plane_background
+// Background: one trajectory of the toggle switch (ode_solvers, Dopri5),
+// and the eigenvalues of the Jacobian at "U on" (nalgebra).
+use nalgebra::Matrix2;
+use ode_solvers::{Dopri5, System, Vector2};
+
+const ALPHA: f64 = 3.0;
+const N: f64 = 2.0;
+
+struct Toggle;
+impl System<f64, Vector2<f64>> for Toggle {
+    // ode_solvers wants system(t, x, dx): write the derivatives into dx
+    fn system(&self, _t: f64, x: &Vector2<f64>, dx: &mut Vector2<f64>) {
+        let (u, v) = (x[0], x[1]);
+        dx[0] = ALPHA / (1.0 + v.powf(N)) - u; // du/dt
+        dx[1] = ALPHA / (1.0 + u.powf(N)) - v; // dv/dt
+    }
+}
+
+// Jacobian, as in Newton for systems
+fn jac(u: f64, v: f64) -> Matrix2<f64> {
+    Matrix2::new(-1.0, -ALPHA * N * v.powf(N - 1.0) / (1.0 + v.powf(N)).powi(2),
+                 -ALPHA * N * u.powf(N - 1.0) / (1.0 + u.powf(N)).powi(2), -1.0)
+}
+
+fn main() {
+    // Dopri5::new(system, t0, t_end, output spacing, x0, rtol, atol)
+    let mut solver = Dopri5::new(Toggle, 0.0, 20.0, 1.0, Vector2::new(0.5, 0.3), 1e-10, 1e-12);
+    solver.integrate().expect("integration failed");
+    let (ts, xs) = (solver.x_out(), solver.y_out()); // output at t = 0, 1, 2, ..., 20
+    for i in [0, 1, 5, 20] {
+        println!("t = {:4.1}   u = {:.6}   v = {:.6}", ts[i], xs[i][0], xs[i][1]);
+    }
+    let (u_on, v_on) = ((3.0 + 5f64.sqrt()) / 2.0, (3.0 - 5f64.sqrt()) / 2.0); // "U on", exact
+    println!("{:?}", jac(u_on, v_on).complex_eigenvalues().as_slice());
+}
+
+// Output:
+// t =  0.0   u = 0.500000   v = 0.300000
+// t =  1.0   u = 1.323446   v = 0.968978
+// t =  5.0   u = 1.628535   v = 0.872293
+// t = 20.0   u = 2.587075   v = 0.393849
+// [Complex { re: -1.6666666666666665, im: 0.0 }, Complex { re: -0.3333333333333333, im: 0.0 }]
+```
+
+:::
+
+Each library wants the right-hand side in its own shape: deSolve `func(t, x, parms)` returning a **list**; solve_ivp `fun(t, x)` returning the derivatives; ode_solvers a type implementing the `System` trait with `system(&self, t, x, dx)` that **writes** the derivatives into `dx`. `ode_solvers` uses its own copy of nalgebra, so in Rust we keep the ODE state (`ode_solvers::Vector2`) and the linear algebra (`nalgebra::Matrix2`) apart and copy numbers between them.
+
+## By hand
+
+**B1. A switch with one gene.** A gene activates its own transcription: $\dfrac{dx}{dt} = f(x) = \dfrac{x^2}{1 + x^2} - 0.4\,x$.
+(a) Find the three fixed points. (Hint: one is $0$; divide the rest by $x$.)
+(b) Compute $f'(x)$ and classify each fixed point.
+(c) A cell sits at the upper state and is pushed by $\delta_0 = 0.1$. Roughly how long until the push has halved?
+
+**B2. Nullclines of the toggle switch.** ($\alpha = 3$, $n = 2$.)
+(a) Find the sign of $du/dt$ and $dv/dt$ at $(0, 0)$, $(3, 3)$, $(2, 0.7)$ and $(0.7, 2)$. In which of the four regions of the lecture's nullcline figure does each point lie?
+(b) On the u-nullcline the flow is vertical. Is it up or down at the points of the u-nullcline with $v = 2$ and with $v = 0.5$? (First compute $u$ there.)
+(c) Use (b) to argue, without eigenvalues, that the middle state cannot be stable.
+
+**B3. The zoo.** Classify the fixed point $\mathbf 0$ of $\dot{\mathbf x} = A\mathbf x$ by trace and determinant, then give the eigenvalues:
+$$A_1 = \begin{pmatrix} -3 & 1 \\ 1 & -3\end{pmatrix},\quad A_2 = \begin{pmatrix} 1 & 2 \\ 2 & 1\end{pmatrix},\quad A_3 = \begin{pmatrix} -1 & -4 \\ 1 & -1\end{pmatrix},\quad A_4 = \begin{pmatrix} 0 & 1 \\ -4 & 0\end{pmatrix}.$$
+For $A_2$, also find both eigenvectors and say which direction attracts and which repels.
+
+**B4. The stable states of the toggle.** At U on, $u^* = 2.618034$, $v^* = 0.381966$.
+(a) Evaluate $J$ (the formula is in *Newton for systems of equations*: diagonal $-1$, off-diagonals $-6v/(1+v^2)^2$ and $-6u/(1+u^2)^2$). Compute $\tau$, $\Delta$ and the eigenvalues.
+(b) Show that $J = \begin{pmatrix} -1 & -p \\ -q & -1\end{pmatrix}$ has eigenvalues $-1 \pm \sqrt{pq}$.
+(c) For general $\alpha > 2$ the outer states satisfy $u(1 + v^2) = \alpha$, $v(1 + u^2) = \alpha$ and $uv = 1$. Show that $pq = 4/\alpha^2$, so the eigenvalues are $-1 \pm 2/\alpha$. For which $\alpha$ are the outer states stable?
+(d) Find an eigenvector for $\lambda = -1/3$ (Fact 5) and normalise it to length 1.
+
+**B5. The middle state is a saddle.** At $u = v = s$ the Jacobian is $\begin{pmatrix} -1 & -g \\ -g & -1\end{pmatrix}$ with $g = 2\alpha s/(1+s^2)^2$.
+(a) Show that $(1, 1)$ and $(1, -1)$ are eigenvectors and find their eigenvalues.
+(b) For $\alpha = 3$, $s = 1.2134$: compute $g$ and both eigenvalues. Which direction is "the cell decides"?
+(c) Use $\alpha = s(1 + s^2)$ to show $g = 2s^2/(1+s^2)$. Conclude that the middle state is a saddle exactly when $\alpha > 2$.
+
+**B6. A push at U on, solved exactly.** The cell at U on gets a pulse of extra U: $\boldsymbol\delta_0 = (0.1, 0)$. Use the linearisation with $\lambda_1 = -5/3$, $\mathbf v_1 = (0.9342, 0.3568)$ and $\lambda_2 = -1/3$, $\mathbf v_2 = (0.9342, -0.3568)$.
+(a) Write $\boldsymbol\delta_0 = c_1\mathbf v_1 + c_2\mathbf v_2$ and find $c_1$, $c_2$.
+(b) Give $\boldsymbol\delta(t)$ and evaluate it at $t = 3$. What happens to V, and why does that make biological sense?
+(c) When has $\delta_u$ fallen to $0.001$?
+
+**B7. Sel'kov by hand.**
+(a) Add the two equations to show that the fixed point has $u^* = b$ and then $v^* = b/(a + b^2)$. Evaluate for $a = 0.08$, $b = 0.6$.
+(b) Show that $J = \begin{pmatrix} -1 + 2uv & a + u^2 \\ -2uv & -(a + u^2)\end{pmatrix}$ and that at the fixed point $\Delta = a + b^2$. Compute $\tau$ and classify for $b = 0.6$ and for $b = 1$.
+(c) Oscillations start or stop where $\tau = 0$. Show that this means $b^4 + (2a - 1)b^2 + a + a^2 = 0$ and find the two values of $b$ for $a = 0.08$.
+
+**B8. Symmetry and time reversal.**
+(a) In the symmetric toggle, show that a start with $u_0 = v_0$ keeps $u = v$ for all time. Where does it end, and what does that say about the separatrix?
+(b) Running time backwards means solving $\dot{\mathbf x} = -\mathbf F(\mathbf x)$. What are the Jacobian and its eigenvalues at a fixed point now? Explain why a backward run from next to the saddle follows the separatrix, while a forward run from next to it does not.
+(c) A start lies $10^{-8}$ away from the separatrix. Roughly how long does it stay near the saddle (unstable eigenvalue $0.19$) before it visibly leaves (distance $\approx 0.1$)?
+
+## In code
+
+The solutions build on each other: the Background defines `toggle` and `J`; C1 defines `states` and `which_state`; C2 defines `fd_jacobian`; C3 defines the biased switch (`toggle2`, `F2`, `states2`). Each Rust file is a complete program.
+
+**C1. Phase portrait of the toggle.** Draw both nullclines and the trajectories from $(0.5, 0.3)$, $(0.3, 0.5)$, $(3.3, 3)$, $(3, 3.3)$, $(0.1, 1.8)$, $(1.8, 0.1)$ and $(2, 2)$, up to $t = 60$. Write a function `which_state(x, states)` that returns the name of the steady state within $10^{-3}$ of `x` (or "not settled"). Which start ends where? Which ones have **not** settled at $t = 30$, and why are exactly these slow?
+
+**C2. Classify fixed points.** Write `classify(A)` that returns "stable node", "unstable node", "stable spiral", "unstable spiral", "saddle" or "undecided (Re = 0)" from the eigenvalues of a $2\times2$ matrix (use a tolerance $10^{-8}$ for "zero"). Check it on B3 and on the three states of the toggle. Then compare the eigenvalues of the exact `J` with those of a finite-difference Jacobian at each state. How big is the difference, and what does it mean for a borderline case?
+
+**C3. Where does the cell end up?** Simulate the ODE from each start of the $10\times10$ grid $u_0, v_0 \in \{0.2, 0.6, \dots, 3.8\}$ to $t = 100$ and count the end states. Do it for the symmetric switch and for the biased switch ($\alpha_v = 2.9$; find its three steady states with `multiroot` / `scipy.optimize.root` / Newton). Compare with Newton from the same grid in *Newton for systems of equations* (C3 there: 23 % U on, 54 % middle, 23 % V on). Why do 10 runs end in the middle state for the symmetric switch but none for the biased one?
+
+**C4. The separatrix of the biased switch.** At the saddle of the biased switch, find the stable eigenvector. Run the ODE backwards for 7.5 time units from saddle $\pm 10^{-6}\,\mathbf v_{\text{stable}}$ and join the two arcs. For $u_0 = 0.1, 0.5, 1, 2, 3$, interpolate the separatrix height $v_{\text{sep}}(u_0)$ and run forwards from $(u_0, v_{\text{sep}} \pm 0.01)$. Does every pair end in different states? What does $v_{\text{sep}}(0.1)$ tell you about a cell that has almost no U?
+
+**C5. The glycolytic oscillator.** (a) For $b = 0.2, 0.4, 0.6, 0.8, 1.0$, compute the eigenvalues at the Sel'kov fixed point and compare with B7(c). (b) For $b = 0.6$, simulate to $t = 200$ (output every 0.01) from $(0.61, 1.36)$ and from $(2.5, 0.2)$. After discarding $t \le 100$, report the range of $u$ and the period (mean time between upward crossings of $u = b$, with linear interpolation). Repeat with tolerances $10^{-6}$ and $10^{-10}$. (c) Do the same for $b = 1$. Is there a "period"? Is there an oscillation?
+
+**C6. Near the bifurcation.** For $\alpha = 3, 2.5, 2.1, 2.01, 2.001$, compute the largest eigenvalue at U on (exact state from B4), the time $\ln(100)/|\lambda_{\max}|$ for a perturbation to shrink to 1 %, and the distance from U on of a simulation from $(3, 0.5)$ at $t = 100$. Then set $\alpha = 2$ and compute $\lambda_{\max}$ from a finite-difference Jacobian at $(1, 1)$ and at $(1 \pm 10^{-6}, 1 \mp 10^{-6})$. What would you conclude about stability from each, and why can you not trust any of them?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — stability in one variable (B1)"}
+$\dfrac{d}{dx}\dfrac{x^2}{1+x^2} = \dfrac{2x}{(1+x^2)^2}$ (quotient rule). For the fixed points other than 0, solve $\dfrac{x}{1+x^2} = 0.4$, a quadratic. A perturbation decays like $e^{f'(x^*)t}$; it halves when $f'(x^*)\,t = -\ln 2$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — eigenvalues and eigenvectors of a 2×2 (B3–B5)"}
+$\lambda^2 - \tau\lambda + \Delta = 0$. For $\begin{pmatrix} -1 & -p\\ -q & -1\end{pmatrix}$: $(\lambda + 1)^2 = pq$. To check an eigenvector, multiply: $J\mathbf v$ must equal $\lambda\mathbf v$. For B4(c), use $1 + v^2 = \alpha/u$ and $1 + u^2 = \alpha/v$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — the push (B6)"}
+Because $\mathbf v_1$ and $\mathbf v_2$ differ only in the sign of the second entry, adding and subtracting the two equations $c_1\mathbf v_1 + c_2\mathbf v_2 = (0.1, 0)$ gives $c_1$ and $c_2$ at once. $e^{-5} = 0.00674$, $e^{-1} = 0.3679$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — simulating (C1, C3)"}
+R: [`ode(y, times, func, parms, rtol, atol)`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) returns a matrix with columns `time`, then the states; `func` must return `list(c(du, dv))`. Python: [`solve_ivp(fun, t_span, y0, t_eval=..., rtol=..., atol=...)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) returns an object with `.t` and `.y` (one **row** per variable). Rust: [`Dopri5::new(system, t0, t_end, dx, y0, rtol, atol)`](https://docs.rs/ode_solvers/latest/ode_solvers/dopri5/struct.Dopri5.html), then `.integrate()`, `.x_out()`, `.y_out()`; output every `dx`. Steady states of the biased switch: [`rootSolve::multiroot`](https://search.r-project.org/CRAN/refmans/rootSolve/html/multiroot.html) (set both `atol` and `rtol`), [`scipy.optimize.root`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.root.html).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — classifying (C2)"}
+R [`eigen(A, only.values = TRUE)$values`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html) may be complex; use `Re()` and `Im()`. Python [`np.linalg.eigvals`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvals.html), `.real`, `.imag`. Rust `a.complex_eigenvalues()` returns complex numbers with fields `.re`, `.im`. Test "saddle" before "stable/unstable". Sort eigenvalues before comparing two lists of them.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — the separatrix (C4)"}
+R: a decreasing `times` vector, e.g. `seq(0, -7.5, by = -0.01)`, makes `ode` integrate backwards; the finite-difference Jacobian of a deSolve-style function is [`rootSolve::jacobian.full(y, func)`](https://search.r-project.org/CRAN/refmans/rootSolve/html/jacobian.full.html); pick the stable column with `e$vectors[, e$values < 0]`. Python: `solve_ivp(fun, (0, -7.5), ...)` integrates backwards; [`np.linalg.eig`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eig.html) returns values and vectors (columns). Rust: integrate $-\mathbf F$ forwards; the eigenvector of a $2\times2$ from Fact 5. Interpolation: R [`approx`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/approxfun.html), Python [`np.interp`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html) (both need the points sorted by $u$), Rust by hand.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — period of an oscillation (C5)"}
+An upward crossing of $u = b$ is an index $i$ with $u_i < b \le u_{i+1}$; the crossing time is $t_i + \dfrac{b - u_i}{u_{i+1} - u_i}\,\Delta t$. The period is the mean difference between successive crossing times. Before you trust it, look at the **range** $\max u - \min u$ after the transient: a range of the size of the solver tolerance is not an oscillation.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution — by hand"}
+
+**B1.**
+(a) $f(x) = x\left(\dfrac{x}{1+x^2} - 0.4\right) = 0$: $x = 0$, or $x = 0.4(1 + x^2)$, i.e. $0.4x^2 - x + 0.4 = 0$, $x = \dfrac{1 \pm \sqrt{1 - 0.64}}{0.8} = \dfrac{1 \pm 0.6}{0.8}$: $x = 0.5$ and $x = 2$.
+(b) $f'(x) = \dfrac{2x}{(1+x^2)^2} - 0.4$. $f'(0) = -0.4$: stable (gene off). $f'(0.5) = \dfrac{1}{1.5625} - 0.4 = 0.24$: unstable (the threshold). $f'(2) = \dfrac{4}{25} - 0.4 = -0.24$: stable (gene on). A one-gene **bistable** switch: positive feedback gives memory.
+(c) $\delta(t) \approx 0.1\,e^{-0.24t}$; halves after $\ln 2/0.24 = 2.9$ time units.
+
+**B2.**
+(a) $(0, 0)$: $\dot u = 3 > 0$, $\dot v = 3 > 0$, below both nullclines. $(3, 3)$: $\dot u = 0.3 - 3 < 0$, $\dot v < 0$, above both. $(2, 0.7)$: $\dot u = 3/1.49 - 2 = +0.013$, $\dot v = 3/5 - 0.7 = -0.1$: the thin lens between the middle state and U on ($u\uparrow$, $v\downarrow$). $(0.7, 2)$: mirror image, $\dot u = -0.1$, $\dot v = +0.013$: the lens towards V on.
+(b) At $v = 2$: $u = 3/5 = 0.6$, $\dot v = 3/1.36 - 2 = +0.206$, **up**. At $v = 0.5$: $u = 3/1.25 = 2.4$, $\dot v = 3/6.76 - 0.5 = -0.056$, **down**.
+(c) The u-nullcline passes through the middle state. Above it (at $v = 2$) the flow moves up along the nullcline, below it (at $v = 0.5$) down: on both sides the flow carries points **away** from the middle state. A point slightly off the middle state on this curve does not return, so the middle state is unstable.
+
+**B3.**
+$A_1$: $\tau = -6$, $\Delta = 8$, $\tau^2 - 4\Delta = 4 > 0$: stable node, $\lambda = (-6 \pm 2)/2 = -2, -4$.
+$A_2$: $\Delta = 1 - 4 = -3 < 0$: saddle; $\lambda = (2 \pm 4)/2 = 3, -1$. $(A_2 - 3I)\mathbf v = 0$ gives $\mathbf v = (1, 1)$, repelling; $(A_2 + I)\mathbf v = 0$ gives $(1, -1)$, attracting.
+$A_3$: $\tau = -2$, $\Delta = 1 + 4 = 5$, $\tau^2 - 4\Delta = -16 < 0$: stable spiral, $\lambda = -1 \pm 2i$.
+$A_4$: $\tau = 0$, $\Delta = 4$: centre, $\lambda = \pm 2i$. Linearisation cannot decide for a nonlinear model.
+
+**B4.**
+(a) $p = 6 \cdot 0.381966/(1.145898)^2 = 2.291796/1.313082 = 1.745356$, $q = 6\cdot 2.618034/(7.854102)^2 = 15.708204/61.686918 = 0.254644$. $J = \begin{pmatrix} -1 & -1.745356\\ -0.254644 & -1\end{pmatrix}$, $\tau = -2$, $\Delta = 1 - 0.444444 = 0.555556$, $\lambda = (-2 \pm \sqrt{4 - 2.222222})/2 = -1 \pm 0.666667$: $-0.3333$ and $-1.6667$. Stable node.
+(b) $\tau = -2$, $\Delta = 1 - pq$, $\lambda = -1 \pm \sqrt{1 - (1 - pq)} = -1 \pm \sqrt{pq}$.
+(c) $pq = \dfrac{2\alpha v}{(1+v^2)^2}\cdot\dfrac{2\alpha u}{(1+u^2)^2} = 4\alpha^2 uv\cdot\dfrac{u^2}{\alpha^2}\cdot\dfrac{v^2}{\alpha^2} = \dfrac{4(uv)^3}{\alpha^2} = \dfrac{4}{\alpha^2}$. So $\lambda = -1 \pm 2/\alpha$, both negative for every $\alpha > 2$: the outer states are stable whenever they exist. At $\alpha = 2$, $\lambda = 0$.
+(d) $\mathbf v = (J_{12}, \lambda - J_{11}) = (-1.745356, -1/3 + 1) = (-1.745356, 0.666667)$; length $\sqrt{3.046268 + 0.444444} = 1.868345$; normalised $(-0.9342, 0.3568)$, or with the sign flipped $(0.9342, -0.3568)$: more U and less V.
+
+**B5.**
+(a) $J(1, 1)^T = (-1 - g, -g - 1) = (-1 - g)(1, 1)$, eigenvalue $-1 - g$. $J(1, -1)^T = (-1 + g, -g + 1) = (-1 + g)(1, -1)$, eigenvalue $-1 + g$.
+(b) $s^2 = 1.47234$, $g = 6\cdot1.2134/(2.47234)^2 = 7.2804/6.11246 = 1.1911$. $\lambda = -2.1911$ along $(1, 1)$ and $+0.1911$ along $(1, -1)$: a saddle. The growing direction $(1, -1)$, one protein up and the other down, is the cell deciding.
+(c) $g = \dfrac{2 s (1 + s^2) s}{(1 + s^2)^2} = \dfrac{2s^2}{1 + s^2}$. $g > 1 \iff 2s^2 > 1 + s^2 \iff s > 1 \iff \alpha = s + s^3 > 2$. So for $\alpha > 2$ the middle state is a saddle, for $\alpha < 2$ it is a stable node (and the only state): the bifurcation of the lecture.
+
+**B6.**
+(a) First entries: $0.9342(c_1 + c_2) = 0.1$; second: $0.3568(c_1 - c_2) = 0$. So $c_1 = c_2 = 0.1/(2\cdot0.9342) = 0.05352$.
+(b) $\boldsymbol\delta(t) = 0.05352\big(e^{-5t/3}\mathbf v_1 + e^{-t/3}\mathbf v_2\big)$, i.e. $\delta_u = 0.05\,(e^{-5t/3} + e^{-t/3})$, $\delta_v = 0.0191\,(e^{-5t/3} - e^{-t/3})$. At $t = 3$: $\delta_u = 0.05\cdot0.37462 = 0.0187$, $\delta_v = 0.0191\cdot(-0.36114) = -0.0069$. V **dips** although only U was pushed: the extra U represses V's gene, then both recover. (The full nonlinear ODE gives $(0.0182, -0.0067)$; with a push of $0.01$ instead of $0.1$ the agreement is three digits.)
+(c) The fast term is gone; $0.05\,e^{-t/3} = 0.001$ at $t = 3\ln 50 = 11.7$ protein lifetimes.
+
+**B7.**
+(a) The sum is $\dot u + \dot v = -u + b$, which is zero at the fixed point: $u^* = b = 0.6$. The second equation: $b = (a + u^2)v$, $v^* = 0.6/0.44 = 1.3636$.
+(b) Partial derivatives: $\partial_u(-u + av + u^2 v) = -1 + 2uv$, $\partial_v = a + u^2$; the second row is $-2uv$ and $-(a + u^2)$. $\Delta = (-1 + 2uv)(-(a+u^2)) + 2uv(a + u^2) = a + u^2 = a + b^2$. For $b = 0.6$: $2uv = 1.6364$, $\tau = -1 + 1.6364 - 0.44 = 0.1964$, $\Delta = 0.44$, $\tau^2 - 4\Delta < 0$: **unstable spiral**, $\lambda = 0.0982 \pm 0.6560i$. For $b = 1$: $v^* = 0.9259$, $2uv = 1.8519$, $\tau = -0.2281$, $\Delta = 1.08$: **stable spiral**, $\lambda = -0.1141 \pm 1.0330i$.
+(c) $\tau = \dfrac{2b^2}{a + b^2} - 1 - a - b^2 = 0 \iff 2b^2 = (1 + a + b^2)(a + b^2) \iff b^4 + (2a - 1)b^2 + a + a^2 = 0$. With $a = 0.08$: $B^2 - 0.84B + 0.0864 = 0$ for $B = b^2$, $B = (0.84 \pm 0.6)/2 = 0.72$ or $0.12$, so $b = 0.849$ and $b = 0.346$. Between these the fixed point is unstable and the model oscillates.
+
+**B8.**
+(a) If $u = v$ then $\dot u = \alpha/(1 + v^2) - u = \alpha/(1 + u^2) - v = \dot v$, so $u - v$ stays $0$. The trajectory stays on the diagonal and can only end at the steady state there: the middle state. The diagonal is therefore the stable manifold of the saddle, i.e. the separatrix of the symmetric switch.
+(b) The Jacobian of $-\mathbf F$ is $-J$, with eigenvalues $-\lambda$ and the same eigenvectors. The saddle's stable direction ($\lambda = -2.19$) becomes unstable ($+2.19$) in backward time, so a backward run from $\mathbf x^* + \varepsilon\mathbf v_{\text{stable}}$ moves away from the saddle **along** the separatrix. Forwards, the separatrix attracts towards the saddle only along itself; any error (even rounding) is amplified by the unstable eigenvalue and the run leaves it.
+(c) $10^{-8}e^{0.19t} = 0.1$ gives $t = \ln(10^7)/0.19 \approx 85$ time units (compare the lecture's figure).
+:::
+
+::: {.callout-note collapse="true" title="Solution — in code"}
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+states <- rbind("U on"   = c(2.618034, 0.381966),
+                "middle" = c(1.213412, 1.213412),
+                "V on"   = c(0.381966, 2.618034))
+which_state <- function(x, states, tol = 1e-3) {   # name of the nearest state, if close
+  d <- sqrt(rowSums((states - matrix(x, nrow(states), 2, byrow = TRUE))^2))
+  if (min(d) < tol) rownames(states)[which.min(d)] else "not settled"
+}
+s <- seq(0, 3.5, length.out = 200)
+plot(alpha / (1 + s^2), s, type = "l", col = "blue", lwd = 2, xlim = c(0, 3.5),
+     ylim = c(0, 3.5), xlab = "u", ylab = "v")          # u-nullcline, du/dt = 0
+lines(s, alpha / (1 + s^2), col = "red", lwd = 2)        # v-nullcline, dv/dt = 0
+starts <- list(c(0.5, 0.3), c(0.3, 0.5), c(3.3, 3.0), c(3.0, 3.3),
+               c(0.1, 1.8), c(1.8, 0.1), c(2, 2))
+for (x0 in starts) {
+  out <- ode(y = x0, times = seq(0, 60, by = 0.05), func = toggle, parms = NULL,
+             rtol = 1e-10, atol = 1e-12)
+  lines(out[, 2], out[, 3])
+  x30 <- out[out[, 1] == 30, 2:3]; x60 <- out[nrow(out), 2:3]
+  cat(sprintf("(%.1f, %.1f)  t = 30: %-11s  t = 60: (%.6f, %.6f) %s\n", x0[1], x0[2],
+              which_state(x30, states), x60[1], x60[2], which_state(x60, states)))
+}
+
+# Output:
+# (0.5, 0.3)  t = 30: not settled  t = 60: (2.618034, 0.381966) U on
+# (0.3, 0.5)  t = 30: not settled  t = 60: (0.381966, 2.618034) V on
+# (3.3, 3.0)  t = 30: not settled  t = 60: (2.618034, 0.381966) U on
+# (3.0, 3.3)  t = 30: not settled  t = 60: (0.381966, 2.618034) V on
+# (0.1, 1.8)  t = 30: V on         t = 60: (0.381966, 2.618034) V on
+# (1.8, 0.1)  t = 30: U on         t = 60: (2.618034, 0.381966) U on
+# (2.0, 2.0)  t = 30: middle       t = 60: (1.213412, 1.213412) middle
+```
+
+### Python
+
+```python
+import matplotlib.pyplot as plt
+
+states = {"U on":   np.array([2.618034, 0.381966]),
+          "middle": np.array([1.213412, 1.213412]),
+          "V on":   np.array([0.381966, 2.618034])}
+
+def which_state(x, states, tol=1e-3):    # name of the nearest state, if close
+    name, d = min(((k, np.linalg.norm(x - s)) for k, s in states.items()), key=lambda p: p[1])
+    return name if d < tol else "not settled"
+
+s = np.linspace(0, 3.5, 200)
+plt.plot(alpha / (1 + s**2), s, "b", lw=2)  # u-nullcline, du/dt = 0
+plt.plot(s, alpha / (1 + s**2), "r", lw=2)  # v-nullcline, dv/dt = 0
+starts = [(0.5, 0.3), (0.3, 0.5), (3.3, 3.0), (3.0, 3.3), (0.1, 1.8), (1.8, 0.1), (2, 2)]
+for x0 in starts:
+    sol = solve_ivp(toggle, (0, 60), x0, t_eval=np.arange(0, 60.01, 0.05),
+                    rtol=1e-10, atol=1e-12)
+    plt.plot(sol.y[0], sol.y[1], "k")
+    x30, x60 = sol.y[:, 600], sol.y[:, -1]   # t = 30 is entry 600
+    print(f"({x0[0]:.1f}, {x0[1]:.1f})  t = 30: {which_state(x30, states):<11s}  "
+          f"t = 60: ({x60[0]:.6f}, {x60[1]:.6f}) {which_state(x60, states)}")
+plt.xlabel("u"); plt.ylabel("v"); plt.show()
+
+# Output:
+# (0.5, 0.3)  t = 30: not settled  t = 60: (2.618034, 0.381966) U on
+# (0.3, 0.5)  t = 30: not settled  t = 60: (0.381966, 2.618034) V on
+# (3.3, 3.0)  t = 30: not settled  t = 60: (2.618034, 0.381966) U on
+# (3.0, 3.3)  t = 30: not settled  t = 60: (0.381966, 2.618034) V on
+# (0.1, 1.8)  t = 30: V on         t = 60: (0.381966, 2.618034) V on
+# (1.8, 0.1)  t = 30: U on         t = 60: (2.618034, 0.381966) U on
+# (2.0, 2.0)  t = 30: middle       t = 60: (1.213412, 1.213412) middle
+```
+
+### Rust
+
+```rust
+// rust/examples/phase_plane_c1.rs  —  cargo run --example phase_plane_c1
+// C1: trajectories of the toggle switch from seven starts; where are they at t = 30 and t = 60?
+// (No plotting here: write ts/xs to a file and plot with any tool if you like.)
+use ode_solvers::{Dopri5, System, Vector2};
+
+const ALPHA: f64 = 3.0;
+const N: f64 = 2.0;
+
+struct Toggle;
+impl System<f64, Vector2<f64>> for Toggle {
+    fn system(&self, _t: f64, x: &Vector2<f64>, dx: &mut Vector2<f64>) {
+        let (u, v) = (x[0], x[1]);
+        dx[0] = ALPHA / (1.0 + v.powf(N)) - u;
+        dx[1] = ALPHA / (1.0 + u.powf(N)) - v;
+    }
+}
+
+const STATES: [(&str, [f64; 2]); 3] = [("U on", [2.618034, 0.381966]),
+                                       ("middle", [1.213412, 1.213412]),
+                                       ("V on", [0.381966, 2.618034])];
+
+// name of the nearest state, if closer than tol
+fn which_state(x: &Vector2<f64>, states: &[(&str, [f64; 2])], tol: f64) -> String {
+    let (name, d) = states.iter()
+        .map(|(k, s)| (*k, ((x[0] - s[0]).powi(2) + (x[1] - s[1]).powi(2)).sqrt()))
+        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap()).unwrap();
+    if d < tol { name.to_string() } else { "not settled".to_string() }
+}
+
+fn main() {
+    let starts = [(0.5, 0.3), (0.3, 0.5), (3.3, 3.0), (3.0, 3.3), (0.1, 1.8), (1.8, 0.1), (2.0, 2.0)];
+    for (u0, v0) in starts {
+        // output every 0.05 time units, as in R and Python
+        let mut s = Dopri5::new(Toggle, 0.0, 60.0, 0.05, Vector2::new(u0, v0), 1e-10, 1e-12);
+        s.integrate().expect("integration failed");
+        let xs = s.y_out();
+        let (x30, x60) = (&xs[600], xs.last().unwrap()); // t = 30 is entry 600
+        println!("({:.1}, {:.1})  t = 30: {:<11}  t = 60: ({:.6}, {:.6}) {}", u0, v0,
+                 which_state(x30, &STATES, 1e-3), x60[0], x60[1], which_state(x60, &STATES, 1e-3));
+    }
+}
+
+// Output:
+// (0.5, 0.3)  t = 30: not settled  t = 60: (2.618034, 0.381966) U on
+// (0.3, 0.5)  t = 30: not settled  t = 60: (0.381966, 2.618034) V on
+// (3.3, 3.0)  t = 30: not settled  t = 60: (2.618034, 0.381966) U on
+// (3.0, 3.3)  t = 30: not settled  t = 60: (0.381966, 2.618034) V on
+// (0.1, 1.8)  t = 30: V on         t = 60: (0.381966, 2.618034) V on
+// (1.8, 0.1)  t = 30: U on         t = 60: (2.618034, 0.381966) U on
+// (2.0, 2.0)  t = 30: middle       t = 60: (1.213412, 1.213412) middle
+```
+
+:::
+
+The starts on either side of the diagonal go to the state of the protein that starts higher; $(2, 2)$ lies exactly on the separatrix and converges to the **saddle** (B8). The four starts that have not settled at $t = 30$ start close to the diagonal ($|u_0 - v_0| = 0.2$ or $0.3$): they first slide in towards the saddle along its stable direction and then leave slowly, at rate $0.19$. The two starts far from the diagonal settle by $t = 30$.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+classify <- function(A, tol = 1e-8) {
+  lam <- eigen(A, only.values = TRUE)$values
+  re <- Re(lam); im <- Im(lam)
+  if (any(abs(re) < tol)) return("undecided (Re = 0)")
+  if (any(re > 0) && any(re < 0)) return("saddle")
+  paste(if (all(re < 0)) "stable" else "unstable",
+        if (any(abs(im) > tol)) "spiral" else "node")
+}
+fmt <- function(lam) {                    # sort by real part, then imaginary part
+  lam <- lam[order(-Re(lam), -Im(lam))]
+  paste(sprintf("%8.4f%+.4fi", Re(lam), Im(lam)), collapse = " ")
+}
+mats <- list(A1 = matrix(c(-3, 1, 1, -3), 2, byrow = TRUE),
+             A2 = matrix(c(1, 2, 2, 1), 2, byrow = TRUE),
+             A3 = matrix(c(-1, -4, 1, -1), 2, byrow = TRUE),
+             A4 = matrix(c(0, 1, -4, 0), 2, byrow = TRUE),
+             "U on" = J(states[1, ]), middle = J(states[2, ]), "V on" = J(states[3, ]))
+for (nm in names(mats)) {
+  cat(sprintf("%-7s %s   %s\n", nm, fmt(eigen(mats[[nm]])$values), classify(mats[[nm]])))
+}
+F <- function(x) toggle(0, x, NULL)[[1]]
+fd_jacobian <- function(F, x, h = sqrt(.Machine$double.eps)) {
+  Fx <- F(x); Jm <- matrix(0, length(Fx), length(x))
+  for (j in seq_along(x)) {
+    hj <- h * max(abs(x[j]), 1); xh <- x; xh[j] <- x[j] + hj
+    Jm[, j] <- (F(xh) - Fx) / hj
+  }
+  Jm
+}
+for (i in 1:3) {
+  x <- states[i, ]
+  d <- max(abs(sort(eigen(fd_jacobian(F, x))$values) - sort(eigen(J(x))$values)))
+  cat(sprintf("%-7s eigenvalues from FD Jacobian differ by %.1e\n", rownames(states)[i], d))
+}
+
+# Output:
+# A1       -2.0000+0.0000i  -4.0000+0.0000i   stable node
+# A2        3.0000+0.0000i  -1.0000+0.0000i   saddle
+# A3       -1.0000+2.0000i  -1.0000-2.0000i   stable spiral
+# A4        0.0000+2.0000i   0.0000-2.0000i   undecided (Re = 0)
+# U on     -0.3333+0.0000i  -1.6667+0.0000i   stable node
+# middle    0.1911+0.0000i  -2.1911+0.0000i   saddle
+# V on     -0.3333+0.0000i  -1.6667+0.0000i   stable node
+# U on    eigenvalues from FD Jacobian differ by 2.5e-09
+# middle  eigenvalues from FD Jacobian differ by 1.5e-08
+# V on    eigenvalues from FD Jacobian differ by 2.5e-09
+```
+
+### Python
+
+```python
+
+def classify(A, tol=1e-8):
+    lam = np.linalg.eigvals(A)
+    re, im = lam.real, lam.imag
+    if np.any(np.abs(re) < tol):
+        return "undecided (Re = 0)"
+    if np.any(re > 0) and np.any(re < 0):
+        return "saddle"
+    return ("stable" if np.all(re < 0) else "unstable") + \
+           (" spiral" if np.any(np.abs(im) > tol) else " node")
+
+def fmt(lam):                            # sort by real part, then imaginary part
+    lam = sorted(lam, key=lambda z: (-z.real, -z.imag))
+    return " ".join(f"{z.real:8.4f}{z.imag:+.4f}i" for z in lam)
+
+mats = {"A1": np.array([[-3, 1], [1, -3]]), "A2": np.array([[1, 2], [2, 1]]),
+        "A3": np.array([[-1, -4], [1, -1]]), "A4": np.array([[0, 1], [-4, 0]]),
+        "U on": J(states["U on"]), "middle": J(states["middle"]), "V on": J(states["V on"])}
+for name, A in mats.items():
+    print(f"{name:<7s} {fmt(np.linalg.eigvals(A).astype(complex))}   {classify(A)}")
+
+def F(x):
+    return np.array(toggle(0, x))
+
+def fd_jacobian(F, x, h=np.sqrt(np.finfo(float).eps)):
+    Fx = F(x); Jm = np.zeros((len(Fx), len(x)))
+    for j in range(len(x)):
+        hj = h * max(abs(x[j]), 1); xh = x.copy(); xh[j] += hj
+        Jm[:, j] = (F(xh) - Fx) / hj
+    return Jm
+
+for name, x in states.items():
+    d = np.max(np.abs(np.sort(np.linalg.eigvals(fd_jacobian(F, x))) - np.sort(np.linalg.eigvals(J(x)))))
+    print(f"{name:<7s} eigenvalues from FD Jacobian differ by {d:.1e}")
+
+# Output:
+# A1       -2.0000+0.0000i  -4.0000+0.0000i   stable node
+# A2        3.0000+0.0000i  -1.0000+0.0000i   saddle
+# A3       -1.0000+2.0000i  -1.0000-2.0000i   stable spiral
+# A4        0.0000+2.0000i   0.0000-2.0000i   undecided (Re = 0)
+# U on     -0.3333+0.0000i  -1.6667+0.0000i   stable node
+# middle    0.1911+0.0000i  -2.1911+0.0000i   saddle
+# V on     -0.3333+0.0000i  -1.6667+0.0000i   stable node
+# U on    eigenvalues from FD Jacobian differ by 2.5e-09
+# middle  eigenvalues from FD Jacobian differ by 1.5e-08
+# V on    eigenvalues from FD Jacobian differ by 2.5e-09
+```
+
+### Rust
+
+```rust
+// rust/examples/phase_plane_c2.rs  —  cargo run --example phase_plane_c2
+// C2: classify fixed points from the eigenvalues of a 2x2 Jacobian (nalgebra).
+use nalgebra::{Complex, Matrix2, Vector2};
+
+const ALPHA: f64 = 3.0;
+const N: f64 = 2.0;
+
+fn f(x: &Vector2<f64>) -> Vector2<f64> {
+    let (u, v) = (x[0], x[1]);
+    Vector2::new(ALPHA / (1.0 + v.powf(N)) - u, ALPHA / (1.0 + u.powf(N)) - v)
+}
+
+fn jac(x: &Vector2<f64>) -> Matrix2<f64> {
+    let (u, v) = (x[0], x[1]);
+    Matrix2::new(-1.0, -ALPHA * N * v.powf(N - 1.0) / (1.0 + v.powf(N)).powi(2),
+                 -ALPHA * N * u.powf(N - 1.0) / (1.0 + u.powf(N)).powi(2), -1.0)
+}
+
+// eigenvalues sorted by real part, then imaginary part (largest first)
+fn eig(a: &Matrix2<f64>) -> Vec<Complex<f64>> {
+    let mut lam: Vec<Complex<f64>> = a.complex_eigenvalues().iter().cloned().collect();
+    lam.sort_by(|p, q| (-p.re, -p.im).partial_cmp(&(-q.re, -q.im)).unwrap());
+    lam
+}
+
+fn classify(a: &Matrix2<f64>, tol: f64) -> String {
+    let lam = eig(a);
+    if lam.iter().any(|z| z.re.abs() < tol) { return "undecided (Re = 0)".into(); }
+    if lam.iter().any(|z| z.re > 0.0) && lam.iter().any(|z| z.re < 0.0) { return "saddle".into(); }
+    let st = if lam.iter().all(|z| z.re < 0.0) { "stable" } else { "unstable" };
+    let ty = if lam.iter().any(|z| z.im.abs() > tol) { "spiral" } else { "node" };
+    format!("{} {}", st, ty)
+}
+
+fn fmt(lam: &[Complex<f64>]) -> String {
+    lam.iter().map(|z| format!("{:8.4}{:+.4}i", z.re, z.im + 0.0)).collect::<Vec<_>>().join(" ")
+}
+
+fn fd_jacobian(f: impl Fn(&Vector2<f64>) -> Vector2<f64>, x: &Vector2<f64>) -> Matrix2<f64> {
+    let h = f64::EPSILON.sqrt();
+    let fx = f(x);
+    let mut jm = Matrix2::zeros();
+    for j in 0..2 {
+        let hj = h * x[j].abs().max(1.0);
+        let mut xh = *x;
+        xh[j] += hj;
+        jm.set_column(j, &((f(&xh) - fx) / hj));
+    }
+    jm
+}
+
+fn main() {
+    let states = [("U on", Vector2::new(2.618034, 0.381966)),
+                  ("middle", Vector2::new(1.213412, 1.213412)),
+                  ("V on", Vector2::new(0.381966, 2.618034))];
+    let mut mats = vec![("A1", Matrix2::new(-3.0, 1.0, 1.0, -3.0)),
+                        ("A2", Matrix2::new(1.0, 2.0, 2.0, 1.0)),
+                        ("A3", Matrix2::new(-1.0, -4.0, 1.0, -1.0)),
+                        ("A4", Matrix2::new(0.0, 1.0, -4.0, 0.0))];
+    for (name, x) in &states { mats.push((name, jac(x))); }
+    for (name, a) in &mats {
+        println!("{:<7} {}   {}", name, fmt(&eig(a)), classify(a, 1e-8));
+    }
+    for (name, x) in &states {
+        let (e1, e2) = (eig(&fd_jacobian(f, x)), eig(&jac(x)));
+        let d = e1.iter().zip(&e2).map(|(p, q)| (p - q).norm()).fold(0.0, f64::max);
+        println!("{:<7} eigenvalues from FD Jacobian differ by {:.1e}", name, d);
+    }
+}
+
+// Output:
+// A1       -2.0000+0.0000i  -4.0000+0.0000i   stable node
+// A2        3.0000+0.0000i  -1.0000+0.0000i   saddle
+// A3       -1.0000+2.0000i  -1.0000-2.0000i   stable spiral
+// A4        0.0000+2.0000i   0.0000-2.0000i   undecided (Re = 0)
+// U on     -0.3333+0.0000i  -1.6667+0.0000i   stable node
+// middle    0.1911+0.0000i  -2.1911+0.0000i   saddle
+// V on     -0.3333+0.0000i  -1.6667+0.0000i   stable node
+// U on    eigenvalues from FD Jacobian differ by 2.5e-9
+// middle  eigenvalues from FD Jacobian differ by 1.5e-8
+// V on    eigenvalues from FD Jacobian differ by 2.5e-9
+```
+
+:::
+
+`classify` agrees with B3 and with the lecture. The finite-difference Jacobian changes the eigenvalues by about $10^{-8}$, the size of the finite-difference error. That is harmless when $|\mathrm{Re}\,\lambda| \ge 0.1$, but an eigenvalue with $|\mathrm{Re}\,\lambda| < 10^{-7}$ computed this way has a sign you cannot trust (C6). Rust prints exponents without a leading zero (`2.5e-9`).
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(rootSolve)
+fates <- function(rhs, states) {          # simulate from a 10 x 10 grid to t = 100
+  g <- seq(0.2, 3.8, by = 0.4)
+  res <- character(0)
+  for (u0 in g) for (v0 in g) {
+    out <- ode(y = c(u0, v0), times = c(0, 100), func = rhs, parms = NULL,
+               rtol = 1e-10, atol = 1e-12)
+    res <- c(res, which_state(out[2, 2:3], states))
+  }
+  table(factor(res, levels = c(rownames(states), "not settled")))
+}
+fates(toggle, states)
+au <- 3; av <- 2.9                         # biased switch
+toggle2 <- function(t, x, parms)
+  list(c(au / (1 + x[2]^2) - x[1], av / (1 + x[1]^2) - x[2]))
+F2 <- function(x) toggle2(0, x, NULL)[[1]]
+states2 <- rbind("U on"   = multiroot(F2, c(3, 0.3), atol = 1e-12, rtol = 1e-12)$root,
+                 "middle" = multiroot(F2, c(1.1, 1.3), atol = 1e-12, rtol = 1e-12)$root,
+                 "V on"   = multiroot(F2, c(0.4, 2.5), atol = 1e-12, rtol = 1e-12)$root)
+print(states2, digits = 7)
+fates(toggle2, states2)
+
+# Output:
+#
+#        U on      middle        V on not settled
+#          45          10          45           0
+#             [,1]      [,2]
+# U on   2.6555235 0.3601677
+# middle 1.0943960 1.3195598
+# V on   0.4282447 2.4505795
+#
+#        U on      middle        V on not settled
+#          58           0          42           0
+```
+
+### Python
+
+```python
+from scipy.optimize import root
+
+def fates(rhs, states):                  # simulate from a 10 x 10 grid to t = 100
+    g = np.arange(0.2, 3.81, 0.4)
+    counts = {k: 0 for k in list(states) + ["not settled"]}
+    for u0 in g:
+        for v0 in g:
+            sol = solve_ivp(rhs, (0, 100), [u0, v0], rtol=1e-10, atol=1e-12)
+            counts[which_state(sol.y[:, -1], states)] += 1
+    return counts
+
+print(fates(toggle, states))
+au, av = 3.0, 2.9                        # biased switch
+def toggle2(t, x):
+    return [au / (1 + x[1]**2) - x[0], av / (1 + x[0]**2) - x[1]]
+F2 = lambda x: np.array(toggle2(0, x))
+states2 = {"U on":   root(F2, [3, 0.3], tol=1e-12).x,
+           "middle": root(F2, [1.1, 1.3], tol=1e-12).x,
+           "V on":   root(F2, [0.4, 2.5], tol=1e-12).x}
+for k, s in states2.items():
+    print(f"{k:<7s} {s[0]:.7f} {s[1]:.7f}")
+print(fates(toggle2, states2))
+
+# Output:
+# {'U on': 45, 'middle': 10, 'V on': 45, 'not settled': 0}
+# U on    2.6555235 0.3601677
+# middle  1.0943960 1.3195598
+# V on    0.4282447 2.4505795
+# {'U on': 58, 'middle': 0, 'V on': 42, 'not settled': 0}
+```
+
+### Rust
+
+```rust
+// rust/examples/phase_plane_c3.rs  —  cargo run --example phase_plane_c3
+// C3: where does the cell end up? Simulate from a 10 x 10 grid of starts, for the
+// symmetric switch and for the biased one (alpha_v = 2.9). Steady states of the
+// biased switch by a hand-written Newton (no root-finding crate in our list).
+// ode_solvers uses its own nalgebra version, so Newton uses nalgebra's types
+// (prefix na::) and we convert with Vector2::new(x[0], x[1]).
+use nalgebra as na;
+use ode_solvers::{Dopri5, System, Vector2};
+
+struct Toggle { au: f64, av: f64 }
+impl System<f64, Vector2<f64>> for Toggle {
+    fn system(&self, _t: f64, x: &Vector2<f64>, dx: &mut Vector2<f64>) {
+        dx[0] = self.au / (1.0 + x[1] * x[1]) - x[0];
+        dx[1] = self.av / (1.0 + x[0] * x[0]) - x[1];
+    }
+}
+
+fn newton(au: f64, av: f64, u0: f64, v0: f64) -> Vector2<f64> {
+    let mut x = na::Vector2::new(u0, v0);
+    for _ in 0..50 {
+        let (u, v) = (x[0], x[1]);
+        let fx = na::Vector2::new(au / (1.0 + v * v) - u, av / (1.0 + u * u) - v);
+        let j = na::Matrix2::new(-1.0, -2.0 * au * v / (1.0 + v * v).powi(2),
+                                 -2.0 * av * u / (1.0 + u * u).powi(2), -1.0);
+        x += j.lu().solve(&(-fx)).expect("singular Jacobian");
+    }
+    Vector2::new(x[0], x[1])
+}
+
+fn which_state(x: &Vector2<f64>, states: &[(&str, Vector2<f64>)], tol: f64) -> String {
+    let (name, d) = states.iter().map(|(k, s)| (*k, (x - s).norm()))
+        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap()).unwrap();
+    if d < tol { name.to_string() } else { "not settled".to_string() }
+}
+
+fn fates(au: f64, av: f64, states: &[(&str, Vector2<f64>)]) {
+    let mut counts = vec![0; states.len() + 1];
+    for i in 0..10 {
+        for k in 0..10 {
+            let x0 = Vector2::new(0.2 + 0.4 * i as f64, 0.2 + 0.4 * k as f64);
+            let mut s = Dopri5::new(Toggle { au, av }, 0.0, 100.0, 1.0, x0, 1e-10, 1e-12);
+            s.integrate().expect("integration failed");
+            let name = which_state(s.y_out().last().unwrap(), states, 1e-3);
+            let idx = states.iter().position(|(k, _)| *k == name).unwrap_or(states.len());
+            counts[idx] += 1;
+        }
+    }
+    let names: Vec<&str> = states.iter().map(|(k, _)| *k).chain(["not settled"]).collect();
+    println!("{:?}", names.iter().zip(&counts).collect::<Vec<_>>());
+}
+
+fn main() {
+    let sym = [("U on", Vector2::new(2.618034, 0.381966)),
+               ("middle", Vector2::new(1.213412, 1.213412)),
+               ("V on", Vector2::new(0.381966, 2.618034))];
+    fates(3.0, 3.0, &sym);
+    let (au, av) = (3.0, 2.9); // biased switch
+    let biased = [("U on", newton(au, av, 3.0, 0.3)),
+                  ("middle", newton(au, av, 1.1, 1.3)),
+                  ("V on", newton(au, av, 0.4, 2.5))];
+    for (k, s) in &biased { println!("{:<7} {:.7} {:.7}", k, s[0], s[1]); }
+    fates(au, av, &biased);
+}
+
+// Output:
+// [("U on", 45), ("middle", 10), ("V on", 45), ("not settled", 0)]
+// U on    2.6555235 0.3601677
+// middle  1.0943960 1.3195598
+// V on    0.4282447 2.4505795
+// [("U on", 58), ("middle", 0), ("V on", 42), ("not settled", 0)]
+```
+
+:::
+
+The cell's fates: 45 / 10 / 45 for the symmetric switch, 58 / 0 / 42 for the biased one. Newton gave 23 / 54 / 23 from the same grid. The 10 "middle" runs of the symmetric switch are the 10 starts **on** the diagonal, which is invariant (B8): they converge to the saddle, and in a real cell any noise would push them off. In the biased switch the diagonal is no longer invariant and no grid point lies on the (curved) separatrix, so no run ends at the saddle. A 3 % weaker V promoter shifts 13 of the 100 starts to U on.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+xs <- states2["middle", ]
+e <- eigen(jacobian.full(y = xs, func = toggle2))
+vs <- e$vectors[, e$values < 0]                      # stable direction of the saddle
+tb <- seq(0, -7.5, by = -0.01)                       # backwards in time
+arc1 <- ode(y = xs + 1e-6 * vs, times = tb, func = toggle2, parms = NULL, rtol = 1e-10, atol = 1e-12)
+arc2 <- ode(y = xs - 1e-6 * vs, times = tb, func = toggle2, parms = NULL, rtol = 1e-10, atol = 1e-12)
+sep <- rbind(arc1[, 2:3], arc2[, 2:3])
+sep <- sep[order(sep[, 1]), ]                        # sort by u for interpolation
+sep <- sep[sep[, 1] >= 0 & sep[, 1] <= 4, ]
+for (u0 in c(0.1, 0.5, 1, 2, 3)) {
+  vsep <- approx(sep[, 1], sep[, 2], xout = u0)$y
+  below <- ode(c(u0, vsep - 0.01), c(0, 200), toggle2, NULL, rtol = 1e-10, atol = 1e-12)[2, 2:3]
+  above <- ode(c(u0, vsep + 0.01), c(0, 200), toggle2, NULL, rtol = 1e-10, atol = 1e-12)[2, 2:3]
+  cat(sprintf("u = %.1f  v_sep = %.4f  below -> %-5s above -> %s\n", u0, vsep,
+              which_state(below, states2), which_state(above, states2)))
+}
+
+# Output:
+# u = 0.1  v_sep = 0.2674  below -> U on  above -> V on
+# u = 0.5  v_sep = 0.6720  below -> U on  above -> V on
+# u = 1.0  v_sep = 1.2144  below -> U on  above -> V on
+# u = 2.0  v_sep = 2.3486  below -> U on  above -> V on
+# u = 3.0  v_sep = 3.5031  below -> U on  above -> V on
+```
+
+### Python
+
+```python
+xs = states2["middle"]
+lam, vec = np.linalg.eig(fd_jacobian(F2, xs))
+vs = vec[:, lam < 0].ravel()                    # stable direction of the saddle
+tb = np.arange(0, -7.5, -0.01)                  # backwards in time: t_span (0, -7.5)
+arcs = [solve_ivp(toggle2, (0, -7.5), xs + sgn * 1e-6 * vs, t_eval=tb,
+                  rtol=1e-10, atol=1e-12).y.T for sgn in (1, -1)]
+sep = np.vstack(arcs)
+sep = sep[np.argsort(sep[:, 0])]                # sort by u for interpolation
+sep = sep[(sep[:, 0] >= 0) & (sep[:, 0] <= 4)]
+for u0 in [0.1, 0.5, 1, 2, 3]:
+    vsep = np.interp(u0, sep[:, 0], sep[:, 1])
+    below = solve_ivp(toggle2, (0, 200), [u0, vsep - 0.01], rtol=1e-10, atol=1e-12).y[:, -1]
+    above = solve_ivp(toggle2, (0, 200), [u0, vsep + 0.01], rtol=1e-10, atol=1e-12).y[:, -1]
+    print(f"u = {u0:.1f}  v_sep = {vsep:.4f}  below -> {which_state(below, states2):<5s} "
+          f"above -> {which_state(above, states2)}")
+
+# Output:
+# u = 0.1  v_sep = 0.2674  below -> U on  above -> V on
+# u = 0.5  v_sep = 0.6720  below -> U on  above -> V on
+# u = 1.0  v_sep = 1.2144  below -> U on  above -> V on
+# u = 2.0  v_sep = 2.3486  below -> U on  above -> V on
+# u = 3.0  v_sep = 3.5031  below -> U on  above -> V on
+```
+
+### Rust
+
+```rust
+// rust/examples/phase_plane_c4.rs  —  cargo run --example phase_plane_c4
+// C4: the separatrix of the biased switch (alpha_v = 2.9), from two runs backwards in
+// time out of the saddle along its stable eigenvector; then check it with forward runs.
+// Backwards in time = forwards with the sign of the right-hand side flipped.
+use nalgebra as na;
+use ode_solvers::{Dopri5, System, Vector2};
+
+const AU: f64 = 3.0;
+const AV: f64 = 2.9;
+
+fn rhs(x: &Vector2<f64>) -> Vector2<f64> {
+    Vector2::new(AU / (1.0 + x[1] * x[1]) - x[0], AV / (1.0 + x[0] * x[0]) - x[1])
+}
+
+struct Toggle { dir: f64 } // dir = 1: forwards in time, dir = -1: backwards
+impl System<f64, Vector2<f64>> for Toggle {
+    fn system(&self, _t: f64, x: &Vector2<f64>, dx: &mut Vector2<f64>) {
+        *dx = rhs(x) * self.dir;
+    }
+}
+
+fn run(x0: Vector2<f64>, t_end: f64, dir: f64) -> Vec<Vector2<f64>> {
+    let mut s = Dopri5::new(Toggle { dir }, 0.0, t_end, 0.01, x0, 1e-10, 1e-12);
+    s.integrate().expect("integration failed");
+    s.y_out().clone()
+}
+
+fn newton(mut x: Vector2<f64>) -> Vector2<f64> {
+    for _ in 0..50 {
+        let j = fd_jacobian(&x);
+        let fx = rhs(&x);
+        let d = j.lu().solve(&na::Vector2::new(-fx[0], -fx[1])).expect("singular Jacobian");
+        x += Vector2::new(d[0], d[1]);
+    }
+    x
+}
+
+fn fd_jacobian(x: &Vector2<f64>) -> na::Matrix2<f64> {
+    let h = f64::EPSILON.sqrt();
+    let fx = rhs(x);
+    let mut jm = na::Matrix2::zeros();
+    for j in 0..2 {
+        let hj = h * x[j].abs().max(1.0);
+        let mut xh = *x;
+        xh[j] += hj;
+        let col = (rhs(&xh) - fx) / hj;
+        jm[(0, j)] = col[0];
+        jm[(1, j)] = col[1];
+    }
+    jm
+}
+
+fn which_state(x: &Vector2<f64>, states: &[(&str, Vector2<f64>)]) -> String {
+    let (name, d) = states.iter().map(|(k, s)| (*k, (x - s).norm()))
+        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap()).unwrap();
+    if d < 1e-3 { name.to_string() } else { "not settled".to_string() }
+}
+
+fn main() {
+    let states = [("U on", newton(Vector2::new(3.0, 0.3))),
+                  ("middle", newton(Vector2::new(1.1, 1.3))),
+                  ("V on", newton(Vector2::new(0.4, 2.5)))];
+    let xs = states[1].1;
+    let j = fd_jacobian(&xs);
+    // the negative eigenvalue; real here (det J < 0), so take the real part
+    let lam = j.complex_eigenvalues().iter().map(|z| z.re).fold(f64::INFINITY, f64::min);
+    // eigenvector of a 2x2 by hand: (J - lam I) v = 0 is solved by v = (J12, lam - J11)
+    let vs = Vector2::new(j[(0, 1)], lam - j[(0, 0)]).normalize();
+    let mut sep: Vec<Vector2<f64>> = Vec::new();
+    for sgn in [1.0, -1.0] {
+        sep.extend(run(xs + vs * (sgn * 1e-6), 7.5, -1.0)); // 7.5 time units backwards
+    }
+    sep.retain(|p| p[0] >= 0.0 && p[0] <= 4.0);
+    sep.sort_by(|p, q| p[0].partial_cmp(&q[0]).unwrap()); // sort by u for interpolation
+    for u0 in [0.1, 0.5, 1.0, 2.0, 3.0] {
+        let k = sep.iter().position(|p| p[0] >= u0).unwrap(); // linear interpolation
+        let (p, q) = (sep[k - 1], sep[k]);
+        let vsep = p[1] + (u0 - p[0]) / (q[0] - p[0]) * (q[1] - p[1]);
+        let below = *run(Vector2::new(u0, vsep - 0.01), 200.0, 1.0).last().unwrap();
+        let above = *run(Vector2::new(u0, vsep + 0.01), 200.0, 1.0).last().unwrap();
+        println!("u = {:.1}  v_sep = {:.4}  below -> {:<5} above -> {}", u0, vsep,
+                 which_state(&below, &states), which_state(&above, &states));
+    }
+}
+
+// Output:
+// u = 0.1  v_sep = 0.2674  below -> U on  above -> V on
+// u = 0.5  v_sep = 0.6720  below -> U on  above -> V on
+// u = 1.0  v_sep = 1.2144  below -> U on  above -> V on
+// u = 2.0  v_sep = 2.3486  below -> U on  above -> V on
+// u = 3.0  v_sep = 3.5031  below -> U on  above -> V on
+```
+
+:::
+
+Every pair ends in different states: the backward-in-time curve separates the basins (the same check as in the lecture's figure, here with 10 forward runs). The separatrix lies **above** the diagonal ($v_{\text{sep}} > u$): with the weaker V promoter, V needs a head start to win. Even a cell with almost no U ($u = 0.1$) ends with U on if $v < 0.27$. R uses `rootSolve::jacobian.full`, Python and Rust our `fd_jacobian`; Rust integrates $-\mathbf F$ forwards instead of $\mathbf F$ backwards, and computes the eigenvector from Fact 5 because nalgebra has no eigenvectors for non-symmetric matrices.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+a <- 0.08
+selkov <- function(t, x, b) {            # parms = b
+  u <- x[1]; v <- x[2]
+  list(c(-u + a * v + u^2 * v, b - a * v - u^2 * v))
+}
+Jsel <- function(x) {
+  u <- x[1]; v <- x[2]
+  matrix(c(-1 + 2 * u * v, a + u^2, -2 * u * v, -(a + u^2)), 2, byrow = TRUE)
+}
+for (b in c(0.2, 0.4, 0.6, 0.8, 1.0)) {
+  lam <- eigen(Jsel(c(b, b / (a + b^2))))$values
+  cat(sprintf("b = %.1f  lambda = %.4f %+.4fi\n", b, Re(lam[1]), abs(Im(lam[1]))))
+}
+cycle <- function(x0, b, tol) {          # amplitude and period after the transient
+  out <- ode(y = x0, times = seq(0, 200, by = 0.01), func = selkov, parms = b,
+             rtol = tol, atol = tol)
+  tt <- out[out[, 1] > 100, 1]; u <- out[out[, 1] > 100, 2]
+  i <- which(u[-1] >= b & u[-length(u)] < b)            # upward crossings of u = b
+  tc <- tt[i] + (b - u[i]) / (u[i + 1] - u[i]) * 0.01   # linear interpolation
+  cat(sprintf("(%.2f, %.2f) b = %.1f tol = %.0e: u in [%.4f, %.4f], range %.1e, period %s\n",
+              x0[1], x0[2], b, tol, min(u), max(u), max(u) - min(u),
+              if (length(tc) > 1) sprintf("%.4f", mean(diff(tc))) else "none"))
+}
+cycle(c(0.61, 1.36), 0.6, 1e-6)
+cycle(c(2.5, 0.2), 0.6, 1e-6)
+cycle(c(2.5, 0.2), 0.6, 1e-10)
+cycle(c(2.5, 0.2), 1.0, 1e-10)
+
+# Output:
+# b = 0.2  lambda = -0.2267 +0.2620i
+# b = 0.4  lambda = 0.0467 +0.4877i
+# b = 0.6  lambda = 0.0982 +0.6560i
+# b = 0.8  lambda = 0.0289 +0.8480i
+# b = 1.0  lambda = -0.1141 +1.0330i
+# (0.61, 1.36) b = 0.6 tol = 1e-06: u in [0.2453, 1.5176], range 1.3e+00, period 9.6226
+# (2.50, 0.20) b = 0.6 tol = 1e-06: u in [0.2453, 1.5176], range 1.3e+00, period 9.6226
+# (2.50, 0.20) b = 0.6 tol = 1e-10: u in [0.2453, 1.5176], range 1.3e+00, period 9.6226
+# (2.50, 0.20) b = 1.0 tol = 1e-10: u in [1.0000, 1.0000], range 7.7e-06, period 6.0828
+```
+
+### Python
+
+```python
+a = 0.08
+def selkov(t, x, b):
+    u, v = x
+    return [-u + a * v + u**2 * v, b - a * v - u**2 * v]
+def Jsel(x):
+    u, v = x
+    return np.array([[-1 + 2 * u * v, a + u**2], [-2 * u * v, -(a + u**2)]])
+for b in [0.2, 0.4, 0.6, 0.8, 1.0]:
+    lam = np.linalg.eigvals(Jsel([b, b / (a + b**2)]))
+    print(f"b = {b:.1f}  lambda = {lam[0].real:.4f} +{abs(lam[0].imag):.4f}i")
+
+def cycle(x0, b, tol):                   # amplitude and period after the transient
+    t_eval = np.arange(0, 200.001, 0.01)
+    sol = solve_ivp(selkov, (0, 200), x0, args=(b,), t_eval=t_eval, rtol=tol, atol=tol)
+    keep = sol.t > 100
+    tt, u = sol.t[keep], sol.y[0, keep]
+    i = np.where((u[1:] >= b) & (u[:-1] < b))[0]        # upward crossings of u = b
+    tc = tt[i] + (b - u[i]) / (u[i + 1] - u[i]) * 0.01   # linear interpolation
+    per = f"{np.mean(np.diff(tc)):.4f}" if len(tc) > 1 else "none"
+    print(f"({x0[0]:.2f}, {x0[1]:.2f}) b = {b:.1f} tol = {tol:.0e}: u in [{u.min():.4f}, "
+          f"{u.max():.4f}], range {u.max() - u.min():.1e}, period {per}")
+
+cycle([0.61, 1.36], 0.6, 1e-6)
+cycle([2.5, 0.2], 0.6, 1e-6)
+cycle([2.5, 0.2], 0.6, 1e-10)
+cycle([2.5, 0.2], 1.0, 1e-10)
+
+# Output:
+# b = 0.2  lambda = -0.2267 +0.2620i
+# b = 0.4  lambda = 0.0467 +0.4877i
+# b = 0.6  lambda = 0.0982 +0.6560i
+# b = 0.8  lambda = 0.0289 +0.8480i
+# b = 1.0  lambda = -0.1141 +1.0330i
+# (0.61, 1.36) b = 0.6 tol = 1e-06: u in [0.2452, 1.5176], range 1.3e+00, period 9.6226
+# (2.50, 0.20) b = 0.6 tol = 1e-06: u in [0.2452, 1.5176], range 1.3e+00, period 9.6226
+# (2.50, 0.20) b = 0.6 tol = 1e-10: u in [0.2453, 1.5176], range 1.3e+00, period 9.6226
+# (2.50, 0.20) b = 1.0 tol = 1e-10: u in [1.0000, 1.0000], range 7.7e-06, period 6.0066
+```
+
+### Rust
+
+```rust
+// rust/examples/phase_plane_c5.rs  —  cargo run --example phase_plane_c5
+// C5: the Sel'kov glycolysis model: eigenvalues at the fixed point for several b,
+// then amplitude and period of the limit cycle from simulations.
+use nalgebra::Matrix2;
+use ode_solvers::{Dopri5, System, Vector2};
+
+const A: f64 = 0.08;
+
+struct Selkov { b: f64 }
+impl System<f64, Vector2<f64>> for Selkov {
+    fn system(&self, _t: f64, x: &Vector2<f64>, dx: &mut Vector2<f64>) {
+        let (u, v) = (x[0], x[1]);
+        dx[0] = -u + A * v + u * u * v;
+        dx[1] = self.b - A * v - u * u * v;
+    }
+}
+
+fn jsel(u: f64, v: f64) -> Matrix2<f64> {
+    Matrix2::new(-1.0 + 2.0 * u * v, A + u * u, -2.0 * u * v, -(A + u * u))
+}
+
+// amplitude and period after the transient (t > 100)
+fn cycle(u0: f64, v0: f64, b: f64, tol: f64) {
+    let mut s = Dopri5::new(Selkov { b }, 0.0, 200.0, 0.01, Vector2::new(u0, v0), tol, tol);
+    s.integrate().expect("integration failed");
+    let (ts, xs) = (s.x_out(), s.y_out());
+    let (tt, u): (Vec<f64>, Vec<f64>) = ts.iter().zip(xs).filter(|(t, _)| **t > 100.0)
+        .map(|(t, x)| (*t, x[0])).unzip();
+    let mut tc = Vec::new(); // upward crossings of u = b, linear interpolation
+    for i in 0..u.len() - 1 {
+        if u[i] < b && u[i + 1] >= b {
+            tc.push(tt[i] + (b - u[i]) / (u[i + 1] - u[i]) * 0.01);
+        }
+    }
+    let (lo, hi) = u.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), &x| (l.min(x), h.max(x)));
+    let per = if tc.len() > 1 {
+        format!("{:.4}", (tc[tc.len() - 1] - tc[0]) / (tc.len() - 1) as f64) // mean period
+    } else { "none".to_string() };
+    println!("({:.2}, {:.2}) b = {:.1} tol = {:.0e}: u in [{:.4}, {:.4}], range {:.1e}, period {}",
+             u0, v0, b, tol, lo, hi, hi - lo, per);
+}
+
+fn main() {
+    for b in [0.2, 0.4, 0.6, 0.8, 1.0] {
+        let lam = jsel(b, b / (A + b * b)).complex_eigenvalues();
+        println!("b = {:.1}  lambda = {:.4} +{:.4}i", b, lam[0].re, lam[0].im.abs());
+    }
+    cycle(0.61, 1.36, 0.6, 1e-6);
+    cycle(2.5, 0.2, 0.6, 1e-6);
+    cycle(2.5, 0.2, 0.6, 1e-10);
+    cycle(2.5, 0.2, 1.0, 1e-10);
+}
+
+// Output:
+// b = 0.2  lambda = -0.2267 +0.2620i
+// b = 0.4  lambda = 0.0467 +0.4877i
+// b = 0.6  lambda = 0.0982 +0.6560i
+// b = 0.8  lambda = 0.0289 +0.8480i
+// b = 1.0  lambda = -0.1141 +1.0330i
+// (0.61, 1.36) b = 0.6 tol = 1e-6: u in [0.2453, 1.5176], range 1.3e0, period 9.6226
+// (2.50, 0.20) b = 0.6 tol = 1e-6: u in [0.2453, 1.5176], range 1.3e0, period 9.6226
+// (2.50, 0.20) b = 0.6 tol = 1e-10: u in [0.2453, 1.5176], range 1.3e0, period 9.6226
+// (2.50, 0.20) b = 1.0 tol = 1e-10: u in [1.0000, 1.0000], range 7.7e-6, period 6.0079
+```
+
+:::
+
+(a) The real part is positive for $b = 0.4, 0.6, 0.8$ and negative for $b = 0.2$ and $1.0$, consistent with the thresholds $0.346$ and $0.849$ from B7(c).
+(b) Both starts end on the same cycle: $u$ between $0.245$ and $1.518$, period $9.6226$. The tighter tolerance changes the minimum only in the 4th decimal (Python's RK45 at $10^{-6}$ gives $0.2452$) and the period not at all in the shown digits.
+(c) At $b = 1$ the range after $t = 100$ is $8\times10^{-6}$: a damped spiral still ringing, not a limit cycle. The "period" printed ($6.08$ in R, $6.01$ in Python and Rust) is the period of that dying ringing at amplitude $10^{-5}$, and depends on the solver. Always check the amplitude before reporting a period.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+for (al in c(3, 2.5, 2.1, 2.01, 2.001)) {
+  alpha <- al
+  xon <- c(al + sqrt(al^2 - 4), al - sqrt(al^2 - 4)) / 2      # "U on", exact
+  lmax <- max(Re(eigen(J(xon))$values))
+  out <- ode(y = c(3, 0.5), times = c(0, 100), func = toggle, parms = NULL,
+             rtol = 1e-10, atol = 1e-12)
+  err <- sqrt(sum((out[2, 2:3] - xon)^2))
+  cat(sprintf("alpha = %.3f  lambda_max = %8.5f  t_1%% = %7.1f  error at t = 100: %s\n",
+              al, lmax, log(100) / abs(lmax),
+              if (err < 1e-8) "< 1e-08" else sprintf("%.1e", err)))
+}
+alpha <- 2
+for (x in list(c(1, 1), c(1 + 1e-6, 1 - 1e-6), c(1 - 1e-6, 1 + 1e-6))) {
+  lam <- eigen(fd_jacobian(F, x))$values
+  cat(sprintf("at (%.6f, %.6f): lambda_max from FD Jacobian = %.2e\n", x[1], x[2], max(Re(lam))))
+}
+
+# Output:
+# alpha = 3.000  lambda_max = -0.33333  t_1% =    13.8  error at t = 100: < 1e-08
+# alpha = 2.500  lambda_max = -0.20000  t_1% =    23.0  error at t = 100: < 1e-08
+# alpha = 2.100  lambda_max = -0.04762  t_1% =    96.7  error at t = 100: 1.9e-03
+# alpha = 2.010  lambda_max = -0.00498  t_1% =   925.6  error at t = 100: 8.4e-02
+# alpha = 2.001  lambda_max = -0.00050  t_1% =  9214.9  error at t = 100: 1.6e-01
+# at (1.000000, 1.000000): lambda_max from FD Jacobian = -1.49e-08
+# at (1.000001, 0.999999): lambda_max from FD Jacobian = 3.73e-09
+# at (0.999999, 1.000001): lambda_max from FD Jacobian = 3.73e-09
+```
+
+### Python
+
+```python
+for al in [3, 2.5, 2.1, 2.01, 2.001]:
+    alpha = al                                   # toggle and J read the global alpha
+    xon = np.array([al + np.sqrt(al**2 - 4), al - np.sqrt(al**2 - 4)]) / 2   # "U on", exact
+    lmax = np.max(np.linalg.eigvals(J(xon)).real)
+    sol = solve_ivp(toggle, (0, 100), [3, 0.5], rtol=1e-10, atol=1e-12)
+    err = np.linalg.norm(sol.y[:, -1] - xon)
+    e = "< 1e-08" if err < 1e-8 else f"{err:.1e}"
+    print(f"alpha = {al:.3f}  lambda_max = {lmax:8.5f}  t_1% = {np.log(100) / abs(lmax):7.1f}"
+          f"  error at t = 100: {e}")
+alpha = 2
+for x in [np.array([1.0, 1.0]), np.array([1 + 1e-6, 1 - 1e-6]), np.array([1 - 1e-6, 1 + 1e-6])]:
+    lam = np.linalg.eigvals(fd_jacobian(F, x))
+    print(f"at ({x[0]:.6f}, {x[1]:.6f}): lambda_max from FD Jacobian = {np.max(lam.real):.2e}")
+
+# Output:
+# alpha = 3.000  lambda_max = -0.33333  t_1% =    13.8  error at t = 100: < 1e-08
+# alpha = 2.500  lambda_max = -0.20000  t_1% =    23.0  error at t = 100: < 1e-08
+# alpha = 2.100  lambda_max = -0.04762  t_1% =    96.7  error at t = 100: 1.9e-03
+# alpha = 2.010  lambda_max = -0.00498  t_1% =   925.6  error at t = 100: 8.4e-02
+# alpha = 2.001  lambda_max = -0.00050  t_1% =  9214.9  error at t = 100: 1.6e-01
+# at (1.000000, 1.000000): lambda_max from FD Jacobian = -1.49e-08
+# at (1.000001, 0.999999): lambda_max from FD Jacobian = 3.73e-09
+# at (0.999999, 1.000001): lambda_max from FD Jacobian = 3.73e-09
+```
+
+### Rust
+
+```rust
+// rust/examples/phase_plane_c6.rs  —  cargo run --example phase_plane_c6
+// C6: near the bifurcation at alpha = 2: the slowest eigenvalue, how long a simulation
+// needs, and what a finite-difference Jacobian says when the true eigenvalue is 0.
+use nalgebra::Matrix2;
+use ode_solvers::{Dopri5, System, Vector2};
+
+struct Toggle { alpha: f64 }
+impl System<f64, Vector2<f64>> for Toggle {
+    fn system(&self, _t: f64, x: &Vector2<f64>, dx: &mut Vector2<f64>) {
+        dx[0] = self.alpha / (1.0 + x[1] * x[1]) - x[0];
+        dx[1] = self.alpha / (1.0 + x[0] * x[0]) - x[1];
+    }
+}
+
+fn f(alpha: f64, x: [f64; 2]) -> [f64; 2] {
+    [alpha / (1.0 + x[1] * x[1]) - x[0], alpha / (1.0 + x[0] * x[0]) - x[1]]
+}
+
+fn jac(alpha: f64, u: f64, v: f64) -> Matrix2<f64> {
+    Matrix2::new(-1.0, -2.0 * alpha * v / (1.0 + v * v).powi(2),
+                 -2.0 * alpha * u / (1.0 + u * u).powi(2), -1.0)
+}
+
+fn fd_jacobian(alpha: f64, x: [f64; 2]) -> Matrix2<f64> {
+    let h = f64::EPSILON.sqrt();
+    let fx = f(alpha, x);
+    let mut jm = Matrix2::zeros();
+    for j in 0..2 {
+        let hj = h * x[j].abs().max(1.0);
+        let mut xh = x;
+        xh[j] += hj;
+        let fh = f(alpha, xh);
+        for i in 0..2 { jm[(i, j)] = (fh[i] - fx[i]) / hj; }
+    }
+    jm
+}
+
+fn lmax(m: &Matrix2<f64>) -> f64 {
+    m.complex_eigenvalues().iter().map(|z| z.re).fold(f64::NEG_INFINITY, f64::max)
+}
+
+fn main() {
+    for alpha in [3.0, 2.5, 2.1, 2.01, 2.001] {
+        let r = (alpha * alpha - 4.0_f64).sqrt();
+        let (uon, von) = ((alpha + r) / 2.0, (alpha - r) / 2.0); // "U on", exact
+        let l = lmax(&jac(alpha, uon, von));
+        let mut s = Dopri5::new(Toggle { alpha }, 0.0, 100.0, 1.0, Vector2::new(3.0, 0.5), 1e-10, 1e-12);
+        s.integrate().expect("integration failed");
+        let x = s.y_out().last().unwrap();
+        let err = ((x[0] - uon).powi(2) + (x[1] - von).powi(2)).sqrt();
+        let e = if err < 1e-8 { "< 1e-08".to_string() } else { format!("{:.1e}", err) };
+        println!("alpha = {:.3}  lambda_max = {:8.5}  t_1% = {:7.1}  error at t = 100: {}",
+                 alpha, l, 100f64.ln() / l.abs(), e);
+    }
+    for x in [[1.0, 1.0], [1.0 + 1e-6, 1.0 - 1e-6], [1.0 - 1e-6, 1.0 + 1e-6]] {
+        println!("at ({:.6}, {:.6}): lambda_max from FD Jacobian = {:.2e}", x[0], x[1],
+                 lmax(&fd_jacobian(2.0, x)));
+    }
+}
+
+// Output:
+// alpha = 3.000  lambda_max = -0.33333  t_1% =    13.8  error at t = 100: < 1e-08
+// alpha = 2.500  lambda_max = -0.20000  t_1% =    23.0  error at t = 100: < 1e-08
+// alpha = 2.100  lambda_max = -0.04762  t_1% =    96.7  error at t = 100: 1.9e-3
+// alpha = 2.010  lambda_max = -0.00498  t_1% =   925.6  error at t = 100: 8.4e-2
+// alpha = 2.001  lambda_max = -0.00050  t_1% =  9214.9  error at t = 100: 1.6e-1
+// at (1.000000, 1.000000): lambda_max from FD Jacobian = -1.49e-8
+// at (1.000001, 0.999999): lambda_max from FD Jacobian = 3.73e-9
+// at (0.999999, 1.000001): lambda_max from FD Jacobian = 3.73e-9
+```
+
+:::
+
+The slowest eigenvalue $-1 + 2/\alpha$ goes to 0 as $\alpha \to 2$, and the time to relax grows like $1/(\alpha - 2)$: at $\alpha = 2.01$ a simulation of 100 time units is still $0.08$ away from the steady state ("critical slowing down"). At $\alpha = 2$ the true $\lambda_{\max}$ at $(1, 1)$ is exactly 0. The finite-difference Jacobian gives $-1.5\times10^{-8}$ ("stable") at $(1, 1)$ and $+3.7\times10^{-9}$ ("unstable") at a point $10^{-6}$ away. Both are finite-difference error ($\approx \sqrt\varepsilon$), not information. When $|\mathrm{Re}\,\lambda|$ is not much larger than the errors in $J$ and in $\mathbf x^*$, linearisation cannot decide; use exact derivatives, analyse the nonlinear terms, or simulate (for a long time).
+:::
+
+## Where this leads
+
+- *Stochastic simulation* (Part 8): with few molecules the toggle switch is noisy, and noise occasionally kicks a cell across the separatrix; the saddle and the eigenvalues at the stable states set how often.
+- *Nonlinear least squares and ODE fitting* (Part 9): fitting the parameters of models like these to time courses; the bifurcation at $\alpha = 2$ is one reason such fits can jump between qualitatively different behaviours.
+- *Reaction–diffusion and pattern formation* (Part 10): the same linear stability analysis, now for each spatial wavelength, explains Turing patterns.
+- **Numerical continuation** (AUTO, MatCont, BifurcationKit.jl) follows steady states and limit cycles as a parameter changes and detects bifurcations. It is outside this course; C6 and the lecture's outlook slide show the idea.

@@ -43,7 +43,7 @@ const STYLE = `
 [data-demo="${NAME}"] .sl-warn { color: #b00020; }
 @media (max-width: 760px) { [data-demo="${NAME}"] .sl-plots svg { width: 100% !important; } }
 .reveal [data-demo="${NAME}"].qb-demo { font-size: 18px; gap: .25em; }
-.reveal [data-demo="${NAME}"] .qb-readout { font-size: 16px; padding: .2em .5em; }
+.reveal [data-demo="${NAME}"] .qb-readout { font-size: 18px; padding: .2em .5em; line-height: 1.25; }
 .reveal [data-demo="${NAME}"] .qb-btn { font-size: .85em; padding: .15em .55em; }
 `;
 
@@ -115,7 +115,7 @@ const SETS: DataSet[] = [
     y: [1.32, 1.27, 1.03, 0.30, 1.22, 0.98, 0.95, 0.49, 0.84, 1.16, 1.49, 1.06, 1.33, 1.21, 0.76, 1.11, 1.12, 1.39,
       2.46, 2.48, 2.20, 2.85, 3.24, 3.12, 2.53, 2.45, 2.76, 2.70, 2.04, 2.32, 1.69, 1.28, 1.49, 0.81, 1.58, 1.73,
       0.90, 0.65, 1.21, 0.95],
-    xlim: [0, 1], xticks: [0, 0.2, 0.4, 0.6, 0.8, 1], ylim: [-0.5, 4.5], yticks: [0, 1, 2, 3, 4],
+    xlim: [0, 1], xticks: [0, 0.2, 0.4, 0.6, 0.8, 1], ylim: [-0.6, 5.4], yticks: [0, 1, 2, 3, 4, 5],
     dlim: [-25, 25], dticks: [-20, -10, 0, 10, 20],
     xlab: "pseudotime", ylab: "expression", dlab: "slope (per unit pseudotime)",
     step: 0.25, sel: 22, probe: 0.6, show: ["natural", "smooth"],
@@ -172,7 +172,6 @@ function mount(host: HTMLElement): void {
 
   const row3 = htmlEl("div", "sl-row", "", host);
   const lamS = slider(row3, "smoothing log₁₀ λ", LL0, LL1, LSTEP, st.ll, v => { st.ll = v; draw(); }, v => v.toFixed(2));
-  lamS.input.addEventListener("input", () => { st.ll = lamS.get(); });
   button(row3, "GCV", () => { st.ll = gcvBest(); lamS.set(st.ll); draw(); });
   const g3 = htmlEl("div", "sl-group", "", row3);
   htmlEl("span", "", "panel (b):", g3);
@@ -451,7 +450,8 @@ function mount(host: HTMLElement): void {
     minusB.title = plusB.title = `move the selected point by ${s.step}`;
     if (sf) {
       const lamR = 10 ** st.ll;
-      htmlEl("span", "", `smoothing: λ = ${fmt(lamR, 3)} (R) = ${fmt(lamOf(st.ll), 3)} (Python), df = ${sf.df.toFixed(2)}, GCV = ${fmt(sf.gcv, 4)}`, info);
+      const e3 = (v: number) => v.toExponential(2).replace("e-", "e−").replace("e+", "e");
+      htmlEl("span", "", `smoothing: λ = ${e3(lamR)} (R) = ${e3(lamOf(st.ll))} (Python), df = ${sf.df.toFixed(2)}, GCV = ${fmt(sf.gcv, 4)}`, info);
     }
     const fine = Array.from({ length: 4001 }, (_, i) => x0 + (x1 - x0) * i / 4000);
     if (order.length) {

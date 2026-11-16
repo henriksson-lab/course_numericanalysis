@@ -202,7 +202,7 @@ Along every true orbit $V(x, y) = c x - d \ln x + b y - a \ln y$ stays **constan
 - Even RK4 drifts slowly. **Check:** when the model has a conserved quantity (total mass, total population), monitor it.
 
 ::: notes
-V plays the role of energy. Euler's drift is systematic (always upwards, the spiral), the RK4 error oscillates with each cycle and grows slowly. No standard Runge-Kutta method conserves V exactly; special "symplectic" or conservative methods exist but are beyond this course. For SIR, S + I + R = 1 is conserved, and all Runge-Kutta methods keep linear invariants like that exactly (up to rounding), which is why it is a weak check there. Nonlinear invariants like V are a strong check.
+V plays the role of energy. Euler's drift is systematic (always upwards, the spiral), the RK4 error oscillates with each cycle and grows slowly. No standard Runge-Kutta method conserves V exactly; special "symplectic" or conservative methods exist but are beyond this course. For SIR, S + I + R = N is conserved, and all Runge-Kutta methods keep linear invariants like that exactly (up to rounding), which is why it is a weak check there. Nonlinear invariants like V are a strong check.
 :::
 
 ## The repressilator {.smaller}
@@ -306,25 +306,25 @@ $$\text{sc}_i = \texttt{atol} + \texttt{rtol}\cdot |y_i|, \qquad \text{accept if
 
 - `rtol` = relative: `rtol = 1e-6` asks for about 6 correct digits **per step** in large components.
 - `atol` = absolute floor: when $|y_i| \ll$ `atol`/`rtol`, the allowed error is `atol`, whatever the size of $y_i$.
-- SIR in fractions ($S = 0.999$, $I = 0.001$) with `rtol = 1e-3`, `atol = 1e-6`: allowed error in $S$ $\approx 10^{-3}$, in $I$ $\approx 2\times10^{-6}$.
-- `atol` has the **units of $y$**: change from fractions to head counts and `atol` must change too.
+- SIR in people ($S = 9990$, $I = 10$) with `rtol = 1e-3`, `atol = 1e-6`: allowed error in $S$ $\approx 10$ people, in $I$ $\approx 0.01$.
+- `atol` has the **units of $y$**: change from head counts to fractions of the population and `atol` must change too.
 - Defaults differ: deSolve `rtol = atol = 1e-6`; `solve_ivp` `rtol = 1e-3`, `atol = 1e-6`; `ode_solvers` has none (you give both).
 
 ::: notes
-The combination is the standard one (Hairer, Norsett and Wanner; also scipy and deSolve). In words: atol says "below this size I do not care about this variable", rtol says "how many digits I want". If a variable lives on a small scale (a concentration in nM given in M, a fraction of infected 1e-6), atol must be much smaller than that scale, or the solver is allowed to get it wholly wrong. scipy's default rtol = 1e-3 is loose: 3 digits per step, often fewer for the answer. Always set tolerances explicitly.
+The combination is the standard one (Hairer, Norsett and Wanner; also scipy and deSolve). In words: atol says "below this size I do not care about this variable", rtol says "how many digits I want". If a variable lives on a small scale (a concentration in nM given in M, a few infected people out of millions given as fractions), atol must be much smaller than that scale, or the solver is allowed to get it wholly wrong. scipy's default rtol = 1e-3 is loose: 3 digits per step, often fewer for the answer. Always set tolerances explicitly.
 :::
 
 ## When `atol` is too large {.smaller}
 
-A new pathogen seeded at $I_0 = 10^{-6}$ (one in a million); Dormand–Prince, error in $I$ at day 60.
+SIR from 10 infected people; "`atol = 10` people seems harmless in a town of 10 000". Dormand–Prince, error in $I$ at day 60.
 
 ![](fig08-tolerance.svg){width="60%" fig-align="center"}
 
-- With `atol = 1e-6` the error is stuck at **6–9%**, however small `rtol` is: in the early phase $I < $ `atol`, so the solver may get $I$ wrong by 100% there, and the epidemic grows from a wrong seed.
+- With `atol = 10` the error is stuck at **3–5%**, with `atol = 1` at **0.2%**, however small `rtol` is: early on $I \lesssim$ `atol`, so the solver may get $I$ wrong by 100% there, and the epidemic grows from a wrong seed.
 - **Check:** set `atol` well below the smallest value you care about in each variable (here $10^{-12}$), or rescale the variables.
 
 ::: notes
-The early exponential phase decides when the epidemic peaks. With atol = 1e-6 the solver takes large steps while I is around 1e-6, the relative error in I is order 1, and that error is then amplified by the exponential growth. The blue line shows the healthy behaviour: the achieved error roughly follows rtol (one to a few times rtol). deSolve accepts a vector atol, one per variable; so does solve_ivp.
+The early exponential phase decides when the epidemic peaks. With atol = 10 the solver takes large steps while I is around 10 people, the relative error in I is of order 1, and that error is then amplified by the exponential growth. The same failure appears in fractions with atol = 1e-3 (or with atol = 1e-6 for a pathogen seeded at one in a million). The blue line shows the healthy behaviour: the achieved error roughly follows rtol (one to a few times rtol). deSolve accepts a vector atol, one per variable; so does solve_ivp.
 :::
 
 ## The tolerance is per step: check by tightening {.smaller}
@@ -353,50 +353,50 @@ This is the single most useful habit with ODE solvers: run twice with different 
 - deSolve instead limits the step to the spacing of `times` (`hmax`) and starts there (`hini`): ask for a fine enough `times` grid.
 
 ::: notes
-Two separate grids: the steps the solver takes for accuracy, and the times at which you want output. Dense output decouples them. In scipy, t_eval does not change the steps. In deSolve, the default hmax is the largest gap in times and the first step is hmax, so a very coarse times vector (e.g. c(0, 200)) can let ode45 take one huge first step and miss the dynamics; a fine times vector makes it take more steps than needed. Also note: the maximum of the output is only as accurate as the output grid: with a daily grid, max(I) misses the true peak by 2e-4.
+Two separate grids: the steps the solver takes for accuracy, and the times at which you want output. Dense output decouples them. In scipy, t_eval does not change the steps. In deSolve, the default hmax is the largest gap in times and the first step is hmax, so a very coarse times vector (e.g. c(0, 160)) can let ode45 take one huge first step and miss the dynamics; a fine times vector makes it take more steps than needed. Also note: the maximum of the output is only as accurate as the output grid: with a daily grid, max(I) misses the true peak by 1.7 people.
 :::
 
 ## deSolve: `"rk4"` versus `"ode45"` {.smaller}
 
 ```r
 library(deSolve)
-beta <- 0.3; gamma <- 0.1                          # per day; SIR in fractions
+beta <- 0.3; gamma <- 0.1; N <- 10000             # per day; as in the Euler unit
 sir <- function(t, y, parms) {
   S <- y[1]; I <- y[2]
-  list(c(-beta * S * I, beta * S * I - gamma * I, gamma * I))
+  list(c(-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I))
 }
-y0 <- c(S = 0.999, I = 0.001, R = 0)
-times <- seq(0, 200, by = 1)
+y0 <- c(S = 9990, I = 10, R = 0)
+times <- 0:160
 out4  <- ode(y0, times, sir, parms = NULL, method = "rk4")    # fixed h = 1
 out45 <- ode(y0, times, sir, parms = NULL, method = "ode45")  # rtol = atol = 1e-6
 c(max(out4[, "I"]), max(out45[, "I"]))
-# [1] 0.3006227 0.3006230
+# [1] 3006.227 3006.230
 ```
 
-- [`ode`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) wants `func(t, y, parms)` returning a **list**. Exact peak: $0.3007961$; both miss it by $1.7\times10^{-4}$ because of the **daily grid**, not the solver.
-- `"rk4"` steps **from output time to output time**: the repressilator with `times = 0:50` gives $p_1(50) = 3\times10^{58}$. [`diagnostics(out45)`](https://search.r-project.org/CRAN/refmans/deSolve/html/diagnostics.html) shows steps and evaluations (here 200 and 1202).
+- [`ode`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) wants `func(t, y, parms)` returning a **list**. Exact peak: $3007.961$; both miss it by $1.7$ people because of the **daily grid**, not the solver.
+- `"rk4"` steps **from output time to output time**: the repressilator with `times = 0:50` gives $p_1(50) = 3\times10^{58}$. [`diagnostics(out45)`](https://search.r-project.org/CRAN/refmans/deSolve/html/diagnostics.html) shows steps and evaluations (here 160 and 962).
 
 ::: notes
-The function signature differs from our hand-written f(t, y): deSolve passes parms and wants a list whose first element is the derivative vector. The fixed-step methods ("euler", "rk4") in deSolve use the times vector as the step grid unless hini is given; a coarse output grid then silently means a coarse step, and RK4 with h = 1 on the repressilator blows up. ode45 is the safer default. With the daily grid, ode45 is capped at h = 1 here, hence 200 steps; with times = c(0, 200) it takes 40. The exact peak comes from the formula I_max = 1 - (gamma/beta)(1 + ln(beta S0 / gamma)) (Euler unit).
+The function signature differs from our hand-written f(t, y): deSolve passes parms and wants a list whose first element is the derivative vector. The fixed-step methods ("euler", "rk4") in deSolve use the times vector as the step grid unless hini is given; a coarse output grid then silently means a coarse step, and RK4 with h = 1 on the repressilator blows up. ode45 is the safer default. With the daily grid, ode45 is capped at h = 1 here, hence 160 steps; with times = c(0, 160) it takes 67. The exact peak comes from the formula I_max = S0 + I0 - (N gamma/beta)(1 + ln(beta S0 / (gamma N))) from the Euler unit.
 :::
 
 ## Events: stop at the epidemic peak {.smaller}
 
 An **event** is a time where some function $g(t, y)$ crosses zero. The solver checks the sign of $g$ after every step and, when it changes, finds the root on the dense output.
 
-$I$ peaks when $dI/dt = (\beta S - \gamma) I = 0$, i.e. $g = \beta S - \gamma = 0$ ($S = 1/3$).
+$I$ peaks when $dI/dt = (\beta S/N - \gamma) I = 0$, i.e. $g = \beta S/N - \gamma = 0$ ($S = N/3$).
 
 ```r
-peak <- function(t, y, parms) beta * y[1] - gamma          # g(t, y)
+peak <- function(t, y, parms) beta * y[1] / N - gamma      # g(t, y)
 out <- ode(y0, times, sir, parms = NULL, method = "lsoda", rootfunc = peak)
 attributes(out)$troot                                       # stops at the root
-# [1] 38.35025
+# [1] 38.35532
 tail(out, 1)
-#          time         S         I         R
-# [40,] 38.35025 0.3333333 0.3007959 0.3658708
+#           time        S       I        R
+# [40,] 38.35532 3333.333 3007.96 3658.707
 ```
 
-- The peak, $0.3007959$, now agrees with the exact $0.3007961$; peak time $38.35$ days.
+- The peak, $3007.96$, now agrees with the exact $3007.961$; peak time $38.36$ days.
 - In deSolve, `rootfunc` works with `lsoda`/`lsode`/`radau`, not `ode45` (`lsoda` is explained in *Stiffness and implicit methods*). Python: `solve_ivp(..., events=g)` with `g.terminal`, `g.direction`.
 
 ::: notes
@@ -418,7 +418,7 @@ The left panel uses a real Dormand-Prince run at rtol = 1e-4 and a cubic interpo
 ## Checklist: detecting trouble with an ODE solver
 
 - **Answer depends on the tolerance** → tighten `rtol` and `atol` 10–100 times and keep only the digits that agree.
-- **Small variables** (rare cells, nM concentrations, $I_0 = 10^{-6}$) → `atol` far below their scale, per variable if needed.
+- **Small variables** (rare cells, nM concentrations, the first few infected) → `atol` far below their scale, per variable if needed.
 - **Conserved quantity drifts** (total mass, Lotka–Volterra $V$) → tighter tolerance or higher-order method.
 - **Fixed-step method** → halve $h$; on a log–log plot the error must fall with the expected slope.
 - **Peak or threshold from the output grid** → use an event, or a finer output grid.

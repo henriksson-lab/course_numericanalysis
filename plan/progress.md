@@ -16,7 +16,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 11 | least-squares-qr | done | done | done |
 | 12 | svd | done | done | done |
 | 13 | power-iteration | done | done | done |
-| 14 | eigen-algorithms | running | | |
+| 14 | eigen-algorithms | done | running | |
 | 15 | polynomial-interpolation | done | running | |
 | 16 | splines | done | running | |
 | 17 | fourier-fft | running | | |
@@ -48,3 +48,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - monte-carlo: from memory — RANDU history, R 3.6 sample() change, ChaCha12 as StdRng, Bellman 'curse of dimensionality', bedtools shuffle / GAT / regioneR. Slides 13–18 figures not seen in browser.
 - polynomial-interpolation: figure slides not screenshotted (Chrome hung) — check overflow.
 - euler: slides not screenshotted; densest 'Why global error is O(h)', 'Euler by hand'. SIR = N 10000, β .3, γ .1, (9990,10,0), 160 d; runge-kutta told to match.
+- eigen-algorithms: install irlba, RSpectra. Timings typed into fig script (single run, 1 thread). Matrix 20 000 cells (contentplan says 100 000) — align plan text.
