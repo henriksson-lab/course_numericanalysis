@@ -23,13 +23,14 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 18 | finite-differences | done | done | done |
 | 19 | quadrature | running | | |
 | 20 | monte-carlo | done | running | |
-| 21 | euler | running | | |
+| 21 | euler | done | running | |
 | 22 | runge-kutta | running | | |
 | 23 | stiffness | running | | |
 | 24 | phase-plane | running | | |
 | 25 | gillespie | running | | |
 | 26 | optimisation-1d | running | | |
-| 27–37 | | queued | | |
+| 27 | gradient-methods | running | | |
+| 28–37 | | queued | | |
 
 ## Audit notes (pass 3)
 
@@ -46,3 +47,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - splines: tradeSeq / Monocle use spline trends — from memory, verify.
 - monte-carlo: from memory — RANDU history, R 3.6 sample() change, ChaCha12 as StdRng, Bellman 'curse of dimensionality', bedtools shuffle / GAT / regioneR. Slides 13–18 figures not seen in browser.
 - polynomial-interpolation: figure slides not screenshotted (Chrome hung) — check overflow.
+- euler: slides not screenshotted; densest 'Why global error is O(h)', 'Euler by hand'. SIR = N 10000, β .3, γ .1, (9990,10,0), 160 d; runge-kutta told to match.

@@ -172,6 +172,7 @@ function mount(host: HTMLElement): void {
 
   const row3 = htmlEl("div", "sl-row", "", host);
   const lamS = slider(row3, "smoothing log₁₀ λ", LL0, LL1, LSTEP, st.ll, v => { st.ll = v; draw(); }, v => v.toFixed(2));
+  lamS.input.addEventListener("input", () => { st.ll = lamS.get(); });
   button(row3, "GCV", () => { st.ll = gcvBest(); lamS.set(st.ll); draw(); });
   const g3 = htmlEl("div", "sl-group", "", row3);
   htmlEl("span", "", "panel (b):", g3);
@@ -238,10 +239,9 @@ function mount(host: HTMLElement): void {
     });
   }
   // probe: click the background of either panel
-  const setProbe = (svg: SVGSVGElement, sx: (v: number) => number & { invert?: unknown }, ev: PointerEvent) => {
+  const setProbe = (svg: SVGSVGElement, sx: ReturnType<typeof scale>, ev: PointerEvent) => {
     const [px] = svgPoint(svg, ev);
-    const f = sx as unknown as { invert: (v: number) => number };
-    const t = f.invert(px);
+    const t = sx.invert(px);
     const [x0, x1] = [st.set.x[0], st.set.x[st.set.x.length - 1]];
     st.probe = Math.max(x0, Math.min(x1, Math.round(t * 100) / 100));
     draw();
@@ -265,7 +265,16 @@ function mount(host: HTMLElement): void {
       const g = smoothing(st.set.x, st.y, lamOf(ll)).gcv;
       if (g < best) { best = g; arg = ll; }
     }
-    return Math.round(arg / LSTEP) * LSTEP;
+    // refine between the neighbouring grid points by golden-section search
+    const g = (ll: number) => smoothing(st.set.x, st.y, lamOf(ll)).gcv;
+    let a = Math.max(LL0, arg - LSTEP), b = Math.min(LL1, arg + LSTEP);
+    const r = (Math.sqrt(5) - 1) / 2;
+    let c = b - r * (b - a), d = a + r * (b - a), gc = g(c), gd = g(d);
+    for (let k = 0; k < 30; k++) {
+      if (gc < gd) { b = d; d = c; gd = gc; c = b - r * (b - a); gc = g(c); }
+      else { a = c; c = d; gc = gd; d = a + r * (b - a); gd = g(d); }
+    }
+    return (a + b) / 2;
   }
 
   function loadSet(s: DataSet, resetShow: boolean): void {
@@ -297,7 +306,7 @@ function mount(host: HTMLElement): void {
   }
 
   // axes helper
-  function axes(svg: SVGSVGElement, sx: (v: number) => number, sy: (v: number) => number, L: number, Rr: number,
+  function axes(svg: Element, sx: (v: number) => number, sy: (v: number) => number, L: number, Rr: number,
     yt: number[], ylab: (v: number) => string, title: string, xlab: string, ytitle: string): void {
     svgEl("text", { x: 8, y: 24, class: "ttl" }, svg).textContent = title;
     for (const v of yt) {
@@ -346,16 +355,10 @@ function mount(host: HTMLElement): void {
 
     // ---------- (a) ----------
     layerA.replaceChildren();
-    axes(svgA, sx, sy, aL, aR, s.yticks, v => String(v), "(a) data and curves", s.xlab, s.ylab);
+    axes(layerA, sx, sy, aL, aR, s.yticks, v => String(v), "(a) data and curves", s.xlab, s.ylab);
     if (s.ylim[0] < 0) {
       svgEl("rect", { x: aL, y: sy(0), width: aR - aL, height: bot - sy(0), fill: COL.neg, "fill-opacity": 0.6 }, layerA);
       svgEl("line", { x1: aL, x2: aR, y1: sy(0), y2: sy(0), stroke: "#999", "stroke-width": 1.2 }, layerA);
-    }
-    // re-attach axes/grid into layerA so the point layer stays on top
-    while (svgA.lastChild && svgA.lastChild !== ptLayer && svgA.lastChild !== layerA) {
-      const c = svgA.lastChild;
-      if ((c as Element).tagName === "clipPath") break;
-      layerA.insertBefore(c, layerA.firstChild);
     }
     const ca = svgEl("g", { "clip-path": `url(#sl-clip-${uid}-a)` }, layerA);
     if (s.truth) {
@@ -405,9 +408,8 @@ function mount(host: HTMLElement): void {
       for (const m of drawOrder) {
         const c = cur[m]!;
         // piecewise linear: a staircase, drawn with breaks at the knots
-        const tt = m === "linear" ? ts.flatMap(t => x.includes(t) && t !== x0 && t !== x1 ? [t - 1e-9 * (x1 - x0), NaN, t] : [t]) : ts;
-        const vv = tt.map(t => Number.isNaN(t) ? NaN : c.d(t));
-        svgEl("path", { d: path(tt.map(t => Number.isNaN(t) ? 0 : t), vv, sbx, sdy), fill: "none", stroke: COL[m], "stroke-width": m === "smooth" ? 3.2 : 2.4 }, g);
+        const tt = m === "linear" ? ts.flatMap(t => x.includes(t) && t !== x0 && t !== x1 ? [t - 1e-9 * (x1 - x0), t] : [t]) : ts;
+        svgEl("path", { d: path(tt, tt.map(t => c.d(t)), sbx, sdy), fill: "none", stroke: COL[m], "stroke-width": m === "smooth" ? 3.2 : 2.4 }, g);
       }
     } else {
       // log10 |change| since the preset data
@@ -451,6 +453,7 @@ function mount(host: HTMLElement): void {
       const lamR = 10 ** st.ll;
       htmlEl("span", "", `smoothing: λ = ${fmt(lamR, 3)} (R) = ${fmt(lamOf(st.ll), 3)} (Python), df = ${sf.df.toFixed(2)}, GCV = ${fmt(sf.gcv, 4)}`, info);
     }
+    const fine = Array.from({ length: 4001 }, (_, i) => x0 + (x1 - x0) * i / 4000);
     if (order.length) {
       const tab = htmlEl("table", "sl-tab", "", ro);
       const hr = htmlEl("tr", "", "", tab);
@@ -459,7 +462,7 @@ function mount(host: HTMLElement): void {
       for (const m of order) {
         const c = cur[m]!, b = base[m]!;
         let mn = Infinity, mx = -Infinity, tmx = 0;
-        for (const t of grid) {
+        for (const t of fine) {
           const v = c.f(t); if (v < mn) mn = v;
           const d = c.d(t); if (d > mx) { mx = d; tmx = t; }
         }
@@ -468,13 +471,12 @@ function mount(host: HTMLElement): void {
         htmlEl("td", "", fmt(c.f(st.probe)), tr);
         htmlEl("td", "", fmt(c.d(st.probe)), tr);
         htmlEl("td", "", anyMoved ? fmt(c.f(st.probe) - b.f(st.probe), 3) : "–", tr);
-        const tdm = htmlEl("td", mn < 0 && s.ylim[0] < 0 && s.key === "gene" ? "sl-warn" : "", fmt(mn), tr);
-        void tdm;
+        htmlEl("td", mn < 0 && s.key === "gene" ? "sl-warn" : "", fmt(mn), tr);
         htmlEl("td", "", `${fmt(mx)} (${fmtT(tmx)})`, tr);
       }
       if (showTrue && s.truth && s.dtruth) {
         let mx = -Infinity, tmx = 0;
-        for (const t of grid) { const d = s.dtruth(t); if (d > mx) { mx = d; tmx = t; } }
+        for (const t of fine) { const d = s.dtruth(t); if (d > mx) { mx = d; tmx = t; } }
         const tr = htmlEl("tr", "", "", tab);
         const td0 = htmlEl("td", "", s.truthLabel ?? "truth", tr); td0.style.color = COL.ref;
         htmlEl("td", "", fmt(s.truth(st.probe)), tr);
