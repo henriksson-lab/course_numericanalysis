@@ -61,7 +61,7 @@ const fe = (v: number): string => {
   if (!Number.isFinite(v)) return String(v);
   if (v === 0) return "0";
   const a = Math.abs(v);
-  if (a >= 1e-3 && a < 1e4) return v.toPrecision(3);
+  if (a >= 1e-2 && a < 1e4) return v.toPrecision(3);
   return v.toExponential(1).replace("e+", "e");
 };
 const fv = (v: number): string => (!Number.isFinite(v) ? String(v) : Math.abs(v) >= 1e-4 || v === 0 ? fx(v) : (v < 0 ? "" : " ") + v.toExponential(2));
@@ -394,9 +394,9 @@ function mount(host: HTMLElement): void {
       res = `<b>ends:</b> ${name} (${end[0].toFixed(6)}, ${end[1].toFixed(6)}) after <b>${K}</b> step${K === 1 ? "" : "s"}`;
       target = best ? best.x : end;
     } else if (path.status === "nan") {
-      res = `<b>ends:</b> <span class="nw-warn">NaN after ${K} steps</span> (a negative concentration raised to a non-integer power n)`;
+      res = `<b>ends:</b> <span class="nw-warn">NaN after ${K} step${K === 1 ? "" : "s"}</span> (a negative concentration raised to a non-integer power n)`;
     } else if (path.status === "escaped") {
-      res = `<b>ends:</b> <span class="nw-warn">ran off to infinity after ${K} steps</span>`;
+      res = `<b>ends:</b> <span class="nw-warn">ran off to infinity after ${K} step${K === 1 ? "" : "s"}</span>`;
     } else {
       res = `<b>ends:</b> <span class="nw-warn">no convergence in ${MAXIT} steps</span> (‖F‖ = ${fe(norm(F(p, end)))})`;
     }

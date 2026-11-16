@@ -12,7 +12,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 7 | newton-systems | done | running | |
 | 8 | lu | done | running | |
 | 9 | pivoting-conditioning | done | done | done |
-| 10 | structured-sparse | running | | |
+| 10 | structured-sparse | done | running | |
 | 11 | least-squares-qr | done | done | done |
 | 12 | svd | done | running | |
 | 13 | power-iteration | running | | |
@@ -21,7 +21,8 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 16 | splines | running | | |
 | 17 | fourier-fft | running | | |
 | 18 | finite-differences | running | | |
-| 19–37 | | queued | | |
+| 19 | quadrature | running | | |
+| 20–37 | | queued | | |
 
 ## Audit notes (pass 3)
 
@@ -32,3 +33,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - lu: C7 Rust tab omits helper functions (file complete) — only tab not showing whole file. Timings noisy (machine load ~80).
 - svd: tool names EPIC, quanTIseq, MuSiC (slide) and CIBERSORT (notes) as constrained-LS deconvolution — from memory, verify. Only 4/27 slides screenshotted. scipy 1.15.2 nnls bug noted in C6 (may go stale). Install: nnls (R).
 - least-squares-qr demo: drag interaction untested headless.
+- structured-sparse: Thomas signature thomas(a,b,c,d) and morphogen-row example to be reused in Part 10. Rust sprs lacks sparse Cholesky/solve — dense/handwritten substitutes, stated.
