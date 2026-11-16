@@ -338,6 +338,7 @@ A negative number raised to a non-integer power is `NaN` in R and numpy (and in 
 ### R
 
 ```r
+# uses F(), J() from the Background
 fd_jacobian <- function(F, x, h = sqrt(.Machine$double.eps)) {
   Fx <- F(x)
   Jm <- matrix(0, length(Fx), length(x))
@@ -367,6 +368,7 @@ max(abs(jacobian(F, c(1, 2)) - J(c(1, 2))))   # Richardson extrapolation: more d
 ### Python
 
 ```python
+# uses F(), J() from the Background
 from scipy.optimize import approx_fprime
 
 def fd_jacobian(F, x, h=np.sqrt(np.finfo(float).eps)):
@@ -464,6 +466,7 @@ The hand-derived and finite-difference Jacobians agree to about $10^{-8}$ everyw
 ### R
 
 ```r
+# uses F(), J() from the Background
 newton_sys <- function(F, J, x, tol = 1e-12, maxit = 50) {
   path <- matrix(x, nrow = 1)                # row k+1 = x_k
   for (k in 1:maxit) {
@@ -501,6 +504,7 @@ err[2:5] / err[1:4]^2                        # quadratic: roughly constant
 ### Python
 
 ```python
+# uses F(), J() from the Background
 import warnings
 
 def newton_sys(F, J, x, tol=1e-12, maxit=50):
@@ -619,6 +623,7 @@ The first steps from $(3, 0)$ match B4. From $(3, 0.5)$ the error goes $0.4 \to 
 ### R
 
 ```r
+# uses F() from the Background; newton_sys() from the solution of C2
 g <- seq(0.2, 3.8, by = 0.4)                 # 10 values
 starts <- as.matrix(expand.grid(u = g, v = g))   # 100 starts
 roots <- t(apply(starts, 1, function(s) {
@@ -643,6 +648,7 @@ max(apply(roots, 1, function(x) sqrt(sum(F(x)^2))))   # worst residual of all 10
 ### Python
 
 ```python
+# uses F() from the Background; newton_sys() from the solution of C2
 g = np.arange(0.2, 3.81, 0.4)                # 10 values
 starts = [np.array([u, v]) for v in g for u in g]   # 100 starts
 roots = np.array([newton_sys(F, J, s)[-1] for s in starts])   # last iterates
@@ -744,6 +750,7 @@ All 100 runs converge (worst residual $5\times10^{-16}$), to only three distinct
 ### R
 
 ```r
+# uses fd_jacobian() from the solution of C1; newton_sys() from the solution of C2
 for (h in c(sqrt(.Machine$double.eps), 1e-4, 1e-2, 0.3)) {
   Jfd <- function(x) fd_jacobian(F, x, h)
   P <- newton_sys(F, Jfd, c(3, 0.5))
@@ -760,6 +767,7 @@ for (h in c(sqrt(.Machine$double.eps), 1e-4, 1e-2, 0.3)) {
 ### Python
 
 ```python
+# uses fd_jacobian() from the solution of C1; newton_sys() from the solution of C2
 for h in [np.sqrt(np.finfo(float).eps), 1e-4, 1e-2, 0.3]:
     Jfd = lambda x: fd_jacobian(F, x, h)
     P = newton_sys(F, Jfd, np.array([3.0, 0.5]))
@@ -981,6 +989,7 @@ With default settings, `multiroot` stops at a residual of about $10^{-12}$ and a
 ### R
 
 ```r
+# uses F(), J() from the Background; newton_sys() from the solution of C2
 # (a) two nearby starts
 for (s in list(c(1.9, 0.5), c(2.0, 0.55))) {
   P <- newton_sys(F, J, s)
@@ -1031,6 +1040,7 @@ F(xd)
 ### Python
 
 ```python
+# uses F(), J() from the Background; newton_sys() from the solution of C2
 # (a) two nearby starts
 for s in [np.array([1.9, 0.5]), np.array([2.0, 0.55])]:
     P = newton_sys(F, J, s)
@@ -1192,6 +1202,7 @@ fn main() {
 ### R
 
 ```r
+# uses F() from the Background; newton_sys() from the solution of C2
 g <- seq(0.25, 5, length.out = 8)
 starts <- as.matrix(expand.grid(g, g))           # 64 starts
 for (a in seq(1, 5, by = 0.5)) {
@@ -1222,6 +1233,7 @@ for (a in seq(1, 5, by = 0.5)) {
 ### Python
 
 ```python
+# uses F() from the Background; newton_sys() from the solution of C2
 warnings.simplefilter("ignore")                  # we count non-converged runs instead
 g = np.linspace(0.25, 5, 8)
 starts = [np.array([u, v]) for v in g for u in g]   # 64 starts
@@ -1328,8 +1340,8 @@ For $\alpha \le 1.5$ there is one steady state, for $\alpha \ge 2.5$ three, and 
 
 ## Where this leads
 
-- *Gaussian elimination as LU* (Part 3): what `solve(J, -F)` does inside, why it costs about $\tfrac23 n^3$ operations, and why we never form `solve(J)`. *Pivoting, norms and conditioning*: norms beyond the Euclidean length, and why a nearly singular $J$ (C6) amplifies errors.
-- *Structure: symmetric, banded, sparse* (Part 3): gene networks give sparse Jacobians, which makes Newton feasible for thousands of genes.
-- *Numerical differentiation* (Part 7): central differences and Richardson extrapolation (what `numDeriv` does) for more accurate Jacobians.
-- *Equilibria, stability and the phase plane* (Part 8): the same toggle switch; the eigenvalues of $J$ at each steady state decide which ones are stable, explaining why no cell sits in the middle state that Newton found so often.
-- *Gradient descent, Newton and quasi-Newton* (Part 9): Newton applied to the gradient of a likelihood, with the Jacobian of the gradient (the Hessian); quasi-Newton methods build an approximate Jacobian cheaply, which C4 shows is enough.
+- [*Gaussian elimination as LU*](../lu/lec.qmd) (Part 3): what `solve(J, -F)` does inside, why it costs about $\tfrac23 n^3$ operations, and why we never form `solve(J)`. [*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd): norms beyond the Euclidean length, and why a nearly singular $J$ (C6) amplifies errors.
+- [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd) (Part 3): sparse storage and sparse solvers. In a gene network each gene is regulated by a few others, so its Jacobian is sparse, and these solvers make Newton feasible for thousands of genes.
+- [*Numerical differentiation*](../finite-differences/lec.qmd) (Part 7): central differences and Richardson extrapolation (what `numDeriv` does) for more accurate Jacobians.
+- [*Equilibria, stability and the phase plane*](../phase-plane/lec.qmd) (Part 8): the same toggle switch; the eigenvalues of $J$ at each steady state decide which ones are stable, explaining why no cell sits in the middle state that Newton found so often.
+- [*Gradient descent, Newton and quasi-Newton*](../gradient-methods/lec.qmd) (Part 9): Newton applied to the gradient of a likelihood, with the Jacobian of the gradient (the Hessian); quasi-Newton methods build an approximate Jacobian cheaply, which C4 shows is enough.

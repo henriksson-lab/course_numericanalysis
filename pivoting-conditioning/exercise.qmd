@@ -30,7 +30,7 @@ $$A = \begin{pmatrix}1 & c\\ c & 1\end{pmatrix}, \qquad c = 0.95 \text{ (peaks a
 
 **Facts used below:**
 
-1. **Elimination** (from *Gaussian elimination as LU*) subtracts $m = a_{ik}/a_{kk}$ times row $k$ from row $i$. The **pivot** $a_{kk}$ is divided by twice: in the multiplier and in back substitution. A tiny pivot gives huge multipliers, and the rows below are swamped by rounding.
+1. **Elimination** (from [*Gaussian elimination as LU*](../lu/lec.qmd)) subtracts $m = a_{ik}/a_{kk}$ times row $k$ from row $i$. The **pivot** $a_{kk}$ is divided by twice: in the multiplier and in back substitution. A tiny pivot gives huge multipliers, and the rows below are swamped by rounding.
 2. **Partial pivoting**: before eliminating column $k$, swap rows so that the entry of largest absolute value in column $k$ (on or below the diagonal) is the pivot. Then $|m| \le 1$. The swaps are collected in a permutation matrix $P$: $PA = LU$.
 3. **Vector norms**: $\|\mathbf v\|_1 = \sum_i |v_i|$, $\|\mathbf v\|_2 = \sqrt{\sum_i v_i^2}$, $\|\mathbf v\|_\infty = \max_i |v_i|$. Relative error of a vector: $\|\hat{\mathbf x} - \mathbf x\|/\|\mathbf x\|$.
 4. **Matrix norms**: $\|A\| = \max_{\mathbf v\ne 0}\|A\mathbf v\|/\|\mathbf v\|$, the largest stretch. $\|A\|_1$ = largest absolute column sum, $\|A\|_\infty$ = largest absolute row sum, $\|A\|_2 = \sigma_{\max}$, the largest singular value (for a symmetric matrix: the largest $|\lambda|$).
@@ -434,6 +434,7 @@ The error grows roughly like $\varepsilon/\delta$ (it stays at or below that lin
 ### R
 
 ```r
+# uses rel() from C1
 solve_pivot <- function(A, b) {
   n <- nrow(A)
   for (k in 1:(n - 1)) {
@@ -485,6 +486,7 @@ t(as.matrix(f$P) + 0) %*% B        # rows of B in pivot order
 ### Python
 
 ```python
+# uses rel() from C1
 import scipy.linalg
 
 def solve_pivot(A, b):
@@ -797,6 +799,7 @@ All exact values match $(1 + c)/(1 - c)$; for this symmetric matrix the 1-norm a
 ### R
 
 ```r
+# uses rel() from C1
 panel <- function(n, spacing, width = 30) {
   peak <- 500 + spacing * (0:(n - 1))
   outer(peak, peak, function(d, p) exp(-(d - p)^2 / (2 * width^2)))
@@ -819,6 +822,7 @@ for (s in c(60, 30, 20, 10, 5)) {
 ### Python
 
 ```python
+# uses rel() from C1
 def panel(n, spacing, width=30):
     peak = 500 + spacing * np.arange(n)
     return np.exp(-(peak[:, None] - peak[None, :]) ** 2 / (2 * width ** 2))
@@ -882,6 +886,7 @@ $\kappa$ explodes as the peaks crowd together: from 1.6 to $7\times10^8$ when th
 ### R
 
 ```r
+# uses rel() from C1 and panel() from C5
 xt <- c(5, 1, 3, 2, 4, 1)
 A  <- panel(6, 6)
 b  <- drop(A %*% xt)
@@ -896,6 +901,7 @@ cat(sprintf("kappa = %.2e  residual = %.2e  error = %.2e  bound = %.2e\n", k, r,
 ### Python
 
 ```python
+# uses rel() from C1 and panel() from C5
 xt = np.array([5, 1, 3, 2, 4, 1])
 A = panel(6, 6)
 b = A @ xt
@@ -1023,7 +1029,7 @@ The random numbers differ between languages, so the measured standard deviations
 
 ## Where this leads
 
-- ***Structure: symmetric, banded, sparse*** (next unit): the same LU machinery, made faster when $A$ is symmetric positive definite (Cholesky needs no pivoting) or banded or sparse.
-- ***Least squares: normal equations vs QR*** (Part 4): spectral cytometers have more detectors than dyes, so unmixing becomes least squares. Forming the normal equations $A^\top A$ **squares** the condition number; QR avoids that.
-- ***The SVD, rank deficiency and regularisation*** (Part 4): the singular values used here as numbers get their full meaning, and regularisation trades a little bias for much less noise when $\kappa$ is large.
-- Every Newton step in *Newton for systems of equations* (Part 2) solves a linear system with the Jacobian; a large $\kappa$ there means an inaccurate step. In *Identifiability and uncertainty of fitted parameters* (Part 9), a nearly singular matrix means parameters the data cannot pin down.
+- **[*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd)** (next unit): the same LU machinery, made faster when $A$ is symmetric positive definite (Cholesky needs no pivoting) or banded or sparse.
+- **[*Least squares: normal equations vs QR*](../least-squares-qr/lec.qmd)** (Part 4): spectral cytometers have more detectors than dyes, so unmixing becomes least squares (that unit teaches the method on calibration curves rather than spectra). Forming the normal equations $A^\top A$ **squares** the condition number; QR avoids that.
+- **[*The SVD, rank deficiency and regularisation*](../svd/lec.qmd)** (Part 4): the singular values used here as numbers get their full meaning, and regularisation trades a little bias for much less noise when $\kappa$ is large.
+- Every Newton step in [*Newton for systems of equations*](../newton-systems/lec.qmd) (Part 2) solves a linear system with the Jacobian; a large $\kappa$ there means an inaccurate step. In [*Identifiability and uncertainty of fitted parameters*](../identifiability/lec.qmd) (Part 9), a nearly singular matrix means parameters the data cannot pin down.

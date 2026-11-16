@@ -35,7 +35,7 @@ Biology: the instantaneous growth rate from a noisy plate-reader OD curve; the g
 This unit opens Part 7. In Convergence and cost we used the forward difference of the logistic OD curve to see the truncation/rounding V and only previewed the central difference. Here we do the systematic version: where every stencil comes from, how to pick the step, how to do better than any single stencil, and what happens with real, noisy data. The second half is about gradients, the multivariate version, because that is where most biologists meet numerical derivatives without noticing: every optimiser that is not given a gradient computes one by finite differences.
 :::
 
-## Recap: the V from *Convergence and cost* {.smaller}
+## Recap: the V from [*Convergence and cost*](../convergence-cost/lec.qmd) {.smaller}
 
 Logistic OD curve $N(t) = \dfrac{K}{1 + (K/N_0 - 1)\,e^{-rt}}$, $K = 1.2$, $N_0 = 0.05$, $r = 0.8$ per hour. True growth rate at $t = 3$ h: $N'(3) = 0.21026$ OD/h.
 
@@ -150,7 +150,7 @@ $$N(t+h) + N(t-h) = 2N + h^2 N'' + \tfrac{2h^4}{24} N'''' + \dots
 
 - Second order. At $t = 3$: error $\approx -0.00514\,h^2$.
 - Biology: $N''$ is the **acceleration** of growth. It changes sign at the **inflection point**, the time of fastest growth ($t = 3.92$ h here).
-- This $(1, -2, 1)/h^2$ stencil is the **workhorse of Part 10**: in space it becomes the diffusion term $D\,\partial^2 c/\partial x^2$, in *The diffusion (heat) equation by finite differences*.
+- This $(1, -2, 1)/h^2$ stencil is the **workhorse of Part 10**: in space it becomes the diffusion term $D\,\partial^2 c/\partial x^2$, in [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd).
 
 ![](fig02-stencils.svg){width="46%" fig-align="center"}
 
@@ -321,7 +321,7 @@ Start at "neighbours": the growth-rate estimates in (b) scatter around the truth
 
 ## Smooth first, then differentiate {.smaller}
 
-Fit a smooth curve to all the data, then differentiate the **curve**. A smoothing spline (*Splines*, Part 6) picks its smoothness from the data:
+Fit a smooth curve to all the data, then differentiate the **curve**. A smoothing spline ([*Splines*](../splines/lec.qmd), Part 6) picks its smoothness from the data:
 
 ```r
 fit <- smooth.spline(t, y)                 # smoothness chosen by GCV
@@ -337,7 +337,7 @@ c(max(d), t[which.max(d)])                 # max growth rate and when
 - Alternatives: a local polynomial fit (Savitzky–Golay), or fit a growth **model** and differentiate it (Part 9).
 
 ::: notes
-smooth.spline chooses its smoothing parameter by generalised cross-validation, which balances fit against roughness, the same bias-variance trade-off as the stencil width, made automatically. predict with deriv = 1 differentiates the fitted cubic pieces exactly. How smoothing splines work is the topic of Splines. Fitting a parametric model (logistic, Gompertz) and differentiating it is the most accurate option when the model is right, and the most misleading when it is wrong; that is Part 9 (Nonlinear least squares and ODE fitting).
+smooth.spline chooses its smoothing parameter by generalised cross-validation, which balances fit against roughness, the same bias-variance trade-off as the stencil width, made automatically. predict with deriv = 1 differentiates the fitted cubic pieces exactly. How smoothing splines work is the topic of Splines. Fitting a parametric model (logistic, Gompertz) and differentiating it is the most accurate option when the model is right, and the most misleading when it is wrong; the fitting methods are in Part 9 (Nonlinear least squares and ODE fitting, whose example is a drug-concentration model rather than a growth curve, but the method is the same).
 :::
 
 ## Comparing the three {.smaller}
@@ -455,10 +455,10 @@ Every item corresponds to a failure shown in this lecture or the exercise. The g
 - **Stencils from Taylor**: forward/backward $O(h)$, central $O(h^2)$, second derivative $\tfrac{N(t+h) - 2N(t) + N(t-h)}{h^2}$, $O(h^2)$. Any stencil: match Taylor terms with a small linear system.
 - **Best step** balances truncation $Ch^p$ against rounding $\varepsilon/h^k$: $\varepsilon^{1/2}$ (forward), $\varepsilon^{1/3}$ (central), $\varepsilon^{1/4}$ (second derivative). Steps are relative to the variable.
 - **Richardson**: $\tfrac{4D(h/2) - D(h)}{3}$ removes the $h^2$ error; repeated, it gives 12–13 digits (`numDeriv::grad`). Needs a smooth function.
-- **Measured data**: noise $\sigma$ replaces $\varepsilon$, and $\sigma/h$ is huge. Widen the stencil or smooth first (*Splines*); check with two smoothing levels.
+- **Measured data**: noise $\sigma$ replaces $\varepsilon$, and $\sigma/h$ is huge. Widen the stencil or smooth first ([*Splines*](../splines/lec.qmd)); check with two smoothing levels.
 - **Gradients for fitting**: one difference per parameter; watch the step size relative to each parameter (`optim`'s `ndeps`). AD gives exact gradients at the cost of a few evaluations.
 
-**Next:** *Numerical integration*, the opposite operation: integrating **averages** the noise away, and Richardson returns as Romberg.
+**Next:** [*Numerical integration*](../quadrature/lec.qmd), the opposite operation: integrating **averages** the noise away, and Richardson returns as Romberg.
 
 ::: notes
 The single idea of the unit: every derivative estimate divides a difference by a small number, and that amplifies whatever error is in the values, rounding or measurement noise. The stencils tell us how fast truncation falls; the balance tells us where to stop. The second-derivative stencil returns in Part 10 as the diffusion term. Numerical integration is the friendly counterpart: errors average out instead of being amplified.

@@ -27,7 +27,7 @@ The by-hand part needs pen, paper and a calculator. The code part uses the same 
 **Facts used below:**
 
 1. **Steady state.** With $\partial c/\partial t = 0$, diffusion with uptake $r(c)$ becomes the boundary value problem $D\,\nabla^2 c = r(c)$, with $\nabla^2 c = \partial^2 c/\partial x^2 + \partial^2 c/\partial y^2$. Constant $r$: **Poisson** equation; $r = 0$: **Laplace** equation. Only boundary conditions, no initial condition.
-2. **1D grid.** $x_i = i\,h$, $i = 0, \dots, N$. Interior equation:
+2. **1D grid.** Nodes $x_i = i\,h$, $i = 0, \dots, N$, as in [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd) ($h$ is its $\Delta x$). Two differences from that unit: we write **minus** the second difference (diagonal $+2$), so the matrix is symmetric positive definite and Cholesky and CG apply; and concentrations are in µM (or mM), not scaled to 0..1, because thresholds and $K_m$ are absolute. Interior equation:
    $$\frac{D}{h^2}\bigl(-c_{i-1} + 2c_i - c_{i+1}\bigr) + r(c_i) = 0.$$
    A known boundary value $c_0$ moves to the right-hand side: $+\frac{D}{h^2}c_0$ in the first equation.
 3. **No flux** at a closed end $x_N$: ghost point $c_{N+1} = c_{N-1}$, so the last equation is $\frac{D}{h^2}\bigl(-2c_{N-1} + 2c_N\bigr) + r(c_N) = 0$, and $c_N$ is an unknown.
@@ -142,7 +142,7 @@ fn main() {
 
 :::
 
-`sprs` stores and multiplies sparse matrices but has **no direct (LU or Cholesky) solver**. The Rust solutions use the Thomas algorithm in 1D and a hand-written **conjugate gradient** (CG) in 2D; CG works here because every matrix in this exercise is symmetric positive definite. It is introduced in *Structure: symmetric, banded, sparse* and treated fully in *Iterative linear solvers in depth*.
+`sprs` stores and multiplies sparse matrices but has **no direct (LU or Cholesky) solver**. The Rust solutions use the Thomas algorithm in 1D and a hand-written **conjugate gradient** (CG) in 2D; CG works here because every matrix in this exercise is symmetric positive definite. It is introduced in [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd) and treated fully in [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd).
 
 ## By hand
 
@@ -1278,7 +1278,7 @@ fn main() {
 
 ## Where this leads
 
-- *Flow plus diffusion*: an advection term makes the matrix **non-symmetric**; Cholesky and CG no longer apply, and the order of upwind differences matters.
-- *Reaction–diffusion and pattern formation*: production and decay terms, the length scale $\sqrt{D/k}$ of C1, and time-dependent 2D problems, where each implicit time step is a sparse solve like the ones here.
-- *Beyond rectangles: finite elements and flow*: real chambers with pillars and curved walls, where a rectangular grid no longer fits.
-- *Iterative linear solvers in depth*: conjugate gradient (used in the Rust solutions here), preconditioning, and why 3D problems (B8(c)) need it.
+- [*Flow plus diffusion*](../advection-diffusion/lec.qmd): an advection term makes the matrix **non-symmetric**; Cholesky and CG no longer apply, and the order of upwind differences matters.
+- [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd): production and decay terms, the length scale $\sqrt{D/k}$ of C1, and time-dependent 2D problems, where each implicit time step is a linear solve with the five-point Laplacian of this unit (there done with the FFT on a periodic grid, which diagonalises it).
+- [*Beyond rectangles: finite elements and flow*](../fem-outlook/lec.qmd): real chambers with pillars and curved walls, where a rectangular grid no longer fits.
+- [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd): conjugate gradient (used in the Rust solutions here), preconditioning, and why 3D problems (B8(c)) need it.

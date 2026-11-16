@@ -21,12 +21,12 @@ format:
 
 ## About this lecture {.smaller}
 
-In *Nonlinear least squares and ODE fitting* we fitted a pharmacokinetic model and got numbers for $k_a$, $k_e$ and $V$. This lecture asks **how much those numbers can be trusted**.
+In [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd) we fitted a pharmacokinetic model and got numbers for $k_a$, $k_e$ and $V$. This lecture asks **how much those numbers can be trusted**.
 
 - **Structural** non-identifiability: the model itself cannot tell parameters apart (a product $F\!\cdot\!D/V$; the $k_a/k_e$ **flip-flop**). No amount of data helps.
 - **Practical** non-identifiability: the model could, but *these* data do not.
 - Near the optimum the sum of squares is a bowl. Its curvature, the **Hessian** $\approx 2J^TJ$, gives **standard errors** $\sqrt{\operatorname{diag}(s^2(J^TJ)^{-1})}$ and a **correlation matrix**.
-- **Small singular values of $J$** name the badly determined combinations, as in *The SVD, rank deficiency and regularisation*.
+- **Small singular values of $J$** name the badly determined combinations, as in [*The SVD, rank deficiency and regularisation*](../svd/lec.qmd).
 - The **profile likelihood** checks the bowl picture, and shows flat directions the standard errors hide. **Sloppy** models have many of them.
 - Fixes: **better sampling times**, **reparameterisation**, **priors**.
 
@@ -53,10 +53,11 @@ One-compartment model, oral dose $D$, bioavailability $F$ (fraction absorbed):
 $$C(t) = \frac{F\,D\,k_a}{V\,(k_a - k_e)}\left(e^{-k_e t} - e^{-k_a t}\right)$$
 
 ```r
-pk <- function(t, ka, ke, V, D = 100) D * ka / (V * (ka - ke)) * (exp(-ke * t) - exp(-ka * t))
-t <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12)                          # h
-y <- c(1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61)  # mg/L
-fit <- nls(y ~ pk(t, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
+D  <- 100                                                                        # mg
+tt <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12)                          # h
+bateman <- function(t, ka, ke, V) D * ka / (V * (ka - ke)) * (exp(-ke * t) - exp(-ka * t))
+y  <- c(1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61)  # mg/L
+fit <- nls(y ~ bateman(tt, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
 coef(fit)
 #         ka         ke          V
 #  1.0150721  0.1906157 20.2162113
@@ -64,7 +65,7 @@ deviance(fit)                          # residual sum of squares
 # [1] 0.06646744
 ```
 
-- The data of the previous unit: 12 samples, $F = 1$ assumed. Truth: $k_a = 1$, $k_e = 0.2$ /h, $V = 20$ L, noise SD 0.1 mg/L.
+- Data, code names and fit as in the previous unit: 12 samples, $F = 1$ assumed. Truth: $k_a = 1$, $k_e = 0.2$ /h, $V = 20$ L, noise SD 0.1 mg/L. Its RSS is our SSE, $S(\theta)$.
 
 ::: notes
 The same model as in the previous unit: first-order absorption from the gut with rate ka, first-order elimination with rate ke, one well-mixed compartment of volume V. The fit with all 12 samples recovers the truth well. The rest of the lecture asks how well, and what goes wrong with fewer or worse-placed samples. D = 100 mg, so D/V has units mg/L. nls uses Gauss-Newton by default; the details are in the previous unit.
@@ -91,11 +92,11 @@ Structural identifiability is a property of the model and the measured output al
 If the bioavailability $F$ is unknown, $F$ and $V$ enter only through $F/V$: doubling both changes nothing.
 
 ```r
-nls(y ~ pk(t, ka, ke, V / F), start = list(ka = 0.5, ke = 0.1, V = 10, F = 0.8))
+nls(y ~ bateman(tt, ka, ke, V / F), start = list(ka = 0.5, ke = 0.1, V = 10, F = 0.8))
 # Error in nlsModel(...) : singular gradient matrix at initial parameter estimates
 library(numDeriv)                     # numerical Jacobian and Hessian
 p4 <- c(coef(fit), F = 1)
-J4 <- jacobian(function(p) pk(t, p[1], p[2], p[3] / p[4]), p4)
+J4 <- jacobian(function(p) bateman(tt, p[1], p[2], p[3] / p[4]), p4)
 svd(J4 %*% diag(p4))$d                # columns scaled: d C / d log p
 # [1] 1.189228e+01 3.483442e+00 1.047785e+00 2.252039e-11
 round(svd(J4 %*% diag(p4))$v[, 4], 3)
@@ -113,9 +114,9 @@ round(svd(J4 %*% diag(p4))$v[, 4], 3)
 
 ![](fig02-flipflop.svg){width="88%" fig-align="center"}
 
-Recap from *Nonlinear least squares and ODE fitting*: swap $k_a \leftrightarrow k_e$, set $V' = V\,k_e/k_a$, and $C(t)$ is **identical** for every $t$.
+Recap from [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd): swap $k_a \leftrightarrow k_e$, set $V' = V\,k_e/k_a$, and $C(t)$ is **identical** for every $t$.
 
-- Two exact minima, same SSE ($0.066467$): $(1.015, 0.191, 20.2)$ and $(0.191, 1.015, 3.80)$. Each is **locally** identifiable (right: fix $k_a$, re-fit the rest: two wells of equal depth); globally the data cannot choose.
+- Two exact minima, same SSE ($0.06646744$): $(1.0151, 0.1906, 20.22)$ and $(0.1906, 1.0151, 3.796)$. Each is **locally** identifiable (right: fix $k_a$, re-fit the rest: two wells of equal depth); globally the data cannot choose.
 - **Check:** multistart. Equal SSE at different parameters = a symmetry, not a convergence problem. **Fix:** outside knowledge: an IV dose gives $k_e$; or impose $k_a > k_e$ by fitting $k_a = k_e + e^{\delta}$.
 
 ::: notes
@@ -147,7 +148,7 @@ $$\operatorname{Cov}(\hat\theta) \approx \sigma^2 (J^TJ)^{-1}, \qquad \hat\sigma
 
 ```r
 th <- coef(fit)
-J  <- jacobian(function(p) pk(t, p[1], p[2], p[3]), th)   # 12 x 3
+J  <- jacobian(function(p) bateman(tt, p[1], p[2], p[3]), th)   # 12 x 3
 s2 <- deviance(fit) / (length(y) - 3)
 sqrt(diag(s2 * solve(crossprod(J))))          # standard errors by hand
 # [1] 0.06243155 0.01040041 0.71647066
@@ -165,7 +166,7 @@ For a linear model y = X beta + noise, Cov(beta-hat) = sigma^2 (X^T X)^{-1} exac
 ## The Hessian and the Fisher information {.smaller}
 
 ```r
-sse <- function(p) sum((y - pk(t, p[1], p[2], p[3]))^2)
+sse <- function(p) sum((y - bateman(tt, p[1], p[2], p[3]))^2)
 H <- hessian(sse, th)                         # numDeriv: full second derivatives
 round(H, 2)                                   # round(2 * crossprod(J), 2):
 #       [,1]   [,2]  [,3]                     #       [,1]   [,2]  [,3]
@@ -218,7 +219,7 @@ sqrt(s2) / sv$d                       # SE along each direction (log units)
 # [1] 0.009788864 0.024708208 0.085495889
 ```
 
-- As in *The SVD, rank deficiency and regularisation*: noise along $v_i$ is amplified by $1/\sigma_i$. Here the SE along $v_3$ is $s/\sigma_3 = 0.085$, about **9 %**.
+- As in [*The SVD, rank deficiency and regularisation*](../svd/lec.qmd): noise along $v_i$ is amplified by $1/\sigma_i$. Here the SE along $v_3$ is $s/\sigma_3 = 0.085$, about **9 %**.
 - $v_3$: increase $k_a$, decrease $k_e$, increase $V$ together (the sign of $v_3$ is arbitrary). The data barely notice.
 
 ::: notes
@@ -237,7 +238,7 @@ kappa(crossprod(J), exact = TRUE)     # forming J^T J squares kappa
 ```
 
 - Part of a large $\kappa(J)$ is just **units** ($V$ in litres vs rates per hour). Log-parameters remove that part; what is left is real.
-- As in *Pivoting, norms and conditioning*: solving with $J^TJ$ loses about $\log_{10}\kappa(J)^2$ digits. `vcov` uses the QR factor $R$ of $J$: $(J^TJ)^{-1} = R^{-1}R^{-T}$.
+- As in [*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd): solving with $J^TJ$ loses about $\log_{10}\kappa(J)^2$ digits. `vcov` uses the QR factor $R$ of $J$: $(J^TJ)^{-1} = R^{-1}R^{-T}$.
 - `solve(crossprod(J))` on a sloppy model can return garbage or fail: use `chol2inv(qr.R(qr(J)))` or the SVD.
 
 ::: notes
@@ -247,8 +248,8 @@ Two separate issues. First, scaling: a parameter measured in litres has a much s
 ## Practical non-identifiability: samples from 3 h {.smaller}
 
 ```r
-late <- t >= 3                                    # first sample at 3 h
-fits <- nls(y ~ pk(t, ka, ke, V), start = list(ka = 1, ke = 0.2, V = 20),
+late <- tt >= 3                                    # first sample at 3 h
+fits <- nls(y ~ bateman(tt, ka, ke, V), start = list(ka = 1, ke = 0.2, V = 20),
             subset = late)
 summary(fits)$coefficients[, 1:2]
 #      Estimate Std. Error
@@ -287,11 +288,11 @@ To check one parameter, **fix** it on a grid and **re-optimise all the others**:
 $$\text{PL}(k_a) = \min_{k_e,\,V} S(k_a, k_e, V), \qquad \text{95 \% interval: } \frac{\text{PL}(k_a) - S(\hat\theta)}{s^2} \le 3.84$$
 
 ```r
-prof <- function(ka, t, y) {           # fix ka, re-fit ke and V
-  f <- nls(y ~ pk(t, ka, ke, V), start = list(ke = 0.2, V = 20))
+prof <- function(ka, tt, y) {           # fix ka, re-fit ke and V
+  f <- nls(y ~ bateman(tt, ka, ke, V), start = list(ke = 0.2, V = 20))
   deviance(f)
 }
-crit <- function(ka) (prof(ka, t, y) - deviance(fit)) / s2 - 3.84
+crit <- function(ka) (prof(ka, tt, y) - deviance(fit)) / s2 - 3.84
 ka_hat <- coef(fit)[["ka"]]
 c(uniroot(crit, c(0.3, ka_hat))$root, uniroot(crit, c(ka_hat, 30))$root)
 # [1] 0.8971499 1.1417900                         # profile interval
@@ -302,7 +303,7 @@ ka_hat + c(-1.96, 1.96) * sqrt(vcov(fit)["ka", "ka"])
 - $3.84 = 1.96^2$ is the 95 % point of $\chi^2_1$. For a linear model the two intervals are identical.
 
 ::: notes
-The profile is the honest version of the standard error: instead of assuming the valley is a parabola, we walk along it. Each grid point is a full nonlinear fit with one parameter held fixed, so it costs as many fits as grid points, which is cheap for small models. The threshold: with Gaussian noise, -2 log L = S/sigma^2 + const, and the likelihood-ratio test says a drop of chi^2_1(0.95) = 3.84 is the 95 % boundary. We plug in s^2 for sigma^2; with few degrees of freedom an F-based threshold is a bit wider, which does not change the picture. With all 12 samples the two intervals agree to within 0.005: the profile confirms the SE. uniroot finds where the profile crosses the threshold, as in Bisection and fixed-point iteration.
+The profile is the honest version of the standard error: instead of assuming the valley is a parabola, we walk along it. Each grid point is a full nonlinear fit with one parameter held fixed, so it costs as many fits as grid points, which is cheap for small models. The threshold: with Gaussian noise, -2 log L = S/sigma^2 + const, and the likelihood-ratio test says a drop of chi^2_1(0.95) = 3.84 is the 95 % boundary. We plug in s^2 for sigma^2; with few degrees of freedom an F-based threshold is a bit wider, which does not change the picture. With all 12 samples the two intervals agree to within 0.005: the profile confirms the SE. uniroot, the bracketing root finder of Newton and secant methods, finds where the profile crosses the threshold (a sign change, as in Bisection and fixed-point iteration).
 :::
 
 ## Profiles show what the SE hides
@@ -361,8 +362,8 @@ The columns of the Jacobian are these sensitivity curves evaluated at the sample
 ## Design in code: same cost, earlier samples {.smaller}
 
 ```r
-se_design <- function(tt, p = c(1, 0.2, 20), sigma = 0.1) {
-  J <- jacobian(function(lp) pk(tt, exp(lp[1]), exp(lp[2]), exp(lp[3])), log(p))
+se_design <- function(ts, p = c(1, 0.2, 20), sigma = 0.1) {
+  J <- jacobian(function(lp) bateman(ts, exp(lp[1]), exp(lp[2]), exp(lp[3])), log(p))
   sigma * sqrt(diag(solve(crossprod(J))))   # predicted SE of log ka, log ke, log V
 }
 round(se_design(c(3, 4, 6, 8, 10, 12)), 3)
@@ -408,17 +409,17 @@ Prior knowledge "$k_a$ is about 1.2 /h, within a factor $e^{0.5} = 1.65$" become
 
 ```r
 library(minpack.lm)
-res <- function(lp, t, y) c((y - pk(t, exp(lp[1]), exp(lp[2]), exp(lp[3]))) / 0.1,
-                            (lp[1] - log(1.2)) / 0.5)
-fp <- nls.lm(par = log(c(1, 0.2, 20)), fn = res, t = t[late], y = y[late])
+res <- function(lp, tt, y) c((y - bateman(tt, exp(lp[1]), exp(lp[2]), exp(lp[3]))) / 0.1,
+                             (lp[1] - log(1.2)) / 0.5)
+fp <- nls.lm(par = log(c(1, 0.2, 20)), fn = res, tt = tt[late], y = y[late])
 exp(fp$par)
 # [1]  1.1563835  0.1871582 20.1940289
-Ja <- jacobian(res, fp$par, t = t[late], y = y[late])   # 7 x 3 (6 data + 1 prior)
+Ja <- jacobian(res, fp$par, tt = tt[late], y = y[late])   # 7 x 3 (6 data + 1 prior)
 sqrt(diag(solve(crossprod(Ja))))                        # SE of log ka, log ke, log V
 # [1] 0.34998612 0.08243784 0.04434703
 ```
 
-- This is **ridge regularisation** (*The SVD, rank deficiency and regularisation*) on $\log k_a$, and the maximum a posteriori estimate with a log-normal prior.
+- This is **ridge regularisation** ([*The SVD, rank deficiency and regularisation*](../svd/lec.qmd)) on $\log k_a$, and the maximum a posteriori estimate with a log-normal prior.
 - SE of $\log k_a$: 0.35, against 0.50 in the prior alone. The data added **little**: the answer is mostly the prior. Say so.
 
 ::: notes
@@ -448,7 +449,7 @@ Every line maps to one of the slides. The order is roughly the order of cost: a 
 - **Sloppy** models: eigenvalues of $J^TJ$ spread over decades. Predictions can be good where data constrain them.
 - Fixes: **design** (sampling times, computable in advance), **reparameterise** (log, identifiable combinations), **priors** (= ridge; say how much they did).
 
-**Next:** *Constraints and linear programming*: bounds, Lagrange multipliers, and flux balance analysis.
+**Next:** [*Constraints and linear programming*](../constrained-lp/lec.qmd): bounds, Lagrange multipliers, and flux balance analysis.
 
 ::: notes
 The one-sentence version: a good fit is necessary but not sufficient; look at J (its SVD and the covariance it implies) and at profiles before reporting any fitted parameter. The capstone of the course (if used) asks for exactly this analysis on a real time course.

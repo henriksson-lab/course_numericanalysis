@@ -35,7 +35,7 @@ This unit turns the hand-written Euler of the previous unit into the methods ins
 
 ## Recap: Euler's method {.smaller}
 
-From *Initial value problems and Euler's method*: to solve $y' = f(t, y)$, $y(t_0) = y_0$, step along the slope at the start of each step,
+From [*Initial value problems and Euler's method*](../euler/lec.qmd): to solve $y' = f(t, y)$, $y(t_0) = y_0$, step along the slope at the start of each step,
 
 $$y_{n+1} = y_n + h\, f(t_n, y_n).$$
 
@@ -50,7 +50,7 @@ Logistic growth of an OD culture, $N' = rN(1 - N/K)$ with $r = 0.8$ per hour, $K
 - The slope at the start of the step is used for the whole step, but the slope **changes** during the step.
 
 ::: notes
-One slide of recap; the Euler unit has the details (local error h^2, global error h, instability for large h). The numbers are the same logistic running example as in the Euler unit. The last bullet is the idea for the whole first half: use better slopes. The 60 000 steps are measured (see the cost slide later), not estimated.
+One slide of recap; the Euler unit has the details (local error h^2, global error h, instability for large h). The model is the same logistic running example as in the Euler unit, but the Euler unit measured the error at t = 5 h (0.2 at h = 1); here we use t = 10 h, near the plateau, where the errors are smaller. The order is the same. The last bullet is the idea for the whole first half: use better slopes. The 60 000 steps are measured (see the cost slide later), not estimated.
 :::
 
 ## A biology problem first: predators and prey {.smaller}
@@ -223,7 +223,7 @@ repress <- function(t, y) {
 ```
 
 ::: notes
-m_i is the mRNA and p_i the protein of gene i, both scaled. alpha is the maximal transcription rate, alpha0 the leaky rate with full repression, beta the ratio of mRNA to protein lifetime. With these values the steady state is unstable and the system settles on a limit cycle (phase-plane unit). The protein levels swing between about 1 and 60, with a period of about 8.7 mRNA lifetimes. Six equations, nonlinear, no exact solution: a realistic test case.
+m_i is the mRNA and p_i the protein of gene i, both scaled. alpha is the maximal transcription rate, alpha0 the leaky rate with full repression, beta the ratio of mRNA to protein lifetime. With these values the steady state is unstable and the system settles on a limit cycle (limit cycles are treated in Equilibria, stability and the phase plane, with Sel'kov's glycolysis model as the example). The protein levels swing between about 1 and 60, with a period of about 8.7 mRNA lifetimes. Six equations, nonlinear, no exact solution: a realistic test case.
 :::
 
 ## One step size for the whole run? {.smaller}
@@ -409,7 +409,7 @@ tail(out, 1)
 ```
 
 - The peak, $3007.96$, now agrees with the exact $3007.961$; peak time $38.36$ days.
-- In deSolve, `rootfunc` works with `lsoda`/`lsode`/`radau`, not `ode45` (`lsoda` is explained in *Stiffness and implicit methods*). Python: `solve_ivp(..., events=g)` with `g.terminal`, `g.direction`.
+- In deSolve, `rootfunc` works with `lsoda`/`lsode`/`radau`, not `ode45` (`lsoda` is explained in [*Stiffness and implicit methods*](../stiffness/lec.qmd)). Python: `solve_ivp(..., events=g)` with `g.terminal`, `g.direction`.
 
 ::: notes
 Other examples: a population falling below an extinction threshold, a concentration reaching a toxic level, a cell reaching division size (then reset the state and restart: deSolve's events argument does that). In deSolve, giving rootfunc without an events list stops at the first root; events = list(root = TRUE) with terminalroot controls this. ode45 in deSolve has no root finding, which is why we switch to lsoda here: for this non-stiff problem it behaves like an Adams (multistep) method. The exercise does the same with solve_ivp and ode_solvers.
@@ -419,7 +419,7 @@ Other examples: a population falling below an extinction threshold, a concentrat
 
 ![](fig10-events.svg){width="80%" fig-align="center"}
 
-- Left: $g$ changes sign between two steps; a root finder on the dense output (*Bisection and fixed-point iteration*, *Newton and secant methods*) places it inside the step.
+- Left: $g$ changes sign between two steps; a root finder on the dense output ([*Bisection and fixed-point iteration*](../bisection-fixedpoint/lec.qmd), [*Newton and secant methods*](../newton/lec.qmd)) places it inside the step.
 - Right: if $g$ changes sign **twice** within one step, the solver sees no change and the event is **missed**.
 - **Check:** limit the step (`hmax`, `max_step`) to below the shortest excursion you care about, or make $g$ an extremum (e.g. $dy/dt$) that changes sign once.
 
@@ -434,7 +434,7 @@ The left panel uses a real Dormand-Prince run at rtol = 1e-4 and a cubic interpo
 - **Conserved quantity drifts** (total mass, Lotka–Volterra $V$) → tighter tolerance or higher-order method.
 - **Fixed-step method** → halve $h$; on a log–log plot the error must fall with the expected slope.
 - **Peak or threshold from the output grid** → use an event, or a finer output grid.
-- **Huge number of steps or a warning about steps** → maybe stiff: see *Stiffness and implicit methods*.
+- **Huge number of steps or a warning about steps** → maybe stiff: see [*Stiffness and implicit methods*](../stiffness/lec.qmd).
 
 ::: notes
 Each item is a failure from this lecture: the repressilator table, the atol floor, the predator-prey drift, the order plot, the grid-limited peak and the missed event. The last item points forward: if an explicit adaptive solver takes millions of tiny steps on a problem whose solution is smooth, the step is limited by stability, not accuracy. That is stiffness, the next unit.
@@ -448,7 +448,7 @@ Each item is a failure from this lecture: the repressilator table, the atol floo
 - Allowed error per step $=$ `atol` $+$ `rtol` $\cdot|y|$. Tolerances are **per step**: check by tightening. `atol` must be below the scale of every variable.
 - **Dense output** gives values between steps; **events** locate threshold crossings and peaks.
 
-**Next:** *Stiffness and implicit methods*, where explicit methods, adaptive or not, need absurdly small steps.
+**Next:** [*Stiffness and implicit methods*](../stiffness/lec.qmd), where explicit methods, adaptive or not, need absurdly small steps.
 
 ::: notes
 Recap the two ideas (more stages = higher order; embedded pairs = error control) and the practical rules (set tolerances, check by tightening, use events). The next unit shows a kind of problem, stiff kinetics, where ode45 is correct but uselessly slow, and implicit methods are needed.

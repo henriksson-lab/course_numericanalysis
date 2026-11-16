@@ -1,30 +1,30 @@
 # Cross-references from finite-differences
 
-- finite-differences/lec.qmd:35 (notes, About this lecture) -> convergence-cost (forward difference of the OD curve, truncation/rounding V, central difference preview)
-- finite-differences/lec.qmd:38 (slide "Recap: the V from Convergence and cost") -> convergence-cost (one-slide recap: forward difference, eps/h rounding, V, sqrt(eps) step, difference-ratio check)
-- finite-differences/lec.qmd:51 (notes, Recap) -> convergence-cost (students who skipped it should go back)
-- finite-differences/lec.qmd:141 (notes, "Any stencil you need") -> lu / Part 3 (the weights solve a small Vandermonde-type linear system)
-- finite-differences/lec.qmd:141 (notes, "Any stencil you need") -> diffusion-explicit (same construction builds every stencil in Part 10)
-- finite-differences/lec.qmd:153 (slide "The second derivative") -> diffusion-explicit (the (1,-2,1)/h^2 stencil becomes the diffusion term D d2c/dx2; "workhorse of Part 10")
-- finite-differences/lec.qmd:158 (notes, The second derivative) -> diffusion-explicit, diffusion-implicit, steady-state-2d, advection-diffusion, reaction-diffusion (Part 10: h^2/12 N'''' is the spatial accuracy of every scheme)
-- finite-differences/lec.qmd:183 (notes, All four in R) -> convergence-cost (vectorised over h; difference-ratio check)
-- finite-differences/lec.qmd:234 (notes, Failure: second derivative) -> convergence-cost (difference ratios without the exact answer)
-- finite-differences/lec.qmd:254 (notes, Richardson extrapolation) -> quadrature (Richardson on the trapezoid rule = Romberg)
-- finite-differences/lec.qmd:295 (notes, Measured data) -> error-conditioning (differentiation is ill-conditioned)
-- finite-differences/lec.qmd:312 (slide "Smooth first, then differentiate") -> splines (smoothing spline, smooth.spline / make_smoothing_spline, GCV)
-- finite-differences/lec.qmd:325 (slide "Smooth first", bullet "fit a growth model ... (Part 9)") -> nonlinear-least-squares (fit a logistic/Gompertz model and differentiate it)
-- finite-differences/lec.qmd:328 (notes, Smooth first) -> splines; nonlinear-least-squares
-- finite-differences/lec.qmd:364 (notes, Gradients for fitting) -> newton-systems (finite-difference Jacobian, same construction)
-- finite-differences/lec.qmd:388 (notes, Failure: optim's default gradient) -> identifiability (Hessian by finite differences for standard errors, Part 9); gradient-methods (BFGS)
-- finite-differences/lec.qmd:446 (Summary) -> splines (smooth first)
-- finite-differences/lec.qmd:449 (Summary, "Next") -> quadrature (integration averages noise; Romberg)
-- finite-differences/lec.qmd:452 (notes, Summary) -> diffusion-explicit (second-derivative stencil returns in Part 10)
-- finite-differences/exercise.qmd:26 (Background) -> convergence-cost (running example, logistic OD curve)
-- finite-differences/exercise.qmd:271 (Hint 6) -> splines (smoothing spline as library route)
-- finite-differences/exercise.qmd:1169 (Where this leads) -> quadrature (Romberg, noise averaging)
-- finite-differences/exercise.qmd:1170 (Where this leads) -> splines (smoothing spline for noisy derivatives)
-- finite-differences/exercise.qmd:1171 (Where this leads) -> gradient-methods, nonlinear-least-squares, identifiability (gradients/Hessians by finite differences in fitting)
-- finite-differences/exercise.qmd:1172 (Where this leads) -> diffusion-explicit (the (1,-2,1)/h^2 stencil of B2 on a spatial grid)
+- finite-differences/lec.qmd:35 (notes, About this lecture) -> convergence-cost (forward difference of the OD curve, truncation/rounding V, central difference preview) [ok]
+- finite-differences/lec.qmd:38 (slide "Recap: the V from Convergence and cost") -> convergence-cost (one-slide recap: forward difference, eps/h rounding, V, sqrt(eps) step, difference-ratio check) [fixed: heading linked to convergence-cost]
+- finite-differences/lec.qmd:51 (notes, Recap) -> convergence-cost (students who skipped it should go back) [ok]
+- finite-differences/lec.qmd:141 (notes, "Any stencil you need") -> lu / Part 3 (the weights solve a small Vandermonde-type linear system) [ok]
+- finite-differences/lec.qmd:141 (notes, "Any stencil you need") -> diffusion-explicit (same construction builds every stencil in Part 10) [ok]
+- finite-differences/lec.qmd:153 (slide "The second derivative") -> diffusion-explicit (the (1,-2,1)/h^2 stencil becomes the diffusion term D d2c/dx2; "workhorse of Part 10") [ok]
+- finite-differences/lec.qmd:158 (notes, The second derivative) -> diffusion-explicit, diffusion-implicit, steady-state-2d, advection-diffusion, reaction-diffusion (Part 10: h^2/12 N'''' is the spatial accuracy of every scheme) [ok]
+- finite-differences/lec.qmd:183 (notes, All four in R) -> convergence-cost (vectorised over h; difference-ratio check) [ok]
+- finite-differences/lec.qmd:234 (notes, Failure: second derivative) -> convergence-cost (difference ratios without the exact answer) [ok]
+- finite-differences/lec.qmd:254 (notes, Richardson extrapolation) -> quadrature (Richardson on the trapezoid rule = Romberg) [ok: quadrature Romberg recap uses the same (4D(h/2)-D(h))/3 form and Romberg weights 4^j/(4^j-1)]
+- finite-differences/lec.qmd:295 (notes, Measured data) -> error-conditioning (differentiation is ill-conditioned) [ok]
+- finite-differences/lec.qmd:312 (slide "Smooth first, then differentiate") -> splines (smoothing spline, smooth.spline / make_smoothing_spline, GCV) [ok]
+- finite-differences/lec.qmd:325 (slide "Smooth first", bullet "fit a growth model ... (Part 9)") -> nonlinear-least-squares (fit a logistic/Gompertz model and differentiate it) [fixed: nonlinear-least-squares fits a PK model, not a growth model; notes now say the fitting method is the same]
+- finite-differences/lec.qmd:328 (notes, Smooth first) -> splines; nonlinear-least-squares [fixed: see above]
+- finite-differences/lec.qmd:364 (notes, Gradients for fitting) -> newton-systems (finite-difference Jacobian, same construction) [ok]
+- finite-differences/lec.qmd:388 (notes, Failure: optim's default gradient) -> identifiability (Hessian by finite differences for standard errors, Part 9); gradient-methods (BFGS) [ok]
+- finite-differences/lec.qmd:446 (Summary) -> splines (smooth first) [ok]
+- finite-differences/lec.qmd:449 (Summary, "Next") -> quadrature (integration averages noise; Romberg) [ok]
+- finite-differences/lec.qmd:452 (notes, Summary) -> diffusion-explicit (second-derivative stencil returns in Part 10) [ok]
+- finite-differences/exercise.qmd:26 (Background) -> convergence-cost (running example, logistic OD curve) [ok]
+- finite-differences/exercise.qmd:271 (Hint 6) -> splines (smoothing spline as library route) [ok]
+- finite-differences/exercise.qmd:1169 (Where this leads) -> quadrature (Romberg, noise averaging) [ok]
+- finite-differences/exercise.qmd:1170 (Where this leads) -> splines (smoothing spline for noisy derivatives) [ok]
+- finite-differences/exercise.qmd:1171 (Where this leads) -> gradient-methods, nonlinear-least-squares, identifiability (gradients/Hessians by finite differences in fitting) [fixed: wording says NLS example is a drug-concentration model]
+- finite-differences/exercise.qmd:1172 (Where this leads) -> diffusion-explicit (the (1,-2,1)/h^2 stencil of B2 on a spatial grid) [ok]
 
 ## Note for Part 10 (reuse of the second-derivative stencil)
 
@@ -70,3 +70,7 @@ Facts established here (keep consistent):
   standard errors (from numDeriv::hessian) = (0.0035, 0.0015, 0.00062).
   optim BFGS with default ndeps = 1e-3 stops at (0.7948541, 1.202606, 0.0508594).
   Candidate reuse: nonlinear-least-squares / identifiability (Part 9), splines.
+
+## Pass 2
+
+- All italic unit titles turned into links (first mention per slide / page / Where this leads).

@@ -1,27 +1,27 @@
 # Cross-references from power-iteration
 
-- power-iteration/lec.qmd:33 -> svd (notes, About: eigen() used in passing in the SVD unit)
-- power-iteration/lec.qmd:33 -> eigen-algorithms (notes, About: how eigen() works, QR algorithm, Krylov methods)
-- power-iteration/lec.qmd:91 -> eigen-algorithms (notes, Recap 2x2: characteristic polynomial not used for n >= 4, root finding of it badly conditioned)
-- power-iteration/lec.qmd:195 -> convergence-cost (notes, "How fast?": error vs iteration on a log scale, linear convergence)
-- power-iteration/lec.qmd:195 -> bisection-fixedpoint (notes, "How fast?": "the population settles" = "the iteration converges", |g'| rate)
-- power-iteration/lec.qmd:295 -> bisection-fixedpoint (notes, slow switching: false convergence when the rate is near 1)
-- power-iteration/lec.qmd:321 -> least-squares-qr (notes, Rayleigh quotient as a one-column least-squares problem / normal equation)
-- power-iteration/lec.qmd:332 -> eigen-algorithms (notes, Rayleigh slide: leading eigenvector of a correlation matrix = PC1, PCA)
-- power-iteration/lec.qmd:353 -> lu (notes, Inverse iteration: never form the inverse, never solve(A) %*% b)
-- power-iteration/lec.qmd:377 -> lu (notes, Inverse iteration in R: factor once, solve many times; costs 2/3 n^3 and 2 n^2)
-- power-iteration/lec.qmd:424 -> pivoting-conditioning (notes, "Shift exactly at the eigenvalue?": ill-conditioned solve, kappa)
-- power-iteration/lec.qmd:447 -> eigen-algorithms (notes, "Other eigenvalues": deflation and the QR algorithm find several eigenvalues)
-- power-iteration/lec.qmd:466 -> newton (notes, RQI: cubic vs Newton's quadratic convergence)
-- power-iteration/lec.qmd:466 -> eigen-algorithms (notes, RQI: shifts in the QR algorithm)
-- power-iteration/lec.qmd:483 -> eigen-algorithms (notes, "Power iteration or eigen()?": Arnoldi/Lanczos, RSpectra, irlba, scipy.sparse.linalg.eigs)
-- power-iteration/lec.qmd:508 -> eigen-algorithms (Summary: Next slide)
-- power-iteration/exercise.qmd:839 -> eigen-algorithms (C5 solution: symmetric eigen routines faster and more accurate)
-- power-iteration/exercise.qmd:1085 -> eigen-algorithms (Where this leads: QR algorithm, Krylov methods, PCA of 100 000 cells)
-- power-iteration/exercise.qmd:1086 -> phase-plane (Where this leads: Jacobian eigenvalues decide stability)
-- power-iteration/exercise.qmd:1087 -> gillespie (Where this leads: continuous-time Markov chains, stationary distribution)
-- power-iteration/exercise.qmd:1088 -> iterative-solvers (Where this leads: Jacobi rate set by the largest eigenvalue of the iteration matrix)
-- power-iteration/exercise.qmd:B6(c) solution, C7(c) solution -> power-iteration/lec.qmd slide "Shift exactly at the eigenvalue?" (internal)
+- power-iteration/lec.qmd:33 -> svd (notes, About: eigen() used in passing in the SVD unit) [ok]
+- power-iteration/lec.qmd:33 -> eigen-algorithms (notes, About: how eigen() works, QR algorithm, Krylov methods) [ok]
+- power-iteration/lec.qmd:91 -> eigen-algorithms (notes, Recap 2x2: characteristic polynomial not used for n >= 4, root finding of it badly conditioned) [fixed: eigen-algorithms does not discuss conditioning of characteristic-polynomial roots; note now says it shows what libraries do instead]
+- power-iteration/lec.qmd:195 -> convergence-cost (notes, "How fast?": error vs iteration on a log scale, linear convergence) [ok]
+- power-iteration/lec.qmd:195 -> bisection-fixedpoint (notes, "How fast?": "the population settles" = "the iteration converges", |g'| rate) [ok]
+- power-iteration/lec.qmd:295 -> bisection-fixedpoint (notes, slow switching: false convergence when the rate is near 1) [ok]
+- power-iteration/lec.qmd:321 -> least-squares-qr (notes, Rayleigh quotient as a one-column least-squares problem / normal equation) [ok]
+- power-iteration/lec.qmd:332 -> eigen-algorithms (notes, Rayleigh slide: leading eigenvector of a correlation matrix = PC1, PCA) [ok]
+- power-iteration/lec.qmd:353 -> lu (notes, Inverse iteration: never form the inverse, never solve(A) %*% b) [ok]
+- power-iteration/lec.qmd:377 -> lu (notes, Inverse iteration in R: factor once, solve many times; costs 2/3 n^3 and 2 n^2) [ok]
+- power-iteration/lec.qmd:424 -> pivoting-conditioning (notes, "Shift exactly at the eigenvalue?": ill-conditioned solve, kappa) [ok]
+- power-iteration/lec.qmd:447 -> eigen-algorithms (notes, "Other eigenvalues": deflation and the QR algorithm find several eigenvalues) [ok]
+- power-iteration/lec.qmd:466 -> newton (notes, RQI: cubic vs Newton's quadratic convergence) [ok]
+- power-iteration/lec.qmd:466 -> eigen-algorithms (notes, RQI: shifts in the QR algorithm) [ok: eigen-algorithms "Second trick" slide now names RQI explicitly]
+- power-iteration/lec.qmd:483 -> eigen-algorithms (notes, "Power iteration or eigen()?": Arnoldi/Lanczos, RSpectra, irlba, scipy.sparse.linalg.eigs) [ok]
+- power-iteration/lec.qmd:508 -> eigen-algorithms (Summary: Next slide) [fixed: linked; "PCA of 100 000 cells" -> 20 000 cells, as in eigen-algorithms]
+- power-iteration/exercise.qmd:839 -> eigen-algorithms (C5 solution: symmetric eigen routines faster and more accurate) [fixed: linked]
+- power-iteration/exercise.qmd:1085 -> eigen-algorithms (Where this leads: QR algorithm, Krylov methods, PCA of 100 000 cells) [fixed: linked; 100 000-cell -> 20 000-cell, "huge" -> "large"]
+- power-iteration/exercise.qmd:1086 -> phase-plane (Where this leads: Jacobian eigenvalues decide stability) [fixed: linked]
+- power-iteration/exercise.qmd:1087 -> gillespie (Where this leads: continuous-time Markov chains, stationary distribution) [fixed: linked]
+- power-iteration/exercise.qmd:1088 -> iterative-solvers (Where this leads: Jacobi rate set by the largest eigenvalue of the iteration matrix) [fixed: linked]
+- power-iteration/exercise.qmd:B6(c) solution, C7(c) solution -> power-iteration/lec.qmd slide "Shift exactly at the eigenvalue?" (internal) [ok]
 
 ## Running examples defined here
 
@@ -50,3 +50,7 @@
 - **Trait correlation matrix** (body length, body depth, fin length; symmetric):
   `C <- matrix(c(1, 0.4, 0.3, 0.4, 1, 0.2, 0.3, 0.2, 1), 3)`; eigenvalues 1.6074674, 0.8113209,
   0.5812117; leading eigenvector (0.6346, 0.5844, 0.5058).
+
+## Pass 2 additions
+
+- power-iteration/exercise.qmd Solutions: R/Python solution tabs share one session (L from Background, power_it from C1, P from C4, C from C5) [fixed: one-line pointer added before C1 solution]

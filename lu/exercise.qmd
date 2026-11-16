@@ -32,7 +32,7 @@ A consumer's isotope signature is a weighted average of its diet sources (after 
 3. **Solving with the factors.** $L\mathbf y = \mathbf b$ by **forward substitution** (top to bottom), then $U\mathbf x = \mathbf y$ by **back substitution** (bottom to top).
 4. **Cost.** Factorising $\approx \tfrac23 n^3$ operations; each forward + back substitution $\approx 2n^2$. A computer does roughly $10^9$ simple operations per second per core.
 5. **Inverse.** Computing $A^{-1}$ costs $\approx 2n^3$, and multiplying by it is less accurate than substituting.
-6. **Pivots.** A zero pivot stops elimination (division by zero); a tiny one gives huge multipliers and a wrong answer. Libraries **reorder rows** (partial pivoting): $A = PLU$. Pivoting is the topic of *Pivoting, norms and conditioning*.
+6. **Pivots.** A zero pivot stops elimination (division by zero); a tiny one gives huge multipliers and a wrong answer. Libraries **reorder rows** (partial pivoting): $A = PLU$. Pivoting is the topic of [*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd).
 7. **Residual** $\mathbf r = \mathbf b - A\mathbf x$. A good solver gives $\max|r_i|$ near $\varepsilon\cdot\max|a_{ij}|\cdot\max|x_j|$.
 
 A salt-marsh example: a ribbed mussel feeds on *Spartina* (marsh grass, $\delta^{13}$C $= -13$ ‰, $\delta^{34}$S $= +6$ ‰), phytoplankton ($-21$, $+18$) and upland C3 plant detritus ($-27$, $+2$). The basic tools in each language:
@@ -172,7 +172,7 @@ For $d = 1, 10^{-1}, \dots, 10^{-6}$, compute $\mathbf b = A_4\mathbf f$, then $
 
 ## Explore {#explore}
 
-The demo below runs the lecture's mixing model (C3 plants, maize, fish) in exact fractions. Tab **1. Factorise A = LU** does elimination one multiplier at a time: each multiplier $\ell_{ik}$ is written into $L$ at the spot where it makes the new 0 in $U$ (green in both), and the product $L\cdot U$ is shown beside them. Tab **2. Solve for samples** keeps $L$ and $U$ and solves each consumer by forward and back substitution only, written out line by line. It marks the consumer among the sources in isotope space, and counts operations for two strategies: *factor once* (13 to factorise, then 15 per sample) and *re-eliminate for every sample* (13 + 15 = 28 each time). The **zero pivot** button loads the matrix from B5.
+The demo below runs the lecture's mixing model (C3 plants, maize, fish) in exact fractions. Tab **1. Factorise A = LU** does elimination one multiplier at a time: each multiplier $\ell_{ik}$ is written into $L$ at the spot where it makes the new 0 in $U$ (green in both), and the product $L\cdot U$ is shown beside them. Tab **2. Solve for samples** keeps $L$ and $U$ and solves each consumer by forward and back substitution only, written out line by line. It marks the consumer among the sources in isotope space, and counts operations for two strategies: *factor once* and *re-eliminate for every sample*. The **zero pivot** button loads the matrix from B5. The demo shows the answers to some by-hand tasks (the counts in B3(b) and B6(a), the factors in B5), so do those on paper first and use the demo to check them.
 
 ```{=html}
 <link rel="stylesheet" href="../demos/dist/demo.css">
@@ -180,13 +180,13 @@ The demo below runs the lecture's mixing model (C3 plants, maize, fish) in exact
 <script src="../demos/dist/lufactor.js"></script>
 ```
 
-**E1. (the multipliers fill $L$)** In tab 1, click **next ▶** through the elimination. For each step write down the multiplier, where it lands in $L$, the new row of $U$ and the running operation count. Look at the check panel at every step, including the middle ones where $L$ still has grey zeros. What does it show, and why does it hold even halfway?
+**E1. (the multipliers fill $L$)** Before you start, write down your operation count for eliminating a $3\times3$ matrix from B3(b). In tab 1, click **next ▶** through the elimination. For each step write down the multiplier, where it lands in $L$ and the new row of $U$, and check the running operation count against your own. Look at the check panel at every step, including the middle ones where $L$ still has grey zeros. What does it show, and why does it hold even halfway?
 
 ::: {.callout-note collapse="true" title="Answer E1"}
 Step 1: $\ell_{21} = -26 \div 1 = -26$, row 2 of $U$ becomes $(0, 16, 8)$, 5 operations. Step 2: $\ell_{31} = 2 \div 1 = 2$, row 3 becomes $(0, 4, 12)$, 10 so far. Step 3: $\ell_{32} = 4 \div 16 = \tfrac14$, row 3 becomes $(0, 0, 10)$, 13 in total. These are the $L$ and $U$ of the lecture. The check panel shows $L\cdot U = A$ ✓ at **every** step. Each step subtracts $\ell_{ik}$ times row $k$ from row $i$ of $U$ and at the same time writes $\ell_{ik}$ into $L$, and multiplying by $L$ adds that multiple back. The two changes cancel in the product, so no information is lost at any point. The grey zeros are multipliers not computed yet; those rows have not been touched.
 :::
 
-**E2. (forward substitution replays elimination)** Switch to tab 2. Consumer #1 is solved. Read off $\mathbf y$ and compare it with the slide "Why triangular is good". Then click consumers #2 and #3. Write down $\mathbf y$ and the diet for each. How many operations does each sample cost, and which numbers stay the same from one consumer to the next?
+**E2. (forward substitution replays elimination)** Switch to tab 2. Consumer #1 is solved. Read off $\mathbf y$ and compare it with the slide "Why triangular is good". Then click consumers #2 and #3. Write down $\mathbf y$ and the diet for each. Does the operation count per sample agree with your count for one forward + back substitution in B3(b)? Which numbers stay the same from one consumer to the next?
 
 ::: {.callout-note collapse="true" title="Answer E2"}
 Consumer #1: $\mathbf y = (1, 6.4, 2)$, $\mathbf f = (0.5, 0.3, 0.2)$, as on the slide. Consumer #2: $\mathbf y = (1, 11.2, 2)$, $\mathbf f = (0.2, 0.6, 0.2)$. Consumer #3: $\mathbf y = (1, 8.8, 7)$, $\mathbf f = (0.1, 0.2, 0.7)$. Each sample costs 15 operations: 6 in forward substitution (3 multiply–subtract pairs) and 9 in back substitution (3 pairs and 3 divisions). $L$ and $U$, and so the multipliers $-26$, $2$, $\tfrac14$ and the pivots $1$, $16$, $10$, are the same every time. Only $\mathbf b$, $\mathbf y$ and $\mathbf f$ change. $\mathbf y$ is exactly the $\mathbf b$ column that the augmented matrix $[A \mid \mathbf b]$ would hold after elimination, so the forward substitution step replays the row operations on $\mathbf b$.
@@ -204,10 +204,10 @@ $\mathbf y = (1, 2, 6.5)$ and $\mathbf f = (0.55, -0.20, 0.65)$: maize gets $-20
 After 10 samples with $n = 3$: re-eliminating costs $10 \cdot 28 = 280$ operations, factor once $13 + 10\cdot 15 = 163$, 1.72 times fewer. With $n = 1000$: $6.7\cdot10^9$ against $6.9\cdot10^8$, 9.74 times fewer. For $n = 3$ the factorisation (13) costs about as much as one solve (15), so skipping it saves at most a factor $28/15 = 1.87$. For $n = 1000$ one factorisation ($\approx \tfrac23 n^3 = 6.7\cdot10^8$) costs as much as 333 solves ($2n^2 = 2\cdot10^6$). For $m \ll 333$ the saving is about $m$, and for very many samples it approaches $(F + S)/S \approx 334$. This is the $n/3$ ratio from the lecture's cost table. A 10 000-consumer study with a $3\times3$ matrix does not care (B6(d)). A $1000\times1000$ implicit time step does.
 :::
 
-**E5. (a zero pivot)** Click **zero pivot (two sources at −26 ‰)** and then **run to end** in tab 1. Where does elimination stop, and what would `lu_nopivot` store in row 3? Try tab 2. Then go back, click the swap button, and step through again. Give $L$ and $U$, and solve consumer #1 in tab 2.
+**E5. (a zero pivot)** Do B5(a)–(c) by hand first. Then click **zero pivot (two sources at −26 ‰)** and **run to end** in tab 1. Does elimination stop where you found in B5(a), and what would `lu_nopivot` store in row 3? Try tab 2. Then go back, click the swap button, and step through again. Do $L$, $U$ and the diet of consumer #1 in tab 2 agree with your B5(b) and (c)? If not, find the first step where they differ.
 
 ::: {.callout-note collapse="true" title="Answer E5"}
-After step 1, $U$ has rows $(1, 1, 1)$, $(0, 0, 16)$, $(0, 8, 4)$: the pivot $u_{22}$ is 0, and $\ell_{32} = 8 \div 0$ is impossible. In doubles, $\ell_{32} = \text{Inf}$ and row 3 becomes $(0, \text{NaN}, -\text{Inf})$, as on the lecture slide, with no error message. Tab 2 has no factors to reuse. After swapping rows 2 and 3: $\ell_{21} = 2$, $\ell_{31} = -26$, $\ell_{32} = 0 \div 8 = 0$, so $L = \begin{pmatrix} 1&0&0\\2&1&0\\-26&0&1\end{pmatrix}$ and $U = \begin{pmatrix} 1&1&1\\0&8&4\\0&0&16\end{pmatrix}$, again 13 operations and $L\cdot U$ equal to the reordered $A$. Consumer #1, reordered to $P\mathbf b = (1, 6.5, -20)$, gives $\mathbf y = (1, 4.5, 6)$ and $\mathbf f = (0.25, 0.375, 0.375)$, the answer of B5(c). The matrix was never singular; the rows were only in an unlucky order. Choosing that order automatically is partial pivoting, in the next unit.
+After step 1, $U$ has rows $(1, 1, 1)$, $(0, 0, 16)$, $(0, 8, 4)$: the pivot $u_{22}$ is 0, and $\ell_{32} = 8 \div 0$ is impossible. In doubles, $\ell_{32} = \text{Inf}$ and row 3 becomes $(0, \text{NaN}, -\text{Inf})$, as on the lecture slide, with no error message. Tab 2 has no factors to reuse. After swapping rows 2 and 3: $\ell_{21} = 2$, $\ell_{31} = -26$, $\ell_{32} = 0 \div 8 = 0$, so $L = \begin{pmatrix} 1&0&0\\2&1&0\\-26&0&1\end{pmatrix}$ and $U = \begin{pmatrix} 1&1&1\\0&8&4\\0&0&16\end{pmatrix}$, again 13 operations and $L\cdot U$ equal to the reordered $A$. Consumer #1, reordered to $P\mathbf b = (1, 6.5, -20)$, gives $\mathbf y = (1, 4.5, 6)$ and $\mathbf f = (0.25, 0.375, 0.375)$, the answer of B5(c). (The usual slip: forgetting to swap the entries of $\mathbf b$ along with the rows of $A$.) The matrix was never singular; the rows were only in an unlucky order. Choosing that order automatically is partial pivoting, in the next unit.
 :::
 
 ## Hints
@@ -279,7 +279,7 @@ $$L = \begin{pmatrix} 1 & 0 & 0 \\ 2 & 1 & 0 \\ -26 & 0 & 1 \end{pmatrix}, \qqua
 **B6.**
 (a) $n = 3$: 13 operations to factorise ($\tfrac23 n^3 = 18$), 15 to solve ($2n^2 = 18$). For $n = 3$ the lower-order terms still matter; the formulas are for large $n$.
 (b) Factorise $6.7\times10^8$ (about 0.7 s); solve $2\times10^6$ (about 2 ms). Ratio $n/3 \approx 333$.
-(c) Refactorising: $1000 \times 8.3\times10^{10} = 8.3\times10^{13}$ operations, $8.3\times10^4$ s $\approx$ **23 hours**. Factor once: $8.3\times10^{10} + 1000 \times 5\times10^7 = 1.3\times10^{11}$, about **2 minutes**. (The real diffusion matrix is banded, which makes both far cheaper: *Structure: symmetric, banded, sparse*.)
+(c) Refactorising: $1000 \times 8.3\times10^{10} = 8.3\times10^{13}$ operations, $8.3\times10^4$ s $\approx$ **23 hours**. Factor once: $8.3\times10^{10} + 1000 \times 5\times10^7 = 1.3\times10^{11}$, about **2 minutes**. (The real diffusion matrix is banded, which makes both far cheaper: [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd).)
 (d) No: factorising a 3×3 is 13 operations, solving 15. Even $10^4$ refactorisations are $3\times10^5$ operations, a fraction of a millisecond. For small $n$ the cost that matters in R or Python is the **overhead per function call** (microseconds each), which is why `solve(A, B)` with all consumers as columns is still the right call.
 
 **B7.**
@@ -521,7 +521,7 @@ fn main() {
 
 :::
 
-Everything matches B1–B4. The mussel numbers are not exact in the last digits (Rust shows them): $-18.4$ and $11.6$ are not exact in binary (*How computers store numbers*). `np.linalg.det` gives $3.999999999999999$: it multiplies the diagonal of a **pivoted** LU, whose entries are not whole numbers, and rounds along the way.
+Everything matches B1–B4. The mussel numbers are not exact in the last digits (Rust shows them): $-18.4$ and $11.6$ are not exact in binary ([*How computers store numbers*](../floating-point/lec.qmd)). `np.linalg.det` gives $3.999999999999999$: it multiplies the diagonal of a **pivoted** LU, whose entries are not whole numbers, and rounds along the way.
 
 **C2.**
 
@@ -1018,7 +1018,7 @@ fn main() {
 
 :::
 
-The **residual** of the LU solve is at rounding level ($\le 10^{-15}$) for every $d$, in every language. The inverse's residual is usually orders of magnitude larger, growing as $d$ shrinks (up to $10^{-8}$), though by luck it is sometimes small. The **error** grows as $d$ shrinks for **both** methods: two nearly identical sources make the problem ill-conditioned, and no algorithm fixes that (next unit). The inverse's error is mostly somewhat larger, up to 10 times. The consistent difference is in the residual: `solve` returns the exact answer to a system within rounding of yours (it is backward stable, *Error, conditioning and stability*), the inverse route does not. The individual numbers differ between languages because R, numpy and nalgebra round differently inside their routines.
+The **residual** of the LU solve is at rounding level ($\le 10^{-15}$) for every $d$, in every language. The inverse's residual is usually orders of magnitude larger, growing as $d$ shrinks (up to $10^{-8}$), though by luck it is sometimes small. The **error** grows as $d$ shrinks for **both** methods: two nearly identical sources make the problem ill-conditioned, and no algorithm fixes that (next unit). The inverse's error is mostly somewhat larger, up to 10 times. The consistent difference is in the residual: `solve` returns the exact answer to a system within rounding of yours (it is backward stable, [*Error, conditioning and stability*](../error-conditioning/lec.qmd)), the inverse route does not. The individual numbers differ between languages because R, numpy and nalgebra round differently inside their routines.
 
 **C7.**
 
@@ -1104,8 +1104,49 @@ print(bs - As @ x_ok)
 
 ```rust
 // rust/examples/lu_c7.rs  —  cargo run --example lu_c7
+// C7: a zero pivot and a tiny pivot break LU without pivoting.
 use nalgebra::{dmatrix, dvector, DMatrix, DVector};
-// lu_nopivot, forward_sub, back_sub and show: as in lu_c1.rs (in the file; not repeated here)
+
+fn lu_nopivot(a: &DMatrix<f64>) -> (DMatrix<f64>, DMatrix<f64>) {
+    let n = a.nrows();
+    let mut l = DMatrix::<f64>::identity(n, n);
+    let mut u = a.clone();
+    for k in 0..n - 1 {
+        for i in k + 1..n {
+            l[(i, k)] = u[(i, k)] / u[(k, k)];
+            for j in k..n {
+                u[(i, j)] -= l[(i, k)] * u[(k, j)];
+            }
+        }
+    }
+    (l, u)
+}
+
+fn forward_sub(l: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = b.len();
+    let mut y = DVector::<f64>::zeros(n);
+    for i in 0..n {
+        let s: f64 = (0..i).map(|j| l[(i, j)] * y[j]).sum();
+        y[i] = (b[i] - s) / l[(i, i)];
+    }
+    y
+}
+
+fn back_sub(u: &DMatrix<f64>, y: &DVector<f64>) -> DVector<f64> {
+    let n = y.len();
+    let mut x = DVector::<f64>::zeros(n);
+    for i in (0..n).rev() {
+        let s: f64 = (i + 1..n).map(|j| u[(i, j)] * x[j]).sum();
+        x[i] = (y[i] - s) / u[(i, i)];
+    }
+    x
+}
+
+fn show(m: &DMatrix<f64>) {
+    for r in m.row_iter() {
+        println!("{:?}", r.iter().collect::<Vec<_>>());
+    }
+}
 
 fn main() {
     let a0 = dmatrix![1.0, 1.0, 1.0; -26.0, -26.0, -10.0; 2.0, 10.0, 6.0];
@@ -1152,7 +1193,7 @@ fn main() {
 
 ## Where this leads
 
-- ***Pivoting, norms and conditioning*** (next unit): why the library chose $-13$ as the first pivot, why that makes elimination stable, and the **condition number** of a matrix, which explains the error growth in C3 and C6 that no algorithm removes. The biology there is spectral unmixing in flow cytometry, a mixing model with overlapping spectra.
-- ***Structure: symmetric, banded, sparse***: when $A$ is symmetric positive definite (a covariance matrix), banded or mostly zeros, special LU-like factorisations (Cholesky, tridiagonal solvers, sparse LU) are much cheaper than $\tfrac23 n^3$.
-- **Factor once, solve many** returns in *Stiffness and implicit methods* (Part 8) and *Implicit schemes and the method of lines* (Part 10), where every time step solves a system with the same matrix, and in *Newton for systems of equations*, where a Jacobian can be reused for several steps.
-- Mixing models with more sources than isotopes have no unique solution; least squares and its pitfalls are in *Least squares: normal equations vs QR*.
+- **[*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd)** (next unit): why the library chose $-13$ as the first pivot, why that makes elimination stable, and the **condition number** of a matrix, which explains the error growth in C3 and C6 that no algorithm removes. The biology there is spectral unmixing in flow cytometry, a mixing model with overlapping spectra.
+- **[*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd)**: when $A$ is symmetric positive definite (a covariance matrix), banded or mostly zeros, special LU-like factorisations (Cholesky, tridiagonal solvers, sparse LU) are much cheaper than $\tfrac23 n^3$.
+- **Factor once, solve many** returns in [*Stiffness and implicit methods*](../stiffness/lec.qmd) (Part 8) and [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd) (Part 10), where every time step solves a system with the same matrix, and in [*Newton for systems of equations*](../newton-systems/lec.qmd), where a Jacobian can be reused for several steps.
+- Mixing models with more sources than isotopes have no unique solution; least squares and its pitfalls are in [*Least squares: normal equations vs QR*](../least-squares-qr/lec.qmd).

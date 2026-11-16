@@ -21,7 +21,7 @@ format:
 
 ## About this lecture
 
-One polynomial through many points wiggles (*Polynomial interpolation*). The cure is to use **many small pieces**, joined smoothly.
+One polynomial through many points wiggles ([*Polynomial interpolation*](../polynomial-interpolation/lec.qmd)). The cure is to use **many small pieces**, joined smoothly.
 
 - **Piecewise linear**: join the dots. Simple, safe, error $O(h^2)$, but the slope jumps at every point.
 - **Cubic splines**: a cubic on each interval, with value, slope and curvature continuous. Finding them means solving a **tridiagonal** system, $O(n)$.
@@ -48,7 +48,7 @@ range(cd)                                # true rate lies between 0.04 and 0.24
 The OD looks clean (noise sd 0.01), but its differences are noisy: a **negative** growth rate in stationary phase.
 
 ::: notes
-Same logistic curve as in Convergence and cost: K = 1.2, N0 = 0.05, r = 0.8 per hour, now sampled every 15 minutes with plate-reader noise of sd 0.01, rounded to 3 decimals. In Convergence and cost the only noise was rounding, 1e-16, and the trouble started at h = 1e-8. Here the noise is 1e-2, so it starts at ordinary step sizes. The central difference divides a difference of two noisy numbers by 2h = 0.5: noise sd of the estimate is sqrt(2) * 0.01 / 0.5 = 0.028, about 12 % of the maximum rate. Making h smaller makes it worse, not better. Numerical differentiation (Part 7) treats the finite-difference side; here we fit a smooth curve first and differentiate the curve.
+Same logistic curve as in Convergence and cost: K = 1.2, N0 = 0.05, r = 0.8 per hour, now sampled every 15 minutes with plate-reader noise of sd 0.01, rounded to 3 decimals. In Convergence and cost the only noise was rounding, 1e-16, and the trouble started at h = 1e-8. Here the noise is 1e-2, so it starts at ordinary step sizes. The central difference divides a difference of two noisy numbers by 2h = 0.5: noise sd of the estimate is sqrt(2) * 0.01 / 0.5 = 0.028, about 12 % of the maximum rate. Making h smaller makes it worse, not better. Numerical differentiation (Part 7) treats the finite-difference side (wider stencils, Richardson) on its own simulated run of the same curve, read every 10 minutes with noise sd 0.005, and ends with the smoothing spline of this lecture; here we fit a smooth curve first and differentiate the curve.
 :::
 
 ## Recap: one polynomial through all points
@@ -59,7 +59,7 @@ Same logistic curve as in Convergence and cost: K = 1.2, N0 = 0.05, r = 0.8 per 
 - **Piecewise** methods only look at nearby points: a peak at 0.5 h does not disturb the curve at 12 h.
 
 ::: notes
-Recap of Polynomial interpolation in one picture. The data: expression in TPM of a gene that spikes 30 minutes after stimulation and returns to baseline, sampled at uneven times, which is typical for time courses (dense early, sparse late). The polynomial goes through every point but is useless in between, the Runge phenomenon on uneven points. Piecewise linear (green) and the cubic spline (blue) stay near the data. Note the blue curve dips below zero near 3 hours; that is a failure we come back to.
+Recap of Polynomial interpolation in one picture. The data: expression in TPM of a gene that spikes 30 minutes after stimulation and returns to baseline, sampled at uneven times, which is typical for time courses (dense early, sparse late). These are the same sampling times as the immediate-early gene of Polynomial interpolation (its exercise C7), but a sharper spike than the smooth fold-change curve used there (which reached -2241 instead of -1.6e5); we use measured-looking TPM values here because the overshoot of a cubic spline (later slide) only shows with a steep drop. The polynomial goes through every point but is useless in between, the Runge phenomenon on uneven points. Piecewise linear (green) and the cubic spline (blue) stay near the data. Note the blue curve dips below zero near 3 hours; that is a failure we come back to.
 :::
 
 ## Piecewise linear interpolation {.smaller}
@@ -131,7 +131,7 @@ Each equation involves only **three neighbours**. Example: 4 points $(0,0), (1,1
 $$\begin{pmatrix} 4 & 1 \\ 1 & 4 \end{pmatrix}\begin{pmatrix} M_2 \\ M_3\end{pmatrix} = \begin{pmatrix} 6(-1 - 1) \\ 6(1 + 1)\end{pmatrix} = \begin{pmatrix} -12 \\ 12\end{pmatrix} \quad\Rightarrow\quad M_2 = -4,\; M_3 = 4$$
 
 - **Tridiagonal**, symmetric, and **strictly diagonally dominant**: $2(h_{i-1} + h_i) > h_{i-1} + h_i$.
-- So the Thomas algorithm from *Structure: symmetric, banded, sparse* solves it in $O(n)$, with no pivoting needed.
+- So the Thomas algorithm from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd) solves it in $O(n)$, with no pivoting needed.
 
 ::: notes
 The right-hand side is 6 times the change in slope of the data at x_i: a second difference. Where the data bend down (point 2) the curvature M is negative; where they bend up, positive. By hand: subtract a quarter of row 1 from row 2: 3.75 M3 = 12 + 3 = 15, M3 = 4, then M2 = (-12 - 4)/4 = -4. That is the Thomas forward sweep and back substitution. Diagonal dominance holds for any spacing, which is why spline codes never pivot. For a million points the solve takes milliseconds.
@@ -154,7 +154,7 @@ natural_M(c(0, 1, 2, 3), c(0, 1, 0, 1))
 # [1]  0 -4  4  0
 ```
 
-- `thomas(a, b, c, d)` is the function from *Structure: symmetric, banded, sparse* (sub-, main, super-diagonal, right-hand side).
+- `thomas(a, b, c, d)` is the function from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd) (sub-, main, super-diagonal, right-hand side; all of length $n$, `a[1]` and `c[n]` unused).
 - [`findInterval`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/findInterval.html) finds the interval of each `t` by binary search.
 
 ::: notes
@@ -236,7 +236,7 @@ Wildly oscillating data exaggerate the difference, but the point holds: three de
 
 ![](fig03-error-orders.svg){width="68%" fig-align="center"}
 
-- Exact OD values on a grid of spacing $h$. Slopes read off as in *Convergence and cost*: linear $O(h^2)$, cubic spline $O(h^4)$, its derivative $O(h^3)$.
+- Exact OD values on a grid of spacing $h$. Slopes read off as in [*Convergence and cost*](../convergence-cost/lec.qmd): linear $O(h^2)$, cubic spline $O(h^4)$, its derivative $O(h^3)$.
 - **Natural** ends drop the spline to $O(h^2)$: the error at $t = 0$ dominates.
 
 ::: notes
@@ -347,7 +347,7 @@ Everything is computed live: natural and not-a-knot splines by a Thomas solve, P
 
 ## Growth rate from the smoothed curve {.smaller}
 
-![](fig08-growth-rate.svg){width="62%" fig-align="center"}
+![](fig08-growth-rate.svg){width="56%" fig-align="center"}
 
 ```r
 g <- predict(fit, tf, deriv = 1)$y            # tf: fine grid, 0 to 10 h
@@ -356,9 +356,10 @@ c(max(g), tf[which.max(g)])                   # true: 0.24 at 3.92 h
 ```
 
 - RMS error of the growth rate: central differences 0.024, interpolating spline 0.038, **smoothing spline 0.0067**.
+- [*Numerical differentiation*](../finite-differences/lec.qmd) repeats this on a denser, less noisy run (every 10 min, sd 0.005): smoothing spline rms 0.0047, a wider difference stencil 0.0053.
 
 ::: notes
-predict.smooth.spline with deriv = 1 returns the slope of the fitted spline. The maximum growth rate is estimated within 0.5 % and its time within 6 minutes. Note the ends: the smoothing spline is natural, so S'' = 0 at both ends, which biases the slope near t = 0 and t = 10 (visible at the left end). If you have a model, for example the logistic, fitting it directly (Nonlinear least squares and ODE fitting, Part 9) uses that knowledge and does better; a smoothing spline is what you use when you do not want to assume a model.
+predict.smooth.spline with deriv = 1 returns the slope of the fitted spline. The maximum growth rate is estimated within 0.5 % and its time within 6 minutes. Note the ends: the smoothing spline is natural, so S'' = 0 at both ends, which biases the slope near t = 0 and t = 10 (visible at the left end). If you have a model, for example the logistic, fitting it directly uses that knowledge and does better (Numerical differentiation fits the logistic to its plate-reader data by maximum likelihood; Nonlinear least squares and ODE fitting, Part 9, treats such fits in general, on a drug-concentration model); a smoothing spline is what you use when you do not want to assume a model.
 :::
 
 ## Biology: expression along pseudotime
@@ -424,7 +425,7 @@ The list to keep next to the keyboard. The first item catches most interpolation
 - With **noisy** data, interpolation and differences amplify the noise. A **smoothing spline** minimises misfit $+\ \lambda\,\int f''^2$; $\lambda$ trades **bias** against **noise**, chosen by **GCV/CV**; report **df**.
 - Growth rate from OD: smoothing spline slope, rms error 0.007 against 0.024 for central differences.
 
-**Next:** *Fourier series and the FFT*, a global basis of sines and cosines, for periodic signals such as circadian expression.
+**Next:** [*Fourier series and the FFT*](../fourier-fft/lec.qmd), a global basis of sines and cosines, for periodic signals such as circadian expression.
 
 ::: notes
 Recap the three ideas: local pieces instead of one polynomial; a banded system makes it cheap; smoothing instead of interpolation when data are noisy. Numerical differentiation (Part 7) returns to the noise amplification of finite differences from the other side. Fourier series are the other classic approximation: global, like polynomials, but well behaved for periodic data, and also a way to smooth a noisy trace by dropping high frequencies.

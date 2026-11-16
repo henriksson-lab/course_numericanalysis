@@ -3,10 +3,11 @@
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -51,10 +52,10 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
@@ -75,9 +76,9 @@ fn hessian(f: &dyn Fn(&[f64]) -> f64, p: &[f64]) -> DMatrix<f64> {
 }
 
 fn main() {
-    let r = resid(&T, &Y);
+    let r = resid(&TT, &Y);
     let th = levmar(&r, &[0.5, 0.1, 10.0]);
-    let s2 = sse(&r, &th) / (T.len() - 3) as f64;
+    let s2 = sse(&r, &th) / (TT.len() - 3) as f64;
     let j = jacobian(&r, &th);
     let f = |p: &[f64]| sse(&r, p);
     let h = hessian(&f, &th);

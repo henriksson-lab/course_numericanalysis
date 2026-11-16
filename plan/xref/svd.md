@@ -1,23 +1,23 @@
 # Cross-references from `svd` (unit 12)
 
-- svd/lec.qmd:24 (About this lecture) -> least-squares-qr (least squares by QR, assumes well-separated columns)
-- svd/lec.qmd:74 (Least squares gives a negative cell type, code comment "previous unit") -> least-squares-qr (qr.solve for rectangular least squares)
-- svd/lec.qmd:89 (notes, "as in the previous unit") -> least-squares-qr (qr.solve returns the least-squares solution)
-- svd/lec.qmd:94 (Recap: conditioning of least squares) -> pivoting-conditioning (condition number, lose log10 kappa digits)
-- svd/lec.qmd:94 (Recap: conditioning of least squares) -> least-squares-qr (normal equations square kappa; QR does not)
-- svd/lec.qmd:177 (Why not take eigenvalues of A^T A?, "Same lesson as the normal equations") -> least-squares-qr (normal equations vs QR)
-- svd/lec.qmd:400 (Proportions cannot be negative: NNLS, "QR, as in the previous unit") -> least-squares-qr (small least-squares solves by QR)
-- svd/lec.qmd:404 (notes, KKT condition) -> constrained-lp (KKT / optimality conditions under constraints)
-- svd/lec.qmd:450 (notes, Checklist) -> identifiability (same ideas for nonlinear models, Jacobian in the role of S)
-- svd/lec.qmd:458 (Aside: PCA is an SVD) -> eigen-algorithms (irlba / Lanczos for top singular triplets of large sparse matrices)
-- svd/lec.qmd:475 (Summary, Next) -> power-iteration (start of Part 5)
-- svd/lec.qmd:460 (Aside: PCA is an SVD, "sister course") -> sister course quantbio-3MB00A `pca` (statistics of PCA; external, not a unit here)
-- svd/exercise.qmd:300 (Hint 7) -> least-squares-qr (Rust NNLS built on the QR least-squares solve "from the previous unit")
-- svd/exercise.qmd:555,696,849,1012,1148,1326 (Rust solutions C2–C7, comment in lstsq_qr "as in the previous unit") -> least-squares-qr (Householder QR least squares, q_tr_mul + solve_upper_triangular, same style as rust/examples/least_squares_qr_background.rs)
-- svd/exercise.qmd:1442 (Where this leads) -> power-iteration (eigenvalue algorithms; singular values as sqrt of eigenvalues of A^T A)
-- svd/exercise.qmd:1442 (Where this leads) -> eigen-algorithms (Lanczos / irlba for PCA of single-cell data)
-- svd/exercise.qmd:1443 (Where this leads) -> identifiability (small singular values of the Jacobian = non-identifiable combinations)
-- svd/exercise.qmd:1444 (Where this leads) -> constrained-lp (KKT conditions; NNLS optimality check is a special case)
+- svd/lec.qmd:24 (About this lecture) -> least-squares-qr (least squares by QR, assumes well-separated columns) [ok]
+- svd/lec.qmd:74 (Least squares gives a negative cell type, code comment "previous unit") -> least-squares-qr (qr.solve for rectangular least squares) [ok]
+- svd/lec.qmd:89 (notes, "as in the previous unit") -> least-squares-qr (qr.solve returns the least-squares solution) [ok]
+- svd/lec.qmd:94 (Recap: conditioning of least squares) -> pivoting-conditioning (condition number, lose log10 kappa digits) [ok]
+- svd/lec.qmd:94 (Recap: conditioning of least squares) -> least-squares-qr (normal equations square kappa; QR does not) [ok]
+- svd/lec.qmd:177 (Why not take eigenvalues of A^T A?, "Same lesson as the normal equations") -> least-squares-qr (normal equations vs QR) [ok]
+- svd/lec.qmd:400 (Proportions cannot be negative: NNLS, "QR, as in the previous unit") -> least-squares-qr (small least-squares solves by QR) [ok]
+- svd/lec.qmd:404 (notes, KKT condition) -> constrained-lp (KKT / optimality conditions under constraints) [ok]
+- svd/lec.qmd:450 (notes, Checklist) -> identifiability (same ideas for nonlinear models, Jacobian in the role of S) [ok]
+- svd/lec.qmd:458 (Aside: PCA is an SVD) -> eigen-algorithms (irlba / Lanczos for top singular triplets of large sparse matrices) [ok]
+- svd/lec.qmd:475 (Summary, Next) -> power-iteration (start of Part 5) [ok]
+- svd/lec.qmd:460 (Aside: PCA is an SVD, "sister course") -> sister course quantbio-3MB00A `pca` (statistics of PCA; external, not a unit here) [ok]
+- svd/exercise.qmd:300 (Hint 7) -> least-squares-qr (Rust NNLS built on the QR least-squares solve "from the previous unit") [ok]
+- svd/exercise.qmd:555,696,849,1012,1148,1326 (Rust solutions C2–C7, comment in lstsq_qr "as in the previous unit") -> least-squares-qr (Householder QR least squares, q_tr_mul + solve_upper_triangular, same style as rust/examples/least_squares_qr_background.rs) [ok]
+- svd/exercise.qmd:1442 (Where this leads) -> power-iteration (eigenvalue algorithms; singular values as sqrt of eigenvalues of A^T A) [ok]
+- svd/exercise.qmd:1442 (Where this leads) -> eigen-algorithms (Lanczos / irlba for PCA of single-cell data) [ok]
+- svd/exercise.qmd:1443 (Where this leads) -> identifiability (small singular values of the Jacobian = non-identifiable combinations) [ok]
+- svd/exercise.qmd:1444 (Where this leads) -> constrained-lp (KKT conditions; NNLS optimality check is a special case) [ok]
 
 ## Running examples defined here
 

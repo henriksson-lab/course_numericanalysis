@@ -1,36 +1,36 @@
 # Cross-references from structured-sparse
 
-- structured-sparse/lec.qmd:32 -> lu (previous unit, general dense LU)
-- structured-sparse/lec.qmd:32 -> pivoting-conditioning (previous unit)
-- structured-sparse/lec.qmd:98 -> pivoting-conditioning (element growth / why pivoting; Cholesky needs none)
-- structured-sparse/lec.qmd:145 -> floating-point (underflow; sum of logs instead of product, applied to log det)
-- structured-sparse/lec.qmd:194 -> pivoting-conditioning (ill-conditioning loses log10(kappa) digits)
-- structured-sparse/lec.qmd:211 -> diffusion-explicit (same tridiagonal matrix from the diffusion equation)
-- structured-sparse/lec.qmd:252 -> diffusion-implicit (Thomas function reused once per implicit time step)
-- structured-sparse/lec.qmd:291 -> convergence-cost (reading slopes off log-log timing plots)
-- structured-sparse/lec.qmd:309 -> pivoting-conditioning (failure of elimination without pivoting)
-- structured-sparse/lec.qmd:"Recap: sparse storage" slide (l. 314, 323) -> convergence-cost (8 bytes/entry, CSC ~12 bytes/non-zero, centring destroys sparsity)
-- structured-sparse/lec.qmd:406 -> lu (never compute the inverse to solve)
-- structured-sparse/lec.qmd:443 -> steady-state-2d (2D five-point Laplacian, fill-in in a band)
-- structured-sparse/lec.qmd:467 -> iterative-solvers (full treatment of Jacobi, Gauss-Seidel, CG, GMRES, preconditioning)
-- structured-sparse/lec.qmd:497 -> pivoting-conditioning (small residual is not small error)
-- structured-sparse/lec.qmd:497 -> convergence-cost (error vs iteration on log axes, linear convergence)
-- structured-sparse/lec.qmd:508 -> iterative-solvers ("Which solver?" table)
-- structured-sparse/lec.qmd:524 -> least-squares-qr (Next: normal equations, X^T X is SPD, Cholesky)
-- structured-sparse/lec.qmd:527 -> eigen-algorithms (sparse PCA of single-cell data)
-- structured-sparse/lec.qmd:527 -> iterative-solvers
-- structured-sparse/lec.qmd:527 -> diffusion-implicit, steady-state-2d (Part 10, plain text "Part 10")
-- structured-sparse/exercise.qmd:140 -> pivoting-conditioning (B3(c): partial pivoting)
-- structured-sparse/exercise.qmd:629 -> diffusion-implicit (C3 solution: "Part 10 uses it", plain text)
-- structured-sparse/exercise.qmd:871 -> floating-point (C5 solution: 2 lost to rounding next to 1e17)
-- structured-sparse/exercise.qmd:1281 -> pivoting-conditioning (C8 solution: condition number, error vs residual)
-- structured-sparse/exercise.qmd:1286 -> least-squares-qr (Where this leads)
-- structured-sparse/exercise.qmd:1287 -> eigen-algorithms (Where this leads)
-- structured-sparse/exercise.qmd:1288 -> diffusion-implicit (Where this leads)
-- structured-sparse/exercise.qmd:1288 -> steady-state-2d (Where this leads)
-- structured-sparse/exercise.qmd:1289 -> iterative-solvers (Where this leads)
-- structured-sparse/quiz.qmd:54 -> floating-point (Q4 hint: underflow of a product)
-- structured-sparse/quiz.qmd:209 -> iterative-solvers (Q11 answer)
+- structured-sparse/lec.qmd:32 -> lu (previous unit, general dense LU) [ok, linked]
+- structured-sparse/lec.qmd:32 -> pivoting-conditioning (previous unit) [ok, linked]
+- structured-sparse/lec.qmd:98 -> pivoting-conditioning (element growth / why pivoting; Cholesky needs none) [ok, linked]
+- structured-sparse/lec.qmd:145 -> floating-point (underflow; sum of logs instead of product, applied to log det) [ok, linked]
+- structured-sparse/lec.qmd:194 -> pivoting-conditioning (ill-conditioning loses log10(kappa) digits) [ok, linked]
+- structured-sparse/lec.qmd:211 -> diffusion-explicit (same tridiagonal matrix from the diffusion equation) [fixed: notes said diffusion-explicit has "exactly the same matrix" and a solve per time step; now: same tridiagonal pattern with opposite sign and no degradation, and diffusion-implicit does the solve per step (1 + 2r diagonal)]
+- structured-sparse/lec.qmd:252 -> diffusion-implicit (Thomas function reused once per implicit time step) [ok: diffusion-implicit lec + exercise use thomas(a, b, c, d) with the same convention (a[1], c[n] unused); Rust signature identical; advection-diffusion also reuses it]
+- structured-sparse/lec.qmd:291 -> convergence-cost (reading slopes off log-log timing plots) [ok, linked]
+- structured-sparse/lec.qmd:309 -> pivoting-conditioning (failure of elimination without pivoting) [ok, linked]
+- structured-sparse/lec.qmd:"Recap: sparse storage" slide (l. 314, 323) -> convergence-cost (8 bytes/entry, CSC ~12 bytes/non-zero, centring destroys sparsity) [ok, linked]
+- structured-sparse/lec.qmd:406 -> lu (never compute the inverse to solve) [ok, linked]
+- structured-sparse/lec.qmd:443 -> steady-state-2d (2D five-point Laplacian, fill-in in a band) [ok: steady-state-2d notes quote 30x30 grid, 4380 / 27 029 / 10 231 non-zeros]
+- structured-sparse/lec.qmd:467 -> iterative-solvers (full treatment of Jacobi, Gauss-Seidel, CG, GMRES, preconditioning) [ok: iterative-solvers recap quotes 4160 Jacobi / 240 CG on 1000-cell morphogen, the [1 2; 2 1] divergence and C8 jacobi()/cg(); all match]
+- structured-sparse/lec.qmd:497 -> pivoting-conditioning (small residual is not small error) [ok, linked]
+- structured-sparse/lec.qmd:497 -> convergence-cost (error vs iteration on log axes, linear convergence) [ok, linked]
+- structured-sparse/lec.qmd:508 -> iterative-solvers ("Which solver?" table) [ok, linked]
+- structured-sparse/lec.qmd:524 -> least-squares-qr (Next: normal equations, X^T X is SPD, Cholesky) [ok, linked]
+- structured-sparse/lec.qmd:527 -> eigen-algorithms (sparse PCA of single-cell data) [ok, linked]
+- structured-sparse/lec.qmd:527 -> iterative-solvers [ok, linked]
+- structured-sparse/lec.qmd:527 -> diffusion-implicit, steady-state-2d (Part 10, plain text "Part 10") [ok, linked]
+- structured-sparse/exercise.qmd:140 -> pivoting-conditioning (B3(c): partial pivoting) [ok, linked]
+- structured-sparse/exercise.qmd:629 -> diffusion-implicit (C3 solution: "Part 10 uses it", plain text) [fixed: added link to diffusion-implicit, same argument order]
+- structured-sparse/exercise.qmd:871 -> floating-point (C5 solution: 2 lost to rounding next to 1e17) [ok, linked]
+- structured-sparse/exercise.qmd:1281 -> pivoting-conditioning (C8 solution: condition number, error vs residual) [ok, linked]
+- structured-sparse/exercise.qmd:1286 -> least-squares-qr (Where this leads) [ok, linked]
+- structured-sparse/exercise.qmd:1287 -> eigen-algorithms (Where this leads) [ok, linked]
+- structured-sparse/exercise.qmd:1288 -> diffusion-implicit (Where this leads) [ok, linked]
+- structured-sparse/exercise.qmd:1288 -> steady-state-2d (Where this leads) [ok, linked]
+- structured-sparse/exercise.qmd:1289 -> iterative-solvers (Where this leads) [ok, linked]
+- structured-sparse/quiz.qmd:54 -> floating-point (Q4 hint: underflow of a product) [ok, linked]
+- structured-sparse/quiz.qmd:209 -> iterative-solvers (Q11 answer) [ok, linked]
 
 ## Running examples defined here
 
@@ -51,3 +51,7 @@
 - **3 x 3 gene covariance** Sigma = [4 2 -2; 2 10 2; -2 2 6], L = [2 0 0; 1 3 0; -1 1 2], det 144.
 - **Arrow (hub gene) matrix**: hub diagonal n, row/column of ones, others diagonal 2;
   n = 1000: chol has 500500 non-zeros hub first, 1999 hub last.
+
+## Pass 2 (other fixes)
+
+- [fixed: exercise C4, C5 R/Python tabs get a pointer to thomas() (C3)]

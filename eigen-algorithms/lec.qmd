@@ -21,7 +21,7 @@ format:
 
 ## About this lecture {.smaller}
 
-In *Power iteration and friends* we found **one** eigenvalue at a time by multiplying a vector by $A$ again and again. This lecture is about what `eigen()` does to get **all** of them, and what to do when the matrix is too big for that.
+In [*Power iteration and friends*](../power-iteration/lec.qmd) we found **one** eigenvalue at a time by multiplying a vector by $A$ again and again. This lecture is about what `eigen()` does to get **all** of them, and what to do when the matrix is too big for that.
 
 - The **QR algorithm**: factor $A = QR$, multiply back as $RQ$, repeat. It is power iteration on all vectors at once.
 - Two tricks make it fast: **Hessenberg reduction** first, and **shifts**.
@@ -77,26 +77,36 @@ How to choose the number of PCs, scaling and interpretation: the sister course. 
 One slide only, because PCA is taught in the sister course and its link to the SVD is the aside at the end of The SVD, rank deficiency and regularisation. The point here is purely computational: PCA is an eigenvalue problem for a symmetric matrix, and we need only the top few eigenpairs. PC1 in this simulation is mostly library size (sequencing depth), as in real data before normalisation; PC2 separates two cell types. The scores come from irlba, the method at the end of the lecture.
 :::
 
-## Recap: power iteration {.smaller}
+## Recap: power iteration and friends {.smaller}
+
+:::: {.columns}
+::: {.column width="55%"}
+From [*Power iteration and friends*](../power-iteration/lec.qmd):
+
+- **Power iteration** $\mathbf x \leftarrow A\mathbf x/\|A\mathbf x\|$ finds the eigenvalue of largest $|\lambda|$; the error shrinks by $|\lambda_2/\lambda_1|$ per step. Fish Leslie matrix: $\lambda_1 = 1.177$, rate 0.654, 55 steps.
+- It **fails** when $|\lambda_2| = |\lambda_1|$ (semelparous fish: the estimate cycles) and **crawls** when the ratio is near 1 (slow-switching cells: 5406 steps).
+- **Inverse iteration** with shift $\sigma$ finds the eigenvalue nearest $\sigma$; **Rayleigh quotient iteration** ($\sigma$ = current Rayleigh quotient) converges **cubically** for symmetric $A$.
+- One eigenpair per run.
+:::
+::: {.column width="45%"}
+Our test matrix for this lecture:
 
 ```r
 A <- matrix(c(4, 1, 0,
               1, 3, 1,
-              0, 1, 2), 3)              # symmetric 3 x 3
-x <- c(1, 1, 1)
-for (k in 1:30) { x <- A %*% x; x <- x / sqrt(sum(x^2)) }
-sum(x * (A %*% x))                     # Rayleigh quotient
-# [1] 4.732051
+              0, 1, 2), 3)   # symmetric
+power_rq(A, c(1, 1, 1))$lambda
+# [1] 4.732051              # 51 steps
 eigen(A)$values
 # [1] 4.732051 3.000000 1.267949
 ```
 
-- Repeated multiplication by $A$ turns any start vector towards the eigenvector of the **largest** $|\lambda|$; the error shrinks by $|\lambda_2/\lambda_1|$ per step (here $3/4.73 = 0.63$).
-- One eigenpair per run. For the next one we must remove the first (deflation), and errors pile up.
-- `eigen()` returns all three, accurate to the last digit, in microseconds. How?
+Rate $3/4.73 = 0.63$ per step. `eigen()` returns **all three**, to the last digit, in microseconds. How?
+:::
+::::
 
 ::: notes
-Recap from Power iteration and friends; do not re-teach. This matrix (eigenvalues 3 + sqrt 3, 3, 3 - sqrt 3) is our small test case throughout the lecture. The questions for the next slides: how to get all eigenvalues at once, and how to make the convergence much faster than 0.63 per step.
+Recap only; do not re-teach. The numbers are the ones students saw in Power iteration and friends: the fish Leslie matrix (lambda_1 = 1.177, |lambda_2/lambda_1| = 0.654, 55 iterations to a residual of 1e-10), the semelparous variant whose four eigenvalues share one modulus, the slow-switching cell-state chain (5406 iterations and still only 5 digits), and Rayleigh quotient iteration on the trait correlation matrix (exercise C7 there). power_rq is that lecture's power iteration with 2-norm normalisation and the Rayleigh quotient as the estimate; on A it reaches a residual of 1e-10 after 51 steps. This matrix (eigenvalues 3 + sqrt 3, 3, 3 - sqrt 3) is our small test case throughout the lecture. The questions for the next slides: how to get all eigenvalues at once, and how to make the convergence much faster than 0.63 per step. Both answers reuse the pieces above: power iteration on many vectors at once, and shifts.
 :::
 
 ## The QR algorithm {.smaller}
@@ -177,11 +187,11 @@ qr.R(f) %*% qr.Q(f)                    # A_1 = A_0: nothing ever changes
 # [2,]    1    0
 ```
 
-- $|\lambda_2/\lambda_1| = 1$: power iteration cannot separate the two, and neither can the QR algorithm. The matrix is already its own QR fixed point.
+- $|\lambda_2/\lambda_1| = 1$: power iteration cannot separate the two (the semelparous fish of *Power iteration and friends*), and neither can the QR algorithm. The matrix is already its own QR fixed point.
 - The **check**: off-diagonal entries that do not shrink. The fix: a **shift**.
 
 ::: notes
-The same failure as power iteration on a periodic Markov chain (Power iteration and friends): eigenvalues of equal size. Q = -P and R = -I, so RQ = P. In practice exact ties in magnitude are rare except for structure (periodic chains, matrices with symmetric spectra, complex pairs on the next slides), but near-ties are common, and they give the slow convergence of the previous slide. Shifting the matrix by mu changes the eigenvalues to 1 - mu and -1 - mu, which have different sizes for any mu other than 0.
+The same failure as power iteration on the semelparous fish in Power iteration and friends (a periodic life cycle, four eigenvalues of equal modulus): eigenvalues of equal size. Q = -P and R = -I, so RQ = P. In practice exact ties in magnitude are rare except for structure (periodic chains, matrices with symmetric spectra, complex pairs on the next slides), but near-ties are common, and they give the slow convergence of the previous slide. Shifting the matrix by mu changes the eigenvalues to 1 - mu and -1 - mu, which have different sizes for any mu other than 0.
 :::
 
 ## First trick: Hessenberg form {.smaller}
@@ -200,11 +210,11 @@ One slide, as promised: the details are in Trefethen and Bau, lectures 26 and 28
 
 ![](fig03-shifts.svg){width="62%" fig-align="center"}
 
-- **Shift**: factor $A_k - \mu I = QR$, then $A_{k+1} = RQ + \mu I$. Still a similarity; the rate for the last entry becomes $|\lambda_n - \mu| / |\lambda_{n-1} - \mu|$. With $\mu = a_{nn}$ (a Rayleigh quotient) that ratio goes to 0: digits triple per step.
+- **Shift**: factor $A_k - \mu I = QR$, then $A_{k+1} = RQ + \mu I$. Still a similarity; the rate for the last entry becomes $|\lambda_n - \mu| / |\lambda_{n-1} - \mu|$. $\mu = a_{nn}$ is a Rayleigh quotient: this is the **Rayleigh quotient iteration** of *Power iteration and friends*, working on the last row. Digits triple per step.
 - **Deflate**: once $|a_{n,n-1}| < 10^{-12}$, $a_{nn}$ is an eigenvalue. Drop the last row and column and continue. Our 3 × 3: **62** steps unshifted, **7** shifted.
 
 ::: notes
-This is shifted inverse iteration from Power iteration and friends, in disguise: the last column of the QR algorithm does inverse iteration with shift mu. With the Rayleigh-quotient shift mu = a_nn, a symmetric matrix converges cubically: here the last subdiagonal goes 7e-3, 1e-7, 6e-22. The plain Rayleigh shift can fail: for [[2,1],[1,2]] a_nn = 2 lies exactly between the eigenvalues 1 and 3 and the iteration stalls, as in the previous slide. LAPACK uses the Wilkinson shift (the eigenvalue of the trailing 2x2 block closer to a_nn), which always converges for symmetric matrices; the exercise (C2) tries both. For real nonsymmetric matrices LAPACK uses two shifts at once (the Francis double shift) so that complex shifts can be handled in real arithmetic.
+Nothing new to teach here: the last column of the QR algorithm does shifted inverse iteration with shift mu, and with mu = a_nn that shift is the current Rayleigh quotient, so this is the Rayleigh quotient iteration of Power iteration and friends (slide and exercise C7 there) in disguise. As there, a symmetric matrix converges cubically: here the last subdiagonal goes 7e-3, 1e-7, 6e-22. The plain Rayleigh shift can fail: for [[2,1],[1,2]] a_nn = 2 lies exactly between the eigenvalues 1 and 3 and the iteration stalls, as in the previous slide. LAPACK uses the Wilkinson shift (the eigenvalue of the trailing 2x2 block closer to a_nn), which always converges for symmetric matrices; the exercise (C2) tries both. For real nonsymmetric matrices LAPACK uses two shifts at once (the Francis double shift) so that complex shifts can be handled in real arithmetic.
 :::
 
 ## Try it: the QR algorithm, live {.smaller}
@@ -414,7 +424,7 @@ ritz(L, 20)[1:4]
 - That is exactly the PCA situation: a few large, separated eigenvalues above a noise bulk.
 
 ::: notes
-The test matrix is diagonal, so we know the answer; Lanczos does not know it is diagonal, it only sees products. After 5 steps the largest Ritz value is already 9.76; after 10 steps it is right to 6 digits. The rate depends on the gap between the wanted eigenvalue and the rest of the spectrum, relative to the spread of the spectrum (Kaniel-Paige theory, which uses Chebyshev polynomials): a much better rate than power iteration's lambda2/lambda1. Eigenvalues inside the bulk would need many more steps. Shift-and-invert (Power iteration and friends) turns interior eigenvalues into extreme ones, at the price of a sparse solve per step.
+The test matrix is diagonal, so we know the answer; Lanczos does not know it is diagonal, it only sees products. After 5 steps the largest Ritz value is already 9.76; after 10 steps it is right to 6 digits. The rate depends on the gap between the wanted eigenvalue and the rest of the spectrum, relative to the spread of the spectrum (Kaniel-Paige theory, which uses Chebyshev polynomials): a much better rate than power iteration's lambda2/lambda1. Eigenvalues inside the bulk would need many more steps. Shift-and-invert (the shifted inverse iteration of Power iteration and friends) turns interior eigenvalues into extreme ones, at the price of a sparse solve per step.
 :::
 
 ## Failure: loss of orthogonality {.smaller}
@@ -508,7 +518,7 @@ A summary of the failure modes and the check for each. The order follows the lec
 - **Krylov / Lanczos**: keep all power-iteration vectors, need only $A\mathbf v$; extreme eigenvalues converge first. Reorthogonalise and restart (ARPACK, `irlba`).
 - **Single-cell PCA**: matrix-free, implicitly centred, top 10 PCs in 0.4 s and 11 MB instead of 22 s and 1.4 GB.
 
-**Next:** Part 6, *Polynomial interpolation*.
+**Next:** Part 6, [*Polynomial interpolation*](../polynomial-interpolation/lec.qmd).
 
 ::: notes
 The two halves of the lecture have one idea in common: everything is power iteration, made fast either by orthogonal similarity transforms on a dense matrix (QR algorithm) or by keeping the whole Krylov subspace (Lanczos). The checks to remember: kappa(V) or perturb-and-recompute for nonsymmetric problems, and the residual for truncated solvers.

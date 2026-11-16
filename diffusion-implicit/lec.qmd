@@ -30,7 +30,7 @@ FTCS is simple, but its time step must shrink with the **square** of the grid sp
 - Biology: a *Drosophila* embryo held between a **cold and a warm stream** [M1, M2]. How sharp is the temperature step inside it?
 
 ::: notes
-Second unit of Part 10. Everything here is assembled from earlier parts: the chamber, the grid and FTCS from The diffusion (heat) equation by finite differences; the Thomas algorithm from Structure: symmetric, banded, sparse; backward Euler, stiffness and BDF from Stiffness and implicit methods. The new things are Crank–Nicolson, the separation of time and space errors, and the habit of verifying a PDE solver before believing it. The biology switches from concentration to temperature: same equation, different D.
+Second unit of Part 10. Everything here is assembled from earlier parts: the chamber, the grid and FTCS from [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd); the Thomas algorithm from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd); backward Euler, stiffness and BDF from [*Stiffness and implicit methods*](../stiffness/lec.qmd). The new things are Crank–Nicolson, the separation of time and space errors, and the habit of verifying a PDE solver before believing it. The biology switches from concentration to temperature: same equation, different D.
 :::
 
 ## A biology problem first {.smaller}
@@ -62,12 +62,12 @@ L^2 / D                         # time scale L^2/D (s)
 - 22 µs steps for a process that takes a second; halve $\Delta x$ and it is **4 ×** as many steps.
 
 ::: notes
-The thermal diffusivity is k / (rho c_p): conductivity 0.6 W/(m K), density 1000 kg/m^3, heat capacity 4180 J/(kg K) give 1.4e-7 m^2/s, the value [M2] uses for water. Heat diffuses about 100 times faster than a small molecule, which is why temperature steps are hard to keep sharp on a chip. 2.5 µm is not an extravagant grid: the transition we look for turns out to be about 130 µm wide, and we want 50 points across it. The FTCS limit r <= 1/2 is from the previous unit. The number of steps grows like N^2 for a fixed simulated time: 80 000 here, 320 000 at 1.25 µm. In 2D (Steady state in two dimensions) the limit is even stricter.
+The thermal diffusivity is k / (rho c_p): conductivity 0.6 W/(m K), density 1000 kg/m^3, heat capacity 4180 J/(kg K) give 1.4e-7 m^2/s, the value [M2] uses for water. Heat diffuses about 100 times faster than a small molecule, which is why temperature steps are hard to keep sharp on a chip. 2.5 µm is not an extravagant grid: the transition we look for turns out to be about 130 µm wide, and we want 50 points across it. The FTCS limit r <= 1/2 is from the previous unit. The number of steps grows like N^2 for a fixed simulated time: 80 000 here, 320 000 at 1.25 µm. In 2D ([*Steady state in two dimensions*](../steady-state-2d/lec.qmd)) the limit is even stricter.
 :::
 
 ## Recap: FTCS and its limit {.smaller}
 
-On the chamber of *The diffusion (heat) equation by finite differences*, with $r = D\,\Delta t/\Delta x^2$:
+On the chamber of [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd), with $r = D\,\Delta t/\Delta x^2$:
 
 $$c_i^{n+1} = c_i^n + r\,\bigl(c_{i-1}^n - 2c_i^n + c_{i+1}^n\bigr) \qquad\Longleftrightarrow\qquad \mathbf c^{n+1} = (I + rA)\,\mathbf c^n + \dots$$
 
@@ -76,7 +76,7 @@ $$c_i^{n+1} = c_i^n + r\,\bigl(c_{i-1}^n - 2c_i^n + c_{i+1}^n\bigr) \qquad\Longl
 - The zigzag is gone in milliseconds, but it sets the step: the system is **stiff**.
 
 ::: notes
-One slide only: everything here was derived in the previous unit (L = 500 µm, D = 1000 µm^2/s, N = 50, dx = 10 µm, source c = 1 at x = 0, sink c = 0 at x = L). theta is the wavenumber of the mode times dx, from 0 (smooth) to pi (zigzag). The dots stand for the boundary values, which enter the first and last equations. The stiffness argument is the one from Stiffness and implicit methods: the explicit step is set by the fastest mode, which we do not care about, rather than by the slow one we do care about. The remedy there was backward Euler.
+One slide only: everything here was derived in the previous unit (L = 500 µm, D = 1000 µm^2/s, N = 50, dx = 10 µm, source c = 1 at x = 0, sink c = 0 at x = L). The grid is also the same: nodes x_i = i dx, i = 0..N, the boundary values sit on the two end nodes and the N - 1 interior nodes are the unknowns; units µm and s. theta is the wavenumber of the mode times dx, from 0 (smooth) to pi (zigzag). The dots stand for the boundary values, which enter the first and last equations. The stiffness argument is the one from [*Stiffness and implicit methods*](../stiffness/lec.qmd): the explicit step is set by the fastest mode, which we do not care about, rather than by the slow one we do care about. The remedy there was backward Euler.
 :::
 
 ## Backward Euler for diffusion {.smaller}
@@ -91,10 +91,10 @@ $$-r\,c_{i-1}^{n+1} + (1 + 2r)\,c_i^{n+1} - r\,c_{i+1}^{n+1} = c_i^n \qquad\Long
 
 - Every step is a **linear system**. The matrix is **tridiagonal**, diagonally dominant, the same every step.
 - $\mathbf b$: the boundary values, $r\,c_0$ in the first row and $r\,c_N$ in the last.
-- Linear problem, so no Newton iteration (unlike the enzyme in *Stiffness and implicit methods*).
+- Linear problem, so no Newton iteration (unlike the enzyme in [*Stiffness and implicit methods*](../stiffness/lec.qmd)).
 
 ::: notes
-This is backward Euler from Stiffness and implicit methods applied to the ODE system c' = (D / dx^2) A c + boundary terms: y_{n+1} = y_n + h f(y_{n+1}), and f is linear, so the "Newton solve" is a single linear solve with matrix I - h J = I - r A. Diagonal dominance: 1 + 2r > r + r, so Thomas needs no pivoting (Structure: symmetric, banded, sparse). The matrix is also symmetric positive definite. Because it does not change from step to step, one could even factorise it once and reuse the factors; with Thomas the factorisation costs as much as the solve, so we simply call it every step.
+This is backward Euler from Stiffness and implicit methods applied to the ODE system c' = (D / dx^2) A c + boundary terms: y_{n+1} = y_n + h f(y_{n+1}), and f is linear, so the "Newton solve" is a single linear solve with matrix I - h J = I - r A. Diagonal dominance: 1 + 2r > r + r, so Thomas needs no pivoting ([*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd)). The matrix is also symmetric positive definite. Because it does not change from step to step, one could even factorise it once and reuse the factors; with Thomas the factorisation costs as much as the solve, so we simply call it every step.
 :::
 
 ## Backward Euler by hand {.smaller}
@@ -112,7 +112,7 @@ $$\begin{pmatrix} 3 & -1 & 0 \\ -1 & 3 & -1 \\ 0 & -1 & 3 \end{pmatrix}\begin{pm
 - One implicit step reaches **all** points at once and stays between 0 and 1. FTCS overshoots to the source value and would then explode.
 
 ::: notes
-Thomas by hand (as in Structure: symmetric, banded, sparse): w = -1/3, b2 = 3 - 1/3 = 8/3, d2 = 1/3; w = -3/8, b3 = 3 - 3/8 = 21/8, d3 = 1/8; back substitution c3 = (1/8) / (21/8) = 1/21, c2 = (1/3 + 1/21) / (8/3) = 1/7 = 3/21, c1 = (1 + 3/21) / 3 = 8/21. The exact values come from the Fourier series of the previous unit. Backward Euler is not accurate with a single 15.6 s step (it smears too much near the source and lets too much reach the sink), but it has the right shape. FTCS at r = 1 is outside its limit: the attractant only reaches the first point, and that point already holds the source value. The exercise does one more step by hand.
+Thomas by hand (as in [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd)): w = -1/3, b2 = 3 - 1/3 = 8/3, d2 = 1/3; w = -3/8, b3 = 3 - 3/8 = 21/8, d3 = 1/8; back substitution c3 = (1/8) / (21/8) = 1/21, c2 = (1/3 + 1/21) / (8/3) = 1/7 = 3/21, c1 = (1 + 3/21) / 3 = 8/21. The exact values come from the Fourier series of the previous unit. Backward Euler is not accurate with a single 15.6 s step (it smears too much near the source and lets too much reach the sink), but it has the right shape. FTCS at r = 1 is outside its limit: the attractant only reaches the first point, and that point already holds the source value. The exercise does one more step by hand.
 :::
 
 ## One tridiagonal solve per step
@@ -128,7 +128,7 @@ be_step <- function(c, r) {           # c includes the two boundary values
 }
 ```
 
-- `thomas(a, b, c, d)` from *Structure: symmetric, banded, sparse*: sub-diagonal, diagonal, super-diagonal, right-hand side. About $8N$ operations.
+- `thomas(a, b, c, d)` from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd): sub-diagonal, diagonal, super-diagonal, right-hand side. About $8N$ operations.
 - So one implicit step costs a few times an explicit step, **not** $N^3$. Never build a dense $N\times N$ matrix and call `solve()`.
 
 ::: notes
@@ -164,7 +164,7 @@ Here D = 1000 µm^2/s, L = 500, N = 50, x and exact() are from the previous unit
 - Backward Euler: $0 < g < 1$ for **every** $z$: unconditionally stable, and fast modes are **killed** ($g \to 0$).
 
 ::: notes
-z is dt times the decay rate of the mode; the exact solution multiplies the mode by e^{-z} per step (black). For small z (smooth modes, small steps) all methods agree with the exact factor. FTCS leaves the band [-1, 1] at z = 2, i.e. r = 1/2 for the zigzag. Backward Euler never does: this is the A-stability of Stiffness and implicit methods on the negative real axis. It damps the fast modes even more strongly than the exact solution would in the limit (both go to 0). The red curve is Crank–Nicolson, the next slide; note where it ends up for large z.
+z is dt times the decay rate of the mode; the exact solution multiplies the mode by e^{-z} per step (black). For small z (smooth modes, small steps) all methods agree with the exact factor. FTCS leaves the band [-1, 1] at z = 2, i.e. r = 1/2 for the zigzag. Backward Euler never does: this is the A-stability of [*Stiffness and implicit methods*](../stiffness/lec.qmd) on the negative real axis. It damps the fast modes even more strongly than the exact solution would in the limit (both go to 0). The red curve is Crank–Nicolson, the next slide; note where it ends up for large z.
 :::
 
 ## Crank–Nicolson {.smaller}
@@ -186,7 +186,7 @@ cn_step <- function(c, r) {
 - Same cost as backward Euler: one tridiagonal solve. Growth factor $g = \frac{1 - z/2}{1 + z/2}$: $|g| \le 1$ for every $z$, and **second order** in time.
 
 ::: notes
-Crank and Nicolson (1947) introduced it for heat conduction. Centred in time around t_{n+1/2}, which is why it is second order: the time error of backward Euler cancels between the two halves, like the trapezoidal rule against the rectangle rule in Numerical integration. It is A-stable too: |g| <= 1 for every z >= 0. But look at fig02 again: for large z, g tends to -1, not to 0. That is the catch on the next slide.
+Crank and Nicolson (1947) introduced it for heat conduction. Centred in time around t_{n+1/2}, which is why it is second order: the time error of backward Euler cancels between the two halves, like the trapezoidal rule against the rectangle rule in [*Numerical integration*](../quadrature/lec.qmd). It is A-stable too: |g| <= 1 for every z >= 0. But look at fig02 again: for large z, g tends to -1, not to 0. That is the catch on the next slide.
 :::
 
 ## Crank–Nicolson fails on sharp data
@@ -268,7 +268,7 @@ Any single Fourier mode is an exact solution of the diffusion equation with zero
 - Right: refine space with a tiny $\Delta t$: slope 2.
 
 ::: notes
-Read the order off the slope, as in Convergence and cost. The open circles are Crank–Nicolson on the chamber's own grid, N = 50: below dt of about 1 s the error stops at 1.2e-4, the space error of the 10 µm grid. The dip at dt = 1.5 s is a warning: Crank–Nicolson decays the sine slightly too fast, the grid slightly too slowly, and at one particular dt the two cancel. A single run at that dt would look ten times more accurate than it is. Only a sequence of runs (refinement) shows the true behaviour. The right panel uses CN with dt = 0.01 s so that the time error is negligible.
+Read the order off the slope, as in [*Convergence and cost*](../convergence-cost/lec.qmd). The open circles are Crank–Nicolson on the chamber's own grid, N = 50: below dt of about 1 s the error stops at 1.2e-4, the space error of the 10 µm grid. The dip at dt = 1.5 s is a warning: Crank–Nicolson decays the sine slightly too fast, the grid slightly too slowly, and at one particular dt the two cancel. A single run at that dt would look ten times more accurate than it is. Only a sequence of runs (refinement) shows the true behaviour. The right panel uses CN with dt = 0.01 s so that the time error is negligible.
 :::
 
 ## Try it: one time step, three schemes
@@ -300,7 +300,7 @@ round(d[-4] / d[-1], 2)            # should approach 2^p = 4
 - The first ratio is **not** 4: $\Delta x = 20$ µm is too coarse to be in the **asymptotic range**. Never trust the order from the two coarsest grids.
 
 ::: notes
-embryo_steady (on the embryo slides; full code in the exercise) computes the steady temperature profile of the embryo model on N intervals and returns the value at x = 200 µm, 50 µm on the cold side of the middle. With observed order p, the error of the finest grid is about d / (2^p - 1) = 0.00014 / 3 = 5e-5; Richardson extrapolation (Numerical integration) adds that correction. If the ratios wander instead of settling, the solver is not converging at its design order: look for a bug, a boundary condition of lower order, or a non-smooth input. A sign change in the differences, as in the first one here, means the coarsest grid is outside the asymptotic range, not that the method is wrong.
+embryo_steady (on the embryo slides; full code in the exercise) computes the steady temperature profile of the embryo model on N intervals and returns the value at x = 200 µm, 50 µm on the cold side of the middle. With observed order p, the error of the finest grid is about d / (2^p - 1) = 0.00014 / 3 = 5e-5; Richardson extrapolation ([*Numerical differentiation*](../finite-differences/lec.qmd), used again in *Numerical integration*) adds that correction. If the ratios wander instead of settling, the solver is not converging at its design order: look for a bug, a boundary condition of lower order, or a non-smooth input. A sign change in the differences, as in the first one here, means the coarsest grid is outside the asymptotic range, not that the method is wrong.
 :::
 
 ## Method of lines {.smaller}
@@ -340,7 +340,7 @@ for (m in c("lsoda", "bdf", "ode45")) {
 - Plain `ode()` with `lsoda`: same 128 steps but **2655** f-evals, to build a dense $201\times201$ Jacobian.
 
 ::: notes
-diff(diff(Tg)) is the second difference of the vector with ghost points, exactly the stencil (1, -2, 1). The ghost points T[2] and T[N] are the mirror images for the no-flux condition (previous unit). Tout and tau are defined on the embryo slides. ode45, the explicit Dormand–Prince solver, takes 3563 steps: it rides its stability limit, just like on the enzyme model in Stiffness and implicit methods. The library solvers choose dt and the order themselves and control the time error to the tolerance; the spatial error is fixed by the grid you chose. In Python the same thing is solve_ivp(method="BDF", jac_sparsity=...) with a tridiagonal sparsity pattern; the exercise compares them.
+diff(diff(Tg)) is the second difference of the vector with ghost points, exactly the stencil (1, -2, 1). The ghost points T[2] and T[N] are the mirror images for the no-flux condition (previous unit). Tout and tau are defined on the embryo slides. ode45, the explicit Dormand–Prince solver, takes 3563 steps: it rides its stability limit, just like on the enzyme model in [*Stiffness and implicit methods*](../stiffness/lec.qmd). The library solvers choose dt and the order themselves and control the time error to the tolerance; the spatial error is fixed by the grid you chose. In Python the same thing is solve_ivp(method="BDF", jac_sparsity=...) with a tridiagonal sparsity pattern; the exercise compares them.
 :::
 
 ## What the library controls, and what it does not {.smaller}
@@ -351,7 +351,7 @@ diff(diff(Tg)) is the second difference of the vector with ghost points, exactly
 - Python: `solve_ivp(rhs, ..., method="BDF", jac_sparsity=S)` with `S` the tridiagonal pattern. Rust: no stiff solver in `ode_solvers`; write backward Euler or CN with Thomas by hand.
 
 ::: notes
-The method of lines is how most production PDE codes for diffusion-like problems work: a spatial discretisation (finite differences here, finite volumes or finite elements in Beyond rectangles: finite elements and flow) plus a good stiff ODE solver. Its weak point is the false sense of accuracy: the solver reports success at rtol = 1e-8 while the answer is wrong in the third digit because of the grid. The two refinements are independent, which is the practical meaning of error = C_t dt^p + C_x dx^2. BDF's first steps are backward Euler steps with tiny h; the step grows as the sharp modes die out, which is the automatic version of the Rannacher start.
+The method of lines is how most production PDE codes for diffusion-like problems work: a spatial discretisation (finite differences here, finite volumes or finite elements in [*Beyond rectangles: finite elements and flow*](../fem-outlook/lec.qmd)) plus a good stiff ODE solver. Its weak point is the false sense of accuracy: the solver reports success at rtol = 1e-8 while the answer is wrong in the third digit because of the grid. The two refinements are independent, which is the practical meaning of error = C_t dt^p + C_x dx^2. BDF's first steps are backward Euler steps with tiny h; the step grows as the sharp modes die out, which is the automatic version of the Rannacher start.
 :::
 
 ## Back to the embryo: a 1D model {.smaller}
@@ -365,7 +365,7 @@ $$\frac{\partial T}{\partial t} = D\,\frac{\partial^2 T}{\partial x^2} + \frac{T
 - Steady state: $T = T_\text{out} \mp 3.5\,e^{-|x - L/2|/\lambda}$ with **length scale** $\lambda = \sqrt{D\tau} = 42$ µm.
 
 ::: notes
-This is our simplification, not the model of [M2]: we replace the 3D embryo by a cylinder whose surface is held at the temperature of the stream it touches, and keep only the slowest radial mode (2.405 is the first zero of the Bessel function J0; take it as given). The leak term is then exactly a linear "exchange" with rate 1/tau. The steady-state formula ignores the tips (they are 6 lambda away, so their effect is e^{-6}, under 0.01 °C) and comes from solving T - lambda^2 T'' = Tout on each side with T and T' continuous at the middle. lambda = R / 2.405: the step cannot be sharper than about the embryo's own radius. The same structure, decay length sqrt(D / k), comes back for morphogens in Reaction–diffusion and pattern formation, and appeared as sqrt(D/k) cells for the morphogen in a row of cells.
+This is our simplification, not the model of [M2]: we replace the 3D embryo by a cylinder whose surface is held at the temperature of the stream it touches, and keep only the slowest radial mode (2.405 is the first zero of the Bessel function J0; take it as given). The leak term is then exactly a linear "exchange" with rate 1/tau. The steady-state formula ignores the tips (they are 6 lambda away, so their effect is e^{-6}, under 0.01 °C) and comes from solving T - lambda^2 T'' = Tout on each side with T and T' continuous at the middle. lambda = R / 2.405: the step cannot be sharper than about the embryo's own radius. The same structure, decay length sqrt(D / k), comes back for morphogens in [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd), and appeared as sqrt(D/k) cells for the morphogen in a row of cells in [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd). Grid: the same nodes x_i = i dx as for the chamber, but N = 200 (dx = 2.5 µm, to put about 50 points across the transition), both tips are no-flux ends handled with ghost points, so all 201 nodes are unknowns, and the variable is temperature in °C instead of a scaled concentration.
 :::
 
 ## How sharp is the step?
@@ -411,8 +411,8 @@ These extend the checklist of the previous unit. The exact-solution test is chea
 - **Method of lines**: the grid gives a stiff ODE system; `ode.1D` with `lsoda`/`bdf`, or `solve_ivp(method="BDF", jac_sparsity=...)`. The tolerance does not control the grid error.
 - Embryo: the temperature step inside is set by $\lambda = \sqrt{D\tau} \approx 42$ µm: about **130 µm** wide, formed within 50 ms.
 
-**Next:** *Steady state in two dimensions*: no time at all, one big sparse solve.
+**Next:** [*Steady state in two dimensions*](../steady-state-2d/lec.qmd): no time at all, one big sparse solve.
 
 ::: notes
-Recap. The pattern of this unit, a tridiagonal solve per step with a stiff solver in the background, carries over to every later unit of Part 10: in 2D the matrix becomes sparse rather than tridiagonal (Steady state in two dimensions), flow adds a non-symmetric term (Flow plus diffusion), and reaction terms are handled by splitting diffusion (implicit) from reaction (explicit) in Reaction–diffusion and pattern formation. Note that the embryo steady state was computed as one tridiagonal solve: the limit of backward Euler as dt goes to infinity. That is the starting point of the next unit.
+Recap. The pattern of this unit, a tridiagonal solve per step with a stiff solver in the background, carries over to every later unit of Part 10: in 2D the matrix becomes sparse rather than tridiagonal ([*Steady state in two dimensions*](../steady-state-2d/lec.qmd)), flow adds a non-symmetric term ([*Flow plus diffusion*](../advection-diffusion/lec.qmd)), and reaction terms are handled by splitting diffusion (implicit) from reaction (explicit) in [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd). Note that the embryo steady state was computed as one tridiagonal solve: the limit of backward Euler as dt goes to infinity. That is the starting point of the next unit.
 :::

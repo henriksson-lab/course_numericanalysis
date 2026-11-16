@@ -31,17 +31,17 @@ We work in **µm** and **s**: $D = 1000$ µm²/s is $10^{-9}$ m²/s (a small mol
 
 **Facts used below:**
 
-1. **Péclet number** $\text{Pe} = uL/D$: advection against diffusion over a length $L$. Across a channel of width $w$ at mean speed $\bar u$, streams mix after a **mixing length** of order $\bar u w^2/D = \text{Pe}\cdot w$. For two half-streams in plug flow, mixing is complete to 1 % at $x \approx 0.42\,\bar u w^2/D$.
+1. **Péclet number** $\text{Pe} = uL/D$: advection against diffusion over a length $L$. Across a channel of width $w$ at mean speed $\bar u$, streams mix after a **mixing length** of order $\bar u w^2/D = \text{Pe}\cdot w$. Call the streams **mixed to 1 %** when every $|c - \tfrac12| \le 0.01$. For two half-streams in plug flow this happens at $x \approx 0.42\,\bar u w^2/D$ (from the slowest Fourier mode); with the Poiseuille profile of Fact 7 it happens somewhat earlier (about $0.31\,\bar u w^2/D$ for the T-sensor, Explore E5), so $0.42\,\bar u w^2/D$ is a slightly cautious design estimate.
 2. **Back-diffusion test problem.** Steady $u\,c' = D\,c''$ on $[0, L]$ with $c(0) = 0$, $c(L) = 1$: $c(x) = \dfrac{e^{\text{Pe}\,x/L} - 1}{e^{\text{Pe}} - 1}$, a boundary layer of thickness $D/u$ at $x = L$. We use $L = 500$ µm, $u = 100$ µm/s, $D = 1000$ µm²/s, so Pe = 50.
 3. **Central** differences, with the cell Péclet number $P = u\Delta x/D$:
    $\left(1 + \tfrac P2\right)c_{i-1} - 2c_i + \left(1 - \tfrac P2\right)c_{i+1} = 0$. Second order; **wiggles** if $P > 2$.
 4. **Upwind** differences ($u > 0$): $(1 + P)\,c_{i-1} - (2 + P)\,c_i + c_{i+1} = 0$. First order, never wiggles, and exactly the central scheme with $D$ replaced by $D + u\Delta x/2$ (**numerical diffusion**).
 5. **Explicit upwind in time:** $c_i^{n+1} = (C + r)\,c_{i-1}^n + (1 - C - 2r)\,c_i^n + r\,c_{i+1}^n$ with **Courant number** $C = u\Delta t/\Delta x$ and $r = D\Delta t/\Delta x^2$. Stable (no new extremes) if $C + 2r \le 1$; for $D = 0$ this is the **CFL** condition $C \le 1$. Numerical diffusion $u\Delta x(1 - C)/2$.
-6. **Marching.** Steady flow along a channel, profile $u(y)$, Pe ≫ 1: drop diffusion along $x$ and solve $u(y)\,\partial c/\partial x = D\,\partial^2 c/\partial y^2$ as if $x$ were time. Grid across the channel: $M$ cells of width $\Delta y$, centres $y_j = (j - \tfrac12)\Delta y$. Backward Euler in $x$ with $a_j = D\Delta x/(u_j\Delta y^2)$:
+6. **Marching.** Steady flow along a channel, profile $u(y)$, Pe ≫ 1: drop diffusion along $x$ and solve $u(y)\,\partial c/\partial x = D\,\partial^2 c/\partial y^2$ as if $x$ were time. Grid across the channel: $M$ cells of width $\Delta y$, centres $y_j = (j - \tfrac12)\Delta y$. This cell-centred grid differs on purpose from the node grid $x_i = i\Delta x$ of [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd) and of [*Steady state in two dimensions*](../steady-state-2d/lec.qmd): no unknown sits on a wall where $u = 0$ (the "time step" $\Delta x/u_j$ would be infinite there), and the no-flux wall is a mirror halfway between the last cell and its ghost cell ($c_0 = c_1$). The 1D problems along a channel (Facts 2–5) keep the node grid $x_i = i\Delta x$. Backward Euler in $x$ with $a_j = D\Delta x/(u_j\Delta y^2)$:
    $-a_j c_{j-1}^{k+1} + (1 + 2a_j)\,c_j^{k+1} - a_j c_{j+1}^{k+1} = c_j^k$, with $1 + a_j$ on the diagonal in the two wall rows (no flux). One tridiagonal solve per step.
 7. **Given flow profile** (Poiseuille): $u(y) = 6\bar u\,(y/w)(1 - y/w)$, zero at the walls, $1.5\bar u$ in the middle. The solute **flux** $\sum_j u_j c_j$ is the same at every $x$.
 
-The basic tool: the steady 1D problem with both schemes. The tridiagonal system is solved with [`solve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html) (Python: [`numpy.linalg.solve`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html); the Rust version uses the hand-written Thomas algorithm from *Implicit schemes and the method of lines*). The exact solution uses [`expm1`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Log.html) (Python: [`np.expm1`](https://numpy.org/doc/stable/reference/generated/numpy.expm1.html), Rust: `f64::exp_m1`).
+The basic tool: the steady 1D problem with both schemes. The tridiagonal system is solved with [`solve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html) (Python: [`numpy.linalg.solve`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html); the Rust version uses the hand-written Thomas algorithm `thomas(a, b, c, d)` from [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd)). The exact solution uses [`expm1`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Log.html) (Python: [`np.expm1`](https://numpy.org/doc/stable/reference/generated/numpy.expm1.html), Rust: `f64::exp_m1`).
 
 ::: {.panel-tabset group="language"}
 
@@ -278,7 +278,7 @@ $c_1 = 0.525\cdot 1 + 0.45\cdot 1 + 0.025\cdot 0 = 0.975$; $c_2 = 0.525\cdot 1 +
 
 (c) Only $D/\bar u$ is determined: $D = 398 \cdot 0.8 = 318.6$ µm²/s (C6 confirms 318.56).
 
-(d) No: both profiles depend on $D x_1/\bar u$ and $D x_2/\bar u$, so $(D, \bar u)$ and $(2D, 2\bar u)$ fit equally well; the parameters are not identifiable (*Identifiability and uncertainty of fitted parameters*). You need $\bar u$ independently: the flow rate $Q$ from a calibrated pump or by weighing the outflow, and the cross-section: $\bar u = Q/(wh)$.
+(d) No: both profiles depend on $D x_1/\bar u$ and $D x_2/\bar u$, so $(D, \bar u)$ and $(2D, 2\bar u)$ fit equally well; the parameters are not identifiable ([*Identifiability and uncertainty of fitted parameters*](../identifiability/lec.qmd)). You need $\bar u$ independently: the flow rate $Q$ from a calibrated pump or by weighing the outflow, and the cross-section: $\bar u = Q/(wh)$.
 :::
 
 ## In code
@@ -690,7 +690,7 @@ The true peak is 0.975; the $\Delta x = 10$ µm simulation gives 0.6405, which i
 :::
 
 **C3. The T-sensor by marching.** Width $w = 100$ µm, $\bar u = 1000$ µm/s, small molecule $D = 1000$ µm²/s, sample ($c = 1$) in $y < 50$ µm at $x = 0$.
-(a) Write `march(c, u, D, dy, dx, nsteps)` (Fact 6) using `thomas()` from *Implicit schemes and the method of lines*. Test it with **plug flow** ($u = \bar u$ everywhere, $M = 200$ cells) against the exact solution
+(a) Write `march(c, u, D, dy, dx, nsteps)` (Fact 6) using `thomas()` from [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd) (Python: `solve_banded`, see the Hint). Test it with **plug flow** ($u = \bar u$ everywhere, $M = 200$ cells) against the exact solution
 $$c(x, y) = \tfrac12 + \sum_{n=1}^{\infty}\frac{2}{n\pi}\sin\frac{n\pi}{2}\cos\frac{n\pi y}{w}\,e^{-n^2\pi^2 Dx/(\bar u w^2)}$$
 at $x = 2$ mm, for $\Delta x = 200, 100, 50, 25, 12.5$ µm. What order do you see?
 (b) Now use the Poiseuille profile with $M = 50$. March to $x = 2$ mm with $\Delta x = 50$ µm and check that the flux $\sum u_j c_j$ is conserved.
@@ -1061,7 +1061,7 @@ fn main() {
 
 :::
 
-The small molecule is essentially mixed by 5 mm (49.95 %), the protein reaches 47 % only at 20 mm, and cells stay below 1 % throughout. (b) A 1.6 mm channel extracts 45.2 % of the small molecule but also 17.2 % of the protein: the extract contains about 38 % as much protein, relative to the sample, as small molecule. Separating by a factor 10 in $D$ gives only partial purity; separating a small molecule from cells (a factor $10^4$) is easy. That is why the H-filter is used for extracting small molecules from blood.
+The small molecule's flux fraction is 49.95 % at 5 mm (by the stricter criterion of Fact 1, every $|c - \tfrac12| \le 0.01$, it is mixed at about 3.1 mm; Explore E5), the protein reaches 47 % only at 20 mm, and cells stay below 1 % throughout. (b) A 1.6 mm channel extracts 45.2 % of the small molecule but also 17.2 % of the protein: the extract contains about 38 % as much protein, relative to the sample, as small molecule. Separating by a factor 10 in $D$ gives only partial purity; separating a small molecule from cells (a factor $10^4$) is easy. That is why the H-filter is used for extracting small molecules from blood.
 :::
 
 **C5. A Christmas-tree gradient generator.**
@@ -1227,7 +1227,7 @@ fn main() {
 0.457 0.383 0.346 0.269 0.216 0.153 0.157 0.112 0.180 0.100 0.089 0.125
 ```
 
-(a) Write `profile(D, M, dx)`: march to $x = 1$ mm with the Poiseuille profile and average the $M$ cells over the 25 pixels. Fit $D$ by minimising the sum of squared residuals with Brent's method on $[10, 3000]$ µm²/s (*Optimisation in one dimension*), with $M = 50$, $\Delta x = 25$ µm.
+(a) Write `profile(D, M, dx)`: march to $x = 1$ mm with the Poiseuille profile and average the $M$ cells over the 25 pixels. Fit $D$ by minimising the sum of squared residuals with Brent's method on $[10, 3000]$ µm²/s ([*Optimisation in one dimension*](../optimisation-1d/lec.qmd)), with $M = 50$, $\Delta x = 25$ µm.
 (b) Refit with coarser and finer grids: $(M, \Delta x) = (50, 1000), (50, 250), (50, 100), (100, 10), (200, 5)$. How much does the estimate depend on the grid?
 (c) Refit assuming $\bar u = 800$ µm/s. Compare with B6(c).
 
@@ -1408,7 +1408,7 @@ At $P = 5$ the blue points lie on the grey curve (exact with $D + u\Delta x/2 = 
 Lecture setting: $\Delta t = 0.025$ s, $r = 0.025$, $C + 2r = 0.55$; the cells see a peak of 0.6405 at 10.48 s against the exact 0.975 at 10.50 s. The blue curve lies on the grey one: exact with $D + D_\text{num} = 100 + 500 = 600$ µm²/s. $\Delta x = 5$: peak 0.769 ($D_\text{num} = 250$); $\Delta x = 1$: 0.932 ($D_\text{num} = 50$). The peak time is right in every case; only the height and width are wrong. **C 0.9**: $C + 2r = 0.990$, stable, range 0 … 0.971 at 6 s, peak 0.886 at the cells: a larger time step **reduces** $D_\text{num}$ to $u\Delta x(1 - C)/2 = 100$. **C 0.95**: $C + 2r = 1.045 > 1$, and by $t = 6$ s a zigzag has grown to $-1750$ … $1743$ (the lecture's 1700); at the cells the readout reports a maximum of $1.3\times10^7$. The limit is $C + 2r \le 1$, not $C \le 1$ alone.
 :::
 
-**E4. (central differences with explicit time steps)** Tick **central** and click **lecture: Δx 10, C 0.5** again. What happens, and what does the readout say about the condition $C \le 2/P$? Now lower $C$ to 0.1. Then try $\Delta x = 2$ with $C = 0.5$, and finally **Δx 1**. Note the range of $c$ at $t = 10.5$ s and the peak at the cells for the central scheme each time. Why can the central peak be **higher** than the exact one? Also try $C = 0.9$ at $\Delta x = 1$: which scheme fails now?
+**E4. (central differences with explicit time steps)** Tick **central** and click **lecture: Δx 10, C 0.5** again. What happens, and what does the readout say about the condition $C \le 2/P$? (Not derived on this page: for central differences in space with explicit Euler in time, the von Neumann analysis gives stability, for $r \le 1/2$, only when $C^2 \le 2r$, i.e. $u^2\Delta t \le 2D$; with $r = C/P$ this is $C \le 2/P$. The answer below explains it as a negative effective diffusion.) Now lower $C$ to 0.1. Then try $\Delta x = 2$ with $C = 0.5$, and finally **Δx 1**. Note the range of $c$ at $t = 10.5$ s and the peak at the cells for the central scheme each time. Why can the central peak be **higher** than the exact one? Also try $C = 0.9$ at $\Delta x = 1$: which scheme fails now?
 
 ::: {.callout-note collapse="true" title="Answer E4"}
 At $\Delta x = 10$ µm ($P = 20$), $C = 0.5$ violates $C \le 2/P = 0.1$: the central solution grows to $|c| \approx 10^6$ by 6 s and exceeds $10^{12}$ at 11 s, while upwind with the same $\Delta t$ is stable. At $C = 0.1$ (condition met) it no longer explodes but wiggles: range $-0.339$ … $1.23$ at 10.5 s, peak 1.236 at the cells, against the exact 0.975. $\Delta x = 2$, $C = 0.5$ ($P = 4$, exactly at $C = 2/P$): range $-0.244$ … $1.25$, peak 1.245, wiggles again because $P > 2$. $\Delta x = 1$, $C = 0.5$ ($P = 2$): range 0 … 0.998, no wiggles, peak 0.998 at 10.51 s, higher than the exact 0.975 (upwind gives 0.932). Explicit Euler adds a **negative** numerical diffusion $-u^2\Delta t/2 = -C u\Delta x/2 = -50$ µm²/s, so the central scheme behaves like $D = 50$: too sharp a peak. The condition $C \le 2/P$ is the same as $D - C u\Delta x/2 \ge 0$: the scheme blows up when its effective diffusion coefficient is negative. At $\Delta x = 1$, $C = 0.9$ the roles swap: $r = 0.45$, $C + 2r = 1.8$, and **upwind** blows up within 0.2 s, while central stays bounded (peak 1.000, effective $D = 10$). On a fine grid the diffusion part $2r = 2C/P$ of the condition dominates.
@@ -1422,6 +1422,6 @@ At 2 mm the buffer outlet receives 47.4 % of the small molecule, 19.3 % of the p
 
 ## Where this leads
 
-- **Reaction–diffusion and pattern formation** (unit 35) adds production and degradation terms to the diffusion equation; the explicit/implicit stability rules and grid-refinement checks of this unit carry over.
-- The flow profile was **given**. Computing flow fields in real geometries (the Stokes and Navier–Stokes equations) and handling curved walls is the subject of *Beyond rectangles: finite elements and flow* (Part 11).
-- Better advection schemes (higher-order upwind, flux limiters, semi-Lagrangian methods) reduce numerical diffusion without wiggles; we do not cover them. The fit in C6 had one parameter; fitting several (for example $D$ and an unknown inlet concentration) uses the methods of *Nonlinear least squares and ODE fitting*, and the identifiability problem of B6 is treated in *Identifiability and uncertainty of fitted parameters*.
+- [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd) (unit 35) adds production and degradation terms to the diffusion equation; the explicit/implicit stability rules and grid-refinement checks of this unit carry over.
+- The flow profile was **given**. Computing flow fields in real geometries (the Stokes and Navier–Stokes equations) and handling curved walls is the subject of [*Beyond rectangles: finite elements and flow*](../fem-outlook/lec.qmd) (Part 11).
+- Better advection schemes (higher-order upwind, flux limiters, semi-Lagrangian methods) reduce numerical diffusion without wiggles; we do not cover them. The fit in C6 had one parameter; fitting several (for example $D$ and an unknown inlet concentration) uses the methods of [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd), and the identifiability problem of B6 is treated in *Identifiability and uncertainty of fitted parameters*.

@@ -30,7 +30,7 @@ You already call `optim()`, `uniroot()`, `integrate()`, `solve()` and `ode()`. T
 - Biology: a **growth-curve fit** that reports success and returns a doubling time of 1 minute.
 
 ::: notes
-This is the opening deck of the course, so it does two jobs: it motivates the whole course, and it gives the one piece of mathematics we lean on everywhere, Taylor polynomials with a remainder. The three failure types are only previewed here, each with a one-line example; units 2, 3 and 4 treat them properly. Keep an R session open: every code block on the slides is short and worth running live.
+This is the opening deck of the course, so it does two jobs: it motivates the whole course, and it gives the one piece of mathematics we lean on everywhere, Taylor polynomials with a remainder. The three failure types are only previewed here, each with a one-line example; units 2, 3 and 4 (*How computers store numbers*, *Error, conditioning and stability*, *Convergence and cost*) treat them properly. Keep an R session open: every code block on the slides is short and worth running live.
 :::
 
 ## A growth curve, a fit, a green light {.smaller}
@@ -65,7 +65,7 @@ This is the hook for the whole course. The data are simulated from a logistic cu
 - **"Converged" means "stopped improving", not "found the answer".**
 
 ::: notes
-The blue curve starts from r = 0.01 per minute, which is the right order of magnitude (0.5 per hour is 0.0083 per minute). The orange curve is the fit from the previous slide: it jumps to K immediately and is flat, a horizontal line at the mean of the data. Its SSE is 2.23, about 700 times larger than the good fit's 0.003. We come back at the end of the lecture to why the optimiser stopped there, and what checks would have caught it. The proper treatment of model fitting is Part 9.
+The blue curve starts from r = 0.01 per minute, which is the right order of magnitude (0.5 per hour is 0.0083 per minute). The orange curve is the fit from the previous slide: it jumps to K immediately and is flat, a horizontal line at the mean of the data. Its SSE is 2.23, about 700 times larger than the good fit's 0.003. We come back at the end of the lecture to why the optimiser stopped there, and what checks would have caught it. The proper treatment of model fitting is Part 9; *Gradient descent, Newton and quasi-Newton* comes back to this very fit.
 :::
 
 ## What is a numerical method?
@@ -89,24 +89,24 @@ for (i in 1:5) {
 - Questions for every method: how **accurate**? how **fast**? when does it **fail**?
 
 ::: notes
-Heron's method for square roots, about 2000 years old. If x is too big, 2/x is too small, so their average is closer. The number of correct digits roughly doubles each step: 1, 3, 6, 12, 16. This is Newton's method in disguise (unit 6 in Part 2). The point here is the anatomy: we replaced an exact answer we cannot compute with a sequence of arithmetic steps, and we had to decide when to stop. Every method in the course has that shape. Even here, the last iterate differs from sqrt(2) in R by 2.2e-16: that is rounding, the subject of the next unit.
+Heron's method for square roots, about 2000 years old. If x is too big, 2/x is too small, so their average is closer. The number of correct digits roughly doubles each step: 1, 3, 6, 12, 16. This is Newton's method in disguise (*Newton and secant methods*, unit 6 in Part 2; *Convergence and cost* already uses it as the example of quadratic convergence). The point here is the anatomy: we replaced an exact answer we cannot compute with a sequence of arithmetic steps, and we had to decide when to stop. Every method in the course has that shape. Even here, the last iterate differs from sqrt(2) in R by 2.2e-16: that is rounding, the subject of the next unit.
 :::
 
 ## What is inside the black boxes
 
 | R | Python | Computes | Method inside | Silent failure | Part |
 |---|---|---|---|---|---|
-| [`solve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html) | `numpy.linalg.solve` | $A\mathbf x = \mathbf b$ | LU with pivoting | ill-conditioned $A$: digits lost | 3 |
-| [`uniroot`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html) | `scipy.optimize.brentq` | $f(x) = 0$ | Brent: bisection + secant | loose default tolerance (R) | 2 |
-| [`optim`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/optim.html) | `scipy.optimize.minimize` | minimum of $f$ | Nelder–Mead, BFGS | stops at a plateau or local minimum | 9 |
-| [`integrate`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/integrate.html) | `scipy.integrate.quad` | $\int_a^b f(x)\,dx$ | adaptive Gauss–Kronrod | misses a narrow peak | 7 |
-| [`ode`](https://rdrr.io/cran/deSolve/man/ode.html) (deSolve) | `scipy.integrate.solve_ivp` | $y' = f(t, y)$ | adaptive Runge–Kutta, LSODA | wrong tolerance, stiffness | 8 |
+| [`solve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html) | `numpy.linalg.solve` | $A\mathbf x = \mathbf b$ | LU with pivoting | ill-conditioned $A$: digits lost | [3](../lu/lec.qmd) |
+| [`uniroot`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html) | `scipy.optimize.brentq` | $f(x) = 0$ | Brent: bisection + secant | loose default tolerance (R) | [2](../newton/lec.qmd) |
+| [`optim`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/optim.html) | `scipy.optimize.minimize` | minimum of $f$ | Nelder–Mead, BFGS | stops at a plateau or local minimum | [9](../gradient-methods/lec.qmd) |
+| [`integrate`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/integrate.html) | `scipy.integrate.quad` | $\int_a^b f(x)\,dx$ | adaptive Gauss–Kronrod | misses a narrow peak | [7](../quadrature/lec.qmd) |
+| [`ode`](https://rdrr.io/cran/deSolve/man/ode.html) (deSolve) | `scipy.integrate.solve_ivp` | $y' = f(t, y)$ | adaptive Runge–Kutta, LSODA | wrong tolerance, stiffness | [8](../runge-kutta/lec.qmd) |
 
 - Each one is a numerical method with **tuning knobs** (tolerances, starting values, step sizes) and **defaults** chosen for a typical problem.
 - Your problem may not be typical. The course teaches you what the knobs do.
 
 ::: notes
-Walk through the table quickly; each row is a Part of the course. The methods column will mean little now, and that is the point: by the end of the course every entry should be familiar. Stress the last two columns: these routines rarely crash. They return a number, and the number may be wrong. The Python column is for students who will do the exercises in Python.
+Walk through the table quickly; each row is a Part of the course, and the Part number links to the unit that opens that box (LU, Newton and secant with Brent's method, gradient methods, numerical integration, Runge–Kutta). The methods column will mean little now, and that is the point: by the end of the course every entry should be familiar. Stress the last two columns: these routines rarely crash. They return a number, and the number may be wrong. The Python column is for students who will do the exercises in Python.
 :::
 
 ## Silent failures in two lines
@@ -121,11 +121,11 @@ uniroot(function(x) x^2 - 2, c(0, 2))$root - sqrt(2)
 # [1] -2.423776e-07
 ```
 
-- `integrate` samples a few points in $[0, 20000]$; all of them are far out where `dnorm` is 0. It reports 0, with an error estimate of 0.
-- `uniroot` stops when it is within its default tolerance, about $10^{-4}$. Fine for a dose, not for a likelihood.
+- `integrate` samples 21 points in $[0, 20000]$; all of them are far out where `dnorm` is 0. It reports 0, with an error estimate of 0. Why: [*Numerical integration*](../quadrature/lec.qmd).
+- `uniroot` stops when it is within its default tolerance, about $10^{-4}$. Fine for a dose, not for a likelihood ([*Newton and secant methods*](../newton/lec.qmd)).
 
 ::: notes
-The integrate example is from R's own help page for integrate. The adaptive rule evaluates the function at 21 points spread over [0, 20000]; the normal density is non-zero only near 0, so every sample is (numerically) zero, and the method is confident. Asking for [0, Inf] works because integrate then transforms the interval. For uniroot the default tol is .Machine$double.eps^0.25, about 1.2e-4. Neither is a bug: both are documented, and both are the kind of thing this course teaches you to look for.
+The integrate example is from R's own help page for integrate. The adaptive rule evaluates the function at 21 points spread over [0, 20000]; the normal density is non-zero only near 0, so every sample is (numerically) zero, and the method is confident. Asking for [0, Inf] works because integrate then transforms the interval. A smaller upper limit also works, but only up to a point: R finds the peak for upper limits up to about 4300 and misses it from about 4400 (the first 21 points see the peak only up to about 2300; one extra bisection stretches that), all explained in Numerical integration. For uniroot the default tol is .Machine$double.eps^0.25, about 1.2e-4. Neither is a bug: both are documented, and both are the kind of thing this course teaches you to look for.
 :::
 
 ## Three ways a computation goes wrong
@@ -134,7 +134,7 @@ The integrate example is from R's own help page for integrate. The adaptive rule
 2. **Truncation error.** The method stops early: a finite sum for an infinite series, a finite step $h$ instead of a limit $h \to 0$, a finite number of iterations.
 3. **Instability.** The algorithm amplifies small errors (from 1 or 2) step after step, until they swamp the answer.
 
-Plus one that is not the computer's fault: an **ill-conditioned problem**, where tiny changes in the data change the answer a lot (unit 3).
+Plus one that is not the computer's fault: an **ill-conditioned problem**, where tiny changes in the data change the answer a lot ([*Error, conditioning and stability*](../error-conditioning/lec.qmd)).
 
 ::: notes
 This is the classification we use for the rest of the course. Rounding is about how numbers are stored (unit 2). Truncation is about the mathematics of the approximation, and is usually the error we control with a step size or number of terms (unit 4). Instability is a property of the algorithm: a stable algorithm keeps small errors small, an unstable one lets them grow (unit 3). Conditioning is a property of the problem itself, not of the algorithm; we mention it so students do not blame the method for it. The next three slides give one tiny example of each.
@@ -154,7 +154,7 @@ print(0.1 + 0.2, digits = 17)
 - 0.1 is stored rounded (it has no exact binary form). Near $10^{16}$, stored numbers are 2 apart, so adding 1 is lost.
 - Each rounding error is tiny (relative size $\approx 10^{-16}$). Trouble starts when many of them add up or one gets amplified.
 
-Full story: **How computers store numbers** (binary, machine epsilon, overflow, log-likelihoods).
+Full story: [*How computers store numbers*](../floating-point/lec.qmd) (binary, machine epsilon, overflow, log-likelihoods).
 
 ::: notes
 Do not explain binary here; that is the whole of the next unit. The message is only: the computer does not do exact real arithmetic, every result is rounded to about 16 significant digits, and that is usually harmless. The second example shows that rounding is relative: at 1e16 the spacing between doubles is 2, so 1e16 + 1 rounds back to 1e16. The practical rule, comparing with a tolerance instead of ==, also comes in unit 2.
@@ -174,7 +174,7 @@ h <- 0.1
 - Why? $e^h = 1 + h + \frac{h^2}{2} + \dots$, so $\dfrac{e^h - 1}{h} = 1 + \dfrac{h}{2} + \dots$ The error is about $h/2 = 0.05$.
 - Make $h$ smaller and the truncation error shrinks, but only up to a point (two slides on).
 
-More: **Convergence and cost**, and finite differences in **Part 7**.
+More: [*Convergence and cost*](../convergence-cost/lec.qmd), and finite differences in [*Numerical differentiation*](../finite-differences/lec.qmd) (Part 7).
 
 ::: notes
 Truncation error is the error of the mathematical approximation, the part we would have even with exact arithmetic. Here the derivative is a limit as h goes to 0, and we stop at h = 0.1. Notice that we explained the size of the error with a Taylor expansion: that is exactly why Taylor is the workhorse of the course, and the second half of this lecture. The predicted error h/2 = 0.05 matches the observed 0.0517; the small difference is the next term, h^2/6.
@@ -203,10 +203,10 @@ signif(C, 2)
 - Each step multiplies by $1 - hk = -1.4$: any error grows by 40 % and flips sign every step.
 - With $h = 0.5$ the factor is $0.6$, and errors die out. Same formula, different stability.
 
-Stability of algorithms: **Error, conditioning and stability**; of ODE solvers: **Part 8**.
+Stability of algorithms: [*Error, conditioning and stability*](../error-conditioning/lec.qmd); of ODE solvers: [*Initial value problems and Euler's method*](../euler/lec.qmd) and [*Stiffness and implicit methods*](../stiffness/lec.qmd) (Part 8).
 
 ::: notes
-The true concentration decays smoothly to zero. Euler with 3-hour steps produces negative concentrations that grow without bound. Nothing is wrong with the formula; the step is simply too big for this rate, and the method amplifies errors instead of damping them. The rule here is |1 - hk| < 1, so h < 2/k = 2.5 hours. A stable method keeps small errors small; an unstable one turns them into the whole answer. Unit 3 shows instability caused by rounding alone (no step size involved), and Part 8 treats stiff ODEs, where this exact problem forces tiny steps.
+The true concentration decays smoothly to zero. Euler with 3-hour steps produces negative concentrations that grow without bound. Nothing is wrong with the formula; the step is simply too big for this rate, and the method amplifies errors instead of damping them. The rule here is |1 - hk| < 1, so h < 2/k = 2.5 hours. A stable method keeps small errors small; an unstable one turns them into the whole answer. Unit 3 shows instability caused by rounding alone (no step size involved). In Part 8, Initial value problems and Euler's method returns to this exact example and derives h < 2/k, and Stiffness and implicit methods treats stiff ODEs, where this limit forces tiny steps.
 :::
 
 ## Error vs cost
@@ -344,7 +344,7 @@ log(1 + x) - c(x, x - x^2/2)          # errors of P1 and P2
 
 - So $r \approx x$ for small growth, with error about $x^2/2 = 5\times10^{-5}$.
 - Remainder of $P_2$: $f'''(\xi) = 2/(1+\xi)^3$, so $R_2 = \dfrac{x^3}{3(1+\xi)^3}$, between $3.24\times10^{-7}$ and $3.33\times10^{-7}$. Actual: $3.31\times10^{-7}$.
-- For very small $x$, computing `log(1 + x)` loses digits; R's [`log1p`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Log.html) uses this expansion instead (unit 2).
+- For very small $x$, computing `log(1 + x)` loses digits; R's [`log1p`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Log.html) uses this expansion instead ([*How computers store numbers*](../floating-point/lec.qmd)).
 
 ::: notes
 Derivatives: f = log(1+x), f' = 1/(1+x), f'' = -1/(1+x)^2, f''' = 2/(1+x)^3; at 0 these are 0, 1, -1, 2, giving coefficients 1, -1/2, 2/6 = 1/3. The remainder with xi between 0 and 0.01 gives the bracket [0.01^3/(3*1.01^3), 0.01^3/3]. Biology: per-generation or per-hour growth fractions versus continuous rates; for 1 % they differ in the fifth decimal, for 50 % they do not agree at all (log 1.5 = 0.405). The log1p remark is a forward pointer: in unit 2 we see why 1 + x rounds away the digits of a tiny x.
@@ -354,11 +354,11 @@ Derivatives: f = log(1+x), f' = 1/(1+x), f'' = -1/(1+x)^2, f''' = 2/(1+x)^3; at 
 
 | Unit / Part | Taylor statement | Gives |
 |---|---|---|
-| Newton (Part 2) | $f(x+h) \approx f(x) + f'(x)\,h$ | set to 0, solve for $h$ |
-| Conditioning (unit 3) | $f(x + \delta) - f(x) \approx f'(x)\,\delta$ | how errors in data propagate |
-| Finite differences (Part 7) | $\dfrac{f(x+h) - f(x)}{h} = f'(x) + \dfrac{h}{2}f''(\xi)$ | derivative, error $O(h)$ |
-| Euler / Runge–Kutta (Part 8) | $y(t+h) \approx y(t) + h\,y'(t)$ | one ODE step |
-| Optimisation (Part 9) | $f(x+h) \approx f(x) + f'(x)h + \tfrac12 f''(x)h^2$ | minimise the parabola |
+| [Newton](../newton/lec.qmd) (Part 2) | $f(x+h) \approx f(x) + f'(x)\,h$ | set to 0, solve for $h$ |
+| [Conditioning](../error-conditioning/lec.qmd) (unit 3) | $f(x + \delta) - f(x) \approx f'(x)\,\delta$ | how errors in data propagate |
+| [Finite differences](../finite-differences/lec.qmd) (Part 7) | $\dfrac{f(x+h) - f(x)}{h} = f'(x) + \dfrac{h}{2}f''(\xi)$ | derivative, error $O(h)$ |
+| [Euler](../euler/lec.qmd) / [Runge–Kutta](../runge-kutta/lec.qmd) (Part 8) | $y(t+h) \approx y(t) + h\,y'(t)$ | one ODE step |
+| [Optimisation](../optimisation-1d/lec.qmd) (Part 9) | $f(x+h) \approx f(x) + f'(x)h + \tfrac12 f''(x)h^2$ | minimise the parabola |
 
 - Every time: **replace the function by its Taylor polynomial, solve the easy problem, use the remainder to bound the error.**
 
@@ -374,7 +374,7 @@ This slide is the reason for the Taylor recap. Each row is a method we derive la
 - The optimiser sees no slope, makes no progress, and stops. "Converged."
 
 ::: notes
-This is the SSE as a function of r with K and N0 held at their best values. The good minimum is at r = 0.0087 per minute (0.52 per hour). At r = 0.5 per minute, e^(-r t) is e^(-60) at the first measurement after zero, so the model predicts K at every time point except t = 0, whatever the exact value of r. A local method only sees the neighbourhood of where it is; on a plateau there is nothing to follow. The root cause is scaling: time in minutes made the natural guess wrong by a factor of 60. Part 9 discusses scaling, starting values and multistart in depth.
+This is the SSE as a function of r with K and N0 held at their best values. The good minimum is at r = 0.0087 per minute (0.52 per hour). At r = 0.5 per minute, e^(-r t) is e^(-60) at the first measurement after zero, so the model predicts K at every time point except t = 0, whatever the exact value of r. A local method only sees the neighbourhood of where it is; on a plateau there is nothing to follow. The root cause is scaling: time in minutes made the natural guess wrong by a factor of 60. Part 9 discusses scaling and starting values (Gradient descent, Newton and quasi-Newton, which returns to this fit) and multistart (Nonlinear least squares and ODE fitting) in depth.
 :::
 
 ## Checks that would have caught it {.smaller}
@@ -393,7 +393,7 @@ for (r0 in c(0.001, 0.01, 0.1, 1)) {        # several starting values
 
 - **Plot the fit over the data**, and **try several starts**: keep the lowest SSE; different answers mean a hard problem.
 - **Check units and scale**: is a 1-minute doubling time plausible? Use units where parameters are near 1 (hours, not minutes).
-- `convergence == 0` is **necessary, not sufficient**. Fitting in depth: **Part 9**.
+- `convergence == 0` is **necessary, not sufficient**. Fitting in depth: [*Gradient descent, Newton and quasi-Newton*](../gradient-methods/lec.qmd) (scaling, this fit) and [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd) (multistart), Part 9.
 
 ::: notes
 Only one of four starts finds the good fit, and the SSE makes the difference unmistakable: 0.003 versus 2.23. Each check here is generic: plot, multistart, sanity-check the parameters, and treat the convergence code as the least you check. These checks recur in every Part: for each method we ask how it fails and what check a student runs to detect it. Note that nls from the same bad start fails loudly with a "singular gradient" error, which is better than failing silently.
@@ -414,14 +414,14 @@ Only one of four starts finds the good fit, and the SSE makes the difference unm
 11. **Further reading**: finite elements, flow solvers, iterative solvers.
 
 ::: notes
-The course is self-paced; work down the sidebar. Each Part pairs methods with a biological problem that needs them, shown in italics. Parts 1 to 9 are the core; Part 10 builds on Parts 3, 7 and 8; Part 11 is pointers only. The growth curve returns in Part 6 (smoothing splines, growth rate as a derivative) and Part 9 (fitting it properly).
+The course is self-paced; work down the sidebar. Each Part pairs methods with a biological problem that needs them, shown in italics. Parts 1 to 9 are the core; Part 10 builds on Parts 3, 7 and 8; Part 11 is pointers only. The growth curve returns in unit 4 (Convergence and cost: growth rate from an OD curve), Parts 6 and 7 (Splines, Numerical differentiation: growth rate as a derivative of noisy data) and Part 9 (Gradient descent, Newton and quasi-Newton: why this fit failed).
 :::
 
 ## Next in Part 1
 
-- **How computers store numbers**: how a double is stored, machine epsilon, overflow and underflow, why `0.1 + 0.2 != 0.3`. *A likelihood over 10 000 alignment sites underflows to 0: log-likelihoods and log-sum-exp.*
-- **Error, conditioning and stability**: absolute and relative error, catastrophic cancellation, the condition number, stable vs unstable algorithms. *A variance formula that loses all its digits.*
-- **Convergence and cost**: truncation vs rounding, order of accuracy on log–log plots, big-O operation counts, timing code. *From 100 genes to 20 000 genes × 100 000 cells.*
+- [*How computers store numbers*](../floating-point/lec.qmd): how a double is stored, machine epsilon, overflow and underflow, why `0.1 + 0.2 != 0.3`. *A likelihood over 10 000 alignment sites underflows to 0: log-likelihoods and log-sum-exp.*
+- [*Error, conditioning and stability*](../error-conditioning/lec.qmd): absolute and relative error, catastrophic cancellation, the condition number, stable vs unstable algorithms. *A variance formula that loses all its digits; a dose read off a response near the plateau.*
+- [*Convergence and cost*](../convergence-cost/lec.qmd): truncation vs rounding, order of accuracy on log–log plots, big-O operation counts, timing code. *Growth rate from an OD curve; from 100 genes to 20 000 genes × 100 000 cells.*
 
 Each unit: lecture, quiz, exercise with **by-hand** problems and code (R and Python).
 

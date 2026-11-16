@@ -3,10 +3,11 @@
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -51,20 +52,20 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
-fn svd_report(tt: &[f64], yy: &[f64]) {
-    let r = resid(tt, yy);
+fn svd_report(ts: &[f64], ys: &[f64]) {
+    let r = resid(ts, ys);
     let th = levmar(&r, &[1.0, 0.2, 20.0]);
-    let s = (sse(&r, &th) / (tt.len() - 3) as f64).sqrt();
-    let model = |p: &[f64]| -> Vec<f64> { tt.iter().map(|t| pk(*t, p[0], p[1], p[2])).collect() };
+    let s = (sse(&r, &th) / (ts.len() - 3) as f64).sqrt();
+    let model = |p: &[f64]| -> Vec<f64> { ts.iter().map(|t| bateman(*t, p[0], p[1], p[2])).collect() };
     let j = jacobian(&model, &th);
-    let jl = DMatrix::from_fn(tt.len(), 3, |i, k| j[(i, k)] * th[k]);  // d C / d log(theta)
+    let jl = DMatrix::from_fn(ts.len(), 3, |i, k| j[(i, k)] * th[k]);  // d C / d log(theta)
     let kappa = |m: &DMatrix<f64>| { let d = m.singular_values(); d.max() / d.min() };
     let svd = jl.clone().svd(false, true);
     let mut idx: Vec<usize> = (0..3).collect();
@@ -79,6 +80,6 @@ fn svd_report(tt: &[f64], yy: &[f64]) {
 }
 
 fn main() {
-    svd_report(&T, &Y);
-    svd_report(&T[6..], &Y[6..]);          // samples from 3 h
+    svd_report(&TT, &Y);
+    svd_report(&TT[6..], &Y[6..]);          // samples from 3 h
 }

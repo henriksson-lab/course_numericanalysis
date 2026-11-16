@@ -11,7 +11,7 @@ export interface Plan { n: number; fac: number[]; cos: Float64Array; sin: Float6
 export function makePlan(n: number): Plan {
   const fac: number[] = [];
   let m = n;
-  for (const p of [4, 2, 3, 5]) while (m % p === 0) { fac.push(p); m /= p; }
+  for (const p of [5, 3, 4, 2]) while (m % p === 0) { fac.push(p); m /= p; }
   for (let p = 7; m > 1; p += 2) while (m % p === 0) { fac.push(p); m /= p; }
   const cos = new Float64Array(n), sin = new Float64Array(n);
   for (let k = 0; k < n; k++) { cos[k] = Math.cos(2 * Math.PI * k / n); sin[k] = Math.sin(2 * Math.PI * k / n); }
@@ -36,18 +36,38 @@ function rec(P: Plan, xr: Float64Array, xi: Float64Array, xo: number, sx: number
     }
     return;
   }
+  if (p === 4) {
+    for (let k = 0; k < m; k++) {
+      const i0 = yo + k, i1 = i0 + m, i2 = i1 + m, i3 = i2 + m;
+      const w1 = k * st, w2 = 2 * w1, w3 = 3 * w1;
+      const c1 = C[w1], s1 = sg * S[w1], c2 = C[w2], s2 = sg * S[w2], c3 = C[w3], s3 = sg * S[w3];
+      const t0r = yr[i0], t0i = yi[i0];
+      const t1r = yr[i1] * c1 - yi[i1] * s1, t1i = yr[i1] * s1 + yi[i1] * c1;
+      const t2r = yr[i2] * c2 - yi[i2] * s2, t2i = yr[i2] * s2 + yi[i2] * c2;
+      const t3r = yr[i3] * c3 - yi[i3] * s3, t3i = yr[i3] * s3 + yi[i3] * c3;
+      const ar = t0r + t2r, ai = t0i + t2i, br = t0r - t2r, bi = t0i - t2i;
+      const cr = t1r + t3r, ci = t1i + t3i, er = t1r - t3r, ei = t1i - t3i;
+      // sg * i * e = (-sg ei, sg er)
+      yr[i0] = ar + cr; yi[i0] = ai + ci; yr[i2] = ar - cr; yi[i2] = ai - ci;
+      yr[i1] = br - sg * ei; yi[i1] = bi + sg * er; yr[i3] = br + sg * ei; yi[i3] = bi - sg * er;
+    }
+    return;
+  }
+  const NP = N / p;
   for (let k = 0; k < m; k++) {
     for (let j = 0; j < p; j++) {          // twiddle Y_j[k] by W_n^{jk}
-      const id = yo + j * m + k, w = (j * k * st) % N;
+      const id = yo + j * m + k, w = j * k * st;   // < N since j < p, k < m
       const c = C[w], s = sg * S[w];
       tr[j] = yr[id] * c - yi[id] * s; ti[j] = yr[id] * s + yi[id] * c;
     }
     for (let q = 0; q < p; q++) {          // length-p DFT
       let sr = 0, si = 0;
+      let w = 0;
+      const dw = q * NP;
       for (let j = 0; j < p; j++) {
-        const w = ((j * q) % p) * (N / p);
         const c = C[w], s = sg * S[w];
         sr += tr[j] * c - ti[j] * s; si += tr[j] * s + ti[j] * c;
+        w += dw; if (w >= N) w -= N;
       }
       yr[yo + q * m + k] = sr; yi[yo + q * m + k] = si;
     }

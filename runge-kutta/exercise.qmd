@@ -39,7 +39,7 @@ The running examples:
 
 - **Logistic OD curve** $N' = rN(1 - N/K)$, $r = 0.8$ per hour, $K = 1.2$, $N_0 = 0.05$; exact $N(t) = K / \big(1 + (K/N_0 - 1)e^{-rt}\big)$.
 - **Drug clearance** $C' = -0.8\, C$, $C_0 = 10$ mg/L; exact $C(t) = 10 e^{-0.8t}$.
-- **SIR epidemic** (as in *Initial value problems and Euler's method*): $S' = -\beta SI/N$, $I' = \beta SI/N - \gamma I$, $R' = \gamma I$ with $N = 10\,000$ people, $\beta = 0.3$ and $\gamma = 0.1$ per day, $(S, I, R)(0) = (9990, 10, 0)$. Exact peak $I_{\max} = 3007.961$.
+- **SIR epidemic** (as in [*Initial value problems and Euler's method*](../euler/lec.qmd)): $S' = -\beta SI/N$, $I' = \beta SI/N - \gamma I$, $R' = \gamma I$ with $N = 10\,000$ people, $\beta = 0.3$ and $\gamma = 0.1$ per day, $(S, I, R)(0) = (9990, 10, 0)$. Exact peak $I_{\max} = 3007.961$.
 - **Lotka–Volterra** (hares $x$, lynx $y$): $x' = ax - bxy$, $y' = cxy - dy$ with $a = 1$, $b = 0.1$, $c = 0.075$, $d = 1.5$ per year, $(x, y)(0) = (10, 5)$.
 - **Repressilator** (Elowitz & Leibler 2000, dimensionless): $m_i' = -m_i + \alpha/(1 + p_j^{\,n}) + \alpha_0$, $p_i' = -\beta(p_i - m_i)$, $(i, j) = (1,3), (2,1), (3,2)$, with $\alpha = 216$, $\alpha_0 = 0.216$, $\beta = 5$, $n = 2$, start $m = (1, 0, 0)$, $p = (0, 0, 0)$.
 
@@ -612,7 +612,32 @@ for (m in names(stages)) {
 
 ```python
 import numpy as np
-# uses the step functions, methods and rk_solve from C1
+
+# the steppers and rk_solve of C1, repeated so this block runs on its own
+def euler_step(f, t, y, h):
+    return y + h * f(t, y)
+
+def heun_step(f, t, y, h):
+    k1 = f(t, y)
+    k2 = f(t + h, y + h * k1)
+    return y + h / 2 * (k1 + k2)
+
+def rk4_step(f, t, y, h):
+    k1 = f(t, y)
+    k2 = f(t + h / 2, y + h / 2 * k1)
+    k3 = f(t + h / 2, y + h / 2 * k2)
+    k4 = f(t + h, y + h * k3)
+    return y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+def rk_solve(step, f, t0, y0, h, n):
+    t = t0 + h * np.arange(n + 1)
+    Y = np.zeros((n + 1, np.size(y0))); Y[0] = y0
+    for i in range(n):
+        Y[i + 1] = step(f, t[i], Y[i], h)
+    return t, Y
+
+methods = {"Euler": euler_step, "Heun": heun_step, "RK4": rk4_step}
+
 f = lambda t, N: 0.8 * N * (1 - N / 1.2)
 exact = lambda t: 1.2 / (1 + (1.2 / 0.05 - 1) * np.exp(-0.8 * t))
 nsteps = 10 * 2 ** np.arange(14)               # h = 1, 1/2, ..., 1/8192
@@ -721,8 +746,31 @@ for (tol in c(1e-3, 1e-6)) {
 
 ```python
 import numpy as np
-# uses the step functions, methods and rk_solve from C1
 from scipy.integrate import solve_ivp
+
+# the steppers and rk_solve of C1, repeated so this block runs on its own
+def euler_step(f, t, y, h):
+    return y + h * f(t, y)
+
+def heun_step(f, t, y, h):
+    k1 = f(t, y)
+    k2 = f(t + h, y + h * k1)
+    return y + h / 2 * (k1 + k2)
+
+def rk4_step(f, t, y, h):
+    k1 = f(t, y)
+    k2 = f(t + h / 2, y + h / 2 * k1)
+    k3 = f(t + h / 2, y + h / 2 * k2)
+    k4 = f(t + h, y + h * k3)
+    return y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+def rk_solve(step, f, t0, y0, h, n):
+    t = t0 + h * np.arange(n + 1)
+    Y = np.zeros((n + 1, np.size(y0))); Y[0] = y0
+    for i in range(n):
+        Y[i + 1] = step(f, t[i], Y[i], h)
+    return t, Y
+
 a, b, c, d = 1, 0.1, 0.075, 1.5                     # per year
 lv = lambda t, y: np.array([a * y[0] - b * y[0] * y[1], c * y[0] * y[1] - d * y[1]])
 V = lambda x, y: c * x - d * np.log(x) + b * y - a * np.log(y)
@@ -1050,7 +1098,22 @@ for (h in c(1, 0.2, 0.01)) {
 ```python
 import numpy as np
 from scipy.integrate import solve_ivp
-# uses rk_solve and rk4_step from C1
+
+# rk4_step and rk_solve of C1, repeated so this block runs on its own
+def rk4_step(f, t, y, h):
+    k1 = f(t, y)
+    k2 = f(t + h / 2, y + h / 2 * k1)
+    k3 = f(t + h / 2, y + h / 2 * k2)
+    k4 = f(t + h, y + h * k3)
+    return y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+def rk_solve(step, f, t0, y0, h, n):
+    t = t0 + h * np.arange(n + 1)
+    Y = np.zeros((n + 1, np.size(y0))); Y[0] = y0
+    for i in range(n):
+        Y[i + 1] = step(f, t[i], Y[i], h)
+    return t, Y
+
 alpha, alpha0, beta, n = 216, 0.216, 5, 2
 def repress(t, y):
     m, p = y[:3], y[3:]
@@ -1062,7 +1125,7 @@ for tol in 10.0 ** -np.arange(3, 10):
     sol = solve_ivp(repress, (0, 50), y0, method="RK45", rtol=tol, atol=tol)
     print(f"tol {tol:.0e}: p1(50) = {sol.y[3, -1]:.8g}, steps {sol.t.size - 1}, "
           f"f evaluations {sol.nfev}")
-# (b) fixed-step RK4 (scipy has none: use rk_solve from C1)
+# (b) fixed-step RK4 (scipy has none: use rk_solve above)
 for h in [1, 0.2, 0.01]:
     t, Y = rk_solve(rk4_step, repress, 0, y0, h, round(50 / h))
     print(f"rk4, h = {h}: p1(50) = {Y[-1, 3]:.8g}")
@@ -1171,7 +1234,25 @@ for (atol in c(10, 1, 1e-6)) {
 
 ```python
 import numpy as np
-# uses adapt_heun from C4
+
+def adapt_heun(f, t, y, tend, h, rtol=1e-6, atol=1e-9):   # as in C4
+    y = np.atleast_1d(np.asarray(y, dtype=float))
+    ts, hs, Y, nrej = [t], [], [y], 0
+    while t < tend:
+        h = min(h, tend - t)
+        k1 = f(t, y); k2 = f(t + h, y + h * k1)
+        ylo = y + h * k1                         # Euler, order 1
+        yhi = y + h / 2 * (k1 + k2)              # Heun, order 2
+        sc = atol + rtol * np.maximum(np.abs(y), np.abs(yhi))
+        err = np.sqrt(np.mean(((yhi - ylo) / sc) ** 2))
+        if err <= 1:                             # accept and record
+            t, y = t + h, yhi
+            ts.append(t); hs.append(h); Y.append(y)
+        else:                                    # reject: retry with smaller h
+            nrej += 1
+        h = h * min(5, max(0.2, 0.9 * err ** -0.5))
+    return np.array(ts), np.array(hs), np.array(Y), nrej
+
 beta, gamma, N = 0.3, 0.1, 10000
 def sir(t, y):
     S, I = y[0], y[1]
@@ -1411,6 +1492,6 @@ fn main() {
 
 ## Where this leads
 
-- ***Stiffness and implicit methods*** (Part 8): on stiff problems (fast and slow processes together) every explicit method, RK4 and Dormand–Prince included, needs tiny steps for **stability**, not accuracy; the adaptive solver then takes millions of steps. Implicit methods and LSODA (the `lsoda` used for events above) fix this.
-- ***Equilibria, stability and the phase plane*** (Part 8): the closed predator–prey orbits and the repressilator's limit cycle are studied there with nullclines and the Jacobian; the solvers of this unit draw the trajectories.
-- ***Nonlinear least squares and ODE fitting*** (Part 9): fitting ODE parameters to data calls the solver thousands of times; tolerances that are too loose make the fit noisy, tolerances that are too tight make it slow.
+- **[*Stiffness and implicit methods*](../stiffness/lec.qmd)** (Part 8): on stiff problems (fast and slow processes together) every explicit method, RK4 and Dormand–Prince included, needs tiny steps for **stability**, not accuracy; the adaptive solver then takes millions of steps. Implicit methods and LSODA (the `lsoda` used for events above) fix this.
+- **[*Equilibria, stability and the phase plane*](../phase-plane/lec.qmd)** (Part 8): closed orbits and limit cycles are studied there with nullclines and the Jacobian (on a genetic toggle switch and Sel'kov's glycolysis oscillator); the same tools explain the predator–prey orbits and the repressilator's limit cycle of this unit, whose solvers draw the trajectories.
+- **[*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd)** (Part 9): fitting ODE parameters to data calls the solver thousands of times; tolerances that are too loose make the fit noisy, tolerances that are too tight make it slow.

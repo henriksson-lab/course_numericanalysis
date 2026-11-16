@@ -21,7 +21,7 @@ format:
 
 ## About this lecture
 
-The last two units, *Polynomial interpolation* and *Splines*, interpolated data with polynomials and splines. For **periodic** data (daily rhythms, cell cycles, a row of pixels) a better basis is sines and cosines.
+The last two units, [*Polynomial interpolation*](../polynomial-interpolation/lec.qmd) and [*Splines*](../splines/lec.qmd), interpolated data with polynomials and splines. For **periodic** data (daily rhythms, cell cycles, a row of pixels) a better basis is sines and cosines.
 
 - **Trigonometric interpolation:** $n$ samples, $n$ Fourier coefficients. Computing them is the **discrete Fourier transform** (DFT), a matrix–vector product, $O(n^2)$.
 - The **fast Fourier transform** (FFT) gets the same numbers in $O(n\log n)$ by splitting even and odd samples. That is what `fft()` does.
@@ -49,7 +49,7 @@ This is the running example of the unit: 24 numbers, given as a literal vector i
 
 ## Recap: interpolation in a basis
 
-In *Polynomial interpolation* we wrote the interpolant as a combination of basis functions and solved for the coefficients:
+In [*Polynomial interpolation*](../polynomial-interpolation/lec.qmd) we wrote the interpolant as a combination of basis functions and solved for the coefficients:
 
 $$p(t) = \sum_k c_k\,\phi_k(t), \qquad p(t_j) = x_j \text{ for every sample } j.$$
 
@@ -150,7 +150,7 @@ round(trig_interp(x, 48, c(1, 3, 5)), 2)
 - Keeping only $k = 0$ and $k = 2$ gives the **least-squares** fit of mean + 24-h cosine: orthogonality again, no system to solve (next slide).
 
 ::: notes
-The interpolant is exact at the samples up to rounding. Between samples it is the unique trigonometric polynomial of this form through the data. For noisy data, interpolation is the wrong goal (as with polynomials and splines): we want to keep the few coefficients that carry signal. Because the columns of the Fourier basis are orthogonal on the grid, dropping coefficients gives exactly the least-squares fit with the remaining basis functions; this is the normal-equations matrix being diagonal. That is how the cosinor method, a standard circadian analysis, can be done with one fft.
+The interpolant is exact at the samples up to rounding. Between samples it is the unique trigonometric polynomial of this form through the data. For noisy data, interpolation is the wrong goal (as with polynomials and splines): we want to keep the few coefficients that carry signal. Because the columns of the Fourier basis are orthogonal on the grid, dropping coefficients gives exactly the least-squares fit with the remaining basis functions; this is the normal-equations matrix of Least squares: normal equations vs QR being diagonal. That is how the cosinor method, a standard circadian analysis, can be done with one fft.
 :::
 
 ## When the data are not periodic
@@ -159,10 +159,10 @@ The interpolant is exact at the samples up to rounding. Between samples it is th
 
 - Left: dashed = mean + 24-h cosine only (least squares). Solid = all 24 terms (interpolation).
 - Right: an OD growth curve is **not** periodic. The interpolant joins the end (1.2) back to the start (0.05): wiggles everywhere, a dive at the end.
-- **Check:** does `x[n]` lead smoothly into `x[1]`? If not, remove the trend first, or use splines.
+- **Check:** does `x[n]` lead smoothly into `x[1]`? If not, remove the trend first, or use [*Splines*](../splines/lec.qmd).
 
 ::: notes
-The right panel uses the course's logistic growth curve (K = 1.2, N0 = 0.05, r = 0.8 per hour) sampled every hour for 16 h. The trigonometric interpolant is periodic with period 16 h by construction, so between t = 15 and t = 16 it must come back down to 0.05. Fitting a jump with smooth waves gives Gibbs-type ringing that spreads over the whole record. The same problem returns as leakage and as edge effects in filtering. The rule: Fourier methods assume that the record wraps around.
+The right panel uses the course's logistic growth curve from Convergence and cost (K = 1.2, N0 = 0.05, r = 0.8 per hour) sampled every hour for 16 h. The trigonometric interpolant is periodic with period 16 h by construction, so between t = 15 and t = 16 it must come back down to 0.05. Fitting a jump with smooth waves gives Gibbs-type ringing that spreads over the whole record. The same problem returns as leakage and as edge effects in filtering. The rule: Fourier methods assume that the record wraps around.
 :::
 
 ## The DFT is a matrix
@@ -399,7 +399,7 @@ The trace is 20 + 60 exp(-t/40) + 30 exp(-t/80) cos(2 pi (t - 4)/24) plus noise 
 - **Check:** plot the smoothed curve over the data, especially the first and last few points.
 
 ::: notes
-Same message as the growth curve and leakage: the DFT treats the record as one period of a periodic signal. A trend makes the ends disagree, and the sharp cut-off in frequency produces Gibbs ringing in time. Remedies: detrend (linear or a smooth fit), mirror the data before filtering, pad, or use a gentler filter whose gain falls smoothly to zero. For smoothing alone, splines or a moving average with proper edge handling are often simpler; Fourier filtering pays off when the frequency content matters (remove 50 Hz mains hum, or a known stripe in an image).
+Same message as the growth curve and leakage: the DFT treats the record as one period of a periodic signal. A trend makes the ends disagree, and the sharp cut-off in frequency produces Gibbs ringing in time. Remedies: detrend (linear or a smooth fit), mirror the data before filtering, pad, or use a gentler filter whose gain falls smoothly to zero. For smoothing alone, smoothing splines (Splines) or a moving average with proper edge handling are often simpler; Fourier filtering pays off when the frequency content matters (remove 50 Hz mains hum, or a known stripe in an image).
 :::
 
 ## The convolution theorem
@@ -431,7 +431,7 @@ The convolution theorem is why the FFT matters far beyond spectra: every linear,
 ![](fig08-blur.svg){width="100%" fig-align="center"}
 
 - A microscope image = true image convolved with the **point spread function** (PSF). 2D: `fft()` of a matrix, multiply, transform back: $O(N^2\log N)$ for an $N\times N$ image.
-- **Deconvolution** = divide by `fft(psf)`. Where that is $\approx 10^{-18}$, noise is amplified $10^{18}$×: the image is lost. Regularise, as in *The SVD, rank deficiency and regularisation*.
+- **Deconvolution** = divide by `fft(psf)`. Where that is $\approx 10^{-18}$, noise is amplified $10^{18}$×: the image is lost. Regularise, as in [*The SVD, rank deficiency and regularisation*](../svd/lec.qmd).
 
 ::: notes
 One slide, to connect to imaging. The blurred image is computed as Re(fft(fft(img) * fft(psf), inverse = TRUE)) / N^2 with a Gaussian PSF of sd 2 pixels, stored with its centre at pixel [1, 1] (the 2D version of the wrapped box on the previous slide). Deconvolution is an ill-conditioned linear problem: the Fourier coefficients of the PSF are the singular values of the blur matrix, and dividing by tiny ones amplifies noise exactly like the small singular values in the SVD unit. Wiener filtering (ridge regression in frequency space) and Richardson–Lucy are the standard remedies in microscopy software.
@@ -461,7 +461,7 @@ Pin this next to the keyboard. The first three are convention bugs and are caugh
 - A non-periodic record leaks (window it) and rings at the edges (detrend it).
 - **Convolution theorem:** smoothing and blur are products of DFTs; circular unless zero-padded. Deconvolution is ill-conditioned.
 
-**Next:** Part 7 starts with *Numerical differentiation*: derivatives from sampled data, where noise is amplified much as in deconvolution.
+**Next:** Part 7 starts with [*Numerical differentiation*](../finite-differences/lec.qmd): derivatives from sampled data, where noise is amplified much as in deconvolution.
 
 ::: notes
 The two ideas to keep: the FFT is just a fast way to compute an orthogonal change of basis, and everything it tells you is about a periodic, sampled version of your data. Most mistakes come from forgetting one of those two words. Numerical differentiation of noisy data is a high-pass filter (in Fourier terms, multiplication by i k), which is why it amplifies noise; the next unit treats it with finite differences.

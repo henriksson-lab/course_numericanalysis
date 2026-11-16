@@ -3,10 +3,11 @@
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -51,19 +52,19 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
 fn main() {
     // (a) F and V both free: C depends on V / F only
-    let r4 = |p: &[f64]| -> Vec<f64> { T.iter().zip(&Y).map(|(t, y)| y - pk(*t, p[0], p[1], p[2] / p[3])).collect() };
+    let r4 = |p: &[f64]| -> Vec<f64> { TT.iter().zip(&Y).map(|(t, y)| y - bateman(*t, p[0], p[1], p[2] / p[3])).collect() };
     let p4 = [1.0151_f64, 0.1906, 20.22, 1.0];
     let lp4: Vec<f64> = p4.iter().map(|x| x.ln()).collect();
-    let flog = |lp: &[f64]| -> Vec<f64> { T.iter().map(|t| pk(*t, lp[0].exp(), lp[1].exp(), (lp[2] - lp[3]).exp())).collect() };
+    let flog = |lp: &[f64]| -> Vec<f64> { TT.iter().map(|t| bateman(*t, lp[0].exp(), lp[1].exp(), (lp[2] - lp[3]).exp())).collect() };
     let svd = jacobian(&flog, &lp4).svd(false, true);
     let mut idx: Vec<usize> = (0..4).collect();          // nalgebra does not promise an order
     idx.sort_by(|a, b| svd.singular_values[*b].partial_cmp(&svd.singular_values[*a]).unwrap());
@@ -75,7 +76,7 @@ fn main() {
     let p = levmar(&r4, &[0.5, 0.1, 10.0, 0.8]);
     println!("LM with F free: ka {:.4} ke {:.4} V {:.4} F {:.4}  V/F {:.4}", p[0], p[1], p[2], p[3], p[2] / p[3]);
     // (b) multistart
-    let r = resid(&T, &Y);
+    let r = resid(&TT, &Y);
     for (ka0, ke0) in [(0.5, 0.1), (2.0, 0.1), (0.1, 0.5), (2.0, 0.5)] {
         let th = levmar(&r, &[ka0, ke0, 10.0]);
         println!("start ka={:.1} ke={:.1} -> ka={:.4} ke={:.4} V={:.3} SSE={:.6}",

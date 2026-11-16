@@ -42,7 +42,7 @@ The data: $D = 100$ mg, plasma sampled at 12 times over 12 hours. They were **si
 4. **Levenberg–Marquardt.** $\boldsymbol\delta = \arg\min \|\mathbf r - J\boldsymbol\delta\|^2 + \lambda\|D_g\boldsymbol\delta\|^2$, i.e. $(J^TJ + \lambda D_g^2)\boldsymbol\delta = J^T\mathbf r$, solved as the stacked least-squares problem $\begin{pmatrix}J\\ \sqrt\lambda D_g\end{pmatrix}\boldsymbol\delta \approx \begin{pmatrix}\mathbf r\\ \mathbf 0\end{pmatrix}$. $D_g$ = diagonal of the column lengths of $J$ (or $I$). Accept the step and divide $\lambda$ by 10 if the RSS goes down; otherwise reject it and multiply $\lambda$ by 10.
 5. **Log-parameters.** Fit $\mathbf q = \log\mathbf p$; $\partial m/\partial q_j = p_j\,\partial m/\partial p_j$.
 6. **Flip-flop.** $(k_a, k_e, V)$ and $(k_e, k_a, V k_e/k_a)$ give the same $C(t)$.
-7. **Finite differences with noise.** If the model values carry an error of size $\varepsilon$ (rounding, or an ODE solver's error), the forward-difference error is about $\tfrac{h}{2}|m''| + 2\varepsilon/h$, smallest near $h \approx 2\sqrt{\varepsilon/|m''|}$ (*Convergence and cost*).
+7. **Finite differences with noise.** If the model values carry an error of size $\varepsilon$ (rounding, or an ODE solver's error), the forward-difference error is about $\tfrac{h}{2}|m''| + 2\varepsilon/h$, smallest near $h \approx 2\sqrt{\varepsilon/|m''|}$ ([*Convergence and cost*](../convergence-cost/lec.qmd)).
 
 The data, the model and a first library fit in each language. All solutions below assume this code has been run.
 
@@ -252,7 +252,7 @@ Truncation error $\approx \tfrac{h}{2}|m''|$, noise error $\approx 2\varepsilon/
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 4 — QR least squares in each language (C2–C4)"}
-R: [`qr.solve(A, b)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/qr.html) solves a tall system in the least-squares sense; `rbind` stacks the damping rows under $J$. Python: `Q, R = np.linalg.qr(A)` then `np.linalg.solve(R, Q.T @ b)` ([`np.linalg.qr`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.qr.html)); `np.vstack` stacks. Rust: `a.clone().qr()`, `q_tr_mul` and `solve_upper_triangular`, as in *Least squares: normal equations vs QR*. Condition numbers: [`kappa(A, exact = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kappa.html), `np.linalg.cond`, ratio of nalgebra's `singular_values()`.
+R: [`qr.solve(A, b)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/qr.html) solves a tall system in the least-squares sense; `rbind` stacks the damping rows under $J$. Python: `Q, R = np.linalg.qr(A)` then `np.linalg.solve(R, Q.T @ b)` ([`np.linalg.qr`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.qr.html)); `np.vstack` stacks. Rust: `a.clone().qr()`, `q_tr_mul` and `solve_upper_triangular`, as in [*Least squares: normal equations vs QR*](../least-squares-qr/lec.qmd). Condition numbers: [`kappa(A, exact = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kappa.html), `np.linalg.cond`, ratio of nalgebra's `singular_values()`.
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 5 — library fitters (C2–C4, C7)"}
@@ -260,7 +260,7 @@ R: [`nls`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/nls.html) (`
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 6 — an ODE inside the residual (C5, C6)"}
-R: [`ode(y, times, func, parms, rtol, atol)`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) with `func(t, y, parms)` returning `list(dy)`; give `times = c(0, tt)` because the first time is the start, and drop the first row of the output; column 1 is time. Python: [`solve_ivp(fun, (0, 12), y0, t_eval=tt, args=(ka, ke), rtol=, atol=)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html), solution in `sol.y`. Rust: `Dopri5::new(system, t0, t_end, dx, y0, rtol, atol)` and `integrate_with_continuous_output_model` give the solution at any $t$ (see *Runge–Kutta and adaptive step size*). In `nls.lm`, the finite-difference step is $\sqrt{\texttt{epsfcn}}\,|q_j|$; with $\log k_a \approx 0$ the default is far below the ODE error, so set `epsfcn = 1e-10`.
+R: [`ode(y, times, func, parms, rtol, atol)`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) with `func(t, y, parms)` returning `list(dy)`; give `times = c(0, tt)` because the first time is the start, and drop the first row of the output; column 1 is time. Python: [`solve_ivp(fun, (0, 12), y0, t_eval=tt, args=(ka, ke), rtol=, atol=)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html), solution in `sol.y`. Rust: `Dopri5::new(system, t0, t_end, dx, y0, rtol, atol)` and `integrate_with_continuous_output_model` give the solution at any $t$ (see [*Runge–Kutta and adaptive step size*](../runge-kutta/lec.qmd)). In `nls.lm`, the finite-difference step is $\sqrt{\texttt{epsfcn}}\,|q_j|$; with $\log k_a \approx 0$ the default is far below the ODE error, so set `epsfcn = 1e-10`.
 :::
 
 ## Solutions
@@ -404,7 +404,7 @@ fn main() {
 
 :::
 
-The concentration peaks at 2.01 h at 3.34 mg/L. At $k_a = k_e$ the formula is $0/0$ = `NaN`, although the limit $D k t e^{-kt}/V$ is perfectly finite (0.8187 and 1.7973 mg/L). Close to the diagonal the formula still works but subtracts two exponentials that agree to about 9 digits: catastrophic cancellation (*Error, conditioning and stability*), with a worst-case relative error of $\varepsilon/10^{-9} \approx 2\times10^{-7}$. Here the result differs from the limit by $1.6\times10^{-9}$, which is mostly the genuine effect of $k_a - k_e = 10^{-9}$; at $k_a - k_e = 10^{-13}$ the cancellation would leave only about 3 digits. The ODE form has no such problem; an optimiser that crosses $k_a = k_e$ with the formula can hit `NaN`.
+The concentration peaks at 2.01 h at 3.34 mg/L. At $k_a = k_e$ the formula is $0/0$ = `NaN`, although the limit $D k t e^{-kt}/V$ is perfectly finite (0.8187 and 1.7973 mg/L). Close to the diagonal the formula still works but subtracts two exponentials that agree to about 9 digits: catastrophic cancellation ([*Error, conditioning and stability*](../error-conditioning/lec.qmd)), with a worst-case relative error of $\varepsilon/10^{-9} \approx 2\times10^{-7}$. Here the result differs from the limit by $1.6\times10^{-9}$, which is mostly the genuine effect of $k_a - k_e = 10^{-9}$; at $k_a - k_e = 10^{-13}$ the cancellation would leave only about 3 digits. The ODE form has no such problem; an optimiser that crosses $k_a = k_e$ with the formula can hit `NaN`.
 
 **C2.**
 
@@ -1546,8 +1546,8 @@ There are two minima with **identical** RSS (0.06646744 to all printed digits): 
 
 ## Where this leads
 
-- ***Identifiability and uncertainty of fitted parameters*** (next unit): the flip-flop is a **structural** non-identifiability; the same PK model and data are used there for standard errors from $J^TJ$, profile likelihoods and practical non-identifiability (long flat valleys like the one in the RSS landscape).
-- ***Gradient descent, Newton and quasi-Newton***: Levenberg–Marquardt's two limits; Gauss–Newton as Newton with the Hessian approximated by $J^TJ$; general-purpose optimisers (`optim`, `scipy.optimize.minimize`) for objectives that are not sums of squares, such as Poisson or negative-binomial likelihoods.
-- ***Constraints and linear programming***: bounds on parameters as an alternative to log-parameters.
-- ***Stiffness and implicit methods***: a stiff model inside a fit needs an implicit solver (lsoda, BDF, Radau) with tight tolerances; explicit solvers then become the slow part of the fit.
+- **[*Identifiability and uncertainty of fitted parameters*](../identifiability/lec.qmd)** (next unit): the flip-flop is a **structural** non-identifiability; the same PK model and data are used there for standard errors from $J^TJ$, profile likelihoods and practical non-identifiability (long flat valleys like the one in the RSS landscape).
+- **[*Gradient descent, Newton and quasi-Newton*](../gradient-methods/lec.qmd)**: Levenberg–Marquardt's two limits; Gauss–Newton as Newton with the Hessian approximated by $J^TJ$; general-purpose optimisers (`optim`, `scipy.optimize.minimize`) for objectives that are not sums of squares, such as Poisson or negative-binomial likelihoods.
+- **[*Constraints and linear programming*](../constrained-lp/lec.qmd)**: bounds on parameters as an alternative to log-parameters.
+- **[*Stiffness and implicit methods*](../stiffness/lec.qmd)**: a stiff model inside a fit needs an implicit solver (lsoda, BDF, Radau) with tight tolerances; explicit solvers then become the slow part of the fit.
 - Exact Jacobians of ODE models from **sensitivity equations** or automatic differentiation are not covered here; they replace the finite differences of C5–C6 in professional fitting tools.

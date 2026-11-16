@@ -29,7 +29,7 @@ LU costs $\tfrac23 n^3$ operations and $8n^2$ bytes, whatever the matrix looks l
 - A glimpse of **iterative** solvers (Jacobi, conjugate gradient) that only need $A\mathbf{x}$.
 
 ::: notes
-This unit closes Part 3. The previous two units (*Gaussian elimination as LU*, and *Pivoting, norms and conditioning*) treated a general dense matrix. Here the message is: look at your matrix before you solve with it. Three kinds of structure cover most of what biologists meet. The Thomas algorithm written here is reused in Part 10 for implicit diffusion steps, so students should keep their function.
+This unit closes Part 3. The previous two units ([*Gaussian elimination as LU*](../lu/lec.qmd), and [*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd)) treated a general dense matrix. Here the message is: look at your matrix before you solve with it. Three kinds of structure cover most of what biologists meet. The Thomas algorithm written here is reused in Part 10 for implicit diffusion steps, so students should keep their function.
 :::
 
 ## Three kinds of structure
@@ -95,7 +95,7 @@ $$\ell_{jj} = \sqrt{a_{jj} - \textstyle\sum_{k<j} \ell_{jk}^2}, \qquad \ell_{ij}
 | pivoting | needed | not needed |
 
 ::: notes
-The formulas are the 2 x 2 case generalised: the diagonal entry is what is left of a_jj after subtracting the squares already used, and each entry below it is what is left of a_ij, divided by the diagonal. The bound l_ij^2 <= a_ii comes from row i of A = L L^T: a_ii is the sum of squares of row i of L. So no element growth, which is the stability problem that pivoting fixes for LU (*Pivoting, norms and conditioning*). Students do a 3 x 3 by hand in the exercise.
+The formulas are the 2 x 2 case generalised: the diagonal entry is what is left of a_jj after subtracting the squares already used, and each entry below it is what is left of a_ij, divided by the diagonal. The bound l_ij^2 <= a_ii comes from row i of A = L L^T: a_ii is the sum of squares of row i of L. So no element growth, which is the stability problem that pivoting fixes for LU ([*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd)). Students do a 3 x 3 by hand in the exercise.
 :::
 
 ## Cholesky in R {.smaller}
@@ -142,7 +142,7 @@ R <- chol(S)
 - The quadratic term is two triangular solves with the same $L$. Never form $\Sigma^{-1}$.
 
 ::: notes
-This is the floating-point lesson again (*How computers store numbers*): a product of many numbers below 1 underflows, the sum of their logs does not. The matrix 0.9^|i-j| is the correlation between equally spaced markers when LD decays exponentially with distance; its determinant is known exactly, (1 - rho^2)^(n-1), which lets us check. Mixed-model software (lme4, GCTA, REML in general) evaluates exactly these two terms by Cholesky, many times during the optimisation. determinant(S, logarithm = TRUE) also works; it uses LU.
+This is the floating-point lesson again ([*How computers store numbers*](../floating-point/lec.qmd)): a product of many numbers below 1 underflows, the sum of their logs does not. The matrix 0.9^|i-j| is the correlation between equally spaced markers when LD decays exponentially with distance; its determinant is known exactly, (1 - rho^2)^(n-1), which lets us check. Mixed-model software (lme4, GCTA, REML in general) evaluates exactly these two terms by Cholesky, many times during the optimisation. determinant(S, logarithm = TRUE) also works; it uses LU.
 :::
 
 ## Simulating correlated traits {.smaller}
@@ -191,7 +191,7 @@ dim(chol(C + 0.1 * diag(10)))              # ridge / shrinkage: SPD again
 - **Fixes:** more samples, **shrinkage** $C + \lambda I$, or a model with an error term ($\sigma_g^2 K + \sigma_e^2 I$).
 
 ::: notes
-This is the everyday failure. Any covariance or kinship matrix estimated from fewer observations than variables (genes > samples, individuals > SNPs) is singular. R's error message names the column where the square root of a non-positive number was needed: here 5, because the first four columns use up the rank. Also common: a correlation matrix assembled from pairwise-complete observations can have truly negative eigenvalues. Shrinkage (adding lambda I) is what limma, glasso and similar tools do; mixed models are safe because the residual variance adds a multiple of I. Ill-conditioning is the milder form: chol succeeds but the solve loses log10(kappa) digits (*Pivoting, norms and conditioning*).
+This is the everyday failure. Any covariance or kinship matrix estimated from fewer observations than variables (genes > samples, individuals > SNPs) is singular. R's error message names the column where the square root of a non-positive number was needed: here 5, because the first four columns use up the rank. Also common: a correlation matrix assembled from pairwise-complete observations can have truly negative eigenvalues. Shrinkage (adding lambda I) is what limma, glasso and similar tools do; mixed models are safe because the residual variance adds a multiple of I. Ill-conditioning is the milder form: chol succeeds but the solve loses log10(kappa) digits ([*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd)).
 :::
 
 ## Biology: a morphogen in a row of cells {.smaller}
@@ -208,7 +208,7 @@ $$\begin{pmatrix} 1.01 & -1 & & & \\ -1 & 2.01 & -1 & & \\ & -1 & 2.01 & -1 & \\
 - An embryo axis has ~100 cells; a tissue model or a fine 1D grid has $10^4$–$10^6$.
 
 ::: notes
-This is a compartment model, not yet a PDE: each cell is one well-mixed box. Part 10 (*The diffusion (heat) equation by finite differences*) arrives at exactly the same matrix from the diffusion equation on a grid, and then needs one such solve per time step. The numbers are Bicoid-like in spirit: lifetime 1/k = 100 minutes, exchange once a minute, which gives a decay length of about sqrt(D/k) = 10 cells. Diagonal dominance: 2.01 > 1 + 1. We will need that.
+This is a compartment model, not yet a PDE: each cell is one well-mixed box. Part 10 ([*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd)) arrives at the same tridiagonal pattern from the diffusion equation on a grid (written there with the opposite sign, -2 on the diagonal and 1 beside it, and without degradation), and [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd) then needs one tridiagonal solve per time step, with 1 + 2r on the diagonal and -r beside it. The numbers are Bicoid-like in spirit: lifetime 1/k = 100 minutes, exchange once a minute, which gives a decay length of about sqrt(D/k) = 10 cells. Diagonal dominance: 2.01 > 1 + 1. We will need that.
 :::
 
 ## Elimination on a band: the Thomas algorithm {.smaller}
@@ -249,7 +249,7 @@ thomas <- function(a, b, c, d) {
 Convention: all four vectors have length $n$; `a[1]` and `c[n]` are not used.
 
 ::: notes
-Twelve lines. Keep this function: Part 10 calls it once per time step for implicit diffusion (*Implicit schemes and the method of lines*). R passes vectors by value, so changing b and d inside the function does not change the caller's vectors. In Python the same code would overwrite the caller's arrays unless you copy them first; the exercise does that.
+Twelve lines. Keep this function: Part 10 calls it once per time step for implicit diffusion ([*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd)). R passes vectors by value, so changing b and d inside the function does not change the caller's vectors. In Python the same code would overwrite the caller's arrays unless you copy them first; the exercise does that.
 :::
 
 ## The gradient, and how to check it {.smaller}
@@ -288,7 +288,7 @@ Three independent checks, each cheap. The residual check works for any linear sy
 - Thomas, even as an interpreted R loop: $10^6$ cells in 0.55 s.
 
 ::: notes
-The slopes are read off as in *Convergence and cost*. The dense solver ignores the zeros and pays n^3; its slope here is a bit below 3 because the small sizes are dominated by overheads. Thomas is a plain R loop, so it has a large constant, but its slope is 1. The green line is Matrix's sparse solver, which recognises the band and runs in compiled code: the same O(n), a smaller constant. Python users get the same from scipy.linalg.solve_banded.
+The slopes are read off as in [*Convergence and cost*](../convergence-cost/lec.qmd). The dense solver ignores the zeros and pays n^3; its slope here is a bit below 3 because the small sizes are dominated by overheads. Thomas is a plain R loop, so it has a large constant, but its slope is 1. The green line is Matrix's sparse solver, which recognises the band and runs in compiled code: the same O(n), a smaller constant. Python users get the same from scipy.linalg.solve_banded.
 :::
 
 ## When Thomas fails: no pivoting {.smaller}
@@ -306,12 +306,12 @@ solve(matrix(c(1, 1, 0,  1, 1, 1,  0, 1, 1), 3), d)   # pivots: fine
 - **Check:** diagonal dominance before, residual $\max|A\mathbf{x} - \mathbf{d}|$ after.
 
 ::: notes
-Thomas is elimination without pivoting, so it inherits the failure of no-pivoting LU from *Pivoting, norms and conditioning*. In practice the matrices from diffusion, heat and compartment exchange are diagonally dominant (each cell loses at least as much as it passes on), and then every pivot stays away from zero. Problems with strong flow (advection, Part 10) can lose diagonal dominance; then use a banded solver with pivoting (LAPACK dgbsv, which is what scipy.linalg.solve_banded calls) or the sparse solve.
+Thomas is elimination without pivoting, so it inherits the failure of no-pivoting LU from [*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd). In practice the matrices from diffusion, heat and compartment exchange are diagonally dominant (each cell loses at least as much as it passes on), and then every pivot stays away from zero. Problems with strong flow (advection, Part 10) can lose diagonal dominance; then use a banded solver with pivoting (LAPACK dgbsv, which is what scipy.linalg.solve_banded calls) or the sparse solve.
 :::
 
 ## Recap: sparse storage {.smaller}
 
-From *Convergence and cost*:
+From [*Convergence and cost*](../convergence-cost/lec.qmd):
 
 - Dense: **8 bytes per entry**. A 20 000 genes × 100 000 cells count matrix = 16 GB.
 - Single-cell count matrices are **> 90 % zeros**. Compressed sparse column (**CSC**) keeps each non-zero's value (8 bytes) and row index (4 bytes), plus one pointer per column: **~12 bytes per non-zero**. At 10 % non-zero: 2.4 GB.
@@ -403,7 +403,7 @@ nnzero(solve(A))
 - **Rule:** `solve(A, b)`, never `solve(A) %*% b`. The factors of a band matrix stay sparse; the inverse does not.
 
 ::: notes
-The same rule as in *Gaussian elimination as LU* (never compute the inverse to solve a system), but for sparse matrices the penalty is not just a factor 3 in time: it is the difference between 38 MB and 8 TB. Biologically the dense inverse makes sense: a source in any cell raises the steady-state level in every other cell a little, so column j of the inverse, the response to a source in cell j, has no zeros.
+The same rule as in [*Gaussian elimination as LU*](../lu/lec.qmd) (never compute the inverse to solve a system), but for sparse matrices the penalty is not just a factor 3 in time: it is the difference between 38 MB and 8 TB. Biologically the dense inverse makes sense: a source in any cell raises the steady-state level in every other cell a little, so column j of the inverse, the response to a source in cell j, has no zeros.
 :::
 
 ## Fill-in: when elimination creates non-zeros {.smaller}
@@ -452,7 +452,7 @@ nnzero(as(L, "Matrix"))
 - On a 30 × 30 grid (2D diffusion): $A$ has 4380 non-zeros, $L$ 27 029 in natural order, 10 231 reordered. In 2D and 3D some fill-in is unavoidable.
 
 ::: notes
-Finding the ordering with least fill-in is NP-hard, but heuristics (approximate minimum degree, nested dissection) do very well. The arrow example: the ordering puts the hub last (L@perm ends with 0, the 0-based index of the hub). The 2D grid is the five-point Laplacian of *Steady state in two dimensions* (Part 10); there the band of width 30 fills completely in natural order. In 3D the fill-in grows faster still, which is when iterative solvers become necessary. Check: nnzero of the factor, compared to nnzero of A.
+Finding the ordering with least fill-in is NP-hard, but heuristics (approximate minimum degree, nested dissection) do very well. The arrow example: the ordering puts the hub last (L@perm ends with 0, the 0-based index of the hub). The 2D grid is the five-point Laplacian of [*Steady state in two dimensions*](../steady-state-2d/lec.qmd) (Part 10); there the band of width 30 fills completely in natural order. In 3D the fill-in grows faster still, which is when iterative solvers become necessary. Check: nnzero of the factor, compared to nnzero of A.
 :::
 
 ## A glimpse of iterative solvers {.smaller}
@@ -476,7 +476,7 @@ it
 - **Conjugate gradient** (CG, for SPD $A$) picks a better direction each step: about 240 iterations here instead of about 4160.
 
 ::: notes
-The motivation: for a 3D grid or a huge network, even a sparse factorisation fills in too much. Iterative methods never form L, they only multiply by A. Jacobi is the simplest: each cell updates its concentration from its neighbours' current values. CG is the standard method for SPD systems; its convergence depends on the condition number (about sqrt(kappa) iterations per digit). Full treatment, with Gauss-Seidel, GMRES and preconditioning, is in *Iterative linear solvers in depth* (Part 11). The exercise writes both in about 10 lines each.
+The motivation: for a 3D grid or a huge network, even a sparse factorisation fills in too much. Iterative methods never form L, they only multiply by A. Jacobi is the simplest: each cell updates its concentration from its neighbours' current values. CG is the standard method for SPD systems; its convergence depends on the condition number (about sqrt(kappa) iterations per digit). Full treatment, with Gauss-Seidel, GMRES and preconditioning, is in [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (Part 11). The exercise writes both in about 10 lines each.
 :::
 
 ## Iterative solvers: convergence and failure {.smaller}
@@ -506,7 +506,7 @@ for (it in 1:5) {
 - **Check:** always monitor the residual; stop on a tolerance, and report if the iteration limit was hit.
 
 ::: notes
-Error vs iteration on a log scale, as for every iteration in the course (*Convergence and cost*). Jacobi's rate is set by the largest eigenvalue of I - D^-1 A, here 0.995: about 460 iterations per digit. With less degradation (smaller k) it gets even slower, which is why plain Jacobi is never used on its own. The 2 x 2 example has the exact solution (1, 1) but the residual doubles each step: the iteration matrix has eigenvalue -2. A small residual is still not a small error when A is ill-conditioned (*Pivoting, norms and conditioning*): in the 1000-cell run the error is 8e-10 for a residual of 1e-10.
+Error vs iteration on a log scale, as for every iteration in the course ([*Convergence and cost*](../convergence-cost/lec.qmd)). Jacobi's rate is set by the largest eigenvalue of I - D^-1 A, here 0.995: about 460 iterations per digit. With less degradation (smaller k) it gets even slower, which is why plain Jacobi is never used on its own. The 2 x 2 example has the exact solution (1, 1) but the residual doubles each step: the iteration matrix has eigenvalue -2. A small residual is still not a small error when A is ill-conditioned ([*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd)): in the 1000-cell run the error is 8e-10 for a residual of 1e-10.
 :::
 
 ## Which solver?
@@ -517,7 +517,7 @@ Error vs iteration on a log scale, as for every iteration in the course (*Conver
 | dense, SPD | Cholesky | `chol`, `backsolve` | $\tfrac13 n^3$ |
 | tridiagonal / banded | Thomas / band LU | hand-written, `Matrix::solve` | $O(n)$ |
 | sparse, moderate size | sparse direct + ordering | `Matrix::solve`, `Cholesky` | depends on fill-in |
-| sparse, huge (3D, networks) | iterative (CG, ...) | packages; *Iterative linear solvers in depth* | $O(\text{nnz})$ per step |
+| sparse, huge (3D, networks) | iterative (CG, ...) | packages; [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) | $O(\text{nnz})$ per step |
 
 **Checks:** symmetric? `isSymmetric(A)`. SPD? `chol` succeeds. Sparse? `nnzero(A) / length(A)`. After: residual, and `nnzero` of the factor.
 
@@ -533,8 +533,8 @@ The decision is made by looking at the matrix, not at the problem name. In pract
 - **Fill-in** depends on the ordering: hub last, or let `Cholesky(perm = TRUE)` choose.
 - **Iterative** solvers need only $A\mathbf{x}$: Jacobi (slow, needs diagonal dominance), CG (SPD). Monitor the residual.
 
-**Next:** Part 4, *Least squares: normal equations vs QR*, where $X^TX$ is SPD and Cholesky returns, along with its accuracy problem.
+**Next:** Part 4, [*Least squares: normal equations vs QR*](../least-squares-qr/lec.qmd), where $X^TX$ is SPD and Cholesky returns, along with its accuracy problem.
 
 ::: notes
-Three structures, three tools, and for each the failure and the check. Where they come back: Cholesky in least squares (the normal equations, next unit) and in model fitting (Part 9); Thomas in implicit diffusion (Part 10); sparse matrices in PCA of single-cell data (*How `eigen()` works, and big problems*) and in 2D steady states (Part 10); iterative solvers in *Iterative linear solvers in depth*.
+Three structures, three tools, and for each the failure and the check. Where they come back: Cholesky in least squares (the normal equations, next unit) and in model fitting (Part 9); Thomas in implicit diffusion (Part 10); sparse matrices in PCA of single-cell data ([*How `eigen()` works, and big problems*](../eigen-algorithms/lec.qmd)) and in 2D steady states (Part 10); iterative solvers in [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd).
 :::

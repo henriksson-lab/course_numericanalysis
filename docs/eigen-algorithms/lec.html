@@ -223,7 +223,7 @@ Numerical analysis for biologists
 </section>
 <section id="about-this-lecture" class="slide level2 smaller">
 <h2>About this lecture</h2>
-<p>In <em>Power iteration and friends</em> we found <strong>one</strong> eigenvalue at a time by multiplying a vector by <span class="math inline">A</span> again and again. This lecture is about what <code>eigen()</code> does to get <strong>all</strong> of them, and what to do when the matrix is too big for that.</p>
+<p>In <a href="../power-iteration/lec.html"><em>Power iteration and friends</em></a> we found <strong>one</strong> eigenvalue at a time by multiplying a vector by <span class="math inline">A</span> again and again. This lecture is about what <code>eigen()</code> does to get <strong>all</strong> of them, and what to do when the matrix is too big for that.</p>
 <ul>
 <li>The <strong>QR algorithm</strong>: factor <span class="math inline">A = QR</span>, multiply back as <span class="math inline">RQ</span>, repeat. It is power iteration on all vectors at once.</li>
 <li>Two tricks make it fast: <strong>Hessenberg reduction</strong> first, and <strong>shifts</strong>.</li>
@@ -304,24 +304,30 @@ Numerical analysis for biologists
           display:block!important;
       }</style></aside>
 </section>
-<section id="recap-power-iteration" class="slide level2 smaller">
-<h2>Recap: power iteration</h2>
+<section id="recap-power-iteration-and-friends" class="slide level2 smaller">
+<h2>Recap: power iteration and friends</h2>
+<div class="columns">
+<div class="column" style="width:55%;">
+<p>From <a href="../power-iteration/lec.html"><em>Power iteration and friends</em></a>:</p>
+<ul>
+<li><strong>Power iteration</strong> <span class="math inline">\mathbf x \leftarrow A\mathbf x/\|A\mathbf x\|</span> finds the eigenvalue of largest <span class="math inline">|\lambda|</span>; the error shrinks by <span class="math inline">|\lambda_2/\lambda_1|</span> per step. Fish Leslie matrix: <span class="math inline">\lambda_1 = 1.177</span>, rate 0.654, 55 steps.</li>
+<li>It <strong>fails</strong> when <span class="math inline">|\lambda_2| = |\lambda_1|</span> (semelparous fish: the estimate cycles) and <strong>crawls</strong> when the ratio is near 1 (slow-switching cells: 5406 steps).</li>
+<li><strong>Inverse iteration</strong> with shift <span class="math inline">\sigma</span> finds the eigenvalue nearest <span class="math inline">\sigma</span>; <strong>Rayleigh quotient iteration</strong> (<span class="math inline">\sigma</span> = current Rayleigh quotient) converges <strong>cubically</strong> for symmetric <span class="math inline">A</span>.</li>
+<li>One eigenpair per run.</li>
+</ul>
+</div><div class="column" style="width:45%;">
+<p>Our test matrix for this lecture:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a aria-hidden="true" tabindex="-1"></a>A <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="dv">4</span>, <span class="dv">1</span>, <span class="dv">0</span>,</span>
 <span id="cb2-2"><a aria-hidden="true" tabindex="-1"></a>              <span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">1</span>,</span>
-<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a>              <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>), <span class="dv">3</span>)              <span class="co"># symmetric 3 x 3</span></span>
-<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">1</span>)</span>
-<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>) { x <span class="ot">&lt;-</span> A <span class="sc">%*%</span> x; x <span class="ot">&lt;-</span> x <span class="sc">/</span> <span class="fu">sqrt</span>(<span class="fu">sum</span>(x<span class="sc">^</span><span class="dv">2</span>)) }</span>
-<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sum</span>(x <span class="sc">*</span> (A <span class="sc">%*%</span> x))                     <span class="co"># Rayleigh quotient</span></span>
-<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 4.732051</span></span>
-<span id="cb2-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">eigen</span>(A)<span class="sc">$</span>values</span>
-<span id="cb2-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 4.732051 3.000000 1.267949</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<ul>
-<li>Repeated multiplication by <span class="math inline">A</span> turns any start vector towards the eigenvector of the <strong>largest</strong> <span class="math inline">|\lambda|</span>; the error shrinks by <span class="math inline">|\lambda_2/\lambda_1|</span> per step (here <span class="math inline">3/4.73 = 0.63</span>).</li>
-<li>One eigenpair per run. For the next one we must remove the first (deflation), and errors pile up.</li>
-<li><code>eigen()</code> returns all three, accurate to the last digit, in microseconds. How?</li>
-</ul>
+<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a>              <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>), <span class="dv">3</span>)   <span class="co"># symmetric</span></span>
+<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">power_rq</span>(A, <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">1</span>))<span class="sc">$</span>lambda</span>
+<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 4.732051              # 51 steps</span></span>
+<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">eigen</span>(A)<span class="sc">$</span>values</span>
+<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 4.732051 3.000000 1.267949</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Rate <span class="math inline">3/4.73 = 0.63</span> per step. <code>eigen()</code> returns <strong>all three</strong>, to the last digit, in microseconds. How?</p>
+</div></div>
 <aside class="notes">
-<p>Recap from Power iteration and friends; do not re-teach. This matrix (eigenvalues 3 + sqrt 3, 3, 3 - sqrt 3) is our small test case throughout the lecture. The questions for the next slides: how to get all eigenvalues at once, and how to make the convergence much faster than 0.63 per step.</p>
+<p>Recap only; do not re-teach. The numbers are the ones students saw in Power iteration and friends: the fish Leslie matrix (lambda_1 = 1.177, |lambda_2/lambda_1| = 0.654, 55 iterations to a residual of 1e-10), the semelparous variant whose four eigenvalues share one modulus, the slow-switching cell-state chain (5406 iterations and still only 5 digits), and Rayleigh quotient iteration on the trait correlation matrix (exercise C7 there). power_rq is that lecture’s power iteration with 2-norm normalisation and the Rayleigh quotient as the estimate; on A it reaches a residual of 1e-10 after 51 steps. This matrix (eigenvalues 3 + sqrt 3, 3, 3 - sqrt 3) is our small test case throughout the lecture. The questions for the next slides: how to get all eigenvalues at once, and how to make the convergence much faster than 0.63 per step. Both answers reuse the pieces above: power iteration on many vectors at once, and shifts.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -432,11 +438,11 @@ Numerical analysis for biologists
 <span id="cb5-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,]    0    1</span></span>
 <span id="cb5-13"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,]    1    0</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
-<li><span class="math inline">|\lambda_2/\lambda_1| = 1</span>: power iteration cannot separate the two, and neither can the QR algorithm. The matrix is already its own QR fixed point.</li>
+<li><span class="math inline">|\lambda_2/\lambda_1| = 1</span>: power iteration cannot separate the two (the semelparous fish of <em>Power iteration and friends</em>), and neither can the QR algorithm. The matrix is already its own QR fixed point.</li>
 <li>The <strong>check</strong>: off-diagonal entries that do not shrink. The fix: a <strong>shift</strong>.</li>
 </ul>
 <aside class="notes">
-<p>The same failure as power iteration on a periodic Markov chain (Power iteration and friends): eigenvalues of equal size. Q = -P and R = -I, so RQ = P. In practice exact ties in magnitude are rare except for structure (periodic chains, matrices with symmetric spectra, complex pairs on the next slides), but near-ties are common, and they give the slow convergence of the previous slide. Shifting the matrix by mu changes the eigenvalues to 1 - mu and -1 - mu, which have different sizes for any mu other than 0.</p>
+<p>The same failure as power iteration on the semelparous fish in Power iteration and friends (a periodic life cycle, four eigenvalues of equal modulus): eigenvalues of equal size. Q = -P and R = -I, so RQ = P. In practice exact ties in magnitude are rare except for structure (periodic chains, matrices with symmetric spectra, complex pairs on the next slides), but near-ties are common, and they give the slow convergence of the previous slide. Shifting the matrix by mu changes the eigenvalues to 1 - mu and -1 - mu, which have different sizes for any mu other than 0.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -475,11 +481,11 @@ Numerical analysis for biologists
 <h2>Second trick: shifts and deflation</h2>
 
 <img data-src="fig03-shifts.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:62.0%"><ul>
-<li><strong>Shift</strong>: factor <span class="math inline">A_k - \mu I = QR</span>, then <span class="math inline">A_{k+1} = RQ + \mu I</span>. Still a similarity; the rate for the last entry becomes <span class="math inline">|\lambda_n - \mu| / |\lambda_{n-1} - \mu|</span>. With <span class="math inline">\mu = a_{nn}</span> (a Rayleigh quotient) that ratio goes to 0: digits triple per step.</li>
+<li><strong>Shift</strong>: factor <span class="math inline">A_k - \mu I = QR</span>, then <span class="math inline">A_{k+1} = RQ + \mu I</span>. Still a similarity; the rate for the last entry becomes <span class="math inline">|\lambda_n - \mu| / |\lambda_{n-1} - \mu|</span>. <span class="math inline">\mu = a_{nn}</span> is a Rayleigh quotient: this is the <strong>Rayleigh quotient iteration</strong> of <em>Power iteration and friends</em>, working on the last row. Digits triple per step.</li>
 <li><strong>Deflate</strong>: once <span class="math inline">|a_{n,n-1}| &lt; 10^{-12}</span>, <span class="math inline">a_{nn}</span> is an eigenvalue. Drop the last row and column and continue. Our 3 × 3: <strong>62</strong> steps unshifted, <strong>7</strong> shifted.</li>
 </ul>
 <aside class="notes">
-<p>This is shifted inverse iteration from Power iteration and friends, in disguise: the last column of the QR algorithm does inverse iteration with shift mu. With the Rayleigh-quotient shift mu = a_nn, a symmetric matrix converges cubically: here the last subdiagonal goes 7e-3, 1e-7, 6e-22. The plain Rayleigh shift can fail: for [[2,1],[1,2]] a_nn = 2 lies exactly between the eigenvalues 1 and 3 and the iteration stalls, as in the previous slide. LAPACK uses the Wilkinson shift (the eigenvalue of the trailing 2x2 block closer to a_nn), which always converges for symmetric matrices; the exercise (C2) tries both. For real nonsymmetric matrices LAPACK uses two shifts at once (the Francis double shift) so that complex shifts can be handled in real arithmetic.</p>
+<p>Nothing new to teach here: the last column of the QR algorithm does shifted inverse iteration with shift mu, and with mu = a_nn that shift is the current Rayleigh quotient, so this is the Rayleigh quotient iteration of Power iteration and friends (slide and exercise C7 there) in disguise. As there, a symmetric matrix converges cubically: here the last subdiagonal goes 7e-3, 1e-7, 6e-22. The plain Rayleigh shift can fail: for [[2,1],[1,2]] a_nn = 2 lies exactly between the eigenvalues 1 and 3 and the iteration stalls, as in the previous slide. LAPACK uses the Wilkinson shift (the eigenvalue of the trailing 2x2 block closer to a_nn), which always converges for symmetric matrices; the exercise (C2) tries both. For real nonsymmetric matrices LAPACK uses two shifts at once (the Francis double shift) so that complex shifts can be handled in real arithmetic.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -845,7 +851,7 @@ Numerical analysis for biologists
 <li>That is exactly the PCA situation: a few large, separated eigenvalues above a noise bulk.</li>
 </ul>
 <aside class="notes">
-<p>The test matrix is diagonal, so we know the answer; Lanczos does not know it is diagonal, it only sees products. After 5 steps the largest Ritz value is already 9.76; after 10 steps it is right to 6 digits. The rate depends on the gap between the wanted eigenvalue and the rest of the spectrum, relative to the spread of the spectrum (Kaniel-Paige theory, which uses Chebyshev polynomials): a much better rate than power iteration’s lambda2/lambda1. Eigenvalues inside the bulk would need many more steps. Shift-and-invert (Power iteration and friends) turns interior eigenvalues into extreme ones, at the price of a sparse solve per step.</p>
+<p>The test matrix is diagonal, so we know the answer; Lanczos does not know it is diagonal, it only sees products. After 5 steps the largest Ritz value is already 9.76; after 10 steps it is right to 6 digits. The rate depends on the gap between the wanted eigenvalue and the rest of the spectrum, relative to the spread of the spectrum (Kaniel-Paige theory, which uses Chebyshev polynomials): a much better rate than power iteration’s lambda2/lambda1. Eigenvalues inside the bulk would need many more steps. Shift-and-invert (the shifted inverse iteration of Power iteration and friends) turns interior eigenvalues into extreme ones, at the price of a sparse solve per step.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -997,7 +1003,7 @@ Numerical analysis for biologists
 <li><strong>Krylov / Lanczos</strong>: keep all power-iteration vectors, need only <span class="math inline">A\mathbf v</span>; extreme eigenvalues converge first. Reorthogonalise and restart (ARPACK, <code>irlba</code>).</li>
 <li><strong>Single-cell PCA</strong>: matrix-free, implicitly centred, top 10 PCs in 0.4 s and 11 MB instead of 22 s and 1.4 GB.</li>
 </ul>
-<p><strong>Next:</strong> Part 6, <em>Polynomial interpolation</em>.</p>
+<p><strong>Next:</strong> Part 6, <a href="../polynomial-interpolation/lec.html"><em>Polynomial interpolation</em></a>.</p>
 <aside class="notes">
 <p>The two halves of the lecture have one idea in common: everything is power iteration, made fast either by orthogonal similarity transforms on a dense matrix (QR algorithm) or by keeping the whole Krylov subspace (Lanczos). The checks to remember: kappa(V) or perturb-and-recompute for nonsymmetric problems, and the residual for truncated solvers.</p>
 <style type="text/css">

@@ -137,7 +137,7 @@ $$\begin{pmatrix} 2 & -1 & 0 & 0 \\ -1 & 3 & -1 & 0 \\ 0 & -1 & 3 & -1 \\ 0 & 0 
 **B3. When Thomas breaks.**
 (a) Run the forward sweep for $a = (\cdot, 1, 1)$, $b = (1, 1, 1)$, $c = (1, 1, \cdot)$. What happens at the second pivot?
 (b) Is this matrix diagonally dominant? Is it singular? (Compute its determinant.)
-(c) Which algorithm from *Pivoting, norms and conditioning* would solve it, and why?
+(c) Which algorithm from [*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd) would solve it, and why?
 
 **B4. CSC by hand.** A count matrix of 3 genes × 5 cells:
 $$M = \begin{pmatrix} 0 & 1 & 0 & 0 & 3 \\ 4 & 0 & 0 & 6 & 0 \\ 0 & 2 & 0 & 0 & 1 \end{pmatrix}.$$
@@ -662,7 +662,7 @@ fn main() {
 
 :::
 
-The residual is at the level of rounding, total degradation equals production, and the gradient falls by $e^{-1}$ over 10 cells, as $\sqrt{D/k} = 10$ predicts (the small difference, 0.3680 vs 0.3679, is because the cells are discrete). The library solvers agree to rounding. Keep your `thomas` function: Part 10 uses it for implicit diffusion steps.
+The residual is at the level of rounding, total degradation equals production, and the gradient falls by $e^{-1}$ over 10 cells, as $\sqrt{D/k} = 10$ predicts (the small difference, 0.3680 vs 0.3679, is because the cells are discrete). The library solvers agree to rounding. Keep your `thomas` function: Part 10 uses it for implicit diffusion steps ([*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd), same argument order).
 
 **C4.**
 
@@ -671,6 +671,7 @@ The residual is at the level of rounding, total degradation equals production, a
 ### R
 
 ```r
+# uses thomas() from C3
 morphogen <- function(n, D = 1, k = 0.01)
   list(a = c(0, rep(-D, n - 1)), c = c(rep(-D, n - 1), 0),
        b = c(D + k, rep(2 * D + k, n - 2), D + k), d = c(1, rep(0, n - 1)))
@@ -695,6 +696,7 @@ for (n in c(1e5, 1e6)) {
 ### Python
 
 ```python
+# uses thomas() from C3
 import time
 
 def morphogen(n, D=1.0, k=0.01):
@@ -799,6 +801,7 @@ Your times will differ (these were measured on a busy server, one BLAS thread). 
 ### R
 
 ```r
+# uses thomas() from C3
 diag_dominant <- function(a, b, c) all(abs(b) >= abs(a) + abs(c))
 a <- c(0, 1, 1, 1); b <- c(1e-17, 2, 2, 2); cc <- c(1, 1, 1, 0); d <- c(1, 1, 1, 1)
 diag_dominant(a, b, cc)
@@ -820,6 +823,7 @@ diag_dominant(c(0, rep(-1, n - 1)), c(1 + k, rep(2 + k, n - 2), 1 + k),
 ### Python
 
 ```python
+# uses thomas() from C3
 def diag_dominant(a, b, c):
     return bool(np.all(np.abs(b) >= np.abs(a) + np.abs(c)))
 
@@ -904,7 +908,7 @@ fn main() {
 
 :::
 
-The first pivot is $10^{-17}$, so $w = 10^{17}$ and $b_2 = 2 - 10^{17}$: the 2 is lost to rounding (*How computers store numbers*). Thomas returns $x_1 = 0$ instead of $-2/3$, with no warning. The residual (0.67, compared with entries of size 1) shows that the answer is wrong. Partial pivoting swaps rows 1 and 2 and avoids the tiny pivot. The morphogen matrix is diagonally dominant, so Thomas is safe there.
+The first pivot is $10^{-17}$, so $w = 10^{17}$ and $b_2 = 2 - 10^{17}$: the 2 is lost to rounding ([*How computers store numbers*](../floating-point/lec.qmd)). Thomas returns $x_1 = 0$ instead of $-2/3$, with no warning. The residual (0.67, compared with entries of size 1) shows that the answer is wrong. Partial pivoting swaps rows 1 and 2 and avoids the tiny pivot. The morphogen matrix is diagonally dominant, so Thomas is safe there.
 
 **C6.**
 
@@ -1319,7 +1323,7 @@ Jacobi needs 4158 iterations, CG 237: both reach the residual $10^{-10}$, and bo
 
 ## Where this leads
 
-- *Least squares: normal equations vs QR* (Part 4): the normal equations $X^TX\boldsymbol\beta = X^T\mathbf{y}$ have an SPD matrix and are solved by Cholesky, but squaring $X$ squares the condition number.
-- *How `eigen()` works, and big problems* (Part 5): PCA of a sparse single-cell matrix with Krylov methods (`irlba`, `scipy.sparse.linalg.eigsh`), which, like CG, only need products $A\mathbf{x}$.
-- *Implicit schemes and the method of lines* (Part 10): one Thomas solve per time step for diffusion along a line; *Steady state in two dimensions* (Part 10): sparse matrices from Kronecker products and sparse direct solves with fill-reducing orderings.
-- *Iterative linear solvers in depth* (Part 11, optional): Jacobi, Gauss–Seidel, conjugate gradient, GMRES and preconditioning for systems too large for a direct solve.
+- [*Least squares: normal equations vs QR*](../least-squares-qr/lec.qmd) (Part 4): the normal equations $X^TX\boldsymbol\beta = X^T\mathbf{y}$ have an SPD matrix and are solved by Cholesky, but squaring $X$ squares the condition number.
+- [*How `eigen()` works, and big problems*](../eigen-algorithms/lec.qmd) (Part 5): PCA of a sparse single-cell matrix with Krylov methods (`irlba`, `scipy.sparse.linalg.eigsh`), which, like CG, only need products $A\mathbf{x}$.
+- [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd) (Part 10): one Thomas solve per time step for diffusion along a line; [*Steady state in two dimensions*](../steady-state-2d/lec.qmd) (Part 10): sparse matrices from Kronecker products and sparse direct solves with fill-reducing orderings.
+- [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (Part 11, optional): Jacobi, Gauss–Seidel, conjugate gradient, GMRES and preconditioning for systems too large for a direct solve.

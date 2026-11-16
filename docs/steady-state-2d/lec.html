@@ -233,7 +233,7 @@ Numerical analysis for biologists
 <li>Biology: <strong>oxygen under a lid</strong> over a cell layer. Where do the cells go hypoxic, and at what cell density?</li>
 </ul>
 <aside class="notes">
-<p>This is the third unit of Part 10. The pieces are all old: the second-difference stencil (The diffusion (heat) equation by finite differences), tridiagonal and sparse solves with fill-in (Structure: symmetric, banded, sparse), and Newton with a Jacobian (Newton for systems of equations). New today: going from one to two space dimensions, which means turning a 2D grid into one vector, and doing that consistently. Grid conventions follow The diffusion (heat) equation by finite differences: points x_i = i h, unknowns at the interior points, units µm, s and µM.</p>
+<p>This is the third unit of Part 10. The pieces are all old: the second-difference stencil (<a href="../diffusion-explicit/lec.html"><em>The diffusion (heat) equation by finite differences</em></a>), tridiagonal and sparse solves with fill-in (<a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a>), and Newton with a Jacobian (<a href="../newton-systems/lec.html"><em>Newton for systems of equations</em></a>). New today: going from one to two space dimensions, which means turning a 2D grid into one vector, and doing that consistently. Grid: nodes x_i = i h as in The diffusion (heat) equation by finite differences (h is its Δx; here the same h in x and y), unknowns at the interior nodes, a ghost point for a wall (exercise), and in 2D the numbering k = i + (j − 1) n_x. Two deliberate differences from the two earlier diffusion units: the matrix is written as minus the second difference, (D/h²) tridiag(−1, 2, −1) instead of tridiag(1, −2, 1), so that it is symmetric positive definite and Cholesky and CG apply; and oxygen is in µM rather than scaled to 0..1, because the hypoxia threshold and K_m are absolute concentrations. Units µm and s as before.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -330,18 +330,18 @@ Numerical analysis for biologists
 <h2>Recap: three tools you already have</h2>
 <div class="columns">
 <div class="column" style="width:33%;">
-<p><strong>Second difference</strong> (<em>The diffusion (heat) equation by finite differences</em>)</p>
+<p><strong>Second difference</strong> (<a href="../diffusion-explicit/lec.html"><em>The diffusion (heat) equation by finite differences</em></a>)</p>
 <p><span class="math display">\frac{c_{i-1} - 2c_i + c_{i+1}}{h^2} \approx c''(x_i)</span></p>
 <p>error <span class="math inline">O(h^2)</span>; boundary values are known numbers.</p>
 </div><div class="column" style="width:33%;">
-<p><strong>Sparse solves</strong> (<em>Structure: symmetric, banded, sparse</em>)</p>
+<p><strong>Sparse solves</strong> (<a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a>)</p>
 <ul>
 <li>tridiagonal: <span class="math inline">O(n)</span> (Thomas)</li>
 <li>sparse: <code>Matrix::solve</code></li>
 <li>2D grid: some <strong>fill-in</strong> is unavoidable; a good ordering helps.</li>
 </ul>
 </div><div class="column" style="width:33%;">
-<p><strong>Newton</strong> (<em>Newton for systems of equations</em>)</p>
+<p><strong>Newton</strong> (<a href="../newton-systems/lec.html"><em>Newton for systems of equations</em></a>)</p>
 <p><span class="math display">J(\mathbf c)\,\boldsymbol\delta = -\mathbf F(\mathbf c), \quad \mathbf c \leftarrow \mathbf c + \boldsymbol\delta</span></p>
 <p>quadratic convergence near a root; may find the <strong>wrong</strong> root.</p>
 </div></div>
@@ -369,7 +369,7 @@ Numerical analysis for biologists
 <li>Could we just time-step until nothing changes? Explicit 2D with <span class="math inline">h = 50</span> µm needs <span class="math inline">\Delta t \le h^2/(4D) = 0.31</span> s, and settling takes <span class="math inline">\sim L^2/D</span>: thousands of steps, <span class="math inline">16\times</span> more at <span class="math inline">h/2</span>. A steady-state solve is <strong>one</strong> linear system.</li>
 </ul>
 <aside class="notes">
-<p>A boundary value problem (BVP) is the opposite of the initial value problems of Part 8: information comes from the edges, all at once, not from a starting time. The 2D stability limit for FTCS is D dt / h^2 &lt;= 1/4 (twice as strict as in 1D, because each point has four neighbours; derived the same way as in The diffusion (heat) equation by finite differences). Halving h divides dt by 4 and multiplies the number of points by 4, so the cost of time-stepping to steady state grows 16-fold. Implicit time steps (Implicit schemes and the method of lines) would remove the step limit, but if you only want the end state, ask for it directly.</p>
+<p>A boundary value problem (BVP) is the opposite of the initial value problems of Part 8: information comes from the edges, all at once, not from a starting time. The 2D stability limit for FTCS is D dt / h^2 &lt;= 1/4 (twice as strict as in 1D, because each point has four neighbours; derived the same way as in <a href="../diffusion-explicit/lec.html"><em>The diffusion (heat) equation by finite differences</em></a>). Halving h divides dt by 4 and multiplies the number of points by 4, so the cost of time-stepping to steady state grows 16-fold. Implicit time steps (<a href="../diffusion-implicit/lec.html"><em>Implicit schemes and the method of lines</em></a>) would remove the step limit, but if you only want the end state, ask for it directly.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -384,12 +384,12 @@ Numerical analysis for biologists
 </section>
 <section id="d-first-one-line-across-the-chamber" class="slide level2 smaller">
 <h2>1D first: one line across the chamber</h2>
-<p>A long chamber: only <span class="math inline">y</span> matters. Grid <span class="math inline">y_i = i\,h</span>, <span class="math inline">i = 0, \dots, N</span>, with <span class="math inline">c_0 = c_N = 200</span> µM known. At each interior point:</p>
+<p>A long chamber: only <span class="math inline">y</span> matters. Grid <span class="math inline">y_i = i\,h</span>, <span class="math inline">i = 0, \dots, N</span> (nodes as in the 1D chamber, <span class="math inline">h = \Delta x</span>), with <span class="math inline">c_0 = c_N = 200</span> µM known. At each interior point:</p>
 <p><span class="math display">\frac{D}{h^2}\bigl(-c_{i-1} + 2c_i - c_{i+1}\bigr) = -R_0, \qquad i = 1, \dots, N-1.</span></p>
 <p>By hand, <span class="math inline">L = 2000</span> µm, <span class="math inline">N = 4</span> (<span class="math inline">h = 500</span> µm, <span class="math inline">D/h^2 = 0.008</span> /s), <span class="math inline">R_0 = 0.5</span> µM/s. Move known values to the right:</p>
 <p><span class="math display">\begin{pmatrix} 2 &amp; -1 &amp; 0 \\ -1 &amp; 2 &amp; -1 \\ 0 &amp; -1 &amp; 2 \end{pmatrix}\begin{pmatrix} c_1 \\ c_2 \\ c_3\end{pmatrix} = \begin{pmatrix} 200 - 62.5 \\ -62.5 \\ 200 - 62.5\end{pmatrix} \quad\Rightarrow\quad \mathbf c = (106.25,\ 75,\ 106.25).</span></p>
 <aside class="notes">
-<p>Sign convention: we write the operator as minus the second difference, so the matrix has a positive diagonal and is symmetric positive definite (the same matrix as the morphogen row in Structure: symmetric, banded, sparse). R0 / (D/h^2) = 0.5 / 0.008 = 62.5. Solve by symmetry: c1 = c3, so 2c1 - c2 = 137.5 and -2c1 + 2c2 = -62.5; adding gives c2 = 75, then c1 = 106.25. The known boundary values appear only in the first and last equations: they move to the right-hand side, which is where all the boundary information lives.</p>
+<p>Sign convention: we write the operator as minus the second difference, so the matrix has a positive diagonal and is symmetric positive definite. The two earlier diffusion units wrote tridiag(1, −2, 1), the second difference itself, because there it sat on the right-hand side of an ODE; for a steady solve the minus sign is the natural choice, since Cholesky and CG need a positive definite matrix. It is the pattern of the morphogen row in <a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a>, without the decay term on the diagonal and with fixed values instead of closed ends. R0 / (D/h^2) = 0.5 / 0.008 = 62.5. Solve by symmetry: c1 = c3, so 2c1 - c2 = 137.5 and -2c1 + 2c2 = -62.5; adding gives c2 = 75, then c1 = 106.25. The known boundary values appear only in the first and last equations: they move to the right-hand side, which is where all the boundary information lives.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -420,7 +420,7 @@ Numerical analysis for biologists
 <li><a href="https://rdrr.io/cran/Matrix/man/bandSparse.html"><code>bandSparse</code></a> + <a href="https://rdrr.io/cran/Matrix/man/solve-methods.html"><code>solve</code></a>: the sparse solver finds the band itself (<span class="math inline">O(n)</span>, as Thomas).</li>
 </ul>
 <aside class="notes">
-<p>The exact solution of D c’’ = R0 with c = c0 at both ends is c0 - R0 y (L - y) / (2D): check by differentiating twice. The Taylor error term of the stencil involves the fourth derivative, which is zero for a parabola, so the grid solution is exact at the grid points for any h. That makes this a weak test of a solver: it cannot reveal the order. The next slides give a better test. The thomas function from Structure: symmetric, banded, sparse would do the same job; we use Matrix because the 2D case needs it anyway.</p>
+<p>The exact solution of D c’’ = R0 with c = c0 at both ends is c0 - R0 y (L - y) / (2D): check by differentiating twice. The Taylor error term of the stencil involves the fourth derivative, which is zero for a parabola, so the grid solution is exact at the grid points for any h. That makes this a weak test of a solver: it cannot reveal the order. The next slides give a better test. The thomas function from <a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a> would do the same job; we use Matrix because the 2D case needs it anyway.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -468,7 +468,7 @@ Numerical analysis for biologists
 </ul>
 </div></div>
 <aside class="notes">
-<p>Linear (first-order) uptake keeps the system linear and has an exact solution: c’’ = c / lambda^2 is solved by cosh, symmetric around the middle. lambda = sqrt(D/k) is the same length scale that appears for morphogens in Reaction–diffusion and pattern formation. The error halves twice per halving of h: second order, as the Taylor expansion of the stencil promises. When no exact solution exists (the usual case), refine the grid and watch the changes shrink by 4x: that is the check we use for the 2D oxygen map later.</p>
+<p>Linear (first-order) uptake keeps the system linear and has an exact solution: c’’ = c / lambda^2 is solved by cosh, symmetric around the middle. lambda = sqrt(D/k) is the same length scale that appears for morphogens in <a href="../reaction-diffusion/lec.html"><em>Reaction–diffusion and pattern formation</em></a>. The error halves twice per halving of h: second order, as the Taylor expansion of the stencil promises. When no exact solution exists (the usual case), refine the grid and watch the changes shrink by 4x: that is the check we use for the 2D oxygen map later.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -768,7 +768,7 @@ Numerical analysis for biologists
 <li>Python: <a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.spsolve.html"><code>scipy.sparse.linalg.spsolve</code></a>. Rust: <code>sprs</code> has <strong>no direct solver</strong>; the exercise uses a hand-written conjugate gradient.</li>
 </ul>
 <aside class="notes">
-<p>Natural order: nnz(L) is about (number of unknowns) x nx, because everything inside the band fills in; refining h by 2 multiplies it by 8. Reordering (approximate minimum degree / nested dissection, chosen automatically by Cholesky(A, perm = TRUE) and by solve on a dsCMatrix) cuts it by a factor 5 to 11 here, and the gap grows with the grid. This is the 2D case of the fill-in discussion in Structure: symmetric, banded, sparse. Timings are from one run on one machine and vary; the factor matters, not the seconds. Matrix caches the factorisation inside the matrix object, so repeated solves with the same A are almost free: time a fresh matrix. sprs-ldl (a separate crate, not in our Cargo.toml) would give a sparse Cholesky in Rust; CG needs only matrix-vector products and works because A is SPD. Full treatment of CG and preconditioning: Iterative linear solvers in depth (Part 11).</p>
+<p>Natural order: nnz(L) is about (number of unknowns) x nx, because everything inside the band fills in; refining h by 2 multiplies it by 8. Reordering (approximate minimum degree / nested dissection, chosen automatically by Cholesky(A, perm = TRUE) and by solve on a dsCMatrix) cuts it by a factor 5 to 11 here, and the gap grows with the grid. This is the 2D case of the fill-in discussion in <a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a>. Timings are from one run on one machine and vary; the factor matters, not the seconds. Matrix caches the factorisation inside the matrix object, so repeated solves with the same A are almost free: time a fresh matrix. sprs-ldl (a separate crate, not in our Cargo.toml) would give a sparse Cholesky in Rust; CG needs only matrix-vector products and works because A is SPD. Full treatment of CG and preconditioning: <a href="../iterative-solvers/lec.html"><em>Iterative linear solvers in depth</em></a> (Part 11).</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -838,7 +838,7 @@ Numerical analysis for biologists
 <span id="cb6-9"><a aria-hidden="true" tabindex="-1"></a>  cv <span class="ot">&lt;-</span> cv <span class="sc">+</span> <span class="fu">as.vector</span>(<span class="fu">solve</span>(J, <span class="sc">-</span>F))</span>
 <span id="cb6-10"><a aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <aside class="notes">
-<p>Uptake at point k depends only on c_k, so its derivative contributes only to the diagonal: the Jacobian has exactly the pattern of A, stays sparse and symmetric, and is positive definite (A is, and r’ &gt; 0 for c &gt; -Km). So every Newton step is a sparse solve of the same kind as before: the cost of a nonlinear steady state is a handful of linear ones. This is Newton for systems of equations with 3081 unknowns instead of 2. The test uses the residual norm in µM/s; 1e-8 is about 1e-10 relative to the largest terms. Note: this code has a bug of the dangerous kind; see the next slide.</p>
+<p>Uptake at point k depends only on c_k, so its derivative contributes only to the diagonal: the Jacobian has exactly the pattern of A, stays sparse and symmetric, and is positive definite (A is, and r’ &gt; 0 for c &gt; -Km). So every Newton step is a sparse solve of the same kind as before: the cost of a nonlinear steady state is a handful of linear ones. This is <a href="../newton-systems/lec.html"><em>Newton for systems of equations</em></a> with 3081 unknowns instead of 2. The test uses the residual norm in µM/s; 1e-8 is about 1e-10 relative to the largest terms. Note: this code has a bug of the dangerous kind; see the next slide.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -866,7 +866,7 @@ Numerical analysis for biologists
 </ul>
 </div></div>
 <aside class="notes">
-<p>The residual plot looks perfect for both runs: a small residual tells you that you found a root, not that you found the right one. That lesson is from Newton for systems of equations (the toggle switch had three roots); here the extra root is an artefact of using the formula c/(Km + c) outside the range where it means anything. First step: at c = 200, r’ is about 2.5e-5, so J is practically A and the step lands on the constant-uptake answer, -27.7 at the centre. Clipping is the simplest fix (a projected Newton step); starting from c = 0 everywhere also reaches the right root (12 steps). Both give the same field to 4e-9 µM. In code that will be reused, put the min(c) check inside the function and stop with an error.</p>
+<p>The residual plot looks perfect for both runs: a small residual tells you that you found a root, not that you found the right one. That lesson is from <a href="../newton-systems/lec.html"><em>Newton for systems of equations</em></a> (the toggle switch had three roots); here the extra root is an artefact of using the formula c/(Km + c) outside the range where it means anything. First step: at c = 200, r’ is about 2.5e-5, so J is practically A and the step lands on the constant-uptake answer, -27.7 at the centre. Clipping is the simplest fix (a projected Newton step); starting from c = 0 everywhere also reaches the right root (12 steps). Both give the same field to 4e-9 µM. In code that will be reused, put the min(c) check inside the function and stop with an error.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -887,7 +887,7 @@ Numerical analysis for biologists
 <li>A threshold: once the centre runs dry, the hypoxic core grows quickly with density.</li>
 </ul>
 <aside class="notes">
-<p>One Newton solve per density (clipped, about 10 steps each). The threshold sits where the constant-uptake centre value would reach zero: under constant uptake the dip is proportional to the density, 114 µM at 1e5 cells/cm^2, so it reaches 200 µM at about 1.75e5 cells/cm^2. Beyond that the cells in the core consume almost nothing (c below Km) and the cells around them consume all incoming oxygen. Practical meaning: the same lid gives a normoxic culture at low density and a hypoxic core at high density, and cells that proliferate during the experiment move from one to the other. The 10 µM threshold is a convention; the size of the core changes little with the choice because the gradient at its edge is steep. Remember that consumption per cell was an assumption: twice the per-cell rate is the same as twice the density.</p>
+<p>One Newton solve per density (clipped, about 10 steps each). The threshold sits where the constant-uptake centre value would reach zero: under constant uptake the dip is proportional to the density, 114 µM at 1e5 cells/cm^2, so it reaches 200 µM at about 1.75e5 cells/cm^2. Beyond that the cells in the core consume almost nothing (c below Km) and the cells around them consume all incoming oxygen. Practical meaning: the same lid gives a normoxic culture at low density and a hypoxic core at high density, and cells that proliferate during the experiment move from one to the other. The 10 µM threshold is a convention, and the reported area depends on it: at 2e5 cells/cm^2 the demo gives 5.7 %, 10.0 % and 16.3 % of the chamber below 5, 10 and 20 µM. What depends on it much less is the density at which a core first appears: by the constant-uptake estimate (114 µM dip per 1e5 cells/cm^2) a 20 µM threshold is reached at about 1.6e5 and a 5 µM threshold at about 1.7e5 cells/cm^2. So always quote a hypoxic area together with its threshold. Remember that consumption per cell was an assumption: twice the per-cell rate is the same as twice the density.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -1016,9 +1016,9 @@ Numerical analysis for biologists
 <li><strong>Michaelis–Menten uptake</strong>: Newton, <span class="math inline">J = A + \operatorname{diag}(r')</span>, same sparsity. It can converge to a negative “root”: clip and check <code>min(c) &gt;= 0</code>.</li>
 <li>Oxygen under a lid: hypoxic core above about <span class="math inline">1.75\times10^5</span> cells/cm² in our (assumed) setting.</li>
 </ul>
-<p><strong>Next:</strong> <em>Flow plus diffusion</em>: what changes when the medium moves.</p>
+<p><strong>Next:</strong> <a href="../advection-diffusion/lec.html"><em>Flow plus diffusion</em></a>: what changes when the medium moves.</p>
 <aside class="notes">
-<p>Recap the modelling step (steady state, uptake law), the discretisation (stencil, Kronecker assembly, ordering), the solver (sparse direct, Newton) and the failures (negative oxygen from the model, wrong ordering, spurious Newton root). Flow plus diffusion adds an advection term, which makes the matrix non-symmetric; Reaction–diffusion and pattern formation adds production and decay terms and returns to time-dependent problems. Iterative solvers for grids too large for a direct solve (3D) are in Iterative linear solvers in depth (Part 11).</p>
+<p>Recap the modelling step (steady state, uptake law), the discretisation (stencil, Kronecker assembly, ordering), the solver (sparse direct, Newton) and the failures (negative oxygen from the model, wrong ordering, spurious Newton root). Flow plus diffusion adds an advection term, which makes the matrix non-symmetric; <a href="../reaction-diffusion/lec.html"><em>Reaction–diffusion and pattern formation</em></a> adds production and decay terms and returns to time-dependent problems. Iterative solvers for grids too large for a direct solve (3D) are in <a href="../iterative-solvers/lec.html"><em>Iterative linear solvers in depth</em></a> (Part 11).</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;

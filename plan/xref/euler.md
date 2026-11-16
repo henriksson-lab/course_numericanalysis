@@ -1,34 +1,34 @@
 # Cross-references from `euler` (Initial value problems and Euler's method)
 
-- euler/lec.qmd:34 (notes, About this lecture) -> runge-kutta (library solvers deSolve::ode / solve_ivp come in the next unit)
-- euler/lec.qmd:37-54 (slide "Recap: Euler already failed once") -> intro (slide "3. Instability": drug clearance C' = -0.8 C, h = 3 h, factor -1.4; same code and output)
-- euler/lec.qmd:72 (notes, slide "ODEs as models") -> convergence-cost (logistic OD growth curve K = 1.2, N0 = 0.05, r = 0.8)
-- euler/lec.qmd:106 (notes, slide "Direction field") -> phase-plane (equilibria and their stability)
-- euler/lec.qmd:117 (slide "Euler's method: follow the slope") -> finite-differences (forward difference, rearranged)
-- euler/lec.qmd:120 (notes) -> intro (Taylor table row "Euler / Runge-Kutta (Part 8)")
-- euler/lec.qmd:120 (notes) -> runge-kutta (same template, smarter slopes)
-- euler/lec.qmd:159 (notes, slide "Euler in R") -> runge-kutta (library solvers, f(t, y) convention)
-- euler/lec.qmd:222 (notes, slide "Measure the order") -> convergence-cost (order from a log-log error-vs-h plot)
-- euler/lec.qmd:249 (slide "Without the exact answer: halve the step") -> runge-kutta (higher order)
-- euler/lec.qmd:252 (notes) -> runge-kutta (adaptive step-size control from local error estimates)
-- euler/lec.qmd:265 (notes, slide "Instability: back to drug clearance") -> intro (h = 3 example), stiffness (fast rate forces tiny steps)
-- euler/lec.qmd:288 (notes, slide "Instability in a nonlinear model") -> bisection-fixedpoint (Ricker model, period doubling / chaos of discrete maps)
-- euler/lec.qmd:303 (notes, slide "Systems of ODEs: the SIR epidemic") -> runge-kutta (SIR model reused)
-- euler/lec.qmd:355 (notes, slide "Higher-order ODEs") -> phase-plane (nonlinear circadian clock models)
-- euler/lec.qmd:376 (notes, slide "Euler on an oscillation") -> runge-kutta (RK4's larger stability region)
-- euler/lec.qmd:387 (notes, slide "The spiral") -> phase-plane (phase-plane pictures, periodic orbits)
-- euler/lec.qmd:399 (notes, slide "Before you trust an ODE solution") -> runge-kutta (adaptive solvers; tolerances)
-- euler/lec.qmd:410 (Summary, "Next") -> runge-kutta (higher order, adaptive steps, deSolve::ode, solve_ivp)
-- euler/lec.qmd:413 (notes, Summary) -> runge-kutta, stiffness
-- euler/exercise.qmd:46 (Background) -> runge-kutta (deSolve::ode, solve_ivp, ode_solvers crate)
-- euler/exercise.qmd:180 (B4(d)) -> stiffness (one fast rate limits the step)
-- euler/exercise.qmd:283 (Solution B4(d)) -> stiffness
-- euler/exercise.qmd:291 (Solution B6(c)) -> runge-kutta (classical RK4 is order 4)
-- euler/exercise.qmd:608 (Solution C2) -> runge-kutta (cost of order 1 as motivation)
-- euler/exercise.qmd:1032 (Where this leads) -> runge-kutta
-- euler/exercise.qmd:1033 (Where this leads) -> stiffness
-- euler/exercise.qmd:1034 (Where this leads) -> phase-plane (equilibria, linearisation, oscillations)
-- euler/exercise.qmd:1035 (Where this leads) -> nonlinear-least-squares (fitting ODE parameters)
+- euler/lec.qmd:34 (notes, About this lecture) -> runge-kutta (library solvers deSolve::ode / solve_ivp come in the next unit) [ok]
+- euler/lec.qmd:37-54 (slide "Recap: Euler already failed once") -> intro (slide "3. Instability": drug clearance C' = -0.8 C, h = 3 h, factor -1.4; same code and output) [ok]
+- euler/lec.qmd:72 (notes, slide "ODEs as models") -> convergence-cost (logistic OD growth curve K = 1.2, N0 = 0.05, r = 0.8) [ok]
+- euler/lec.qmd:106 (notes, slide "Direction field") -> phase-plane (equilibria and their stability) [ok]
+- euler/lec.qmd:117 (slide "Euler's method: follow the slope") -> finite-differences (forward difference, rearranged) [ok: finite-differences derives the forward difference; linked]
+- euler/lec.qmd:120 (notes) -> intro (Taylor table row "Euler / Runge-Kutta (Part 8)") [ok]
+- euler/lec.qmd:120 (notes) -> runge-kutta (same template, smarter slopes) [ok]
+- euler/lec.qmd:159 (notes, slide "Euler in R") -> runge-kutta (library solvers, f(t, y) convention) [ok]
+- euler/lec.qmd:222 (notes, slide "Measure the order") -> convergence-cost (order from a log-log error-vs-h plot) [ok]
+- euler/lec.qmd:249 (slide "Without the exact answer: halve the step") -> runge-kutta (higher order) [ok]
+- euler/lec.qmd:252 (notes) -> runge-kutta (adaptive step-size control from local error estimates) [ok]
+- euler/lec.qmd:265 (notes, slide "Instability: back to drug clearance") -> intro (h = 3 example), stiffness (fast rate forces tiny steps) [ok]
+- euler/lec.qmd:288 (notes, slide "Instability in a nonlinear model") -> bisection-fixedpoint (Ricker model, period doubling / chaos of discrete maps) [ok]
+- euler/lec.qmd:303 (notes, slide "Systems of ODEs: the SIR epidemic") -> runge-kutta (SIR model reused) [ok]
+- euler/lec.qmd:355 (notes, slide "Higher-order ODEs") -> phase-plane (nonlinear circadian clock models) [ok]
+- euler/lec.qmd:376 (notes, slide "Euler on an oscillation") -> runge-kutta (RK4's larger stability region) [fixed: runge-kutta does not show stability regions; notes now point to RK4 on predator-prey and to stiffness for stability regions]
+- euler/lec.qmd:387 (notes, slide "The spiral") -> phase-plane (phase-plane pictures, periodic orbits) [ok]
+- euler/lec.qmd:399 (notes, slide "Before you trust an ODE solution") -> runge-kutta (adaptive solvers; tolerances) [ok]
+- euler/lec.qmd:410 (Summary, "Next") -> runge-kutta (higher order, adaptive steps, deSolve::ode, solve_ivp) [ok]
+- euler/lec.qmd:413 (notes, Summary) -> runge-kutta, stiffness [ok]
+- euler/exercise.qmd:46 (Background) -> runge-kutta (deSolve::ode, solve_ivp, ode_solvers crate) [ok]
+- euler/exercise.qmd:180 (B4(d)) -> stiffness (one fast rate limits the step) [ok]
+- euler/exercise.qmd:283 (Solution B4(d)) -> stiffness [ok]
+- euler/exercise.qmd:291 (Solution B6(c)) -> runge-kutta (classical RK4 is order 4) [ok]
+- euler/exercise.qmd:608 (Solution C2) -> runge-kutta (cost of order 1 as motivation) [ok]
+- euler/exercise.qmd:1032 (Where this leads) -> runge-kutta [ok]
+- euler/exercise.qmd:1033 (Where this leads) -> stiffness [ok: stiffness covers test equation, Euler bound h|lambda|<=2, implicit methods]
+- euler/exercise.qmd:1034 (Where this leads) -> phase-plane (equilibria, linearisation, oscillations) [ok]
+- euler/exercise.qmd:1035 (Where this leads) -> nonlinear-least-squares (fitting ODE parameters) [fixed: NLS fits a PK model, not r/K or beta/gamma; wording changed]
 
 ## Running examples defined here
 
@@ -54,3 +54,7 @@
   reference values: error at t = 5 h is -0.2004 (h = 1), -0.01703 (h = 0.1),
   -0.001660 (h = 0.01); C ≈ 0.166 in error ≈ C h; Euler with h = 3 h ends in a
   2-cycle 0.7683 / 1.4317, with h = 2.6 h in 1.0121 / 1.3417.
+
+## Pass 2
+
+- All italic unit titles turned into links (first mention per slide / page / Where this leads).

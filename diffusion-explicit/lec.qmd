@@ -30,7 +30,7 @@ So far every unknown was a number or a list of numbers that changed in **time**.
 - Biology: a **chemotaxis chamber** between a source and a sink. How long until cells see a linear gradient? Why does doubling the channel length quadruple the wait?
 
 ::: notes
-This opens Part 10, the first PDE of the course. Almost nothing here is new mathematics: the second-difference stencil comes from Numerical differentiation (Part 7), the time step is Euler's method from Initial value problems and Euler's method (Part 8), the stability analysis uses eigenvalues (Part 5) and the partial derivative was introduced in Newton for systems of equations (Part 2). The new thing is putting them together on a grid in space and time. Units 32 to 35 reuse the chamber and the grid set up today.
+This opens Part 10, the first PDE of the course. Almost nothing here is new mathematics: the second-difference stencil comes from [*Numerical differentiation*](../finite-differences/lec.qmd) (Part 7), the time step is Euler's method from [*Initial value problems and Euler's method*](../euler/lec.qmd) (Part 8), the stability analysis uses eigenvalues (Part 5, [*Power iteration and friends*](../power-iteration/lec.qmd)) and the partial derivative was introduced in [*Newton for systems of equations*](../newton-systems/lec.qmd) (Part 2). The new thing is putting them together on a grid in space and time. Units 32 to 35 reuse the grid set up today (nodes x_i = i dx, µm and seconds; later units say where and why they deviate from it); [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd) also reuses the chamber itself.
 :::
 
 ## Biology: a flow-free chemotaxis chamber {.smaller}
@@ -41,21 +41,21 @@ This opens Part 10, the first PDE of the course. Almost nothing here is new math
 - At steady state the profile is a **straight line**: every cell in the channel sees the same gradient. How long until then?
 
 ::: notes
-Diffusion-based gradient generators are one of the two families described in the reviews [G1] (Kim, Kim and Jeon 2010) and [G3] (Frontiers in Bioengineering and Biotechnology 2015); the other family uses flow, which we meet in Flow plus diffusion. The advantage of a flow-free chamber is that cells, especially non-adherent ones such as neutrophils, are not pushed by shear and secreted signals are not washed away. The price is time: one waits for diffusion to set up the gradient. Our version is simplified: a single straight channel, L = 500 µm, reservoirs large enough that their concentrations stay fixed. These numbers are typical values, not taken from one specific device; the reviews were only skimmed, so treat them as order-of-magnitude. The profiles at the bottom are computed with today's method. The orange dots are cells.
+Diffusion-based gradient generators are one of the two families described in the reviews [G1] (Kim, Kim and Jeon 2010) and [G3] (Frontiers in Bioengineering and Biotechnology 2015); the other family uses flow, which we meet in [*Flow plus diffusion*](../advection-diffusion/lec.qmd). The advantage of a flow-free chamber is that cells, especially non-adherent ones such as neutrophils, are not pushed by shear and secreted signals are not washed away. The price is time: one waits for diffusion to set up the gradient. Our version is simplified: a single straight channel, L = 500 µm, reservoirs large enough that their concentrations stay fixed. These numbers are typical values, not taken from one specific device; the reviews were only skimmed, so treat them as order-of-magnitude. The profiles at the bottom are computed with today's method. The orange dots are cells.
 :::
 
 ## Recap: two tools you already have {.smaller}
 
 :::: {.columns}
 ::: {.column width="50%"}
-**Second difference** (*Numerical differentiation*):
+**Second difference** ([*Numerical differentiation*](../finite-differences/lec.qmd)):
 $$\frac{u(x+h) - 2u(x) + u(x-h)}{h^2} = u''(x) + \tfrac{h^2}{12}u''''(x) + \dots$$
 
 - Weights $(1, -2, 1)/h^2$, error $O(h^2)$.
 - A straight line has second difference **0**.
 :::
 ::: {.column width="50%"}
-**Euler** (*Initial value problems and Euler's method*):
+**Euler** ([*Initial value problems and Euler's method*](../euler/lec.qmd)):
 $$y_{n+1} = y_n + h\,f(t_n, y_n)$$
 
 - On $y' = -ky$: each step multiplies by $1 - kh$.
@@ -66,7 +66,7 @@ $$y_{n+1} = y_n + h\,f(t_n, y_n)$$
 Today: the stencil handles **space**, Euler handles **time**, and the stability rule comes back with $k$ = the fastest rate on the grid.
 
 ::: notes
-One slide only. Both results were derived and tested in their own units; students who skipped them should go back. In Numerical differentiation the variable was time t and the function was an OD growth curve; today the variable is position x and the function is a concentration profile. The stencil does not care. From the Euler unit, the key fact is the amplification factor 1 - kh for the decay equation, and the systems version from Stiffness and implicit methods: for y' = Jy the rule must hold for every eigenvalue of J.
+One slide only. Both results were derived and tested in their own units; students who skipped them should go back. In Numerical differentiation the variable was time t and the function was an OD growth curve; today the variable is position x and the function is a concentration profile. The stencil does not care. From the Euler unit, the key fact is the amplification factor 1 - kh for the decay equation, and the systems version from [*Stiffness and implicit methods*](../stiffness/lec.qmd): for y' = Jy the rule must hold for every eigenvalue of J.
 :::
 
 ## A function of space and time
@@ -74,7 +74,7 @@ One slide only. Both results were derived and tested in their own units; student
 ![](fig02-space-time.svg){width="100%"}
 
 - $c(x, t)$: one number for each position **and** time. Hold $t$ fixed: a **profile** with slope $\partial c/\partial x$. Hold $x$ fixed: a **time course** with slope $\partial c/\partial t$.
-- The curly $\partial$ means "the other variable held fixed", exactly as in *Newton for systems of equations*.
+- The curly $\partial$ means "the other variable held fixed", exactly as in [*Newton for systems of equations*](../newton-systems/lec.qmd).
 
 ::: notes
 Left: the concentration in the channel as a heat map, position across, time up; dark is high. The orange line is a slice at t = 30 s: the profile across the channel, whose slope at x = 100 µm is the partial derivative with respect to x (about -0.003 per µm: the gradient the cells feel). The red line is a slice at x = 100 µm: the concentration seen by one cell over time, whose slope is the partial derivative with respect to t. Nothing new beyond Newton for systems of equations, where partial derivatives were slopes of slices of F(u, v). A PDE is an equation that links these partial derivatives to each other.
@@ -110,7 +110,7 @@ $$\frac{\partial c}{\partial t}\,\Delta x = J(x) - J(x + \Delta x) \;\;\Longrigh
 - **Heat** obeys the same equation: $\partial T/\partial t = \alpha\,\partial^2 T/\partial x^2$, thermal diffusivity $\alpha \approx 1.4\cdot10^{-7}$ m²/s for water. Hence "the heat equation".
 
 ::: notes
-The derivation is the ODE principle from the Euler unit applied to each slice: rate in minus rate out. Divide by dx and let it shrink: the difference of the fluxes becomes a derivative. Substitute Fick's law (D constant) to get the second derivative. The curvature rule is the intuition to keep: a bump (curving down at the top) flattens, a dip fills in, a straight line stays. That is why the steady state between two reservoirs is a straight line. The heat equation is the same equation with temperature for concentration; Implicit schemes and the method of lines uses it for a Drosophila embryo held between two temperatures.
+The derivation is the ODE principle from the Euler unit applied to each slice: rate in minus rate out. Divide by dx and let it shrink: the difference of the fluxes becomes a derivative. Substitute Fick's law (D constant) to get the second derivative. The curvature rule is the intuition to keep: a bump (curving down at the top) flattens, a dip fills in, a straight line stays. That is why the steady state between two reservoirs is a straight line. The heat equation is the same equation with temperature for concentration; [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd) uses it for a Drosophila embryo held between two temperatures.
 :::
 
 ## A PDE needs initial and boundary conditions {.smaller}
@@ -166,7 +166,7 @@ $$\frac{d c_i}{dt} = \frac{D}{\Delta x^2}\,\bigl(c_{i-1} - 2c_i + c_{i+1}\bigr),
 - Spatial error $\tfrac{\Delta x^2}{12}\,\partial^4 c/\partial x^4$: second order in $\Delta x$.
 
 ::: notes
-This is the "method of lines": discretise space only, and you are left with a system of ODEs in time, one per grid line. Implicit schemes and the method of lines takes this literally and hands the system to an ODE solver from Part 8. Read the ODE as a compartment model: each grid cell exchanges with its neighbours at rate D/dx^2 = 10 per second. It is the same tridiagonal matrix as the morphogen in a row of cells in Structure: symmetric, banded, sparse, there with rate 1 per minute. The vector b has D/dx^2 times c_0 = 1 in its first entry (the source) and zeros elsewhere (the sink holds 0).
+This is the "method of lines": discretise space only, and you are left with a system of ODEs in time, one per grid line. [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd) takes this literally and hands the system to an ODE solver from Part 8. Read the ODE as a compartment model: each grid cell exchanges with its neighbours at rate D/dx^2 = 10 per second. It is the same tridiagonal pattern as the morphogen in a row of cells in [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd) (there written with the opposite sign, 2D + k on the diagonal and -D beside it, exchange rate D = 1 per minute plus degradation k). The vector b has D/dx^2 times c_0 = 1 in its first entry (the source) and zeros elsewhere (the sink holds 0).
 :::
 
 ## Step 2, time: one Euler step = FTCS {.smaller}
@@ -289,7 +289,7 @@ $$c(x, t) = 1 - \frac{x}{L} - \sum_{n=1}^{\infty} \frac{2}{n\pi}\,\sin\frac{n\pi
 ::::
 
 ::: notes
-The series: a straight line (steady state) minus a sum of sine modes that each decay at their own rate n^2 pi^2 D / L^2. At t = 0 the sum reproduces 1 - x/L, so c = 0 inside. The slowest mode, n = 1, decays with time constant L^2/(pi^2 D) = 25.3 s for our chamber; that mode alone explains the factor 0.258: (2/pi) exp(-pi^2 t~) = 0.05 gives t~ = 0.258. The error plot is the order check of Part 8 in a new setting: error at t = 30 s against dx on log-log axes, slope 2. The step counts are printed under the points: 120 steps for dx = 25 µm, 30 720 steps for dx = 1.56 µm. The cost is what Implicit schemes and the method of lines attacks.
+The series: a straight line (steady state) minus a sum of sine modes that each decay at their own rate n^2 pi^2 D / L^2. At t = 0 the sum reproduces 1 - x/L, so c = 0 inside. The slowest mode, n = 1, decays with time constant L^2/(pi^2 D) = 25.3 s for our chamber; that mode alone explains the factor 0.258: (2/pi) exp(-pi^2 t~) = 0.05 gives t~ = 0.258. The error plot is the order check of Part 8 ([*Initial value problems and Euler's method*](../euler/lec.qmd)) in a new setting: error at t = 30 s against dx on log-log axes, slope 2. The step counts are printed under the points: 120 steps for dx = 25 µm, 30 720 steps for dx = 1.56 µm. The cost is what Implicit schemes and the method of lines attacks.
 :::
 
 ## Failure: a slightly larger time step
@@ -318,7 +318,7 @@ $$c_{i-1} - 2c_i + c_{i+1} = \varepsilon(-1)^i\,(-1 - 2 - 1) = -4\,c_i \;\;\Long
 - Another view: for $r \le 1/2$ the new value $(1 - 2r)c_i + r\,c_{i-1} + r\,c_{i+1}$ is an **average** with weights $\ge 0$, so it stays inside $[0, 1]$.
 
 ::: notes
-The zigzag is the shortest wave the grid can hold (the Nyquist mode from Fourier series and the FFT). Its second difference is -4 times itself, the most negative possible, so it is the fastest-decaying mode of the true dynamics: rate 4D/dx^2 = 40 per second here, a lifetime of 0.025 s. Euler with step dt multiplies it by 1 - 40 dt, the drug clearance example with k = 40 per second. For r between 1/4 and 1/2 the factor is negative but smaller than 1 in size: the zigzag flips sign each step but decays, exactly like Euler with 1/k < h < 2/k. The averaging argument is the cleanest stability proof: weights 1 - 2r, r, r add to 1 and are non-negative only if r <= 1/2. With r = 1/2 the update is c_i = (c_{i-1} + c_{i+1})/2, the plain average of the neighbours.
+The zigzag is the shortest wave the grid can hold (the Nyquist mode from [*Fourier series and the FFT*](../fourier-fft/lec.qmd)). Its second difference is -4 times itself, the most negative possible, so it is the fastest-decaying mode of the true dynamics: rate 4D/dx^2 = 40 per second here, a lifetime of 0.025 s. Euler with step dt multiplies it by 1 - 40 dt, the drug clearance example of [*Initial value problems and Euler's method*](../euler/lec.qmd) with k = 40 per second. For r between 1/4 and 1/2 the factor is negative but smaller than 1 in size: the zigzag flips sign each step but decays, exactly like Euler with 1/k < h < 2/k. The averaging argument is the cleanest stability proof: weights 1 - 2r, r, r add to 1 and are non-negative only if r <= 1/2. With r = 1/2 the update is c_i = (c_{i-1} + c_{i+1})/2, the plain average of the neighbours.
 :::
 
 ## The eigenvalue view {.smaller}
@@ -335,10 +335,10 @@ range(lam)
 ```
 
 - Formula: eigenvalues of $A$ are $-4\sin^2\!\bigl(\tfrac{k\pi}{2N}\bigr)$, $k = 1, \dots, N - 1$. All negative, all real.
-- Euler on $\mathbf c' = \frac{D}{\Delta x^2}A\mathbf c$ needs $\Delta t\,|\lambda| \le 2$ for **every** eigenvalue (Part 5, *Stiffness and implicit methods*). The largest, $\approx 4D/\Delta x^2$, gives $r \le 1/2$.
+- Euler on $\mathbf c' = \frac{D}{\Delta x^2}A\mathbf c$ needs $\Delta t\,|\lambda| \le 2$ for **every** eigenvalue: eigenvalues from Part 5, the rule from Part 8 ([*Stiffness and implicit methods*](../stiffness/lec.qmd)). The largest, $\approx 4D/\Delta x^2$, gives $r \le 1/2$.
 
 ::: notes
-This connects the zigzag argument to the general theory from Part 8: a linear ODE system decouples into one scalar equation per eigenvalue, and Euler must be stable on each. eigen() from How eigen() works, and big problems; the matrix is symmetric, so all eigenvalues are real. The formula can be checked against eigen() in the exercise. The largest magnitude is 4 sin^2(49 pi / 100) = 3.996, slightly less than 4, which is why the exact limit here is r <= 0.5005 rather than 0.5. Python: numpy.linalg.eigvalsh.
+This connects the zigzag argument to the general theory from Part 8 (Euler's |1 - kh| <= 1 in [*Initial value problems and Euler's method*](../euler/lec.qmd), applied eigenvalue by eigenvalue in [*Stiffness and implicit methods*](../stiffness/lec.qmd)): a linear ODE system decouples into one scalar equation per eigenvalue, and Euler must be stable on each. eigen() from [*How `eigen()` works, and big problems*](../eigen-algorithms/lec.qmd) (Part 5); the matrix is symmetric, so all eigenvalues are real. The formula can be checked against eigen() in the exercise. The largest magnitude is 4 sin^2(49 pi / 100) = 3.996, slightly less than 4, which is why the exact limit here is r <= 0.5005 rather than 0.5. Python: numpy.linalg.eigvalsh.
 :::
 
 ## Slow modes, fast modes, and the cost {.smaller}
@@ -346,8 +346,8 @@ This connects the zigzag argument to the general theory from Part 8: a linear OD
 ![](fig08-modes.svg){width="88%" fig-align="center"}
 
 - Slowest mode: half a sine, rate $\approx \pi^2D/L^2 = 0.039$ per s. **This is the biology** (25 s time constant).
-- Fastest mode: the zigzag, 40 per s. It is gone in a few hundredths of a second, yet it **sets the step**. Ratio ≈ 1000: a **stiff** system.
-- Refine to $\Delta x = 1$ µm: ratio ≈ 100 000 and $\Delta t \le 0.5$ ms. Fix: *Implicit schemes and the method of lines*.
+- Fastest mode: the zigzag, 40 per s. It is gone in a few hundredths of a second, yet it **sets the step**. Ratio ≈ 1000: a **stiff** system ([*Stiffness and implicit methods*](../stiffness/lec.qmd)).
+- Refine to $\Delta x = 1$ µm: ratio ≈ 100 000 and $\Delta t \le 0.5$ ms. Fix: [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd).
 
 ::: notes
 The eigenvectors are sine waves, the same modes as in the exact Fourier series: the grid has a discrete version of each. The slowest one carries the physics (how fast the gradient settles); the fastest ones are grid artefacts that a sensible method should simply damp. This is exactly the definition of stiffness from Stiffness and implicit methods: the step is set by stability, not by accuracy. The ratio of fastest to slowest rate grows like (2N/pi)^2, so it gets worse with every refinement. The next unit uses backward Euler and Crank–Nicolson, with one tridiagonal (Thomas) solve per step, and no step limit.
@@ -396,7 +396,7 @@ Same channel, same molecule, only the right boundary condition differs. With the
 - **Units**: D in µm²/s with x in µm; $10^{-9}$ m²/s is 1000 µm²/s, not 1000 m²/s.
 
 ::: notes
-The six checks of this unit. The second and fourth are physical invariants and need no exact solution; the fifth is the step-halving check of Part 8 in two variables. A unit error in D (m^2/s used with a grid in µm) changes r by 1e12 and blows up at once; the reverse mistake gives a simulation in which nothing seems to happen. When a model has several species, for example a small drug and a protein, the small one with the larger D sets the time step for all.
+The six checks of this unit. The second and fourth are physical invariants and need no exact solution; the fifth is the step-halving check of Part 8 ([*Initial value problems and Euler's method*](../euler/lec.qmd)) in two variables. A unit error in D (m^2/s used with a grid in µm) changes r by 1e12 and blows up at once; the reverse mistake gives a simulation in which nothing seems to happen. When a model has several species, for example a small drug and a protein, the small one with the larger D sets the time step for all.
 :::
 
 ## Summary {.smaller}
@@ -407,8 +407,8 @@ The six checks of this unit. The second and fourth are physical invariants and n
 - **Stable only for $r \le 1/2$**: the zigzag mode has the largest eigenvalue $\approx 4D/\Delta x^2$; Euler's $|1 - kh| \le 1$ again. Violated: an exploding zigzag; check that values stay within bounds.
 - **Time scale $L^2/D$**: a linear gradient takes $\approx 0.26\,L^2/D$: 1 minute for a small molecule over 500 µm, 43 minutes for a protein over 1 mm. Doubling $L$ quadruples the wait. Without a sink there is no lasting gradient.
 
-**Next:** *Implicit schemes and the method of lines*: no step limit, one tridiagonal solve per step.
+**Next:** [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd): no step limit, one tridiagonal solve per step.
 
 ::: notes
-Recap the modelling step, the scheme, its accuracy, its failure and the checks. The step limit dt <= dx^2 / (2D) is the price of an explicit method: fine resolution is paid for twice. The next unit removes the limit with implicit time stepping, using the Thomas algorithm from Structure: symmetric, banded, sparse, and hands the method-of-lines system to the stiff solvers of Part 8. Steady state in two dimensions takes the chamber to 2D, Flow plus diffusion adds flow, Reaction–diffusion and pattern formation adds uptake and production.
+Recap the modelling step, the scheme, its accuracy, its failure and the checks. The step limit dt <= dx^2 / (2D) is the price of an explicit method: fine resolution is paid for twice. The next unit removes the limit with implicit time stepping, using the Thomas algorithm from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd), and hands the method-of-lines system to the stiff solvers of Part 8 ([*Stiffness and implicit methods*](../stiffness/lec.qmd)). [*Steady state in two dimensions*](../steady-state-2d/lec.qmd) takes the grid to 2D (oxygen under a lid, a steady state with uptake), [*Flow plus diffusion*](../advection-diffusion/lec.qmd) adds flow, [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd) adds uptake and production.
 :::

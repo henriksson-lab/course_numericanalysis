@@ -1,22 +1,22 @@
 # Cross-references from least-squares-qr
 
-- least-squares-qr/lec.qmd:24 -> lu, pivoting-conditioning (Part 3 solved square systems; "Part 3" only, no title)
-- least-squares-qr/lec.qmd:133 -> structured-sparse (Cholesky for the symmetric positive definite A^T A)
-- least-squares-qr/lec.qmd:165 -> pivoting-conditioning (recap slide: matrix condition number, lose log10 kappa digits, kappa(A, exact = TRUE))
-- least-squares-qr/lec.qmd:179 -> svd (stretch factors are singular values; notes)
-- least-squares-qr/lec.qmd:200 -> error-conditioning (normal equations unstable: ill-conditioned intermediate step; notes)
-- least-squares-qr/lec.qmd:213 -> nonlinear-least-squares (4-parameter logistic calibration curve is nonlinear; notes)
-- least-squares-qr/lec.qmd:276 -> convergence-cost (reading slopes off a log-log error plot; notes)
-- least-squares-qr/lec.qmd:311 -> lu (back substitution)
-- least-squares-qr/lec.qmd:412 -> error-conditioning (catastrophic cancellation in the Householder sign choice; notes)
-- least-squares-qr/lec.qmd:469 -> polynomial-interpolation (high-degree polynomials wiggle between points)
-- least-squares-qr/lec.qmd:472 -> polynomial-interpolation, splines (notes)
-- least-squares-qr/lec.qmd:497 -> svd (Next: slide)
-- least-squares-qr/exercise.qmd:274 -> error-conditioning (catastrophic cancellation, B4 solution)
-- least-squares-qr/exercise.qmd:1069 -> svd (Where this leads: singular values, rank deficiency, lstsq)
-- least-squares-qr/exercise.qmd:1070 -> polynomial-interpolation, splines (Where this leads)
-- least-squares-qr/exercise.qmd:1071 -> nonlinear-least-squares (Where this leads: 4PL, Gauss-Newton solves linear LS each step)
-- least-squares-qr/exercise.qmd:1072 -> identifiability (Where this leads: standard errors from R)
+- least-squares-qr/lec.qmd:24 -> lu, pivoting-conditioning (Part 3 solved square systems; "Part 3" only, no title) [ok, linked]
+- least-squares-qr/lec.qmd:133 -> structured-sparse (Cholesky for the symmetric positive definite A^T A) [ok, linked]
+- least-squares-qr/lec.qmd:165 -> pivoting-conditioning (recap slide: matrix condition number, lose log10 kappa digits, kappa(A, exact = TRUE)) [ok, linked]
+- least-squares-qr/lec.qmd:179 -> svd (stretch factors are singular values; notes) [ok, linked]
+- least-squares-qr/lec.qmd:200 -> error-conditioning (normal equations unstable: ill-conditioned intermediate step; notes) [ok, linked]
+- least-squares-qr/lec.qmd:213 -> nonlinear-least-squares (4-parameter logistic calibration curve is nonlinear; notes) [fixed: NLS unit fits a PK model, not a 4PL; wording now says models like the 4PL are fitted there]
+- least-squares-qr/lec.qmd:276 -> convergence-cost (reading slopes off a log-log error plot; notes) [ok, linked]
+- least-squares-qr/lec.qmd:311 -> lu (back substitution) [ok, linked]
+- least-squares-qr/lec.qmd:412 -> error-conditioning (catastrophic cancellation in the Householder sign choice; notes) [ok, linked]
+- least-squares-qr/lec.qmd:469 -> polynomial-interpolation (high-degree polynomials wiggle between points) [ok, linked]
+- least-squares-qr/lec.qmd:472 -> polynomial-interpolation, splines (notes) [ok, linked]
+- least-squares-qr/lec.qmd:497 -> svd (Next: slide) [ok, linked]
+- least-squares-qr/exercise.qmd:274 -> error-conditioning (catastrophic cancellation, B4 solution) [ok, linked]
+- least-squares-qr/exercise.qmd:1069 -> svd (Where this leads: singular values, rank deficiency, lstsq) [ok, linked]
+- least-squares-qr/exercise.qmd:1070 -> polynomial-interpolation, splines (Where this leads) [ok, linked]
+- least-squares-qr/exercise.qmd:1071 -> nonlinear-least-squares (Where this leads: 4PL, Gauss-Newton solves linear LS each step) [fixed: same 4PL wording; links]
+- least-squares-qr/exercise.qmd:1072 -> identifiability (Where this leads: standard errors from R) [ok, linked]
 
 ## Running examples defined here
 

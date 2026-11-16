@@ -104,7 +104,7 @@ fn main() {
 
 :::
 
-The library routines are [`uniroot`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html) in R and [`scipy.optimize.brentq`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html) in Python; in Rust, the `argmin` crate has [`BrentRoot`](https://docs.rs/argmin/latest/argmin/solver/brent/struct.BrentRoot.html). All three use Brent's method (explained in *Newton and secant methods*). In this exercise you write bisection and fixed-point iteration yourself first and use the library only in C7.
+The library routines are [`uniroot`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html) in R and [`scipy.optimize.brentq`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html) in Python; in Rust, the `argmin` crate has [`BrentRoot`](https://docs.rs/argmin/latest/argmin/solver/brent/struct.BrentRoot.html). All three use Brent's method (explained in [*Newton and secant methods*](../newton/lec.qmd)). In this exercise you write bisection and fixed-point iteration yourself first and use the library only in C7.
 
 ## By hand
 
@@ -318,6 +318,7 @@ For 3, use $g_a$ (monotone) or $g_d$; for $-1$, use $g_c$. Like $g_2$ and $g_3$ 
 ### R
 
 ```r
+# uses f() from the Background
 bisect <- function(f, a, b, tol = 1e-8, maxit = 100) {
   fa <- f(a); fb <- f(b)
   if (sign(fa) == sign(fb)) stop("f(a) and f(b) must have opposite signs")
@@ -351,6 +352,7 @@ c(out$root, pole(out$root))
 ### Python
 
 ```python
+# uses f() from the Background
 import warnings
 
 def bisect(f, a, b, tol=1e-8, maxit=100):
@@ -452,6 +454,7 @@ The step counts match $\lceil\log_2(1/(\text{tol}\cdot\sqrt3))\rceil$ (the stopp
 ### R
 
 ```r
+# uses bisect() from the solution of C1; f() from the Background
 grid <- seq(0, 100, by = 5)
 fg <- f(grid)
 i <- which(sign(fg[-1]) != sign(fg[-length(fg)]))   # sign change between grid[i] and grid[i+1]
@@ -484,6 +487,7 @@ for (Hh in c(10, 12, 14, 14.2, 14.3, 15)) {
 ### Python
 
 ```python
+# uses bisect() from the solution of C1; f() from the Background
 grid = np.arange(0, 101, 5.0)
 fg = f(grid)
 i = np.where(np.sign(fg[1:]) != np.sign(fg[:-1]))[0]   # sign change between grid[i] and grid[i+1]
@@ -584,7 +588,7 @@ fn main() {
 
 :::
 
-The lower steady state is repelling ($g' = 1.34$), the upper one attracting ($g' = 0.71$). As the catch grows, the collapse threshold rises and the stable stock falls; the two meet near $H = 14.26$ and vanish. Close to that catch, a small disturbance or a small increase of the quota is enough to push the stock below the threshold. Note that between $H = 14.2$ and $14.3$ the grid cannot tell "two roots very close together" from "none": that needs the maximum of $f$ (an optimisation problem, *Optimisation in one dimension*).
+The lower steady state is repelling ($g' = 1.34$), the upper one attracting ($g' = 0.71$). As the catch grows, the collapse threshold rises and the stable stock falls; the two meet near $H = 14.26$ and vanish. Close to that catch, a small disturbance or a small increase of the quota is enough to push the stock below the threshold. Note that between $H = 14.2$ and $14.3$ the grid cannot tell "two roots very close together" from "none": that needs the maximum of $f$ (an optimisation problem, [*Optimisation in one dimension*](../optimisation-1d/lec.qmd)).
 
 **C3.**
 
@@ -593,6 +597,7 @@ The lower steady state is repelling ($g' = 1.34$), the upper one attracting ($g'
 ### R
 
 ```r
+# uses bisect() from the solution of C1; g() from the Background
 fixed_point <- function(g, x0, tol = 1e-10, maxit = 1000) {
   x <- numeric(maxit + 1); x[1] <- x0
   for (k in 1:maxit) {
@@ -630,6 +635,7 @@ round(tail(out$x, 4), 3)
 ### Python
 
 ```python
+# uses bisect() from the solution of C1; g() from the Background
 def fixed_point(g, x0, tol=1e-10, maxit=1000):
     x = [x0]
     for k in range(1, maxit + 1):
@@ -747,6 +753,7 @@ The estimated rates match $g'(N^*)$ at the root each iteration converges to: $0.
 ### R
 
 ```r
+# uses dg() from the solution of C2; f(), g() from the Background; g2() from the solution of C3
 n <- 60
 a <- 50; b <- 100; e_bis <- numeric(n)
 for (k in 1:n) {
@@ -772,6 +779,7 @@ lines(1:n, e_g, col = "blue"); lines(1:n, e_g2, col = "darkgreen")
 ### Python
 
 ```python
+# uses dg() from the solution of C2; f(), g() from the Background; g2() from the solution of C3
 import matplotlib.pyplot as plt
 n = 60
 a, b = 50.0, 100.0; e_bis = np.zeros(n)
@@ -1039,6 +1047,7 @@ For $r = 1.5$ the two formulas stay within one or two rounding gaps of each othe
 ### R
 
 ```r
+# uses bisect() from the solution of C1; f() from the Background
 for (br in list(c(0, 50), c(50, 100))) {
   out1 <- uniroot(f, br)
   out2 <- uniroot(f, br, tol = 1e-12)
@@ -1059,6 +1068,7 @@ H <- 10
 ### Python
 
 ```python
+# uses bisect() from the solution of C1; f() from the Background
 from scipy.optimize import brentq
 for br in [(0.0, 50.0), (50.0, 100.0)]:
     x1, res1 = brentq(f, *br, full_output=True)
@@ -1131,7 +1141,7 @@ Brent's method needs 9 or 10 iterations where bisection needs about 46 for the s
 
 ## Where this leads
 
-- ***Newton and secant methods*** (Part 2): using the size of $f$ and its derivative gives **quadratic** convergence; Newton is the fixed-point iteration $g(x) = x - f(x)/f'(x)$, with $g'(x^*) = 0$. Brent's method, inside `uniroot` and `brentq`, combines those fast steps with the bisection safeguard of this exercise.
-- ***Newton for systems of equations*** (Part 2): steady states of models with several variables (a two-gene toggle switch), where there is no bracket and no bisection.
-- ***Equilibria, stability and the phase plane*** (Part 8): the continuous-time counterpart of $|g'(N^*)| < 1$ is the sign of the eigenvalues of the Jacobian.
-- ***Optimisation in one dimension*** (Part 9): the maximum sustainable catch of C2 is the maximum of the surplus production, found with golden-section search, the optimisation cousin of bisection.
+- [***Newton and secant methods***](../newton/lec.qmd) (Part 2): using the size of $f$ and its derivative gives **quadratic** convergence; Newton is the fixed-point iteration $g(x) = x - f(x)/f'(x)$, with $g'(x^*) = 0$. Brent's method, inside `uniroot` and `brentq`, combines those fast steps with the bisection safeguard of this exercise.
+- [***Newton for systems of equations***](../newton-systems/lec.qmd) (Part 2): steady states of models with several variables (a two-gene toggle switch), where there is no bracket and no bisection.
+- [***Equilibria, stability and the phase plane***](../phase-plane/lec.qmd) (Part 8): the continuous-time counterpart of $|g'(N^*)| < 1$ is the sign of the eigenvalues of the Jacobian.
+- [***Optimisation in one dimension***](../optimisation-1d/lec.qmd) (Part 9): the maximum sustainable catch of C2 is the maximum of the surplus production, a maximum that golden-section search, the optimisation cousin of bisection, would find (that unit uses its own examples).

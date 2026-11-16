@@ -43,8 +43,8 @@ This is the last unit of Part 9. Units 26 to 29 minimised a smooth function with
 
 We have already met answers that break them:
 
-- *Gaussian elimination as LU*: a consumer's diet came out as $(0.55, -0.20, 0.65)$, a negative fraction of maize.
-- *The SVD, rank deficiency and regularisation*: least squares gave a CD8 T-cell proportion of $-0.09$.
+- [*Gaussian elimination as LU*](../lu/lec.qmd): a consumer's diet came out as $(0.55, -0.20, 0.65)$, a negative fraction of maize.
+- [*The SVD, rank deficiency and regularisation*](../svd/lec.qmd): least squares gave a CD8 T-cell proportion of $-0.09$.
 
 A constraint is **active** at a solution if it holds with equality there ($c = 0$, $v_\text{glc} = 10$). Inactive constraints do not change the answer.
 
@@ -69,7 +69,7 @@ round(fit$par, 4)
 - That is not a numerical error: the minimum of the SSE really is at $c < 0$. The model needs to be told that $c \ge 0$.
 
 ::: notes
-The data are synthetic: true A = 1, k = 0.5, c = 0, plus a fixed noise vector. Background-subtracted signals can go slightly negative, so this happens with real qPCR or fluorescence decay data too. The fitted half-life also depends on c (next slide), so this is not cosmetic. optim with BFGS is what *Gradient descent, Newton and quasi-Newton* used.
+The data are synthetic: true A = 1, k = 0.5, c = 0, plus a fixed noise vector. Background-subtracted signals can go slightly negative, so this happens with real qPCR or fluorescence decay data too. The fitted half-life also depends on c (next slide), so this is not cosmetic. optim with BFGS is what *Gradient descent, Newton and quasi-Newton* used. These are not the decay data of *Optimisation in one dimension* (there the fraction left, with A = 1 and no background, so one parameter); here three parameters, so that one of them can hit a bound.
 :::
 
 ## Fix 1: bounds {.smaller}
@@ -98,7 +98,7 @@ round(numDeriv::grad(sse, fitb$par), 4)
 
 - In $A$ and $k$ (free) the gradient is 0, as usual. In $c$ it is **positive**: the SSE would fall if $c$ could decrease, but the bound stops it.
 - That number is the **multiplier** of the bound: how fast the SSE would fall per unit we relax $c \ge 0$.
-- **Check:** after a bounded fit, list the parameters that sit at a bound. Their usual standard errors are meaningless (*Identifiability and uncertainty of fitted parameters*), and the result depends on the bound you chose.
+- **Check:** after a bounded fit, list the parameters that sit at a bound. The standard errors of [*Identifiability and uncertainty of fitted parameters*](../identifiability/lec.qmd) assume an interior minimum with zero gradient: for them they are meaningless, and the result depends on the bound you chose.
 
 ::: notes
 "Converged" no longer means "gradient zero". The condition at a bounded minimum is: gradient zero in every free parameter, and pointing outward (into the forbidden region) in every parameter held at a bound. A gradient pointing inward would mean the optimiser stopped too early. This is the simplest case of the KKT conditions, which we meet again with NNLS (*The SVD, rank deficiency and regularisation*) and in linear programming. The Hessian-based standard errors of the previous unit assume an interior minimum with zero gradient, so they do not apply to a parameter at its bound.
@@ -108,7 +108,7 @@ round(numDeriv::grad(sse, fitb$par), 4)
 
 Optimise an unconstrained $\theta$ and map it into the allowed set:
 
-- **Positive:** $c = e^{\theta}$, as for rate constants in *Nonlinear least squares and ODE fitting*.
+- **Positive:** $c = e^{\theta}$, as for rate constants in [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd).
 - **Proportions:** $p = \text{softmax}(\theta) = e^{\theta_i} / \sum_j e^{\theta_j}$, with $\theta_1 = 0$ fixed. Every $p_i > 0$ and they sum to 1.
 
 ```r
@@ -216,12 +216,12 @@ Draw this on the board. The level lines of a linear objective are parallel strai
 1. Start at a corner: $(0, 0)$, ATP 0.
 2. Along which edge does ATP increase? $x_1$: +6 per unit. Go until a constraint stops you: proteome at $x_1 = 3$ (carbon would allow 6). Corner $(3, 0)$, ATP 18.
 3. Along the proteome edge, $x_2$ up by 1 means $x_1$ down by $\tfrac14$: ATP changes by $3 - 6/4 = +1.5$. Go until carbon stops you: $(2, 4)$, ATP 24.
-4. Along the carbon edge: $x_2$ up 1, $x_1$ down 1: $3 - 6 = -3$. **No improving edge: optimal.**
+4. Along the carbon edge: $x_2$ up 1, $x_1$ down 1: $3 - 6 = -3$ per unit $x_2$ (or $-1$ per unit of proteome freed). Back along the proteome edge: $-1.5$ per unit $x_2$ ($-2$ per unit of carbon freed). **No improving edge: optimal.**
 :::
 ::::
 
 ::: notes
-This is Dantzig's simplex method (1947) without the tableau. Each step: from the current corner, look at the edges leaving it; the rate of change of the objective along an edge is the reduced cost. Pick an improving edge, walk along it until the first constraint becomes active (the ratio test), and you are at a new corner. Stop when no edge improves. Because the polygon is convex, a corner with no improving edge is the global optimum: there are no local optima in LP. In n dimensions the corners are found by solving n x n linear systems of active constraints, which is where LU factorisations come in; real solvers update the factorisation from step to step.
+This is Dantzig's simplex method (1947) without the tableau. Each step: from the current corner, look at the edges leaving it; the rate of change of the objective along an edge is the reduced cost. Pick an improving edge, walk along it until the first constraint becomes active (the ratio test), and you are at a new corner. The rate depends on what we count per unit: the slide counts per unit of x2, the demo per unit of the constraint the move frees (its slack). Along the carbon edge x2 up 1 frees 3 units of proteome, so -3 per unit x2 is -1 per unit proteome; back along the proteome edge, -1.5 per unit x2 is -2 per unit carbon. The per-slack rates are minus the shadow prices (carbon 2, proteome 1), as lpSolve reports two slides on. Stop when no edge improves. Because the polygon is convex, a corner with no improving edge is the global optimum: there are no local optima in LP. In n dimensions the corners are found by solving n x n linear systems of active constraints, which is where LU factorisations come in; real solvers update the factorisation from step to step.
 :::
 
 ## How many corners? {.smaller}
@@ -229,7 +229,7 @@ This is Dantzig's simplex method (1947) without the tableau. Each step: from the
 - With $n$ variables and $m$ constraints, a corner is where $n$ constraints are active: up to $\binom{m}{n}$ candidates.
 - $\binom{4}{2} = 6$ here, $\binom{100}{50} \approx 10^{29}$ for a modest problem. Checking every corner is hopeless.
 - The simplex method visits only a short path of improving corners: in practice a small multiple of $m$ steps (in rare worst cases exponentially many).
-- **Interior-point methods** cut through the inside of the polytope with Newton steps (*Newton for systems of equations*) and are polynomial in the worst case.
+- **Interior-point methods** cut through the inside of the polytope with Newton steps ([*Newton for systems of equations*](../newton-systems/lec.qmd)) and are polynomial in the worst case.
 - Modern solvers ([HiGHS](https://highs.dev/), GLPK, Gurobi) have both and pick one.
 
 ::: notes
@@ -280,7 +280,7 @@ Each failure has a biological counterpart in FBA. A tie means alternative optima
 ```
 
 ::: notes
-The ATP LP of the last slides, solved live in the browser. Blue polygon: feasible set; coloured lines: the limits; dashed orange: level lines of ATP, the solid one the best level; the arrow is the gradient (6, 3), and it can be dragged. Click step three times: (0, 0) to (3, 0) at +6 per unit x1, to (2, 4) at +1.5 per unit x2, then both edges are negative, -2 and -1, which are minus the shadow prices of carbon and proteome in the readout. Drag the carbon slider to 7: ATP 26, the scan plot on the right has slope 2; drag it down to 3 and the readout shows a kink, 6 below and 2 above. Then drag the arrow until it is parallel to the proteome line (or click the tie preset): the whole red edge is optimal, and the walk stops at (3, 0) with an edge of rate 0. Click degenerate corner: three lines through (2, 4) and every price has two values. End with unbounded (the walk runs off up the line x1 = 3) and infeasible (no polygon at all). The exercise has a second tab with the FBA network: knock-outs, FVA ranges and the oxygen scan.
+The ATP LP of the last slides, solved live in the browser. Blue polygon: feasible set; coloured lines: the limits; dashed orange: level lines of ATP, the solid one the best level; the arrow is the gradient (6, 3), and it can be dragged. Click step three times: (0, 0) to (3, 0) at +6 per unit x1, to (2, 4) at +1.5 per unit x2, then both edges are negative, -2 and -1, which are minus the shadow prices of carbon and proteome in the readout. The demo counts per unit of the freed slack, the slide per unit x2: the carbon edge is -1 per unit proteome = -3 per unit x2, the proteome edge -2 per unit carbon = -1.5 per unit x2. Drag the carbon slider to 7: ATP 26, the scan plot on the right has slope 2; drag it down to 3 and the readout shows a kink, 6 below and 2 above. Then drag the arrow until it is parallel to the proteome line (or click the tie preset): the whole red edge is optimal, and the walk stops at (3, 0) with an edge of rate 0. Click degenerate corner: three lines through (2, 4) and every price has two values. End with unbounded (the walk runs off up the line x1 = 3) and infeasible (no polygon at all). The exercise has a second tab with the FBA network: knock-outs, FVA ranges and the oxygen scan.
 :::
 
 ## Flux balance analysis: the network {.smaller}
@@ -311,7 +311,7 @@ qr(S)$rank
 ```
 
 - $\frac{d}{dt}(\text{concentrations}) = S\mathbf v$. **Steady state**: $S\mathbf v = \mathbf 0$: every metabolite is made as fast as it is used.
-- 6 independent equations, 9 unknowns: a 3-dimensional **null space** of solutions, the same null space as in *Gaussian elimination as LU*.
+- 6 independent equations, 9 unknowns: elimination (as in [*Gaussian elimination as LU*](../lu/lec.qmd)) leaves 3 free fluxes, a 3-dimensional **null space** of solutions.
 
 ::: notes
 Read one row: P (pyruvate) is made twice by GLY and twice by BYP2, used once by each of RES, FER and BIO. Steady state is the key assumption of FBA: intracellular metabolites turn over in seconds, growth takes an hour, so on the slow time scale the metabolite pools are constant. We do not know the kinetics (no rate laws, no parameters), only the stoichiometry, which is known from biochemistry. That is why FBA works on genome-scale models where kinetic models would need thousands of unknown parameters. Elimination of S v = 0 leaves 3 free fluxes (for example glucose uptake, the split between the two routes, and respiration); the bounds and the objective choose among them.
@@ -352,7 +352,7 @@ The objective "maximise growth" is an assumption: that evolution has tuned the c
 
 - GLY and the bypass can share the glucose in **any** ratio: each ranges over $[0, 10]$.
 - The solver's GLY = 10 was one arbitrary corner.
-- Like a non-identifiable parameter (*Identifiability and uncertainty of fitted parameters*): the objective cannot tell the routes apart. **Report ranges**, not one flux vector.
+- Like a non-identifiable parameter ([*Identifiability and uncertainty of fitted parameters*](../identifiability/lec.qmd)): the objective cannot tell the routes apart. **Report ranges**, not one flux vector.
 :::
 ::::
 
@@ -420,7 +420,7 @@ The same failures as on the LP failure slide, translated into model-building pra
 ## Production tools {.smaller}
 
 - **COBRA Toolbox** (MATLAB) and **cobrapy** (Python) are the standard: they read models in SBML, set bounds, run FBA, FVA, knock-out screens and parsimonious FBA, and call an LP solver (GLPK, HiGHS, Gurobi, CPLEX).
-- Genome-scale models: *E. coli* iML1515 has 2712 reactions and 1877 metabolites; human Recon3D about 13 000 reactions. $S$ is **sparse** (*Structure: symmetric, banded, sparse*): a reaction touches a handful of metabolites.
+- Genome-scale models: *E. coli* iML1515 has 2712 reactions and 1877 metabolites; human Recon3D about 13 000 reactions. $S$ is **sparse** ([*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd)): a reaction touches a handful of metabolites.
 - The toy model is exactly what these tools do, at a size where you can check every number by hand.
 
 ::: notes
@@ -435,7 +435,7 @@ cobrapy: model.optimize() runs FBA, cobra.flux_analysis.flux_variability_analysi
 - **LP**: the optimum is at a **corner** of the feasible polytope; **simplex** walks along improving edges; solvers: `lpSolve::lp`, `scipy.optimize.linprog` (HiGHS), `minilp`. **Check the status**: tie, unbounded, infeasible.
 - **FBA**: maximise growth subject to $S\mathbf v = \mathbf 0$ and bounds. Optimal fluxes are often not unique (**FVA**), knock-outs are one LP each, shadow prices show which nutrient limits growth.
 
-**Next:** Part 10, *The diffusion (heat) equation by finite differences*.
+**Next:** Part 10, [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd).
 
 ::: notes
 The two ideas that carry furthest: constraints change what "converged" means (gradient not zero at an active constraint), and multipliers measure how much each constraint costs. In FBA both become biology: the active bounds are the limiting nutrients, the multipliers their value to the cell. Part 10 moves from ordinary to partial differential equations.

@@ -1,21 +1,21 @@
 # Cross-references from runge-kutta
 
-- runge-kutta/lec.qmd:38 (slide "Recap: Euler's method") -> euler (Euler's method, order 1, logistic errors)
-- runge-kutta/lec.qmd:slide "Better slopes: midpoint and Heun" (notes) -> quadrature (midpoint and trapezoid rules)
-- runge-kutta/lec.qmd:slide "The classical Runge–Kutta method (RK4)" (notes) -> quadrature (Simpson's rule)
-- runge-kutta/lec.qmd:slide "Reading the order off a log–log plot" (notes) -> convergence-cost (asymptotic regime, order from log–log slope)
-- runge-kutta/lec.qmd:slide "Predator–prey: watch the conserved quantity" (notes) -> euler (Euler spirals out on the 24-hour oscillator)
-- runge-kutta/lec.qmd:slide "The repressilator" (notes) -> phase-plane (limit cycle, unstable steady state)
-- runge-kutta/lec.qmd:slide "deSolve: rk4 versus ode45" (notes) -> euler (exact SIR peak formula I_max)
-- runge-kutta/lec.qmd:400 (slide "Events: stop at the epidemic peak") -> stiffness (lsoda explained there)
-- runge-kutta/lec.qmd:410 (slide "How events are found, and missed") -> bisection-fixedpoint, newton (root finding on the dense output)
-- runge-kutta/lec.qmd:425 (slide "Checklist") -> stiffness (huge number of steps = stiffness)
-- runge-kutta/lec.qmd:439 (slide "Summary", Next) -> stiffness
-- runge-kutta/exercise.qmd:42 (Background, running examples) -> euler (SIR epidemic parameters)
-- runge-kutta/exercise.qmd:Background (running examples) -> convergence-cost (logistic OD curve), euler/intro (drug clearance C' = -0.8 C, C0 = 10)
-- runge-kutta/exercise.qmd:Where this leads -> stiffness (stiff problems, LSODA)
-- runge-kutta/exercise.qmd:Where this leads -> phase-plane (predator–prey orbits, repressilator limit cycle)
-- runge-kutta/exercise.qmd:Where this leads -> nonlinear-least-squares (ODE fitting and solver tolerances)
+- runge-kutta/lec.qmd:38 (slide "Recap: Euler's method") -> euler (Euler's method, order 1, logistic errors) [fixed: euler measured logistic error at t = 5 h, here t = 10 h; notes now say so]
+- runge-kutta/lec.qmd:slide "Better slopes: midpoint and Heun" (notes) -> quadrature (midpoint and trapezoid rules) [ok]
+- runge-kutta/lec.qmd:slide "The classical Runge–Kutta method (RK4)" (notes) -> quadrature (Simpson's rule) [ok]
+- runge-kutta/lec.qmd:slide "Reading the order off a log–log plot" (notes) -> convergence-cost (asymptotic regime, order from log–log slope) [ok]
+- runge-kutta/lec.qmd:slide "Predator–prey: watch the conserved quantity" (notes) -> euler (Euler spirals out on the 24-hour oscillator) [ok]
+- runge-kutta/lec.qmd:slide "The repressilator" (notes) -> phase-plane (limit cycle, unstable steady state) [fixed: phase-plane uses toggle switch + Sel'kov, no repressilator; notes reworded]
+- runge-kutta/lec.qmd:slide "deSolve: rk4 versus ode45" (notes) -> euler (exact SIR peak formula I_max) [ok]
+- runge-kutta/lec.qmd:400 (slide "Events: stop at the epidemic peak") -> stiffness (lsoda explained there) [ok]
+- runge-kutta/lec.qmd:410 (slide "How events are found, and missed") -> bisection-fixedpoint, newton (root finding on the dense output) [ok]
+- runge-kutta/lec.qmd:425 (slide "Checklist") -> stiffness (huge number of steps = stiffness) [ok]
+- runge-kutta/lec.qmd:439 (slide "Summary", Next) -> stiffness [ok]
+- runge-kutta/exercise.qmd:42 (Background, running examples) -> euler (SIR epidemic parameters) [ok]
+- runge-kutta/exercise.qmd:Background (running examples) -> convergence-cost (logistic OD curve), euler/intro (drug clearance C' = -0.8 C, C0 = 10) [ok]
+- runge-kutta/exercise.qmd:Where this leads -> stiffness (stiff problems, LSODA) [ok]
+- runge-kutta/exercise.qmd:Where this leads -> phase-plane (predator–prey orbits, repressilator limit cycle) [fixed: same; reworded to say phase-plane studies limit cycles on toggle/Sel'kov]
+- runge-kutta/exercise.qmd:Where this leads -> nonlinear-least-squares (ODE fitting and solver tolerances) [ok]
 
 ## Running examples used here (defined elsewhere)
 
@@ -45,3 +45,9 @@
   8.7 time units. Reference p1(50) = 47.335989 (tight tolerance). Fixed-step
   RK4: h = 1 blows up (3e58), h = 0.2 gives 58.785, h = 0.01 gives 47.338477.
   Natural reuse in phase-plane (limit cycle) and gillespie (stochastic version).
+
+## Pass 2
+
+- All italic unit titles turned into links.
+- [fixed] Python C2, C3, C5, C6 solution tabs now self-contained (steppers / rk_solve / adapt_heun repeated); rerun with python3 -I, outputs unchanged. R tabs keep their one-line "uses ... from C1/C4" pointers (allowed by the brief).
+- SIR parameters agree with euler (N 10 000, beta 0.3, gamma 0.1, (9990, 10, 0)).

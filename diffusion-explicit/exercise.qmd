@@ -28,15 +28,15 @@ The by-hand part uses pen, paper and a pocket calculator. The code part works wi
    Heat conduction is the same equation with temperature $T$ and thermal diffusivity $\alpha$ (water: $\alpha \approx 1.4\cdot10^{-7}$ m²/s).
 2. **Initial and boundary conditions.** A start profile $c(x, 0)$, and at each end either a **fixed value** (a large reservoir, Dirichlet) or **no flux**, $\partial c/\partial x = 0$ (a wall).
 3. **Time scale.** Any diffusion time is a multiple of $L^2/D$. Work in µm and s: $10^{-9}$ m²/s $= 1000$ µm²/s.
-4. **Grid.** $x_i = i\,\Delta x$, $i = 0, \dots, N$, $t_n = n\,\Delta t$, $c_i^n \approx c(x_i, t_n)$. The second difference $(c_{i-1} - 2c_i + c_{i+1})/\Delta x^2$ from *Numerical differentiation* replaces $\partial^2 c/\partial x^2$, with error $\tfrac{\Delta x^2}{12}\,\partial^4 c/\partial x^4$.
-5. **FTCS** (forward in time, centred in space) is Euler's method on the grid ODEs:
+4. **Grid.** $x_i = i\,\Delta x$, $i = 0, \dots, N$, $t_n = n\,\Delta t$, $c_i^n \approx c(x_i, t_n)$. The second difference $(c_{i-1} - 2c_i + c_{i+1})/\Delta x^2$ from [*Numerical differentiation*](../finite-differences/lec.qmd) replaces $\partial^2 c/\partial x^2$, with error $\tfrac{\Delta x^2}{12}\,\partial^4 c/\partial x^4$.
+5. **FTCS** (forward in time, centred in space) is Euler's method ([*Initial value problems and Euler's method*](../euler/lec.qmd)) on the grid ODEs:
    $$c_i^{n+1} = c_i^n + r\,\bigl(c_{i-1}^n - 2c_i^n + c_{i+1}^n\bigr), \qquad r = \frac{D\,\Delta t}{\Delta x^2}.$$
    Stable only for $r \le 1/2$. For $r \le 1/2$ the new value is a weighted average of three old ones with non-negative weights, so no value can leave the range of the start and boundary values (**maximum principle**).
 6. **No-flux wall** at $x_N$: a ghost point $c_{N+1} = c_{N-1}$ gives $c_N^{n+1} = c_N^n + 2r\,(c_{N-1}^n - c_N^n)$.
 7. **Exact solution** for the chamber below (empty at $t = 0$, $c = 1$ at $x = 0$, $c = 0$ at $x = L$):
    $$c(x, t) = 1 - \frac{x}{L} - \sum_{n=1}^{\infty} \frac{2}{n\pi}\,\sin\frac{n\pi x}{L}\;e^{-n^2\pi^2 D t/L^2}.$$
 
-**The running example: a flow-free chemotaxis chamber.** A straight channel of length $L = 500$ µm joins a source reservoir ($c = 1$, concentrations scaled by the source) to a sink reservoir ($c = 0$); there is no flow, so the attractant moves only by diffusion. Diffusion-based gradient devices of this kind are described in the reviews by Kim, Kim & Jeon (2010) and in *Frontiers in Bioengineering and Biotechnology* (2015); our channel is a simplified version with typical, not device-specific, numbers. Small molecule: $D = 1000$ µm²/s ($10^{-9}$ m²/s); protein chemokine: $D = 100$ µm²/s ($10^{-10}$ m²/s). Grid: $N = 50$ intervals of $\Delta x = 10$ µm, $r = 0.4$, so $\Delta t = 0.04$ s.
+**The running example: a flow-free chemotaxis chamber.** A straight channel of length $L = 500$ µm joins a source reservoir ($c = 1$, concentrations scaled by the source) to a sink reservoir ($c = 0$); there is no flow, so the attractant moves only by diffusion. Diffusion-based gradient devices of this kind are described in the reviews by Kim, Kim & Jeon (2010) [G1] and in *Frontiers in Bioengineering and Biotechnology* (2015) [G3]; our channel is a simplified version with typical, not device-specific, numbers. Small molecule: $D = 1000$ µm²/s ($10^{-9}$ m²/s); protein chemokine: $D = 100$ µm²/s ($10^{-10}$ m²/s). Grid: $N = 50$ intervals of $\Delta x = 10$ µm, $r = 0.4$, so $\Delta t = 0.04$ s.
 
 FTCS is hand-written in all three languages: vectorised over space in R and numpy, a plain loop in Rust. The one trap: every point must be updated from the **old** time level. R and numpy evaluate the whole right-hand side before assigning, so this happens automatically; in Rust we copy the old level first.
 
@@ -289,7 +289,7 @@ Write one row per time level. Compute every new value from the **old** row, and 
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 3 — stability (B5, B6, C4)"}
-Euler on $y' = -ky$ multiplies by $1 - kh$ and needs $|1 - kh| \le 1$. For the grid, $k$ runs over the decay rates $-\tfrac{D}{\Delta x^2}\lambda_k$; the largest one decides. For the $3 \times 3$ determinant, set $\mu = -2 - \lambda$: then $\det = \mu^3 - 2\mu$. In code use [`eigen(A, symmetric = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html) (Python: [`np.linalg.eigvalsh`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvalsh.html); Rust: `symmetric_eigenvalues()` in [nalgebra](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.SymmetricEigen.html)). Build $A$ with [`diag`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/diag.html) and index pairs `cbind(i, j)` (Python: [`np.diag`](https://numpy.org/doc/stable/reference/generated/numpy.diag.html) with an offset).
+Euler on $y' = -ky$ multiplies by $1 - kh$ and needs $|1 - kh| \le 1$ ([*Initial value problems and Euler's method*](../euler/lec.qmd); for a system, the rule holds for every eigenvalue: [*Stiffness and implicit methods*](../stiffness/lec.qmd)). For the grid, $k$ runs over the decay rates $-\tfrac{D}{\Delta x^2}\lambda_k$; the largest one decides. For the $3 \times 3$ determinant, set $\mu = -2 - \lambda$: then $\det = \mu^3 - 2\mu$. In code use [`eigen(A, symmetric = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html) (Python: [`np.linalg.eigvalsh`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvalsh.html); Rust: `symmetric_eigenvalues()` in [nalgebra](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.SymmetricEigen.html)). Build $A$ with [`diag`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/diag.html) and index pairs `cbind(i, j)` (Python: [`np.diag`](https://numpy.org/doc/stable/reference/generated/numpy.diag.html) with an offset).
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 4 — vectorised FTCS (C1–C5)"}
@@ -301,7 +301,7 @@ If error $\approx C\,\Delta x^p$, halving $\Delta x$ divides the error by $2^p$.
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 6 — walls and totals (B7, C5)"}
-Compute the new wall value from old values **before** the interior update overwrites its neighbour. The total amount is the integral $\int_0^L c\,dx$; on the grid the trapezoid rule from *Numerical integration* gives the end points half weight.
+Compute the new wall value from old values **before** the interior update overwrites its neighbour. The total amount is the integral $\int_0^L c\,dx$; on the grid the trapezoid rule from [*Numerical integration*](../quadrature/lec.qmd) gives the end points half weight.
 :::
 
 ## Solutions
@@ -362,7 +362,7 @@ Steady state $(0.75, 0.5, 0.25)$: its second differences are all 0 (e.g. $1 - 1.
 **B8.**
 (a) $t = 0.26 \cdot 10^6/100 = 2600$ s. $\Delta t = 100/200 = 0.5$ s: 5200 steps × 99 points ≈ $5\cdot10^5$ updates. Instant.
 (b) $\Delta t = 1/200 = 0.005$ s: 520 000 steps × 999 points ≈ $5\cdot10^8$ updates. Ten times finer in space, a thousand times more work.
-(c) $L^2/(\pi^2 D) = 10^6/987 = 1013$ s, about 200 000 times the step. The step is set by the zigzag mode, which has no biological meaning and decays in milliseconds; the solution itself changes on a scale of minutes. This is stiffness, and it is what *Implicit schemes and the method of lines* removes.
+(c) $L^2/(\pi^2 D) = 10^6/987 = 1013$ s, about 200 000 times the step. The step is set by the zigzag mode, which has no biological meaning and decays in milliseconds; the solution itself changes on a scale of minutes. This is stiffness ([*Stiffness and implicit methods*](../stiffness/lec.qmd)), and it is what [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd) removes.
 :::
 
 ::: {.callout-note collapse="true" title="Solution — in code"}
@@ -1103,7 +1103,7 @@ fn main() {
 
 ## Where this leads
 
-- *Implicit schemes and the method of lines* (next unit): backward Euler and Crank–Nicolson for the same chamber, with no step limit, one tridiagonal (Thomas) solve per step from *Structure: symmetric, banded, sparse*; the grid ODEs handed to a stiff solver from *Stiffness and implicit methods*.
-- *Steady state in two dimensions*: the chamber in 2D, where the steady state is a sparse linear system rather than a straight line.
-- *Flow plus diffusion*: gradient generators with flow, where the Péclet number decides whether flow or diffusion wins.
-- *Reaction–diffusion and pattern formation*: adding production and degradation, and the length scale $\sqrt{D/k}$ of a morphogen gradient.
+- [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd) (next unit): backward Euler and Crank–Nicolson for the same chamber, with no step limit, one tridiagonal (Thomas) solve per step with `thomas(a, b, c, d)` from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd); the grid ODEs handed to a stiff solver from [*Stiffness and implicit methods*](../stiffness/lec.qmd).
+- [*Steady state in two dimensions*](../steady-state-2d/lec.qmd): the same kind of grid in 2D (oxygen in a chamber under a lid, consumed by cells), where the steady state is a sparse linear system rather than a straight line.
+- [*Flow plus diffusion*](../advection-diffusion/lec.qmd): gradient generators with flow, where the Péclet number decides whether flow or diffusion wins.
+- [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd): adding production and degradation, and the length scale $\sqrt{D/k}$ of a morphogen gradient.

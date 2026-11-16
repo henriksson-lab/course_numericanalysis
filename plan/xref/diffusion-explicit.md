@@ -1,37 +1,39 @@
 # Cross-references from diffusion-explicit
 
-- diffusion-explicit/lec.qmd:33 (notes, About this lecture) -> finite-differences (second-difference stencil), euler (time step), power-iteration / eigen-algorithms (Part 5, eigenvalues), newton-systems (partial derivatives); units 32-35 reuse the chamber
-- diffusion-explicit/lec.qmd:44 (notes, Biology slide) -> advection-diffusion (flow-based gradient generators, "Flow plus diffusion")
-- diffusion-explicit/lec.qmd:51 (slide "Recap: two tools you already have") -> finite-differences (the (1,-2,1)/h^2 stencil and its h^2/12 error)
-- diffusion-explicit/lec.qmd:58 (same slide) -> euler (amplification factor 1 - kh, |1 - kh| <= 1)
-- diffusion-explicit/lec.qmd:69 (notes, Recap) -> stiffness (eigenvalue-wise stability for y' = Jy)
-- diffusion-explicit/lec.qmd:77 (slide "A function of space and time") -> newton-systems (partial derivatives as slopes of slices)
-- diffusion-explicit/lec.qmd:80 (notes) -> newton-systems
-- diffusion-explicit/lec.qmd:113 (notes, Fick to diffusion equation) -> euler (rate in - rate out); diffusion-implicit (heat: Drosophila embryo between two temperatures)
-- diffusion-explicit/lec.qmd:169 (notes, Step 1 space) -> diffusion-implicit (method of lines); structured-sparse (same tridiagonal matrix as the morphogen in a row of cells)
-- diffusion-explicit/lec.qmd:280 (notes, exact solution) -> euler (order check on log-log axes, Part 8)
-- diffusion-explicit/lec.qmd:309 (notes, zigzag) -> fourier-fft (Nyquist mode, shortest wave on the grid); euler (drug clearance, 1/k < h < 2/k sign flips)
-- diffusion-explicit/lec.qmd:326 (slide "The eigenvalue view") -> power-iteration / eigen-algorithms (Part 5), stiffness (stability for every eigenvalue)
-- diffusion-explicit/lec.qmd:329 (notes) -> eigen-algorithms (eigen(); Python numpy.linalg.eigvalsh)
-- diffusion-explicit/lec.qmd:338 (slide "Slow modes, fast modes") -> diffusion-implicit (fix for the step limit)
-- diffusion-explicit/lec.qmd:341 (notes) -> stiffness (definition: step set by stability, not accuracy); diffusion-implicit (backward Euler, Crank-Nicolson, Thomas)
-- diffusion-explicit/lec.qmd:387 (notes, checklist) -> euler (step halving, Part 8)
-- diffusion-explicit/lec.qmd:398 (Summary, Next) -> diffusion-implicit
-- diffusion-explicit/lec.qmd:401 (notes, Summary) -> diffusion-implicit, structured-sparse (Thomas algorithm), stiffness, steady-state-2d, advection-diffusion, reaction-diffusion
-- diffusion-explicit/exercise.qmd:31 (Background item 4) -> finite-differences (second difference and its error)
-- diffusion-explicit/exercise.qmd:Background item 5 -> euler (FTCS = Euler on the grid ODEs)
-- diffusion-explicit/exercise.qmd:Hint 3 -> euler (|1 - kh| <= 1)
-- diffusion-explicit/exercise.qmd:264 (Hint 6) -> quadrature (trapezoid rule, "Numerical integration")
-- diffusion-explicit/exercise.qmd:325 (Solution B8(c)) -> diffusion-implicit, stiffness
-- diffusion-explicit/exercise.qmd:1066 (Where this leads) -> diffusion-implicit, structured-sparse (Thomas), stiffness
-- diffusion-explicit/exercise.qmd:1067 (Where this leads) -> steady-state-2d
-- diffusion-explicit/exercise.qmd:1068 (Where this leads) -> advection-diffusion
-- diffusion-explicit/exercise.qmd:1069 (Where this leads) -> reaction-diffusion
-- diffusion-explicit/quiz.qmd:58 (Q4 answer) -> finite-differences, euler
-- diffusion-explicit/quiz.qmd:Q8 answer -> diffusion-implicit ("next unit")
-- diffusion-explicit/quiz.qmd:142 (Q11 answer) -> stiffness
+- diffusion-explicit/lec.qmd:33 (notes, About this lecture) -> finite-differences (second-difference stencil), euler (time step), power-iteration / eigen-algorithms (Part 5, eigenvalues), newton-systems (partial derivatives); units 32-35 reuse the chamber [fixed: linked; "units 32-35 reuse the chamber" corrected — only diffusion-implicit reuses the chamber, the others reuse the grid conventions]
+- diffusion-explicit/lec.qmd:44 (notes, Biology slide) -> advection-diffusion (flow-based gradient generators, "Flow plus diffusion") [ok]
+- diffusion-explicit/lec.qmd:51 (slide "Recap: two tools you already have") -> finite-differences (the (1,-2,1)/h^2 stencil and its h^2/12 error) [ok]
+- diffusion-explicit/lec.qmd:58 (same slide) -> euler (amplification factor 1 - kh, |1 - kh| <= 1) [ok]
+- diffusion-explicit/lec.qmd:69 (notes, Recap) -> stiffness (eigenvalue-wise stability for y' = Jy) [ok]
+- diffusion-explicit/lec.qmd:77 (slide "A function of space and time") -> newton-systems (partial derivatives as slopes of slices) [ok]
+- diffusion-explicit/lec.qmd:80 (notes) -> newton-systems [ok]
+- diffusion-explicit/lec.qmd:113 (notes, Fick to diffusion equation) -> euler (rate in - rate out); diffusion-implicit (heat: Drosophila embryo between two temperatures) [ok]
+- diffusion-explicit/lec.qmd:169 (notes, Step 1 space) -> diffusion-implicit (method of lines); structured-sparse (same tridiagonal matrix as the morphogen in a row of cells) [fixed: morphogen matrix is the same pattern with opposite sign plus degradation, said so; linked]
+- diffusion-explicit/lec.qmd:280 (notes, exact solution) -> euler (order check on log-log axes, Part 8) [ok]
+- diffusion-explicit/lec.qmd:309 (notes, zigzag) -> fourier-fft (Nyquist mode, shortest wave on the grid); euler (drug clearance, 1/k < h < 2/k sign flips) [ok]
+- diffusion-explicit/lec.qmd:326 (slide "The eigenvalue view") -> power-iteration / eigen-algorithms (Part 5), stiffness (stability for every eigenvalue) [fixed: "(Part 5, Stiffness and implicit methods)" -> eigenvalues from Part 5, the rule from Part 8 (stiffness); linked]
+- diffusion-explicit/lec.qmd:329 (notes) -> eigen-algorithms (eigen(); Python numpy.linalg.eigvalsh) [ok]
+- diffusion-explicit/lec.qmd:338 (slide "Slow modes, fast modes") -> diffusion-implicit (fix for the step limit) [ok]
+- diffusion-explicit/lec.qmd:341 (notes) -> stiffness (definition: step set by stability, not accuracy); diffusion-implicit (backward Euler, Crank-Nicolson, Thomas) [ok]
+- diffusion-explicit/lec.qmd:387 (notes, checklist) -> euler (step halving, Part 8) [ok]
+- diffusion-explicit/lec.qmd:398 (Summary, Next) -> diffusion-implicit [ok]
+- diffusion-explicit/lec.qmd:401 (notes, Summary) -> diffusion-implicit, structured-sparse (Thomas algorithm), stiffness, steady-state-2d, advection-diffusion, reaction-diffusion [fixed: "Steady state in two dimensions takes the chamber to 2D" -> takes the grid to 2D (oxygen under a lid); linked]
+- diffusion-explicit/exercise.qmd:31 (Background item 4) -> finite-differences (second difference and its error) [ok]
+- diffusion-explicit/exercise.qmd:Background item 5 -> euler (FTCS = Euler on the grid ODEs) [ok]
+- diffusion-explicit/exercise.qmd:Hint 3 -> euler (|1 - kh| <= 1) [ok]
+- diffusion-explicit/exercise.qmd:264 (Hint 6) -> quadrature (trapezoid rule, "Numerical integration") [ok: trapezoid in Hint 6, linked]
+- diffusion-explicit/exercise.qmd:325 (Solution B8(c)) -> diffusion-implicit, stiffness [ok]
+- diffusion-explicit/exercise.qmd:1066 (Where this leads) -> diffusion-implicit, structured-sparse (Thomas), stiffness [ok]
+- diffusion-explicit/exercise.qmd:1067 (Where this leads) -> steady-state-2d [fixed: "the chamber in 2D" -> same kind of grid in 2D (oxygen under a lid); linked]
+- diffusion-explicit/exercise.qmd:1068 (Where this leads) -> advection-diffusion [ok]
+- diffusion-explicit/exercise.qmd:1069 (Where this leads) -> reaction-diffusion [ok]
+- diffusion-explicit/quiz.qmd:58 (Q4 answer) -> finite-differences, euler [ok]
+- diffusion-explicit/quiz.qmd:Q8 answer -> diffusion-implicit ("next unit") [ok]
+- diffusion-explicit/quiz.qmd:142 (Q11 answer) -> stiffness [ok]
 
 ## Literature cited
+
+[ok: pass 2 — [G1]/[G3] tags match contentplan.md; exercise Background now also carries the tags]
 
 - [G1] Kim, Kim & Jeon (2010), [G3] Frontiers review (2015): lec.qmd slide "Biology: a flow-free chemotaxis chamber" (+ notes), notes of "Sink or wall"; exercise.qmd Background. Only the qualitative claims (diffusion-based vs flow-based devices; no shear; reservoirs equilibrate over time) are attributed to them, stated cautiously. All numbers are standard values, not taken from the papers.
 

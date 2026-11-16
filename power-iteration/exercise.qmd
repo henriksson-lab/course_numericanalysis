@@ -303,6 +303,8 @@ $(L - \sigma I)\mathbf y = \mathbf x$ for a 2 × 2: $\begin{pmatrix} a & b \\ c 
 (b) $L - I = \begin{pmatrix} -0.4 & 0.9 \\ 0.8 & -1 \end{pmatrix}$, determinant $0.4 - 0.72 = -0.32$. $\mathbf y = \frac{1}{-0.32}\begin{pmatrix} -1 & -0.9 \\ -0.8 & -0.4\end{pmatrix}\begin{pmatrix}0\\1\end{pmatrix} = \frac{(-0.9, -0.4)}{-0.32} = (2.8125, 1.25)$. Proportions $(0.6923, 0.3077)$: error $0.092$, down from $0.6$ (a factor 0.15, close to the rate 0.125). One step of power iteration gave $(1, 0)$, error $0.4$.
 (c) $L - 1.2I$ is singular: the system has no unique solution, and in exact arithmetic the method breaks down. In floating point the matrix is only *nearly* singular (rounding in $\sigma$ and in the elimination); the solution is huge but points almost exactly along $\mathbf v_1$, so after normalising it is an excellent eigenvector (lecture slide "Shift exactly at the eigenvalue?"). R's `solve` refuses with "system is computationally singular"; a shift of $1.2 + 10^{-12}$ avoids that.
 
+The R and Python code solutions below run in one session, in order: `L` is defined in the Background, `power_it` in C1, `P` in C4 and `C` in C5. Each Rust tab is a complete program.
+
 **C1.**
 
 ::: {.panel-tabset group="language"}
@@ -876,7 +878,7 @@ fn main() {
 
 :::
 
-For the symmetric $C$ ($|\lambda_2/\lambda_1| = 0.505$), the Rayleigh quotient reaches $10^{-10}$ in 16 iterations, the sum ratio needs 29: about half, because the Rayleigh error falls like $0.505^{2k}$ (fact 7). For the nonsymmetric Leslie matrix both need 53: its eigenvectors are not orthogonal, so the first-order error does not cancel. (For symmetric matrices `eigen(C, symmetric = TRUE)` / [`np.linalg.eigvalsh`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvalsh.html) / nalgebra's `symmetric_eigen` use a faster, more accurate algorithm; *How `eigen()` works, and big problems* explains why.)
+For the symmetric $C$ ($|\lambda_2/\lambda_1| = 0.505$), the Rayleigh quotient reaches $10^{-10}$ in 16 iterations, the sum ratio needs 29: about half, because the Rayleigh error falls like $0.505^{2k}$ (fact 7). For the nonsymmetric Leslie matrix both need 53: its eigenvectors are not orthogonal, so the first-order error does not cancel. (For symmetric matrices `eigen(C, symmetric = TRUE)` / [`np.linalg.eigvalsh`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvalsh.html) / nalgebra's `symmetric_eigen` use a faster, more accurate algorithm; [*How `eigen()` works, and big problems*](../eigen-algorithms/lec.qmd) explains why.)
 
 **C6.**
 
@@ -1122,7 +1124,7 @@ fn main() {
 
 ## Where this leads
 
-- ***How `eigen()` works, and big problems*** (next unit): `eigen()` finds **all** eigenvalues with the QR algorithm, which is, in outline, a clever shifted inverse iteration on all vectors at once. For a few eigenpairs of a **huge sparse** matrix (the top principal components of a 100 000-cell dataset), Krylov methods (Lanczos, `irlba`, `RSpectra`, `scipy.sparse.linalg.eigsh`) improve on power iteration by keeping all the vectors $\mathbf x, A\mathbf x, A^2\mathbf x, \dots$ instead of only the last one.
-- ***Equilibria, stability and the phase plane*** (Part 8): the stability of an equilibrium of an ODE model is decided by the eigenvalues of its Jacobian, and the slowest-decaying direction is again an eigenvector.
-- ***Stochastic simulation*** (Part 8): the Markov chains there run in continuous time; their long-run behaviour is again a stationary distribution.
-- ***Iterative linear solvers in depth*** (Part 11): Jacobi and similar methods converge at a rate set by the largest eigenvalue of an iteration matrix, the same $|\lambda|^k$ argument as in this unit.
+- [***How `eigen()` works, and big problems***](../eigen-algorithms/lec.qmd) (next unit): `eigen()` finds **all** eigenvalues with the QR algorithm, which is, in outline, a clever shifted inverse iteration on all vectors at once. For a few eigenpairs of a **large sparse** matrix (the top principal components of a 20 000-cell dataset), Krylov methods (Lanczos, `irlba`, `RSpectra`, `scipy.sparse.linalg.eigsh`) improve on power iteration by keeping all the vectors $\mathbf x, A\mathbf x, A^2\mathbf x, \dots$ instead of only the last one.
+- [***Equilibria, stability and the phase plane***](../phase-plane/lec.qmd) (Part 8): the stability of an equilibrium of an ODE model is decided by the eigenvalues of its Jacobian, and the slowest-decaying direction is again an eigenvector.
+- [***Stochastic simulation***](../gillespie/lec.qmd) (Part 8): the Markov chains there run in continuous time; their long-run behaviour is again a stationary distribution.
+- [***Iterative linear solvers in depth***](../iterative-solvers/lec.qmd) (Part 11): Jacobi and similar methods converge at a rate set by the largest eigenvalue of an iteration matrix, the same $|\lambda|^k$ argument as in this unit.

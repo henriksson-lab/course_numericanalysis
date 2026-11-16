@@ -19,7 +19,7 @@ By the end of this exercise you should be able to:
 - recognise a **sloppy** model from the spread of the eigenvalues of $J^TJ$,
 - compare **sampling designs** before an experiment, and add a **prior** as an extra residual.
 
-The running example is the pharmacokinetic model and the simulated plasma concentrations of *Nonlinear least squares and ODE fitting*: one oral dose of 100 mg, true $k_a = 1$ /h, $k_e = 0.2$ /h, $V = 20$ L, noise SD 0.1 mg/L. The by-hand part uses pen, paper and a calculator.
+The running example is the pharmacokinetic model and the simulated plasma concentrations of [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd): one oral dose of 100 mg, true $k_a = 1$ /h, $k_e = 0.2$ /h, $V = 20$ L, noise SD 0.1 mg/L. The code uses that unit's names: `bateman(t, ka, ke, V)` with the dose `D`, the sample times `tt` and the concentrations `y`. The by-hand part uses pen, paper and a calculator.
 
 ## Background
 
@@ -46,11 +46,12 @@ The data, the fit, standard errors and correlations in each language. The R and 
 
 ```r
 library(numDeriv)
-pk <- function(t, ka, ke, V, D = 100) D * ka / (V * (ka - ke)) * (exp(-ke * t) - exp(-ka * t))
-t <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12)                       # hours
+D  <- 100                                                                       # oral dose, mg
+bateman <- function(t, ka, ke, V) D * ka / (V * (ka - ke)) * (exp(-ke * t) - exp(-ka * t))
+tt <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12)                       # hours
 y <- c(1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61)  # mg/L
-late <- t >= 3                                                               # sparse design
-fit <- nls(y ~ pk(t, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
+late <- tt >= 3                                                               # sparse design
+fit <- nls(y ~ bateman(tt, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
 summary(fit)$coefficients[, 1:2]          # estimates and standard errors
 #      Estimate Std. Error
 # ka  1.0150721 0.06243155
@@ -69,12 +70,13 @@ round(cov2cor(vcov(fit)), 2)              # correlation matrix of the estimates
 import numpy as np
 from scipy.optimize import least_squares
 
-def pk(t, ka, ke, V, D=100):
-    return D * ka / (V * (ka - ke)) * (np.exp(-ke * t) - np.exp(-ka * t))
-
-t = np.array([0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12])                      # hours
+D = 100.0                                                                         # oral dose, mg
+tt = np.array([0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12])                      # hours
 y = np.array([1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61])  # mg/L
-late = t >= 3                                                                    # sparse design
+late = tt >= 3                                                                    # sparse design
+
+def bateman(t, ka, ke, V):
+    return D * ka / (V * (ka - ke)) * (np.exp(-ke * t) - np.exp(-ka * t))
 
 def jacobian(f, p, h=1e-5):
     """Central-difference Jacobian of a vector function f at p (step relative to |p|)."""
@@ -85,11 +87,11 @@ def jacobian(f, p, h=1e-5):
         cols.append((f(p + e) - f(p - e)) / (2 * e[j]))
     return np.column_stack(cols)
 
-def fit_pk(tt, yy, start):
-    res = least_squares(lambda p: yy - pk(tt, *p), start, xtol=1e-12, ftol=1e-12, gtol=1e-12)
+def fit_pk(ts, ys, start):
+    res = least_squares(lambda p: ys - bateman(ts, *p), start, xtol=1e-12, ftol=1e-12, gtol=1e-12)
     return res.x, np.sum(res.fun**2), res
 
-th, S, res = fit_pk(t, y, [0.5, 0.1, 10])
+th, S, res = fit_pk(tt, y, [0.5, 0.1, 10])
 s2 = S / (len(y) - 3)                      # residual variance s^2
 cov = s2 * np.linalg.inv(res.jac.T @ res.jac)
 se = np.sqrt(np.diag(cov))
@@ -113,10 +115,11 @@ print(np.round(cov / np.outer(se, se), 2))     # correlation matrix of the estim
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -161,17 +164,17 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
 fn main() {
-    let r = resid(&T, &Y);
+    let r = resid(&TT, &Y);
     let th = levmar(&r, &[0.5, 0.1, 10.0]);
-    let s2 = sse(&r, &th) / (T.len() - 3) as f64;          // residual variance s^2
+    let s2 = sse(&r, &th) / (TT.len() - 3) as f64;          // residual variance s^2
     let j = jacobian(&r, &th);
     let cov = (j.transpose() * &j).try_inverse().unwrap() * s2;
     let se: Vec<f64> = (0..3).map(|i| cov[(i, i)].sqrt()).collect();
@@ -247,7 +250,7 @@ R's [`vcov`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/vcov.html)
 (c) Python only: BFGS returns an approximation `hess_inv` of $H^{-1}$. Compare the standard errors from it with those from the real Hessian.
 
 **C3. Structural non-identifiability in code.**
-(a) Let $F$ be a free parameter: fit $C(t) = \text{pk}(t, k_a, k_e, V/F)$ with four parameters. What does `nls` say? What does `least_squares` (Python) or the hand-written LM (Rust) return? Compute the singular values of the log-parameter Jacobian ([`svd`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/svd.html); Python: [`np.linalg.svd`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html)) at $(1.0151, 0.1906, 20.22, 1)$ and the right singular vector of the smallest one.
+(a) Let $F$ be a free parameter: fit $C(t) = \text{bateman}(t, k_a, k_e, V/F)$ with four parameters. What does `nls` say? What does `least_squares` (Python) or the hand-written LM (Rust) return? Compute the singular values of the log-parameter Jacobian ([`svd`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/svd.html); Python: [`np.linalg.svd`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html)) at $(1.0151, 0.1906, 20.22, 1)$ and the right singular vector of the smallest one.
 (b) Fit the three-parameter model from the starts $(k_a, k_e) = (0.5, 0.1), (2, 0.1), (0.1, 0.5), (2, 0.5)$, all with $V = 10$. Report the estimates and the SSE. How many different answers, and how do they differ?
 
 **C4. The SVD of the Jacobian, two designs.** Write a function that fits the model to given samples, computes $J$, its log-parameter version $J_\text{log}$ (fact 2), the singular values of $J_\text{log}$, $\kappa(J)$ and $\kappa(J_\text{log})$ ([`kappa(..., exact = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kappa.html); Python: [`np.linalg.cond`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html)), the SE along each $v_i$ (fact 5, with $s$), and $v_3$.
@@ -255,7 +258,7 @@ R's [`vcov`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/vcov.html)
 (b) Which combination is worst determined in each design? Compare with the slide "Practical non-identifiability".
 
 **C5. Profile likelihood.**
-(a) Write `profile_ka(ka, t, y)`: fix $k_a$, fit $k_e$ and $V$ (start $0.2, 20$), return the SSE. For $k_a = 0.3, 0.5, 0.7, 1, 1.5, 2, 5, 10, 30$, print $\Delta = (\text{PL}(k_a) - S(\hat\theta))/s^2$ for both designs.
+(a) Write `profile_ka(ka, ts, ys)`: fix $k_a$, fit $k_e$ and $V$ (start $0.2, 20$), return the SSE. For $k_a = 0.3, 0.5, 0.7, 1, 1.5, 2, 5, 10, 30$, print $\Delta = (\text{PL}(k_a) - S(\hat\theta))/s^2$ for both designs.
 (b) For all 12 samples, find the profile interval (where $\Delta = 3.84$) with [`uniroot`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html) (Python: [`scipy.optimize.brentq`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html); Rust: bisection). Compare with the Wald interval $\hat k_a \pm 1.96\,\mathrm{SE}$, and with the Wald interval for $\log k_a$, $\hat k_a e^{\pm 1.96\,\mathrm{SE}/\hat k_a}$.
 (c) For the samples from 3 h: what is the 95 % profile interval? What would you write in a report?
 
@@ -335,7 +338,7 @@ Multiply column $j$ of $J$ by $\theta_j$ (R: `J %*% diag(th)`; Python: `J * th`;
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 7 — profiles (C5)"}
-In R, a parameter that is not in `start` is taken from the calling environment, so `nls(y ~ pk(t, ka, ke, V), start = list(ke = 0.2, V = 20))` inside a function with argument `ka` fits only `ke` and `V`. In Python, write the residual as a function of `q = (ke, V)` with `ka` fixed. If a fit fails at an extreme grid point, start it from the solution at the neighbouring point.
+In R, a parameter that is not in `start` is taken from the calling environment, so `nls(ys ~ bateman(ts, ka, ke, V), start = list(ke = 0.2, V = 20))` inside a function with argument `ka` fits only `ke` and `V`. In Python, write the residual as a function of `q = (ke, V)` with `ka` fixed. If a fit fails at an extreme grid point, start it from the solution at the neighbouring point.
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 8 — a prior as a residual (C7)"}
@@ -400,13 +403,13 @@ Divide the data residuals by $\sigma$ and append $(\log k_a - \mu)/\tau$. Then t
 ### R
 
 ```r
-fit <- nls(y ~ pk(t, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
+fit <- nls(y ~ bateman(tt, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
 th <- coef(fit)
 print(signif(th, 5))
 #       ka       ke        V
 #  1.01510  0.19062 20.21600
 s2 <- deviance(fit) / (length(y) - 3)
-J <- jacobian(function(p) pk(t, p[1], p[2], p[3]), th)
+J <- jacobian(function(p) bateman(tt, p[1], p[2], p[3]), th)
 se_vcov  <- sqrt(diag(vcov(fit)))
 se_solve <- sqrt(diag(s2 * solve(crossprod(J))))
 se_qr    <- sqrt(diag(s2 * chol2inv(qr.R(qr(J)))))
@@ -438,13 +441,13 @@ print(round(sqrt(diag(Cb)), 4)); print(round(cov2cor(Cb)[1, 2], 4))
 ### Python
 
 ```python
-th, S, res = fit_pk(t, y, [0.5, 0.1, 10])
+th, S, res = fit_pk(tt, y, [0.5, 0.1, 10])
 print(np.round(th, 5))
 # [ 1.01507  0.19062 20.21621]
 s2 = S / (len(y) - 3)
 J = res.jac                                   # Jacobian of the residuals (= -J, same J^T J)
 se_jac = np.sqrt(np.diag(s2 * np.linalg.inv(J.T @ J)))
-Jc = jacobian(lambda p: pk(t, *p), th)        # central differences
+Jc = jacobian(lambda p: bateman(tt, *p), th)        # central differences
 se_solve = np.sqrt(np.diag(s2 * np.linalg.inv(Jc.T @ Jc)))
 R = np.linalg.qr(Jc, mode="r")                # (J^T J)^-1 = R^-1 R^-T
 Rinv = np.linalg.inv(R)
@@ -476,10 +479,11 @@ print(np.round(np.sqrt(np.diag(Cb)), 4), round(Cb[0, 1] / np.sqrt(Cb[0, 0] * Cb[
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -524,18 +528,18 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
 fn main() {
-    let r = resid(&T, &Y);
+    let r = resid(&TT, &Y);
     let th = levmar(&r, &[0.5, 0.1, 10.0]);
     println!("estimate: {:.5} {:.5} {:.5}", th[0], th[1], th[2]);
-    let s2 = sse(&r, &th) / (T.len() - 3) as f64;
+    let s2 = sse(&r, &th) / (TT.len() - 3) as f64;
     let j = jacobian(&r, &th);                        // = -J; J^T J is the same
     let c_solve = (j.transpose() * &j).try_inverse().unwrap() * s2;
     let rr = j.clone().qr().r();                      // (J^T J)^-1 = R^-1 R^-T
@@ -583,12 +587,12 @@ All three routes agree to the digits shown, as they must for this well-condition
 ### R
 
 ```r
-fit <- nls(y ~ pk(t, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
+fit <- nls(y ~ bateman(tt, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
 th <- coef(fit); s2 <- deviance(fit) / (length(y) - 3)
-J <- jacobian(function(p) pk(t, p[1], p[2], p[3]), th)
+J <- jacobian(function(p) bateman(tt, p[1], p[2], p[3]), th)
 th <- coef(fit); s2 <- deviance(fit) / (length(y) - 3)
-J <- jacobian(function(p) pk(t, p[1], p[2], p[3]), th)
-sse <- function(p) sum((y - pk(t, p[1], p[2], p[3]))^2)
+J <- jacobian(function(p) bateman(tt, p[1], p[2], p[3]), th)
+sse <- function(p) sum((y - bateman(tt, p[1], p[2], p[3]))^2)
 H <- hessian(sse, th)
 round(max(abs(H - 2 * crossprod(J)) / abs(H)), 4)   # largest relative difference
 # [1] 0.0028
@@ -610,10 +614,10 @@ for (start in list(c(1, 0.2, 20), c(0.5, 0.1, 10))) {
 np.set_printoptions(suppress=True)
 from scipy.optimize import minimize
 from scipy.differentiate import hessian
-th, S, res = fit_pk(t, y, [0.5, 0.1, 10])
+th, S, res = fit_pk(tt, y, [0.5, 0.1, 10])
 s2 = S / (len(y) - 3)
-J = jacobian(lambda p: pk(t, *p), th)
-sse = lambda p: np.sum((y - pk(t, *p))**2)
+J = jacobian(lambda p: bateman(tt, *p), th)
+sse = lambda p: np.sum((y - bateman(tt, *p))**2)
 # scipy.differentiate.hessian wants f to accept p with shape (3, ...): loop over extra axes
 def sse_vec(p):
     p = np.asarray(p)
@@ -648,10 +652,11 @@ for start in ([1, 0.2, 20], [0.5, 0.1, 10]):
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -696,10 +701,10 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
@@ -720,9 +725,9 @@ fn hessian(f: &dyn Fn(&[f64]) -> f64, p: &[f64]) -> DMatrix<f64> {
 }
 
 fn main() {
-    let r = resid(&T, &Y);
+    let r = resid(&TT, &Y);
     let th = levmar(&r, &[0.5, 0.1, 10.0]);
-    let s2 = sse(&r, &th) / (T.len() - 3) as f64;
+    let s2 = sse(&r, &th) / (TT.len() - 3) as f64;
     let j = jacobian(&r, &th);
     let f = |p: &[f64]| sse(&r, p);
     let h = hessian(&f, &th);
@@ -760,12 +765,12 @@ $H$ and $2J^TJ$ differ by at most 0.3 % (in the $k_a$–$k_a$ entry): the residu
 
 ```r
 # (a) F and V both free
-f4 <- tryCatch(nls(y ~ pk(t, ka, ke, V / F), start = list(ka = 0.5, ke = 0.1, V = 10, F = 0.8)),
+f4 <- tryCatch(nls(y ~ bateman(tt, ka, ke, V / F), start = list(ka = 0.5, ke = 0.1, V = 10, F = 0.8)),
                error = function(e) conditionMessage(e))
 print(f4)
 # [1] "singular gradient matrix at initial parameter estimates"
 p4 <- c(ka = 1.0151, ke = 0.1906, V = 20.22, F = 1)   # near the fit, F = 1
-J4 <- jacobian(function(lp) pk(t, exp(lp[1]), exp(lp[2]), exp(lp[3] - lp[4])), log(p4))
+J4 <- jacobian(function(lp) bateman(tt, exp(lp[1]), exp(lp[2]), exp(lp[3] - lp[4])), log(p4))
 s4 <- svd(J4)
 print(signif(s4$d, 4))
 # [1] 1.189e+01 3.483e+00 1.048e+00 1.770e-11
@@ -774,7 +779,7 @@ print(round(s4$v[, 4] * sign(s4$v[3, 4]), 3))
 # (b) multistart
 starts <- rbind(c(0.5, 0.1), c(2, 0.1), c(0.1, 0.5), c(2, 0.5))
 for (i in 1:4) {
-  f <- nls(y ~ pk(t, ka, ke, V), start = list(ka = starts[i, 1], ke = starts[i, 2], V = 10))
+  f <- nls(y ~ bateman(tt, ka, ke, V), start = list(ka = starts[i, 1], ke = starts[i, 2], V = 10))
   cat(sprintf("start ka=%.1f ke=%.1f -> ka=%.4f ke=%.4f V=%.3f SSE=%.6f\n",
               starts[i, 1], starts[i, 2], coef(f)[1], coef(f)[2], coef(f)[3], deviance(f)))
 }
@@ -789,19 +794,19 @@ for (i in 1:4) {
 ```python
 # (a) F and V both free: the Jacobian is singular
 p4 = np.array([1.0151, 0.1906, 20.22, 1.0])        # near the fit, F = 1
-J4 = jacobian(lambda lp: pk(t, np.exp(lp[0]), np.exp(lp[1]), np.exp(lp[2] - lp[3])), np.log(p4))
+J4 = jacobian(lambda lp: bateman(tt, np.exp(lp[0]), np.exp(lp[1]), np.exp(lp[2] - lp[3])), np.log(p4))
 U, d, Vt = np.linalg.svd(J4)
 print(np.array2string(d, precision=3))
 # [1.189e+01 3.483e+00 1.048e+00 1.100e-11]
 v4 = Vt[3] * np.sign(Vt[3, 2])
 print(np.round(v4, 3))
 # [0.    0.    0.707 0.707]
-res = least_squares(lambda p: y - pk(t, p[0], p[1], p[2] / p[3]), [0.5, 0.1, 10, 0.8])
+res = least_squares(lambda p: y - bateman(tt, p[0], p[1], p[2] / p[3]), [0.5, 0.1, 10, 0.8])
 print(np.round(res.x, 4), res.status, round(res.x[2] / res.x[3], 4))   # no error; V/F
 # [ 1.0151  0.1906 12.5087  0.6187] 2 20.2162
 # (b) multistart
 for ka0, ke0 in [(0.5, 0.1), (2, 0.1), (0.1, 0.5), (2, 0.5)]:
-    th, S, _ = fit_pk(t, y, [ka0, ke0, 10])
+    th, S, _ = fit_pk(tt, y, [ka0, ke0, 10])
     print(f"start ka={ka0:.1f} ke={ke0:.1f} -> ka={th[0]:.4f} ke={th[1]:.4f} V={th[2]:.3f} SSE={S:.6f}")
 # start ka=0.5 ke=0.1 -> ka=1.0151 ke=0.1906 V=20.216 SSE=0.066467
 # start ka=2.0 ke=0.1 -> ka=1.0151 ke=0.1906 V=20.216 SSE=0.066467
@@ -818,10 +823,11 @@ for ka0, ke0 in [(0.5, 0.1), (2, 0.1), (0.1, 0.5), (2, 0.5)]:
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -866,19 +872,19 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
 fn main() {
     // (a) F and V both free: C depends on V / F only
-    let r4 = |p: &[f64]| -> Vec<f64> { T.iter().zip(&Y).map(|(t, y)| y - pk(*t, p[0], p[1], p[2] / p[3])).collect() };
+    let r4 = |p: &[f64]| -> Vec<f64> { TT.iter().zip(&Y).map(|(t, y)| y - bateman(*t, p[0], p[1], p[2] / p[3])).collect() };
     let p4 = [1.0151_f64, 0.1906, 20.22, 1.0];
     let lp4: Vec<f64> = p4.iter().map(|x| x.ln()).collect();
-    let flog = |lp: &[f64]| -> Vec<f64> { T.iter().map(|t| pk(*t, lp[0].exp(), lp[1].exp(), (lp[2] - lp[3]).exp())).collect() };
+    let flog = |lp: &[f64]| -> Vec<f64> { TT.iter().map(|t| bateman(*t, lp[0].exp(), lp[1].exp(), (lp[2] - lp[3]).exp())).collect() };
     let svd = jacobian(&flog, &lp4).svd(false, true);
     let mut idx: Vec<usize> = (0..4).collect();          // nalgebra does not promise an order
     idx.sort_by(|a, b| svd.singular_values[*b].partial_cmp(&svd.singular_values[*a]).unwrap());
@@ -890,7 +896,7 @@ fn main() {
     let p = levmar(&r4, &[0.5, 0.1, 10.0, 0.8]);
     println!("LM with F free: ka {:.4} ke {:.4} V {:.4} F {:.4}  V/F {:.4}", p[0], p[1], p[2], p[3], p[2] / p[3]);
     // (b) multistart
-    let r = resid(&T, &Y);
+    let r = resid(&TT, &Y);
     for (ka0, ke0) in [(0.5, 0.1), (2.0, 0.1), (0.1, 0.5), (2.0, 0.5)] {
         let th = levmar(&r, &[ka0, ke0, 10.0]);
         println!("start ka={:.1} ke={:.1} -> ka={:.4} ke={:.4} V={:.3} SSE={:.6}",
@@ -919,10 +925,10 @@ fn main() {
 ### R
 
 ```r
-svd_report <- function(tt, yy) {
-  f <- nls(yy ~ pk(tt, ka, ke, V), start = list(ka = 1, ke = 0.2, V = 20))
-  th <- coef(f); s <- sqrt(deviance(f) / (length(yy) - 3))
-  J  <- jacobian(function(p) pk(tt, p[1], p[2], p[3]), th)
+svd_report <- function(ts, ys) {
+  f <- nls(ys ~ bateman(ts, ka, ke, V), start = list(ka = 1, ke = 0.2, V = 20))
+  th <- coef(f); s <- sqrt(deviance(f) / (length(ys) - 3))
+  J  <- jacobian(function(p) bateman(ts, p[1], p[2], p[3]), th)
   Jl <- J %*% diag(th)                       # d C / d log(theta)
   sv <- svd(Jl)
   cat("singular values:", signif(sv$d, 4), "\n")
@@ -932,12 +938,12 @@ svd_report <- function(tt, yy) {
   v3 <- sv$v[, 3] * sign(sv$v[1, 3])
   cat("v3 (log ka, log ke, log V):", round(v3, 3), "\n")
 }
-svd_report(t, y)
+svd_report(tt, y)
 # singular values: 8.779 3.478 1.005
 # kappa(J) = 169.9  kappa(J_log) = 8.734
 # SE along v_i (log units): 0.00979 0.0247 0.0855
 # v3 (log ka, log ke, log V): 0.691 -0.601 0.4
-svd_report(t[late], y[late])
+svd_report(tt[late], y[late])
 # singular values: 6.032 1.527 0.2111
 # kappa(J) = 206.5  kappa(J_log) = 28.58
 # SE along v_i (log units): 0.0129 0.051 0.369
@@ -947,10 +953,10 @@ svd_report(t[late], y[late])
 ### Python
 
 ```python
-def svd_report(tt, yy):
-    th, S, _ = fit_pk(tt, yy, [1, 0.2, 20])
-    s = np.sqrt(S / (len(yy) - 3))
-    J = jacobian(lambda p: pk(tt, *p), th)
+def svd_report(ts, ys):
+    th, S, _ = fit_pk(ts, ys, [1, 0.2, 20])
+    s = np.sqrt(S / (len(ys) - 3))
+    J = jacobian(lambda p: bateman(ts, *p), th)
     Jl = J * th                                 # d C / d log(theta): scale the columns
     U, d, Vt = np.linalg.svd(Jl)
     print("singular values:", np.array2string(d, precision=4))
@@ -959,12 +965,12 @@ def svd_report(tt, yy):
     v3 = Vt[2] * np.sign(Vt[2, 0])
     print("v3 (log ka, log ke, log V):", np.round(v3, 3))
 
-svd_report(t, y)
+svd_report(tt, y)
 # singular values: [8.7791 3.4781 1.0052]
 # kappa(J) = 169.9  kappa(J_log) = 8.734
 # SE along v_i (log units): [0.01  0.025 0.085]
 # v3 (log ka, log ke, log V): [ 0.691 -0.601  0.4  ]
-svd_report(t[late], y[late])
+svd_report(tt[late], y[late])
 # singular values: [6.0322 1.5269 0.2111]
 # kappa(J) = 206.5  kappa(J_log) = 28.58
 # SE along v_i (log units): [0.013 0.051 0.369]
@@ -980,10 +986,11 @@ svd_report(t[late], y[late])
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -1028,20 +1035,20 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
-fn svd_report(tt: &[f64], yy: &[f64]) {
-    let r = resid(tt, yy);
+fn svd_report(ts: &[f64], ys: &[f64]) {
+    let r = resid(ts, ys);
     let th = levmar(&r, &[1.0, 0.2, 20.0]);
-    let s = (sse(&r, &th) / (tt.len() - 3) as f64).sqrt();
-    let model = |p: &[f64]| -> Vec<f64> { tt.iter().map(|t| pk(*t, p[0], p[1], p[2])).collect() };
+    let s = (sse(&r, &th) / (ts.len() - 3) as f64).sqrt();
+    let model = |p: &[f64]| -> Vec<f64> { ts.iter().map(|t| bateman(*t, p[0], p[1], p[2])).collect() };
     let j = jacobian(&model, &th);
-    let jl = DMatrix::from_fn(tt.len(), 3, |i, k| j[(i, k)] * th[k]);  // d C / d log(theta)
+    let jl = DMatrix::from_fn(ts.len(), 3, |i, k| j[(i, k)] * th[k]);  // d C / d log(theta)
     let kappa = |m: &DMatrix<f64>| { let d = m.singular_values(); d.max() / d.min() };
     let svd = jl.clone().svd(false, true);
     let mut idx: Vec<usize> = (0..3).collect();
@@ -1056,8 +1063,8 @@ fn svd_report(tt: &[f64], yy: &[f64]) {
 }
 
 fn main() {
-    svd_report(&T, &Y);
-    svd_report(&T[6..], &Y[6..]);          // samples from 3 h
+    svd_report(&TT, &Y);
+    svd_report(&TT[6..], &Y[6..]);          // samples from 3 h
 }
 
 // Output:
@@ -1082,16 +1089,16 @@ All 12 samples: the worst direction $v_3 \approx (0.69, -0.60, 0.40)$ mixes all 
 ### R
 
 ```r
-profile_ka <- function(ka, tt, yy) {       # fix ka, re-fit ke and V
-  f <- nls(yy ~ pk(tt, ka, ke, V), start = list(ke = 0.2, V = 20))
+profile_ka <- function(ka, ts, ys) {       # fix ka, re-fit ke and V
+  f <- nls(ys ~ bateman(ts, ka, ke, V), start = list(ke = 0.2, V = 20))
   deviance(f)
 }
 grid <- c(0.3, 0.5, 0.7, 1, 1.5, 2, 5, 10, 30)
 for (d in list(rep(TRUE, 11), late)) {
-  tt <- t[d]; yy <- y[d]
-  f  <- nls(yy ~ pk(tt, ka, ke, V), start = list(ka = 1, ke = 0.2, V = 20))
-  s2 <- deviance(f) / (length(yy) - 3)
-  delta <- sapply(grid, function(k) (profile_ka(k, tt, yy) - deviance(f)) / s2)
+  ts <- tt[d]; ys <- y[d]
+  f  <- nls(ys ~ bateman(ts, ka, ke, V), start = list(ka = 1, ke = 0.2, V = 20))
+  s2 <- deviance(f) / (length(ys) - 3)
+  delta <- sapply(grid, function(k) (profile_ka(k, ts, ys) - deviance(f)) / s2)
   print(round(rbind(ka = grid, delta = delta), 2))
 }
 #        [,1]  [,2]  [,3] [,4]  [,5]   [,6]   [,7]   [,8]   [,9]
@@ -1101,11 +1108,11 @@ for (d in list(rep(TRUE, 11), late)) {
 # ka     0.3  0.50 0.70 1.00 1.50 2.00 5.00 10.00 30.00
 # delta 12.4 10.19 3.35 0.14 0.42 0.88 1.07  1.07  1.07
 # (b) profile interval vs Wald intervals, all samples
-fit <- nls(y ~ pk(t, ka, ke, V), start = list(ka = 1, ke = 0.2, V = 20))
+fit <- nls(y ~ bateman(tt, ka, ke, V), start = list(ka = 1, ke = 0.2, V = 20))
 s2 <- deviance(fit) / (length(y) - 3); ka_hat <- coef(fit)[["ka"]]
-crit <- function(k) (profile_ka(k, t, y) - deviance(fit)) / s2 - 3.84
+crit <- function(k) (profile_ka(k, tt, y) - deviance(fit)) / s2 - 3.84
 s2 <- deviance(fit) / (length(y) - 3); ka_hat <- coef(fit)[["ka"]]
-crit <- function(k) (profile_ka(k, t, y) - deviance(fit)) / s2 - 3.84
+crit <- function(k) (profile_ka(k, tt, y) - deviance(fit)) / s2 - 3.84
 prof_ci <- c(uniroot(crit, c(0.3, ka_hat))$root, uniroot(crit, c(ka_hat, 30))$root)
 se <- sqrt(vcov(fit)["ka", "ka"])
 wald    <- ka_hat + c(-1.96, 1.96) * se
@@ -1123,16 +1130,16 @@ print(round(rbind(profile = prof_ci, wald = wald, wald_log = waldlog), 4))
 np.set_printoptions(suppress=True)
 from scipy.optimize import brentq
 
-def profile_ka(ka, tt, yy):                  # fix ka, re-fit ke and V
-    r = least_squares(lambda q: yy - pk(tt, ka, q[0], q[1]), [0.2, 20], xtol=1e-12, ftol=1e-12)
+def profile_ka(ka, ts, ys):                  # fix ka, re-fit ke and V
+    r = least_squares(lambda q: ys - bateman(ts, ka, q[0], q[1]), [0.2, 20], xtol=1e-12, ftol=1e-12)
     return np.sum(r.fun**2)
 
 grid = np.array([0.3, 0.5, 0.7, 1, 1.5, 2, 5, 10, 30])
-for d in (np.ones(len(t), bool), late):
-    tt, yy = t[d], y[d]
-    th, S, _ = fit_pk(tt, yy, [1, 0.2, 20])
-    s2 = S / (len(yy) - 3)
-    delta = [(profile_ka(k, tt, yy) - S) / s2 for k in grid]
+for d in (np.ones(len(tt), bool), late):
+    ts, ys = tt[d], y[d]
+    th, S, _ = fit_pk(ts, ys, [1, 0.2, 20])
+    s2 = S / (len(ys) - 3)
+    delta = [(profile_ka(k, ts, ys) - S) / s2 for k in grid]
     print(np.round(np.vstack([grid, delta]), 2))
 # [[  0.3    0.5    0.7    1.     1.5    2.     5.    10.    30.  ]
 #  [ 46.69  69.34  29.19   0.06  44.39 133.61 576.84 840.25 940.49]]
@@ -1140,11 +1147,11 @@ for d in (np.ones(len(t), bool), late):
 #  [12.4  10.19  3.35  0.14  0.42  0.88  1.07  1.07  1.07]]
 
 # (b) profile interval vs Wald intervals, all samples
-th, S, res = fit_pk(t, y, [1, 0.2, 20])
+th, S, res = fit_pk(tt, y, [1, 0.2, 20])
 s2 = S / (len(y) - 3)
-crit = lambda k: (profile_ka(k, t, y) - S) / s2 - 3.84
+crit = lambda k: (profile_ka(k, tt, y) - S) / s2 - 3.84
 prof_ci = [brentq(crit, 0.3, th[0]), brentq(crit, th[0], 30)]
-J = jacobian(lambda p: pk(t, *p), th)
+J = jacobian(lambda p: bateman(tt, *p), th)
 se = np.sqrt(s2 * np.linalg.inv(J.T @ J)[0, 0])
 wald = th[0] + np.array([-1.96, 1.96]) * se
 wald_log = th[0] * np.exp(np.array([-1.96, 1.96]) * se / th[0])
@@ -1163,10 +1170,11 @@ print(np.round(np.vstack([prof_ci, wald, wald_log]), 4))
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -1211,16 +1219,16 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
 // fix ka, re-fit ke and V; return the minimal SSE
-fn profile_ka(ka: f64, tt: &[f64], yy: &[f64]) -> f64 {
-    let r = |q: &[f64]| -> Vec<f64> { tt.iter().zip(yy).map(|(t, y)| y - pk(*t, ka, q[0], q[1])).collect() };
+fn profile_ka(ka: f64, ts: &[f64], ys: &[f64]) -> f64 {
+    let r = |q: &[f64]| -> Vec<f64> { ts.iter().zip(ys).map(|(t, y)| y - bateman(*t, ka, q[0], q[1])).collect() };
     let q = levmar(&r, &[0.2, 20.0]);
     sse(&r, &q)
 }
@@ -1238,18 +1246,18 @@ fn bisect(f: &dyn Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
 fn main() {
     let grid = [0.3, 0.5, 0.7, 1.0, 1.5, 2.0, 5.0, 10.0, 30.0];
     for start in [0, 6] {                      // all samples; samples from 3 h
-        let (tt, yy) = (&T[start..], &Y[start..]);
-        let r = resid(tt, yy);
+        let (ts, ys) = (&TT[start..], &Y[start..]);
+        let r = resid(ts, ys);
         let th = levmar(&r, &[1.0, 0.2, 20.0]);
-        let (smin, s2) = (sse(&r, &th), sse(&r, &th) / (tt.len() - 3) as f64);
-        let row: Vec<String> = grid.iter().map(|&k| format!("{:.2}", (profile_ka(k, tt, yy) - smin) / s2)).collect();
+        let (smin, s2) = (sse(&r, &th), sse(&r, &th) / (ts.len() - 3) as f64);
+        let row: Vec<String> = grid.iter().map(|&k| format!("{:.2}", (profile_ka(k, ts, ys) - smin) / s2)).collect();
         println!("delta: {}", row.join(" "));
     }
     // (b) profile interval vs Wald intervals, all samples
-    let r = resid(&T, &Y);
+    let r = resid(&TT, &Y);
     let th = levmar(&r, &[1.0, 0.2, 20.0]);
     let (smin, s2) = (sse(&r, &th), sse(&r, &th) / 9.0);
-    let crit = |k: f64| (profile_ka(k, &T, &Y) - smin) / s2 - 3.84;
+    let crit = |k: f64| (profile_ka(k, &TT, &Y) - smin) / s2 - 3.84;
     let (lo, hi) = (bisect(&crit, 0.3, th[0]), bisect(&crit, th[0], 30.0));
     let j = jacobian(&r, &th);
     let se = ((j.transpose() * &j).try_inverse().unwrap()[(0, 0)] * s2).sqrt();
@@ -1285,8 +1293,8 @@ pk2 <- function(t, ka, k10, k12, k21, V, D = 100) {
                 (k21 - ka) / ((al - ka) * (be - ka)) * exp(-ka * t))
 }
 p2 <- c(ka = 1, k10 = 0.2, k12 = 0.3, k21 = 0.15, V = 20)
-sloppy <- function(tt) {
-  J <- jacobian(function(lp) do.call(pk2, c(list(tt), as.list(exp(lp)))), log(p2))
+sloppy <- function(ts) {
+  J <- jacobian(function(lp) do.call(pk2, c(list(ts), as.list(exp(lp)))), log(p2))
   e <- eigen(crossprod(J))
   cat("eigenvalues:", signif(e$values, 3), "\n")
   cat("decades:", round(log10(e$values[1] / e$values), 2), "\n")
@@ -1296,12 +1304,12 @@ sloppy <- function(tt) {
 }
 round(pk2(c(1, 6, 24), 1, 0.2, 0.3, 0.15, 20), 4)
 # [1] 2.4087 0.9606 0.2882
-sloppy(t)
+sloppy(tt)
 # eigenvalues: 43 5.5 0.482 0.0205 0.00134
 # decades: 0 0.89 1.95 3.32 4.51
 # SE along eigenvectors (sigma = 0.1): 0.0153 0.0426 0.144 0.699 2.73
 # sloppiest (ka, k10, k12, k21, V): 0.26 -0.59 -0.28 -0.66 0.25
-sloppy(c(t, 24, 36, 48))
+sloppy(c(tt, 24, 36, 48))
 # eigenvalues: 43.1 5.56 0.593 0.144 0.00821
 # decades: 0 0.89 1.86 2.48 3.72
 # SE along eigenvectors (sigma = 0.1): 0.0152 0.0424 0.13 0.263 1.1
@@ -1320,8 +1328,8 @@ def pk2(t, ka, k10, k12, k21, V, D=100):
 
 p2 = np.array([1, 0.2, 0.3, 0.15, 20])
 
-def sloppy(tt):
-    J = jacobian(lambda lp: pk2(tt, *np.exp(lp)), np.log(p2))
+def sloppy(ts):
+    J = jacobian(lambda lp: pk2(ts, *np.exp(lp)), np.log(p2))
     lam, vec = np.linalg.eigh(J.T @ J)
     lam, vec = lam[::-1], vec[:, ::-1]          # largest first, as in R
     print("eigenvalues:", np.array2string(lam, precision=3))
@@ -1332,12 +1340,12 @@ def sloppy(tt):
 
 print(np.round(pk2(np.array([1, 6, 24]), 1, 0.2, 0.3, 0.15, 20), 4))
 # [2.4087 0.9606 0.2882]
-sloppy(t)
+sloppy(tt)
 # eigenvalues: [4.300e+01 5.503e+00 4.815e-01 2.046e-02 1.343e-03]
 # decades: [0.   0.89 1.95 3.32 4.51]
 # SE along eigenvectors (sigma = 0.1): [0.015 0.043 0.144 0.699 2.728]
 # sloppiest (ka, k10, k12, k21, V): [ 0.26 -0.59 -0.28 -0.66  0.25]
-sloppy(np.concatenate([t, [24, 36, 48]]))
+sloppy(np.concatenate([tt, [24, 36, 48]]))
 # eigenvalues: [4.314e+01 5.561e+00 5.929e-01 1.441e-01 8.212e-03]
 # decades: [0.   0.89 1.86 2.48 3.72]
 # SE along eigenvectors (sigma = 0.1): [0.015 0.042 0.13  0.263 1.104]
@@ -1353,10 +1361,11 @@ sloppy(np.concatenate([t, [24, 36, 48]]))
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -1401,10 +1410,10 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
@@ -1419,11 +1428,11 @@ fn pk2(t: f64, p: &[f64]) -> f64 {
         + (k21 - ka) / ((al - ka) * (be - ka)) * (-ka * t).exp())
 }
 
-fn sloppy(tt: &[f64]) {
+fn sloppy(ts: &[f64]) {
     let lp2: Vec<f64> = [1.0_f64, 0.2, 0.3, 0.15, 20.0].iter().map(|x| x.ln()).collect();
     let f = |lp: &[f64]| -> Vec<f64> {
         let p: Vec<f64> = lp.iter().map(|x| x.exp()).collect();
-        tt.iter().map(|t| pk2(*t, &p)).collect()
+        ts.iter().map(|t| pk2(*t, &p)).collect()
     };
     let j = jacobian(&f, &lp2);
     let eig = (j.transpose() * &j).symmetric_eigen();
@@ -1441,8 +1450,8 @@ fn sloppy(tt: &[f64]) {
 fn main() {
     let p = [1.0, 0.2, 0.3, 0.15, 20.0];
     println!("{:.4} {:.4} {:.4}", pk2(1.0, &p), pk2(6.0, &p), pk2(24.0, &p));
-    sloppy(&T);
-    let mut longer = T.to_vec();
+    sloppy(&TT);
+    let mut longer = TT.to_vec();
     longer.extend([24.0, 36.0, 48.0]);
     sloppy(&longer);
 }
@@ -1470,8 +1479,8 @@ The eigenvalues are spread over 4.5 decades, roughly one decade each, with no ga
 ### R
 
 ```r
-se_design <- function(tt, p = c(1, 0.2, 20), sigma = 0.1) {
-  J <- jacobian(function(lp) pk(tt, exp(lp[1]), exp(lp[2]), exp(lp[3])), log(p))
+se_design <- function(ts, p = c(1, 0.2, 20), sigma = 0.1) {
+  J <- jacobian(function(lp) bateman(ts, exp(lp[1]), exp(lp[2]), exp(lp[3])), log(p))
   sigma * sqrt(diag(solve(crossprod(J))))       # SE of log ka, log ke, log V
 }
 designs <- list(late = c(3, 4, 6, 8, 10, 12), early = c(0.5, 1, 2, 4, 8, 12),
@@ -1483,7 +1492,7 @@ print(round(t(sapply(designs, se_design)), 3))
 # peak  0.116 0.101 0.059
 # (b) prior on log ka, sparse data
 fit_prior <- function(tau, mu = log(1.2), sigma = 0.1) {
-  res <- function(lp) c((y[late] - pk(t[late], exp(lp[1]), exp(lp[2]), exp(lp[3]))) / sigma,
+  res <- function(lp) c((y[late] - bateman(tt[late], exp(lp[1]), exp(lp[2]), exp(lp[3]))) / sigma,
                         (lp[1] - mu) / tau)
   fp <- minpack.lm::nls.lm(par = log(c(1, 0.2, 20)), fn = res)
   Ja <- jacobian(res, fp$par)
@@ -1501,20 +1510,20 @@ print(round(t(sapply(c(0.1, 0.25, 0.5, 1, 2), fit_prior)), 3))
 ### Python
 
 ```python
-def se_design(tt, p=(1, 0.2, 20), sigma=0.1):
-    J = jacobian(lambda lp: pk(tt, *np.exp(lp)), np.log(p))
+def se_design(ts, p=(1, 0.2, 20), sigma=0.1):
+    J = jacobian(lambda lp: bateman(ts, *np.exp(lp)), np.log(p))
     return sigma * np.sqrt(np.diag(np.linalg.inv(J.T @ J)))   # SE of log ka, log ke, log V
 
 designs = {"late": [3, 4, 6, 8, 10, 12], "early": [0.5, 1, 2, 4, 8, 12], "peak": [1, 2, 3, 4, 6, 12]}
-for name, tt in designs.items():
-    print(f"{name:6s}", np.round(se_design(np.array(tt, float)), 3))
+for name, ts in designs.items():
+    print(f"{name:6s}", np.round(se_design(np.array(ts, float)), 3))
 # late   [0.398 0.115 0.061]
 # early  [0.101 0.087 0.059]
 # peak   [0.116 0.101 0.059]
 
 # (b) prior on log ka, sparse data
 def fit_prior(tau, mu=np.log(1.2), sigma=0.1):
-    res = lambda lp: np.append((y[late] - pk(t[late], *np.exp(lp))) / sigma, (lp[0] - mu) / tau)
+    res = lambda lp: np.append((y[late] - bateman(tt[late], *np.exp(lp))) / sigma, (lp[0] - mu) / tau)
     r = least_squares(res, np.log([1, 0.2, 20]), xtol=1e-12, ftol=1e-12)
     Ja = jacobian(res, r.x)
     return tau, np.exp(r.x[0]), np.sqrt(np.linalg.inv(Ja.T @ Ja)[0, 0])
@@ -1537,10 +1546,11 @@ for tau in (0.1, 0.25, 0.5, 1, 2):
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -1585,16 +1595,16 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
-// predicted SE of log ka, log ke, log V for sample times tt, at a guessed theta
-fn se_design(tt: &[f64], p: [f64; 3], sigma: f64) -> Vec<f64> {
-    let f = |lp: &[f64]| -> Vec<f64> { tt.iter().map(|t| pk(*t, lp[0].exp(), lp[1].exp(), lp[2].exp())).collect() };
+// predicted SE of log ka, log ke, log V for sample times ts, at a guessed theta
+fn se_design(ts: &[f64], p: [f64; 3], sigma: f64) -> Vec<f64> {
+    let f = |lp: &[f64]| -> Vec<f64> { ts.iter().map(|t| bateman(*t, lp[0].exp(), lp[1].exp(), lp[2].exp())).collect() };
     let lp: Vec<f64> = p.iter().map(|x| x.ln()).collect();
     let j = jacobian(&f, &lp);
     let c = (j.transpose() * &j).try_inverse().unwrap();
@@ -1604,15 +1614,15 @@ fn se_design(tt: &[f64], p: [f64; 3], sigma: f64) -> Vec<f64> {
 fn main() {
     let designs: [(&str, [f64; 6]); 3] = [("late", [3.0, 4.0, 6.0, 8.0, 10.0, 12.0]),
         ("early", [0.5, 1.0, 2.0, 4.0, 8.0, 12.0]), ("peak", [1.0, 2.0, 3.0, 4.0, 6.0, 12.0])];
-    for (name, tt) in designs.iter() {
-        let se = se_design(tt, [1.0, 0.2, 20.0], 0.1);
+    for (name, ts) in designs.iter() {
+        let se = se_design(ts, [1.0, 0.2, 20.0], 0.1);
         println!("{:6} {:.3} {:.3} {:.3}", name, se[0], se[1], se[2]);
     }
     // (b) prior on log ka (centre log 1.2, SD tau), sparse data, noise SD 0.1
     for tau in [0.1, 0.25, 0.5, 1.0, 2.0] {
         let res = |lp: &[f64]| -> Vec<f64> {
-            let mut r: Vec<f64> = T[6..].iter().zip(&Y[6..])
-                .map(|(t, y)| (y - pk(*t, lp[0].exp(), lp[1].exp(), lp[2].exp())) / 0.1).collect();
+            let mut r: Vec<f64> = TT[6..].iter().zip(&Y[6..])
+                .map(|(t, y)| (y - bateman(*t, lp[0].exp(), lp[1].exp(), lp[2].exp())) / 0.1).collect();
             r.push((lp[0] - 1.2_f64.ln()) / tau);
             r
         };
@@ -1642,7 +1652,7 @@ Before any experiment, the late design predicts an SE of 0.40 for $\log k_a$ (a 
 
 ## Where this leads
 
-- **Part 9, *Constraints and linear programming*:** bounds such as $k_a > k_e$ or $F \le 1$ as constraints in the optimiser, and what the Lagrange multipliers of active bounds say.
+- **Part 9, [*Constraints and linear programming*](../constrained-lp/lec.qmd):** bounds such as $k_a > k_e$ or $F \le 1$ as constraints in the optimiser, and what the Lagrange multipliers of active bounds say.
 - **The capstone** (if used): fit an ODE model to a real time course and report what is determined, using the checklist of the lecture (multistart, SVD of $J$, profiles, prediction uncertainty).
-- We linearised (Wald SEs) and profiled with a $\chi^2_1$ threshold, both large-sample approximations. Bootstrap and Bayesian sampling (MCMC) give uncertainty without them; they need many model fits, which is where fast and robust fitting (*Nonlinear least squares and ODE fitting*) pays off.
+- We linearised (Wald SEs) and profiled with a $\chi^2_1$ threshold, both large-sample approximations. Bootstrap and Bayesian sampling (MCMC) give uncertainty without them; they need many model fits, which is where fast and robust fitting ([*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd)) pays off.
 - Structural identifiability can also be decided symbolically, before any data, for ODE models of moderate size (differential algebra, as in the tools DAISY or StructuralIdentifiability.jl). We did it by hand and from the rank of $J$.

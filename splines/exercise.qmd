@@ -24,7 +24,7 @@ The by-hand part uses pen and paper (a calculator helps in B1 and B6). The code 
 
 ## Background
 
-**Data.** Two running examples. The **OD curve** from *Convergence and cost*: a logistic $N(t) = K / \big(1 + (K/N_0 - 1)e^{-rt}\big)$ with $K = 1.2$, $N_0 = 0.05$, $r = 0.8$ per hour, read by a plate reader every 15 min for 10 h (41 reads) with measurement noise of sd 0.01. Its true growth rate is $N'(t) = rN(1 - N/K)$, at most $rK/4 = 0.24$ OD/h at $t = 3.92$ h. A **gene time course**: an immediate-early gene measured at 0, 0.5, 1, 2, 4, 8, 12 and 24 h after stimulation (C4), and a gene along **pseudotime** in 40 cells (C6).
+**Data.** Two running examples. The **OD curve** from [*Convergence and cost*](../convergence-cost/lec.qmd): a logistic $N(t) = K / \big(1 + (K/N_0 - 1)e^{-rt}\big)$ with $K = 1.2$, $N_0 = 0.05$, $r = 0.8$ per hour, read by a plate reader every 15 min for 10 h (41 reads) with measurement noise of sd 0.01. Its true growth rate is $N'(t) = rN(1 - N/K)$, at most $rK/4 = 0.24$ OD/h at $t = 3.92$ h. A **gene time course**: an immediate-early gene measured at 0, 0.5, 1, 2, 4, 8, 12 and 24 h after stimulation (C4), and a gene along **pseudotime** in 40 cells (C6).
 
 **Facts used below:**
 
@@ -35,7 +35,7 @@ The by-hand part uses pen and paper (a calculator helps in B1 and B6). The code 
    $$S'(x) = s_i + \tfrac{h_i}{6}\big[-(3A^2 - 1)M_i + (3B^2 - 1)M_{i+1}\big].$$
 4. **The system.** Continuity of $S'$ at each interior $x_i$:
    $$h_{i-1}M_{i-1} + 2(h_{i-1} + h_i)M_i + h_iM_{i+1} = 6(s_i - s_{i-1}).$$
-   Tridiagonal and strictly diagonally dominant, so the **Thomas algorithm** (*Structure: symmetric, banded, sparse*) solves it in $O(n)$ without pivoting.
+   Tridiagonal and strictly diagonally dominant, so the **Thomas algorithm** ([*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd); `thomas(a, b, c, d)` with sub-, main and super-diagonal and right-hand side, all of length $n$, `a[1]` and `c[n]` unused) solves it in $O(n)$ without pivoting.
 5. **End conditions.** *Natural*: $M_1 = M_n = 0$. *Clamped* (slopes $d_1$, $d_n$ given): $2h_1M_1 + h_1M_2 = 6(s_1 - d_1)$ and $h_{n-1}M_{n-1} + 2h_{n-1}M_n = 6(d_n - s_{n-1})$. *Not-a-knot*: $S'''$ continuous at $x_2$ and $x_{n-1}$. Defaults: R `splinefun`/`spline` use `"fmm"` (end cubics through 4 points), Python `CubicSpline` uses not-a-knot. Natural ends are $O(h^2)$ near the ends; the others $O(h^4)$; the spline's slope is $O(h^3)$.
 6. **Noise.** A difference quotient of data with independent noise of sd $\sigma$: forward $(y_{i+1} - y_i)/h$ has noise sd $\sqrt2\,\sigma/h$; central $(y_{i+1} - y_{i-1})/(2h)$ has $\sigma/(\sqrt2\,h)$. Smaller $h$ means **more** noise.
 7. **Smoothing spline.** Minimise $\sum_i (y_i - f(t_i))^2 + \lambda\int f''(t)^2\,dt$. The minimiser is a natural cubic spline with knots at the data; $\hat{\mathbf y} = A\mathbf y$ with the **hat matrix** $A$; **df** $= \operatorname{tr}A$ runs from 2 ($\lambda\to\infty$, straight line) to $n$ ($\lambda = 0$, interpolation).
@@ -184,7 +184,7 @@ The true growth rate at 3.1 h is 0.216 OD/h: the interpolating spline's slope (0
 (d) Uneven spacing: data $(0, 0), (1, 1), (3, 0)$, natural ends. Find $M_2$.
 
 **B5. End conditions.**
-(a) For the data of B4, the **not-a-knot** spline with 4 points is the single cubic through all four points. Find it (Newton form from *Polynomial interpolation*) and evaluate it at 0.5. Compare with the natural spline's $S(0.5)$ from B4.
+(a) For the data of B4, the **not-a-knot** spline with 4 points is the single cubic through all four points. Find it (Newton form from [*Polynomial interpolation*](../polynomial-interpolation/lec.qmd)) and evaluate it at 0.5. Compare with the natural spline's $S(0.5)$ from B4.
 (b) For the OD curve, $N'(0) = rN_0(1 - N_0/K) = 0.0383$ and $N''(0) = 0.028$; at 10 h the culture is close to its plateau. Which end condition is wrong at $t = 0$: natural, or clamped with $S'(0) = 0$? Which end condition is reasonable at $t = 10$?
 (c) A colleague interpolates the same data in R with `splinefun(x, y)` and you in Python with `CubicSpline(x, y)`. Where will your curves differ, and why?
 
@@ -210,7 +210,7 @@ The true growth rate at 3.1 h is 0.216 OD/h: the interpolating spline's slope (0
 
 **C3. Clamped ends.** Write `clamped_M(x, y, d0, dn)`: the $n\times n$ tridiagonal system with the clamped first and last rows of Fact 5. Interpolate the exact $N(t)$ at $t = 0, 1, \dots, 10$ with (i) natural ends, (ii) clamped ends with the true slopes $N'(0)$, $N'(10)$, (iii) clamped ends with slope 0 at both ends ("the culture is flat at the start"), (iv) your language's default. Print the maximum error on $[0, 10]$ and on the first hour. Check (ii) against R's [`pracma::cubicspline(x, y, xi, endp2nd = TRUE, der = c(d0, dn))`](https://search.r-project.org/CRAN/refmans/pracma/html/cubicspline.html) or Python's `CubicSpline(x, y, bc_type=((1, d0), (1, dn)))`.
 
-**C4. Overshoot in a gene time course.** An immediate-early gene, in TPM, at `tg = c(0, 0.5, 1, 2, 4, 8, 12, 24)` h: `eg = c(1, 40, 32, 6, 1, 0.5, 0.5, 0.5)`. Interpolate with the default cubic spline, the natural spline, a **monotone** interpolant (R `splinefun(method = "monoH.FC")`, Python [`PchipInterpolator`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.PchipInterpolator.html)), and a cubic spline of $\log_2$ expression transformed back. For each, print the value at 3 h, the minimum and where it is, and the maximum on a grid of step 0.01 h. Which interpolants give impossible values? What does each fix cost?
+**C4. Overshoot in a gene time course.** An immediate-early gene, in TPM, at `tg = c(0, 0.5, 1, 2, 4, 8, 12, 24)` h: `eg = c(1, 40, 32, 6, 1, 0.5, 0.5, 0.5)` (the sampling times of C7 in *Polynomial interpolation*, but measured-looking TPM values with a much sharper spike than the smooth fold-change curve used there). Interpolate with the default cubic spline, the natural spline, a **monotone** interpolant (R `splinefun(method = "monoH.FC")`, Python [`PchipInterpolator`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.PchipInterpolator.html)), and a cubic spline of $\log_2$ expression transformed back. For each, print the value at 3 h, the minimum and where it is, and the maximum on a grid of step 0.01 h. Which interpolants give impossible values? What does each fix cost?
 
 **C5. Growth rate from noisy OD.** With the 41 noisy reads, estimate $N'(t)$ in three ways and print the rms error against the true $rN(1 - N/K)$ at the read times: (i) central differences, (ii) the slope of the interpolating natural spline, (iii) the slope of a smoothing spline with $\lambda$ chosen by GCV ([`smooth.spline`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/smooth.spline.html) and [`predict(..., deriv = 1)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/predict.smooth.spline.html); Python [`make_smoothing_spline`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.make_smoothing_spline.html) and `.derivative()`). From (iii), estimate the maximum growth rate and when it occurs (true: 0.24 at 3.92 h). Then repeat (iii) with fixed `lam = 10` and `lam = 0.005` (R: `lambda = lam / 1000`; why 1000?). Which is too smooth, which too rough?
 
@@ -277,7 +277,7 @@ R: [`smooth.spline(t, y)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/h
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 7 — the smoothing spline in Rust (C5, C6)"}
-The Reinsch form: with $Q$ ($n\times(n-2)$; column $j$ has $1/h_{j-1}$, $-1/h_{j-1} - 1/h_j$, $1/h_j$ in rows $j-1, j, j+1$) and $R$ ($(n-2)\times(n-2)$ tridiagonal; $(h_{j-1} + h_j)/3$ on the diagonal, $h_j/6$ next to it), solve $(R + \lambda Q^TQ)\boldsymbol\gamma = Q^T\mathbf y$; the fitted values are $\mathbf g = \mathbf y - \lambda Q\boldsymbol\gamma$ and $\boldsymbol\gamma$ are the second derivatives at the interior knots, so the natural spline through $\mathbf g$ with $M = (0, \boldsymbol\gamma, 0)$ is the fit. The hat matrix is $A = I - \lambda Q(R + \lambda Q^TQ)^{-1}Q^T$. With $n = 40$ a dense [`nalgebra`](https://docs.rs/nalgebra/latest/nalgebra/) inverse is fine; minimise GCV over $\log_{10}\lambda$ with a grid and golden-section search (*Optimisation in one dimension*).
+The Reinsch form: with $Q$ ($n\times(n-2)$; column $j$ has $1/h_{j-1}$, $-1/h_{j-1} - 1/h_j$, $1/h_j$ in rows $j-1, j, j+1$) and $R$ ($(n-2)\times(n-2)$ tridiagonal; $(h_{j-1} + h_j)/3$ on the diagonal, $h_j/6$ next to it), solve $(R + \lambda Q^TQ)\boldsymbol\gamma = Q^T\mathbf y$; the fitted values are $\mathbf g = \mathbf y - \lambda Q\boldsymbol\gamma$ and $\boldsymbol\gamma$ are the second derivatives at the interior knots, so the natural spline through $\mathbf g$ with $M = (0, \boldsymbol\gamma, 0)$ is the fit. The hat matrix is $A = I - \lambda Q(R + \lambda Q^TQ)^{-1}Q^T$. With $n = 40$ a dense [`nalgebra`](https://docs.rs/nalgebra/latest/nalgebra/) inverse is fine; minimise GCV over $\log_{10}\lambda$ with a grid and golden-section search ([*Optimisation in one dimension*](../optimisation-1d/lec.qmd)).
 :::
 
 ## Solutions
@@ -668,7 +668,7 @@ clamped_M <- function(x, y, d0, dn) {             # S'(x_1) = d0, S'(x_n) = dn
   d  <- c(6 * (s[1] - d0), 6 * diff(s), 6 * (dn - s[n - 1]))
   thomas(a, b, cc, d)
 }
-# thomas, natural_M, spline_eval from C2
+# thomas, natural_M, spline_eval: defined in the C2 solution above (run it first)
 K <- 1.2; N0 <- 0.05; r <- 0.8
 od   <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
 rate <- function(t) r * od(t) * (1 - od(t) / K)
@@ -695,7 +695,7 @@ max(abs(spline_eval(x, y, clamped_M(x, y, rate(0), rate(10)), tt) -
 ```python
 import numpy as np
 from scipy.interpolate import CubicSpline
-# thomas, natural_M, spline_eval from C2
+# thomas, natural_M, spline_eval: defined in the C2 solution above (run it first)
 
 def clamped_M(x, y, d0, dn):                      # S'(x_0) = d0, S'(x_{n-1}) = dn
     h = np.diff(x); s = np.diff(y) / h
@@ -1423,8 +1423,8 @@ GCV and leave-one-out CV agree closely (df 9.4 and 9.3) and both put the peak at
 
 ## Where this leads
 
-- ***Fourier series and the FFT* (Part 6):** a global basis of sines and cosines for periodic data such as circadian expression, and smoothing a noisy trace by dropping high frequencies, a different way of trading bias against noise.
-- ***Numerical differentiation* (Part 7):** finite differences, their truncation-versus-noise V (B6) and Richardson extrapolation, for functions you can evaluate exactly.
-- ***Numerical integration* (Part 7):** integrating a spline exactly is one way to get an area under a sampled curve (AUC).
-- ***Nonlinear least squares and ODE fitting* (Part 9):** when you have a model (here the logistic), fitting it directly uses that knowledge and gives $r$ and $K$ with uncertainties; a smoothing spline is the model-free alternative.
-- ***The SVD, rank deficiency and regularisation* (Part 4):** the roughness penalty is a regularisation, like ridge regression; df plays the role of the effective number of parameters there too.
+- **[*Fourier series and the FFT*](../fourier-fft/lec.qmd) (Part 6):** a global basis of sines and cosines for periodic data such as circadian expression, and smoothing a noisy trace by dropping high frequencies, a different way of trading bias against noise.
+- **[*Numerical differentiation*](../finite-differences/lec.qmd) (Part 7):** finite differences, their truncation-versus-noise V (B6) and Richardson extrapolation, first for functions you can evaluate exactly, then for noisy plate-reader data: another simulated run of the same OD curve (every 10 min, noise sd 0.005), where wider stencils and the smoothing spline of C5 are compared.
+- **[*Numerical integration*](../quadrature/lec.qmd) (Part 7):** the area under a sampled curve (AUC). The trapezoid rule is the exact integral of the piecewise linear interpolant of B1, and Simpson's rule that of local parabolas; integrating a cubic spline exactly is one more option (not treated there).
+- **[*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd) (Part 9):** when you have a model (here the logistic), fitting it directly uses that knowledge and gives its parameters ($r$ and $K$ here) with uncertainties; that unit shows how, on a drug-concentration model. A smoothing spline is the model-free alternative.
+- **[*The SVD, rank deficiency and regularisation*](../svd/lec.qmd) (Part 4):** the roughness penalty is a regularisation, like the Tikhonov (ridge) penalty there, with $\lambda$ trading misfit against size of the solution; df is the matching effective number of parameters.

@@ -31,7 +31,7 @@ So far the fluid in the chip stood still. Most microfluidic devices **pump** it:
 - Biology: the **T-sensor / H-filter** (small molecules cross, cells do not), the **Christmas-tree** gradient generator for neutrophil chemotaxis, and a **fit** of a diffusion coefficient.
 
 ::: notes
-This is the fourth unit of Part 10. It reuses the grid and the FTCS scheme from The diffusion (heat) equation by finite differences, backward Euler and the Thomas algorithm from Implicit schemes and the method of lines, and Brent's method from Optimisation in one dimension (Part 9). The new ingredient is the first derivative term u dc/dx, and it is surprisingly hard: the obvious discretisation (central) can produce negative concentrations, and the safe one (upwind) quietly changes the physics. The flow field itself is never solved for here: it is given. Computing flow fields (Navier-Stokes) is the subject of Beyond rectangles: finite elements and flow.
+This is the fourth unit of Part 10. It reuses the grid and the FTCS scheme from [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd), backward Euler and the Thomas algorithm from [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd), and Brent's method from [*Optimisation in one dimension*](../optimisation-1d/lec.qmd) (Part 9). The new ingredient is the first derivative term u dc/dx, and it is surprisingly hard: the obvious discretisation (central) can produce negative concentrations, and the safe one (upwind) quietly changes the physics. The flow field itself is never solved for here: it is given. Computing flow fields (Navier-Stokes) is the subject of [*Beyond rectangles: finite elements and flow*](../fem-outlook/lec.qmd).
 :::
 
 ## Biology: two streams that do not mix {.smaller}
@@ -42,21 +42,21 @@ This is the fourth unit of Part 10. It reuses the grid and the FTCS scheme from 
 - Small molecules cross within a few mm; proteins much more slowly; cells hardly at all. Collect the buffer half: a filter **without a membrane**.
 
 ::: notes
-The H-filter (Weigl and Yager 1999, Science [T2]) extracts small molecules from a sample, for example from whole blood, without a membrane that could clog: the cells stay in their half of the channel. The T-sensor (Kamholz et al. 1999, Anal. Chem. [T1]) uses the same geometry to measure: an indicator dye in one stream reacts with an analyte diffusing in from the other, and the shape of the interface reports concentrations and diffusion coefficients. The maps on the right are computed with the method of this lecture: a channel 100 µm wide, mean speed 1 mm/s, our own round numbers, not those of a specific device (the sources were only skimmed; check the papers before quoting numbers). Dark blue is the sample concentration. The small molecule (D = 1000 µm²/s) is nearly mixed by 3 mm; the protein (D = 100 µm²/s) has crossed only partly after 10 mm.
+The H-filter (Weigl and Yager 1999, Science [T2]) extracts small molecules from a sample, for example from whole blood, without a membrane that could clog: the cells stay in their half of the channel. The T-sensor (Kamholz et al. 1999, Anal. Chem. [T1]) uses the same geometry to measure: an indicator dye in one stream reacts with an analyte diffusing in from the other, and the shape of the interface reports concentrations and diffusion coefficients. The maps on the right are computed with the method of this lecture: a channel 100 µm wide, mean speed 1 mm/s, our own round numbers, not those of a specific device (the sources were only skimmed; check the papers before quoting numbers). Dark blue is the sample concentration. The small molecule (D = 1000 µm²/s) is mixed to within 1 % by about 3 mm; the protein (D = 100 µm²/s) has crossed only partly after 10 mm.
 :::
 
 ## Recap: diffusion on a grid {.smaller}
 
 :::: {.columns}
 ::: {.column width="50%"}
-**Explicit** (*The diffusion (heat) equation by finite differences*):
+**Explicit** ([*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd)):
 $$c_i^{n+1} = c_i^n + r\,(c_{i-1}^n - 2c_i^n + c_{i+1}^n)$$
 
 - $r = D\Delta t/\Delta x^2 \le 1/2$, else a zigzag explodes.
 - Why: for $r \le 1/2$ the new value is an **average** with weights $\ge 0$.
 :::
 ::: {.column width="50%"}
-**Implicit** (*Implicit schemes and the method of lines*):
+**Implicit** ([*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd)):
 $$-r\,c_{i-1}^{n+1} + (1 + 2r)\,c_i^{n+1} - r\,c_{i+1}^{n+1} = c_i^n$$
 
 - Backward Euler: no step limit, one **tridiagonal** solve per step.
@@ -67,7 +67,7 @@ $$-r\,c_{i-1}^{n+1} + (1 + 2r)\,c_i^{n+1} - r\,c_{i+1}^{n+1} = c_i^n$$
 Today: one new term, $u\,\partial c/\partial x$. Grid as before: $x_i = i\Delta x$, $c_i^n \approx c(x_i, t_n)$, units **µm** and **s**.
 
 ::: notes
-One slide only; students who skipped these units should go back. Two facts carry over. First, the positivity argument: an explicit update whose weights are non-negative and sum to one cannot create new maxima or minima. We will use it again for the advection term, and it gives both the cell Péclet condition and the CFL condition. Second, the Thomas algorithm: we use the same function with the same argument order (a = sub-diagonal, b = diagonal, c = super-diagonal, d = right-hand side) as in Implicit schemes and the method of lines.
+One slide only; students who skipped these units should go back. Two facts carry over. First, the positivity argument: an explicit update whose weights are non-negative and sum to one cannot create new maxima or minima. We will use it again for the advection term, and it gives both the cell Péclet condition and the CFL condition. Second, the Thomas algorithm: we use the same function with the same argument order (a = sub-diagonal, b = diagonal, c = super-diagonal, d = right-hand side) as in Implicit schemes and the method of lines, which took it from Structure: symmetric, banded, sparse.
 :::
 
 ## Flow carries the molecules {.smaller}
@@ -103,7 +103,7 @@ T-sensor: width $w = 100$ µm, mean speed $\bar u = 1000$ µm/s (1 mm/s).
 - Pe ≫ 1: streams stay **separate** for many channel widths. That is what the H-filter uses, and what a mixer must fight.
 
 ::: notes
-Pe compares the two transport mechanisms over the length L that matters. For transport across the channel, L = w and the flow time is the time to travel one width downstream. The mixing length is order-of-magnitude only; the factor in front is computed later (complete to about 1 % at 0.42 u w^2 / D for plug flow). The cell value uses the Stokes-Einstein estimate D = kT / (6 pi eta a) for a cell of radius 4 µm in water, about 5e-14 m^2/s; cells also sediment, which we ignore. The diffusion coefficients are the standard orders of magnitude from the diffusion lecture. Microfluidic devices live at Pe between about 10 and 10^5. Mixing in a chip is hard for exactly this reason, and many devices add serpentines or chaotic mixers.
+Pe compares the two transport mechanisms over the length L that matters. For transport across the channel, L = w and the flow time is the time to travel one width downstream. The mixing length is order-of-magnitude only; the factor in front depends on the flow profile and on what one calls mixed. With the criterion "every |c - 1/2| below 0.01", plug flow gives 0.42 u w^2 / D (4.2 mm here, from the slowest Fourier mode) and the Poiseuille profile used later gives about 3.1 mm (H-filter slide). The cell value uses the Stokes-Einstein estimate D = kT / (6 pi eta a) for a cell of radius 4 µm in water, about 5e-14 m^2/s; cells also sediment, which we ignore. The diffusion coefficients are the standard orders of magnitude from the diffusion lecture. Microfluidic devices live at Pe between about 10 and 10^5. Mixing in a chip is hard for exactly this reason, and many devices add serpentines or chaotic mixers.
 :::
 
 ## A 1D test problem: back-diffusion against the flow {.smaller}
@@ -120,7 +120,7 @@ The biology question: medium flows through an inlet channel into a culture chamb
 
 ## Central differences for $\partial c/\partial x$ {.smaller}
 
-Use the $O(\Delta x^2)$ central difference from *Numerical differentiation* for both derivatives:
+Use the $O(\Delta x^2)$ central difference from [*Numerical differentiation*](../finite-differences/lec.qmd) for both derivatives:
 
 $$u\,\frac{c_{i+1} - c_{i-1}}{2\Delta x} = D\,\frac{c_{i-1} - 2c_i + c_{i+1}}{\Delta x^2}$$
 
@@ -327,7 +327,7 @@ $$u(y)\,\frac{\partial c}{\partial x} = D\left(\frac{\partial^2 c}{\partial x^2}
 - We **march** downstream from the inlet, one column at a time, instead of solving one big 2D system.
 
 ::: notes
-The full steady problem is elliptic (like Steady state in two dimensions) and needs boundary conditions at the outlet too. When Pe is large, the x-diffusion term is small compared with the advection term: with X = u w^2 / D the length over which c changes in x, the ratio of x-diffusion (D c / X^2) to advection (u c / X) is D / (u X) = D^2 / (u^2 w^2) = 1/Pe^2. Dropping it turns the problem into a parabolic one: what happens at x depends only on what happened upstream. A fluid parcel at height y reaches position x at time x / u(y), and meanwhile diffuses sideways. This is exactly the idea behind the mixing length. Computationally: instead of a sparse 2D solve with M times K unknowns, K small tridiagonal solves.
+The full steady problem is elliptic (like [*Steady state in two dimensions*](../steady-state-2d/lec.qmd)) and needs boundary conditions at the outlet too. When Pe is large, the x-diffusion term is small compared with the advection term: with X = u w^2 / D the length over which c changes in x, the ratio of x-diffusion (D c / X^2) to advection (u c / X) is D / (u X) = D^2 / (u^2 w^2) = 1/Pe^2. Dropping it turns the problem into a parabolic one: what happens at x depends only on what happened upstream. A fluid parcel at height y reaches position x at time x / u(y), and meanwhile diffuses sideways. This is exactly the idea behind the mixing length. Computationally: instead of a sparse 2D solve with M times K unknowns, K small tridiagonal solves.
 :::
 
 ## The flow profile is given: Poiseuille {.smaller}
@@ -358,12 +358,12 @@ range(u * dy^2 / (2 * 1000))                     # largest stable dx per row (µ
 ![](fig09-march.svg){width="66%" fig-align="center"}
 
 ::: notes
-Cell-centred grid in y: 50 cells of 2 µm, values at the centres 1, 3, ..., 99 µm, so no unknown sits exactly on the wall where u = 0. Still, u is only 59 µm/s in the first cell and the stable step there is 0.12 µm: 170 000 steps for 20 mm. Left: implicit marching with plug flow against the exact Fourier solution; error halves with dx (backward Euler is first order) and is 0.4 % at dx = 50 µm. Right: explicit marching with dx = 1 µm is stable in the middle of the channel (limit 3 µm) but not near the walls; the zigzag starts there and reaches 1e39 by x = 100 µm. With dx = 0.1 µm it is fine. This is stiffness again: the slowest-moving fluid sets the step.
+Cell-centred grid in y: 50 cells of 2 µm, values at the centres 1, 3, ..., 99 µm. This differs on purpose from the node grid x_i = i dx of the diffusion lecture and of Steady state in two dimensions (unknowns on the boundary, ghost nodes outside): no unknown sits on a wall where u = 0, so the marching step dx/u(y) is never infinite, and the no-flux wall is a mirror halfway between the last cell and its ghost cell (c_0 = c_1). Along the channel, x keeps the node grid. Still, u is only 59 µm/s in the first cell and the stable step there is 0.12 µm: 170 000 steps for 20 mm. Left: implicit marching with plug flow against the exact Fourier solution; error halves with dx (backward Euler is first order) and is 0.4 % at dx = 50 µm. Right: explicit marching with dx = 1 µm is stable in the middle of the channel (limit 3 µm) but not near the walls; the zigzag starts there and reaches 1e39 by x = 100 µm. With dx = 0.1 µm it is fine. This is stiffness again ([*Stiffness and implicit methods*](../stiffness/lec.qmd)): the slowest-moving fluid sets the step.
 :::
 
 ## Implicit marching in R {.smaller}
 
-Backward Euler in $x$: one tridiagonal solve per step, `thomas()` from *Implicit schemes and the method of lines*.
+Backward Euler in $x$: one tridiagonal solve per step, `thomas()` from [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd).
 
 ```r
 march <- function(c, u, D, dy, dx, nsteps) {     # backward Euler in x
@@ -395,7 +395,7 @@ Row j of the system: -a_j c_{j-1} + (1 + 2 a_j) c_j - a_j c_{j+1} = old c_j, wit
 - An H-filter is designed by choosing the length (or the flow rate): long enough for the small molecule, short enough to keep the protein back. Purity is a trade-off.
 
 ::: notes
-Fraction of each species in the buffer half against distance, from the marching solver (dx = 100 µm). 50 % is complete mixing. The small molecule is essentially mixed by 4-5 mm, consistent with the estimate 0.42 u w^2 / D = 4.2 mm for plug flow. The protein curve rises like the square root of x at first (the interface width grows like sqrt(D x / u)), and reaches 47 % only at 20 mm. Cells at D = 0.05 µm^2/s stay put. The real H-filter [T2] separated small molecules from blood cells, a separation by a factor of tens of thousands in D; separating a small molecule from a protein (a factor of 10) gives only partial purity, which you can now quantify before building the device. Note that halving the flow speed is the same as doubling the length: only D x / u matters.
+Fraction of each species in the buffer half against distance, from the marching solver (dx = 100 µm). 50 % is complete mixing. The small molecule's flux fraction is 49.95 % at 5 mm. By the stricter criterion "every |c - 1/2| below 0.01" it is mixed at about 3.1 mm with this Poiseuille profile (3.3 mm on this coarse dx = 100 µm grid; the demo in the exercise gives 3.1 mm), earlier than the plug-flow estimate 0.42 u w^2 / D = 4.2 mm because the slow fluid near the walls has more time to diffuse. The protein curve rises like the square root of x at first (the interface width grows like sqrt(D x / u)), and reaches 47 % only at 20 mm. Cells at D = 0.05 µm^2/s stay put. The real H-filter [T2] separated small molecules from blood cells, a separation by a factor of tens of thousands in D; separating a small molecule from a protein (a factor of 10) gives only partial purity, which you can now quantify before building the device. Note that halving the flow speed is the same as doubling the length: only D x / u matters.
 :::
 
 ## The Christmas-tree gradient generator {.smaller}
@@ -444,10 +444,10 @@ optimize(sse, c(10, 3000), tol = 1e-6)$minimum
 :::
 ::::
 
-- One parameter, one bracket: **Brent** (*Optimisation in one dimension*). True value: 400 µm²/s.
+- One parameter, one bracket: **Brent** ([*Optimisation in one dimension*](../optimisation-1d/lec.qmd)). True value: 400 µm²/s.
 
 ::: notes
-cobs holds 25 synthetic intensities: the model with D = 400 µm^2/s on a very fine grid, averaged over 4 µm pixels, plus Gaussian noise with sd 0.02 (generated in R and given as numbers in the exercise, so every language uses the same data). Every evaluation of sse runs the whole PDE solver: 40 tridiagonal solves. That is the pattern of every PDE fit: the model is a numerical solver inside an objective function. Two warnings for the exercise. First, the solver's own error biases the estimate: with a single 1 mm step the fit gives 505, with dx = 250 µm 419, with dx = 25 µm 398, finer grids 396. Refine until the fitted parameter stops changing. Second, D and u-bar enter only as D / u-bar: if the flow rate is off by a factor 2, so is D (identifiability, Part 9).
+cobs holds 25 synthetic intensities: the model with D = 400 µm^2/s on a very fine grid, averaged over 4 µm pixels, plus Gaussian noise with sd 0.02 (generated in R and given as numbers in the exercise, so every language uses the same data). Every evaluation of sse runs the whole PDE solver: 40 tridiagonal solves. That is the pattern of every PDE fit: the model is a numerical solver inside an objective function. Two warnings for the exercise. First, the solver's own error biases the estimate: with a single 1 mm step the fit gives 505, with dx = 250 µm 419, with dx = 25 µm 398, finer grids 396. Refine until the fitted parameter stops changing. Second, D and u-bar enter only as D / u-bar: if the flow rate is off by a factor 2, so is D ([*Identifiability and uncertainty of fitted parameters*](../identifiability/lec.qmd), Part 9).
 :::
 
 ## Before you trust a flow-plus-diffusion simulation {.smaller}
@@ -473,8 +473,8 @@ The checklist of this unit, extending the one from the diffusion lecture. The fi
 - Steady channel flow at large Pe: **march** in $x$ as if it were time, with a **given** Poiseuille profile; implicit (tridiagonal) because slow fluid near the walls makes explicit marching stiff.
 - Biology: the H-filter separates by $D$; the Christmas tree builds gradients for neutrophils; a fitted $D$ is only as good as the grid and the known flow rate.
 
-**Next:** *Reaction–diffusion and pattern formation*: production and degradation, operator splitting.
+**Next:** [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd): production and degradation, operator splitting.
 
 ::: notes
-Recap: the new term, the dimensionless number that says how important it is, the two classical discretisations and how each fails, the time step limit, and the marching trick that turns a steady 2D problem into a sequence of 1D implicit steps. The next unit adds reaction terms to diffusion (Bicoid, Fgf8). Beyond rectangles: finite elements and flow (Part 11) explains where flow fields like the Poiseuille profile come from when the geometry is not a straight channel.
+Recap: the new term, the dimensionless number that says how important it is, the two classical discretisations and how each fails, the time step limit, and the marching trick that turns a steady 2D problem into a sequence of 1D implicit steps. The next unit adds reaction terms to diffusion (Bicoid, Fgf8). [*Beyond rectangles: finite elements and flow*](../fem-outlook/lec.qmd) (Part 11) explains where flow fields like the Poiseuille profile come from when the geometry is not a straight channel.
 :::

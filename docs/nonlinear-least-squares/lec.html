@@ -330,12 +330,12 @@ Numerical analysis for biologists
 </section>
 <section id="recap-linear-least-squares-by-qr" class="slide level2 smaller">
 <h2>Recap: linear least squares by QR</h2>
-<p>For a <strong>linear</strong> model <span class="math inline">A\mathbf x \approx \mathbf b</span> (unit <em>Least squares: normal equations vs QR</em>):</p>
+<p>For a <strong>linear</strong> model <span class="math inline">A\mathbf x \approx \mathbf b</span> (unit <a href="../least-squares-qr/lec.html"><em>Least squares: normal equations vs QR</em></a>):</p>
 <ul>
 <li>minimise <span class="math inline">\|\mathbf b - A\mathbf x\|^2</span>; factor <span class="math inline">A = QR</span> and back-substitute <span class="math inline">R\mathbf x = Q^T\mathbf b</span>. In R: <code>qr.solve(A, b)</code>.</li>
 <li>The normal equations <span class="math inline">A^TA\mathbf x = A^T\mathbf b</span> give the same <span class="math inline">\mathbf x</span> in exact arithmetic, but <strong>square</strong> the condition number: <span class="math inline">\kappa(A^TA) = \kappa(A)^2</span>.</li>
 </ul>
-<p>And from <em>Newton for systems of equations</em>: the <strong>Jacobian</strong> <span class="math inline">J_{ij} = \partial m_i / \partial p_j</span> is the matrix of slopes, and</p>
+<p>And from <a href="../newton-systems/lec.html"><em>Newton for systems of equations</em></a>: the <strong>Jacobian</strong> <span class="math inline">J_{ij} = \partial m_i / \partial p_j</span> is the matrix of slopes, and</p>
 <p><span class="math display">\mathbf m(\mathbf p + \boldsymbol\delta) \approx \mathbf m(\mathbf p) + J\,\boldsymbol\delta.</span></p>
 <p>Gauss–Newton = these two ideas together.</p>
 <aside class="notes">
@@ -366,7 +366,7 @@ Numerical analysis for biologists
 <ul>
 <li>Column 1: raising <span class="math inline">k_a</span> raises early concentrations and lowers late ones (faster in, faster gone).</li>
 <li>Column 2: raising <span class="math inline">k_e</span> lowers everything, most at 12 h. Column 3: raising <span class="math inline">V</span> dilutes.</li>
-<li>Step <span class="math inline">h = 10^{-7}\,p_j</span> is relative to each parameter, as in <em>Newton for systems of equations</em>.</li>
+<li>Step <span class="math inline">h = 10^{-7}\,p_j</span> is relative to each parameter, as in <a href="../newton-systems/lec.html"><em>Newton for systems of equations</em></a>.</li>
 </ul>
 <aside class="notes">
 <p>Each column is a sensitivity: how much each predicted concentration moves per unit change of one parameter. Read the signs with the students; they are pharmacology. The forward-difference step of about sqrt(eps) times the parameter balances truncation and rounding error (Convergence and cost). We could differentiate the Bateman function by hand, but for an ODE model we cannot, so we use the generic finite-difference Jacobian from the start. Keep the 0.373 in mind: V’s column is small because V is large, a scaling issue that the log-parameters slide comes back to.</p>
@@ -392,7 +392,7 @@ Numerical analysis for biologists
 <span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  0.35245282 -0.01478552  8.03484167</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
 <li>In the normal-equation form, <span class="math inline">J^TJ\,\boldsymbol\delta = J^T\mathbf r</span>. Same <span class="math inline">\boldsymbol\delta</span> here, but at the minimum <span class="math inline">\kappa(J) = 170</span> while <span class="math inline">\kappa(J^TJ) = 2.9\times10^4</span>: QR keeps 2 more digits.</li>
-<li>Compare <em>Newton for systems of equations</em>: there <span class="math inline">J</span> was square and we solved <span class="math inline">J\boldsymbol\delta = -\mathbf F</span>. Here <span class="math inline">J</span> is tall and we solve in the least-squares sense.</li>
+<li>Compare <a href="../newton-systems/lec.html"><em>Newton for systems of equations</em></a>: there <span class="math inline">J</span> was square and we solved <span class="math inline">J\boldsymbol\delta = -\mathbf F</span>. Here <span class="math inline">J</span> is tall and we solve in the least-squares sense.</li>
 </ul>
 <aside class="notes">
 <p>This is the whole method: linearise, solve a linear least-squares problem, update, repeat. Gauss used it for orbits of asteroids around 1800. Many textbooks write the step with the normal equations; libraries do not form J^T J. With three well-scaled parameters the difference is small, but with 20 parameters of very different size, or a nearly non-identifiable model, kappa(J) can be 1e7 and then kappa squared is 1e14, and the normal equations lose everything. qr.solve uses Householder QR (Part 4).</p>
@@ -779,7 +779,7 @@ Numerical analysis for biologists
 
 <img data-src="fig06-tolerance-step.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:60.0%"><ul>
 <li>The Jacobian is a difference quotient: solver error <span class="math inline">\varepsilon_\text{ode}</span> divided by the step <span class="math inline">h</span>. MINPACK’s default step <span class="math inline">1.5\times10^{-8}|q|</span> is tiny (here <span class="math inline">|q_1| = |\log k_a| = 0.015</span>): the error <strong>jumps around</strong> whatever the tolerance.</li>
-<li>Rule (from <em>Convergence and cost</em>): <span class="math inline">h \approx \sqrt{\varepsilon_\text{ode}}</span>, and the solver tolerance 100–1000 times tighter than the accuracy you want from the fit. Then <strong>refit with a tighter tolerance</strong> and keep only the digits that agree.</li>
+<li>Rule (from <a href="../convergence-cost/lec.html"><em>Convergence and cost</em></a>): <span class="math inline">h \approx \sqrt{\varepsilon_\text{ode}}</span>, and the solver tolerance 100–1000 times tighter than the accuracy you want from the fit. Then <strong>refit with a tighter tolerance</strong> and keep only the digits that agree.</li>
 </ul>
 <aside class="notes">
 <p>Relative error of the fitted ka against the exact fit, for deSolve tolerances from 1e-3 to 1e-12 (tighter to the right) and two finite-difference steps. Orange: MINPACK’s default, sqrt(machine eps) times |q|. Because log ka is close to 0, the absolute step for ka is 2e-10, smaller than the solver error, and the Jacobian is garbage at random tolerances (3.5e-3 error at 1e-9!). Blue: epsfcn = 1e-10 gives step 1e-5 |q|; the error falls with the tolerance until it reaches the 1e-7 level set by the optimiser’s own stopping rule. scipy’s least_squares (default “trf”) uses a step relative to max(1, |q|), which avoids the trap. Alternative: forward sensitivity equations (deSolve’s companion packages, SUNDIALS) compute the Jacobian by solving extra ODEs; mention only.</p>
@@ -884,7 +884,7 @@ Numerical analysis for biologists
 <li><strong>ODE fitting</strong>: the solver runs inside the residual; its error is part of the objective. Tight tolerance, a finite-difference step well above the solver error, refit to check.</li>
 <li><strong>Multistart</strong> finds several minima; the PK model has two with equal RSS (flip-flop).</li>
 </ul>
-<p><strong>Next:</strong> <em>Identifiability and uncertainty of fitted parameters</em>: which parameters the data determine, and how well.</p>
+<p><strong>Next:</strong> <a href="../identifiability/lec.html"><em>Identifiability and uncertainty of fitted parameters</em></a>: which parameters the data determine, and how well.</p>
 <aside class="notes">
 <p>The methods of this unit are the workhorse of quantitative biology: almost every published rate constant from a time course came out of a Levenberg-Marquardt or trust-region fit with an ODE solver inside. The next unit asks how much to trust the numbers: standard errors from J^T J, profile likelihoods, and the structural non-identifiability we just met. After that, Constraints and linear programming deals with bounds and linear constraints.</p>
 <style type="text/css">

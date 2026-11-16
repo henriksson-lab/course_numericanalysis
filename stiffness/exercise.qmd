@@ -34,7 +34,7 @@ We use $k_f = 100\ \mu\text{M}^{-1}\text{s}^{-1}$, $k_r = 100\ \text{s}^{-1}$, $
 
 1. **Test equation.** On $y' = \lambda y$ a one-step method multiplies $y$ by a fixed factor $R(z)$ per step, with $z = h\lambda$:
    Euler $R = 1 + z$; RK4 $R = 1 + z + z^2/2 + z^3/6 + z^4/24$; backward Euler $R = 1/(1 - z)$. Errors do not grow if $|R(z)| \le 1$; the set of such $z$ is the **stability region**. On the negative real axis: Euler needs $h|\lambda| \le 2$, RK4 $h|\lambda| \le 2.785$, backward Euler nothing.
-2. **Eigenvalues set the time scales.** Near a state, $\mathbf y' = \mathbf f(\mathbf y)$ behaves like $\mathbf y' = J\mathbf y$ with $J$ the Jacobian ($J_{ij} = \partial f_i / \partial y_j$, *Newton for systems of equations*). Each eigenvalue $\lambda$ of $J$ is a mode with time scale $1/|\text{Re}\,\lambda|$. For a $2\times2$ matrix, $\lambda^2 - (\text{tr}\,J)\lambda + \det J = 0$; if one eigenvalue is much larger than the other, $\lambda_\text{fast} \approx \text{tr}\,J$ and $\lambda_\text{slow} \approx \det J / \text{tr}\,J$.
+2. **Eigenvalues set the time scales.** Near a state, $\mathbf y' = \mathbf f(\mathbf y)$ behaves like $\mathbf y' = J\mathbf y$ with $J$ the Jacobian ($J_{ij} = \partial f_i / \partial y_j$, [*Newton for systems of equations*](../newton-systems/lec.qmd)). Each eigenvalue $\lambda$ of $J$ is a mode with time scale $1/|\text{Re}\,\lambda|$. For a $2\times2$ matrix, $\lambda^2 - (\text{tr}\,J)\lambda + \det J = 0$; if one eigenvalue is much larger than the other, $\lambda_\text{fast} \approx \text{tr}\,J$ and $\lambda_\text{slow} \approx \det J / \text{tr}\,J$.
 3. **Stiff** = the step size of an explicit method is limited by stability (by the fastest mode) rather than by the accuracy needed for the slow solution you care about. Typical sign: a ratio of $10^3$ or more between the fastest and slowest time scale over the simulated time.
 4. **Backward Euler**: $\mathbf y_{n+1} = \mathbf y_n + h\,\mathbf f(\mathbf y_{n+1})$. Each step solves $\mathbf G(\mathbf y) = \mathbf y - \mathbf y_n - h\mathbf f(\mathbf y) = \mathbf 0$ by **Newton**: solve $(I - hJ(\mathbf y))\,\boldsymbol\delta = -\mathbf G(\mathbf y)$, set $\mathbf y \leftarrow \mathbf y + \boldsymbol\delta$, starting from $\mathbf y = \mathbf y_n$. Order 1.
 5. **BDF2**: $\mathbf y_{n+1} - \tfrac43\mathbf y_n + \tfrac13\mathbf y_{n-1} = \tfrac23 h\,\mathbf f(\mathbf y_{n+1})$; Newton matrix $I - \tfrac23 hJ$. Order 2, needs two start values.
@@ -138,7 +138,7 @@ The R and Python LSODA codes are different implementations, so their step counts
 
 ## By hand
 
-**B1. Amplification factors.** Drug clearance $C' = -0.8\,C$ (per hour), as in *Initial value problems and Euler's method*.
+**B1. Amplification factors.** Drug clearance $C' = -0.8\,C$ (per hour), as in [*Initial value problems and Euler's method*](../euler/lec.qmd).
 (a) For $h = 0.5, 2, 3, 10$ hours compute $z = h\lambda$ and the factor per step of Euler and of backward Euler. Compare with the exact factor $e^{z}$ (given: $e^{-0.4} = 0.670$, $e^{-1.6} = 0.202$, $e^{-2.4} = 0.0907$, $e^{-8} = 0.000335$). Which steps are stable? Which are accurate?
 (b) The enzyme model's fastest eigenvalue at the start is $\lambda = -1201\ \text{s}^{-1}$. What is the largest stable step of Euler and of RK4? How many steps does each need to cover 30 s?
 (c) What factor does backward Euler apply to this fast mode with $h = 0.1$ s? What is the exact factor $e^{-120.1}$, roughly? Does the difference matter?
@@ -176,7 +176,7 @@ $$S' = -k_f(E_0 - C)S + k_r C, \qquad C' = k_f(E_0 - C)S - (k_r + k_{cat})C.$$
 
 **B7. Damping and classification.**
 (a) For the oscillator $x'' = -\omega^2 x$ (fact: the eigenvalues are $\pm i\omega$), backward Euler multiplies the amplitude by $|1/(1 - i\omega h)| = 1/\sqrt{1 + \omega^2h^2}$ per step. With $\omega = 2\pi/24$ per hour ($\omega = 0.2618$) and $h = 1$ h, what is the factor per step, per day and after 10 days?
-(b) Stiff or not? Logistic growth of a culture ($r = 0.8$ per hour) over 24 h; the SIR epidemic over a season; the enzyme model over 30 s; the enzyme model over its first 5 ms; Robertson's problem to $t = 10^{5}$; a circadian oscillator over 10 days; diffusion on a fine grid of 1000 points (*Implicit schemes and the method of lines*). For each, which `deSolve`/`solve_ivp` method would you choose?
+(b) Stiff or not? Logistic growth of a culture ($r = 0.8$ per hour) over 24 h; the SIR epidemic over a season; the enzyme model over 30 s; the enzyme model over its first 5 ms; Robertson's problem to $t = 10^{5}$; a circadian oscillator over 10 days; diffusion on a fine grid of 1000 points ([*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd)). For each, which `deSolve`/`solve_ivp` method would you choose?
 
 ## In code
 
@@ -247,7 +247,7 @@ Compute $z = h\lambda$ first: $\lambda = -0.8$, so $z = -0.4, -1.6, -2.4, -8$. S
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 2 — an implicit step (B2, B3)"}
-Write the formula with $C_{n+1}$ on both sides, then collect: B2 is linear, $C_{n+1}(1 + 0.8h) = C_n + 2h$. In B3 the equation is quadratic: $y + hky^2 - M_0 = 0$. Newton: $y \leftarrow y - G(y)/G'(y)$, as in *Newton and secant methods*.
+Write the formula with $C_{n+1}$ on both sides, then collect: B2 is linear, $C_{n+1}(1 + 0.8h) = C_n + 2h$. In B3 the equation is quadratic: $y + hky^2 - M_0 = 0$. Newton: $y \leftarrow y - G(y)/G'(y)$, as in [*Newton and secant methods*](../newton/lec.qmd).
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 3 — Jacobians and eigenvalues (B4, B5)"}
@@ -1339,7 +1339,7 @@ With $h = 1$ h the amplitude after 10 days is $3.5\times10^{-4}$ (B7(a)); even $
 
 ## Where this leads
 
-- *Equilibria, stability and the phase plane* (Part 8): the eigenvalues of the Jacobian come back, now to decide whether a steady state of the biology is stable, not whether a solver is.
-- *Nonlinear least squares and ODE fitting* (Part 9): fitting rate constants solves the model hundreds of times; with a stiff model, choosing `lsoda` or `bdf` decides whether that takes seconds or hours.
-- *Implicit schemes and the method of lines* (Part 10): a diffusion equation on a grid becomes a large, sparse, stiff ODE system; backward Euler then needs one sparse (tridiagonal) solve per step.
+- [*Equilibria, stability and the phase plane*](../phase-plane/lec.qmd) (Part 8): the eigenvalues of the Jacobian come back, now to decide whether a steady state of the biology is stable, not whether a solver is.
+- [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd) (Part 9): fitting rate constants solves the model hundreds of times; with a stiff model, choosing `lsoda` or `bdf` decides whether that takes seconds or hours.
+- [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd) (Part 10): a diffusion equation on a grid becomes a large, sparse, stiff ODE system; backward Euler then needs one sparse (tridiagonal) solve per step.
 - We wrote backward Euler with a fixed step and full Newton iterations. Production solvers (`lsoda`, `bdf`, `radau`) also estimate their error, adapt step and order, and reuse the Jacobian and its LU factorisation over many steps.

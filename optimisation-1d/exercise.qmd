@@ -41,7 +41,7 @@ To minimise a function $f$ of one variable on an interval:
 The running examples of the lecture:
 
 - **mRNA decay.** Fraction of an mRNA left after transcription stops: $t = 0, 0.5, 1, 2, 4, 6, 8$ h, $y = 1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083$. Model $e^{-kt}$; the least-squares (Gaussian maximum-likelihood) rate minimises $\text{SSE}(k) = \sum_i (y_i - e^{-kt_i})^2$; $\hat k = 0.3753873095$ per hour.
-- **Zero-truncated Poisson** (from *Newton and secant methods*). UMI counts 1, 2, 3, 4, 5 in 52, 30, 12, 5, 1 cells; $n = 100$, $\sum x_i = 173$. Minus the log-likelihood is $f(\lambda) = -173\log\lambda + 100\lambda + 100\log(1 - e^{-\lambda})$; the MLE is $\hat\lambda = 1.2184695258$.
+- **Zero-truncated Poisson** (from [*Newton and secant methods*](../newton/lec.qmd)). UMI counts 1, 2, 3, 4, 5 in 52, 30, 12, 5, 1 cells; $n = 100$, $\sum x_i = 173$. Minus the log-likelihood is $f(\lambda) = -173\log\lambda + 100\lambda + 100\log(1 - e^{-\lambda})$; the MLE is $\hat\lambda = 1.2184695258$.
 - **Circadian period.** A simulated bioluminescence recording every 4 h for 6 days (36 values, given in C5). $\text{RSS}(T)$ is the residual sum of squares of the best sine wave with period $T$; the global minimum is at $T = 24.63$ h.
 
 Brent's method on the decay rate, in each language:
@@ -193,7 +193,7 @@ Rust prints numbers in its own format (e.g. `1e-8` rather than `1e-08`); the val
 (b) Evaluate `rss` on a grid from 10 to 40 h with spacing 0.25 h, take the best grid point $T_0$, and refine with Brent on $[T_0 - 0.5, T_0 + 0.5]$. Plot $\text{RSS}(T)$ and compare RSS at the two candidates.
 (c) Check your answer to B6(b) with the grid $10, 20, 30, 40$.
 
-**C6. The growth rate of the OD curve.** The logistic OD curve of *Convergence and cost*, $N(t) = K/(1 + (K/N_0 - 1)e^{-rt})$, with $K = 1.2$ and $N_0 = 0.05$ **known**, measured every 10 min for 10 h with noise (the 61 values of *Numerical differentiation*, in the solution code).
+**C6. The growth rate of the OD curve.** The logistic OD curve of [*Convergence and cost*](../convergence-cost/lec.qmd), $N(t) = K/(1 + (K/N_0 - 1)e^{-rt})$, with $K = 1.2$ and $N_0 = 0.05$ **known**, measured every 10 min for 10 h with noise (the 61 values of [*Numerical differentiation*](../finite-differences/lec.qmd), in the solution code).
 (a) Evaluate $\text{SSE}(r)$ at $r = 0.1, 0.4, 0.8, 1.2, 2, 3$ per hour. Is there one valley?
 (b) Find $\hat r$ with Brent's method to $10^{-10}$. The data were simulated with $r = 0.8$.
 (c) Estimate the noise standard deviation as $\sqrt{\text{SSE}(\hat r)/(n - 1)}$. The simulation used 0.005.
@@ -294,7 +294,7 @@ For fixed $T$, the design matrix has the columns $1$, $\cos(2\pi t/T)$, $\sin(2\
 (b) $x - f'/f'' = x - (1 - 2/x)x^2/2 = x - (x^2 - 2x)/2 = 2x - x^2/2$. Then $x_{k+1} - 2 = -\tfrac12(x_k - 2)^2$, so $e_{k+1} = -e_k^2/2$: quadratic convergence.
 (c) $1 \to 1.5 \to 1.875 \to 1.9921875$; errors $0.5, 0.125, 0.0078$ (then $3.1\times10^{-5}$): correct digits roughly double each step.
 (d) From 3: $e_0 = 1$, $x_1 = 1.5$, then as in (c): converges. From 4: $x_1 = 8 - 8 = 0$, where $\ln 0 = -\infty$ and $f = +\infty$. From 5: $x_1 = -2.5$, outside the domain ($\ln$ of a negative number is `NaN`). From $e_{k+1} = -e_k^2/2$: converges if $|e_0| < 2$, i.e. $0 < x_0 < 4$. Convexity guarantees that the step points **downhill**, not that it is not too **long**: $f''$ is small for large $x$, the local parabola is too flat, and the step overshoots.
-(e) "$f(x_{k+1}) < f(x_k)$, and finite": $f(0) = \infty$ and $f(-2.5) = $ `NaN` both fail it. The fix is to shorten the step until $f$ decreases (a line search, *Gradient descent, Newton and quasi-Newton*).
+(e) "$f(x_{k+1}) < f(x_k)$, and finite": $f(0) = \infty$ and $f(-2.5) = $ `NaN` both fail it. The fix is to shorten the step until $f$ decreases (a line search, [*Gradient descent, Newton and quasi-Newton*](../gradient-methods/lec.qmd)).
 
 **B5.**
 (a) $f(1 + \delta) = 1 + \delta^2$ rounds to 1 when $\delta^2 < \varepsilon/2 = 1.1\times10^{-16}$, i.e. $|\delta| < 1.05\times10^{-8}$. (R: `1 + (1e-8)^2 == 1` is `TRUE`, `1 + (1e-7)^2 == 1` is `FALSE`.)
@@ -1086,7 +1086,7 @@ fn main() -> Result<(), Error> {
 
 ## Where this leads
 
-- ***Gradient descent, Newton and quasi-Newton* (next unit):** with several parameters, $f'$ becomes the gradient and $f''$ the Hessian matrix. Every multivariate method chooses a direction and then does a one-dimensional search along it (a **line search**): the methods of this exercise reappear inside. The checks of C4 become the line-search and trust-region safeguards.
-- ***Nonlinear least squares and ODE fitting*:** the decay fit with two parameters (initial amount and rate) and fits of ODE models, where multistart replaces the grid of C5.
-- ***Identifiability and uncertainty of fitted parameters*:** the curvature $f''(\hat x)$ at the minimum gives the standard error; a flat valley in $f$ means a parameter the data cannot pin down.
-- ***Fourier series and the FFT*:** the periodogram computes something very close to $\text{RSS}(T)$ on a whole grid of periods at once.
+- **[*Gradient descent, Newton and quasi-Newton*](../gradient-methods/lec.qmd) (next unit):** with several parameters, $f'$ becomes the gradient and $f''$ the Hessian matrix. Every multivariate method chooses a direction and then does a one-dimensional search along it (a **line search**): the methods of this exercise reappear inside. The checks of C4 become the line-search and trust-region safeguards.
+- **[*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd):** least squares with several parameters (a pharmacokinetic absorption–elimination curve with three) and fits of ODE models, where multistart replaces the grid of C5.
+- **[*Identifiability and uncertainty of fitted parameters*](../identifiability/lec.qmd):** the curvature $f''(\hat x)$ at the minimum gives the standard error; a flat valley in $f$ means a parameter the data cannot pin down.
+- **[*Fourier series and the FFT*](../fourier-fft/lec.qmd):** the periodogram computes something very close to $\text{RSS}(T)$ on a whole grid of periods at once.

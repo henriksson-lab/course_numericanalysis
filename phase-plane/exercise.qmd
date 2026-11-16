@@ -24,7 +24,7 @@ The by-hand part needs pen, paper and a calculator. The code part checks your ha
 
 ## Background
 
-**The toggle switch** (from *Newton for systems of equations*). Two genes repress each other:
+**The toggle switch** (from [*Newton for systems of equations*](../newton-systems/lec.qmd)). Two genes repress each other:
 
 $$\frac{du}{dt} = \frac{\alpha}{1 + v^{n}} - u, \qquad \frac{dv}{dt} = \frac{\alpha}{1 + u^{n}} - v, \qquad \alpha = 3,\ n = 2.$$
 
@@ -33,6 +33,8 @@ Steady states: **U on** $= \big((3+\sqrt5)/2,\ (3-\sqrt5)/2\big) = (2.618034, 0.
 **The Sel'kov model of glycolytic oscillations** ($u$ = ADP, $v$ = fructose-6-phosphate):
 
 $$\frac{du}{dt} = -u + a v + u^2 v, \qquad \frac{dv}{dt} = b - a v - u^2 v, \qquad a = 0.08,\ b = 0.6.$$
+
+The repressilator of [*Runge–Kutta and adaptive step size*](../runge-kutta/lec.qmd) is also a limit cycle, but with six variables; Sel'kov's model has two, so its whole phase plane fits on the page.
 
 **Facts used below:**
 
@@ -43,7 +45,7 @@ $$\frac{du}{dt} = -u + a v + u^2 v, \qquad \frac{dv}{dt} = b - a v - u^2 v, \qqu
 5. **$2\times2$ shortcut**: with $\tau = \operatorname{tr} J$, $\Delta = \det J$: $\lambda = \big(\tau \pm \sqrt{\tau^2 - 4\Delta}\big)/2$. $\Delta < 0$: **saddle**. $\Delta > 0$: stable if $\tau < 0$, unstable if $\tau > 0$; a **spiral** if $\tau^2 < 4\Delta$, otherwise a **node**. $\tau = 0 < \Delta$: **centre** (undecided). An eigenvector for $\lambda$ is $\mathbf v = (J_{12},\ \lambda - J_{11})$ (if $J_{12} \ne 0$).
 6. **Separatrix**: the stable direction of a saddle continues as a curve that separates the basins of attraction. Running the ODE **backwards in time** (`times` decreasing, or the right-hand side multiplied by $-1$) from $\mathbf x^* \pm \varepsilon\,\mathbf v_{\text{stable}}$ traces it out.
 7. **Limit cycle**: an isolated closed orbit. In two variables, an unstable fixed point inside a region that trajectories cannot leave forces one.
-8. **Library routines.** Trajectories: R [`deSolve::ode`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) (default `lsoda`), Python [`scipy.integrate.solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) (default `RK45`), Rust [`ode_solvers::Dopri5`](https://docs.rs/ode_solvers/latest/ode_solvers/dopri5/struct.Dopri5.html); what they do inside is the topic of *Runge–Kutta and adaptive step size*. Eigenvalues (how they are computed: *How `eigen()` works, and big problems*): R [`eigen`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html), Python [`np.linalg.eigvals`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvals.html) and [`np.linalg.eig`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eig.html), Rust [`nalgebra`'s `complex_eigenvalues`](https://docs.rs/nalgebra/latest/nalgebra/base/struct.Matrix.html#method.complex_eigenvalues). For a non-symmetric matrix `eigen` sorts by **modulus**, `eigvals` and `nalgebra` do not sort at all: never read stability from the first entry.
+8. **Library routines.** Trajectories: R [`deSolve::ode`](https://search.r-project.org/CRAN/refmans/deSolve/html/ode.html) (default `lsoda`), Python [`scipy.integrate.solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) (default `RK45`), Rust [`ode_solvers::Dopri5`](https://docs.rs/ode_solvers/latest/ode_solvers/dopri5/struct.Dopri5.html); what they do inside is the topic of *Runge–Kutta and adaptive step size*. Eigenvalues (how they are computed: [*How `eigen()` works, and big problems*](../eigen-algorithms/lec.qmd)): R [`eigen`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html), Python [`np.linalg.eigvals`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvals.html) and [`np.linalg.eig`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eig.html), Rust [`nalgebra`'s `complex_eigenvalues`](https://docs.rs/nalgebra/latest/nalgebra/base/struct.Matrix.html#method.complex_eigenvalues). For a non-symmetric matrix `eigen` sorts by **modulus**, `eigvals` and `nalgebra` do not sort at all: never read stability from the first entry.
 
 The toggle switch as an ODE, one trajectory, and the eigenvalues at U on, in each language. We use tight tolerances (`rtol = 1e-10`, `atol = 1e-12`) on this page so that the three solvers print the same digits:
 
@@ -224,7 +226,7 @@ The solutions build on each other: the Background defines `toggle` and `J`; C1 d
 
 ## Explore {#explore}
 
-The demo below draws the phase plane of the toggle switch ($\alpha_u = 3$, $n = 2$, $\alpha_v$ on the slider) or of the Sel'kov model ($a = 0.08$, $b$ on the slider) in your browser. Grey arrows show the direction of the flow (all the same length), blue is the nullcline $du/dt = 0$, red is $dv/dt = 0$. Fixed points are black if stable and white if unstable, labelled with their type; the readout lists their eigenvalues. **Click anywhere** (or use a start button) to launch a trajectory. It is integrated with classical RK4, $h = 0.01$, up to $t = 100$ (toggle) or $t = 200$ (Sel'kov), and it stops when it comes within $10^{-3}$ of a stable fixed point. Below the buttons you see $u(t)$ and $v(t)$ of the latest trajectory. **Basins of the flow** colours each of $160 \times 160$ starts in $[0, 4]^2$ by the stable state its trajectory reaches. **Separatrix** draws the saddle's stable manifold, computed as in C4 by running backwards in time from the saddle $\pm 10^{-6}\,\mathbf v_{\text{stable}}$. The demo *Newton for systems of equations* shows the same plane coloured by where **Newton** goes. This one shows where the **cell** goes.
+The demo below draws the phase plane of the toggle switch ($\alpha_u = 3$, $n = 2$, $\alpha_v$ on the slider) or of the Sel'kov model ($a = 0.08$, $b$ on the slider) in your browser. Grey arrows show the direction of the flow (all the same length), blue is the nullcline $du/dt = 0$, red is $dv/dt = 0$. Fixed points are black if stable and white if unstable, labelled with their type; the readout lists their eigenvalues. **Click anywhere** (or use a start button) to launch a trajectory. It is integrated with classical RK4, $h = 0.01$, up to $t = 100$ (toggle) or $t = 200$ (Sel'kov), and it stops when it comes within $10^{-3}$ of a stable fixed point. Below the buttons you see $u(t)$ and $v(t)$ of the latest trajectory. **Basins of the flow** colours each of $160 \times 160$ starts in $[0, 4]^2$ by the stable state its trajectory reaches. **Separatrix** draws the saddle's stable manifold, computed as in C4 by running backwards in time from the saddle $\pm 10^{-6}\,\mathbf v_{\text{stable}}$. The demo in [*Newton for systems of equations*](../newton-systems/lec.qmd) shows the same plane (symmetric switch only) coloured by where **Newton** goes. This one shows where the **cell** goes.
 
 ```{=html}
 <link rel="stylesheet" href="../demos/dist/demo.css">
@@ -244,7 +246,7 @@ $(0.5, 0.3)$ ends in **U on**, $(0.3, 0.5)$ in **V on**, each within $10^{-3}$ a
 $(2, 2)$ lies on the diagonal, the stable manifold of the saddle. The run slides into the middle state and stays within $10^{-3}$ of it from $t = 3.3$ to $t = 100$; the readout warns that this is an **unstable** state. A simulation that "settled" here proves nothing about stability. $(2, 2.0001)$ also reaches the saddle quickly, but the tiny excess of V grows like $e^{0.191 t}$. It takes $\ln(0.1/10^{-4})/0.191 \approx 36$ time units to grow to a visible $0.1$, and the run reaches V on only at $t = 75.0$ (U on from $(0.5, 0.3)$ took 30.6). It ends in **V on** because $v_0 > u_0$: it starts above the separatrix $u = v$. This is the lecture's failure slide, live.
 :::
 
-**E3. (basins of the flow versus Newton's basins)** Tick **basins of the flow** and **separatrix**. Read the shares for the symmetric switch, then click **biased toggle** ($\alpha_v = 2.9$). Read the shares again and check the separatrix against C4 at $u = 1$ and $u = 2$. How does this picture differ from Newton's basins for the same plane (*Newton for systems of equations*: 21.8 / 57 / 21.2 % for the biased switch)?
+**E3. (basins of the flow versus Newton's basins)** Tick **basins of the flow** and **separatrix**. Read the shares for the symmetric switch, then click **biased toggle** ($\alpha_v = 2.9$). Read the shares again and check the separatrix against C4 at $u = 1$ and $u = 2$. How does this picture differ from Newton's basins for the same plane (21.8 / 57 / 21.2 % for the biased switch, lecture slide "Where Newton goes ≠ where the cell goes"; 21 / 57 / 21 % for the symmetric switch in *Newton for systems of equations*)?
 
 ::: {.callout-note collapse="true" title="Answer E3"}
 Symmetric: U on 50 %, V on 50 %, middle 0.6 %. The "middle" share is exactly the 160 grid cells on the diagonal $u = v$ (160 of 25 600 = 0.625 %), whose runs stay on the stable manifold and end at the saddle. The separatrix is the diagonal. Biased: U on 58 %, V on 42 %, middle 0 %. The separatrix now bends **above** the diagonal: it passes $u = 1$ at $v \approx 1.21$ and $u = 2$ at $v \approx 2.35$ (C4: 1.2144 and 2.3486). It is exactly the edge between green and purple. The flow's basins are two smooth regions separated by **one** curve, and the saddle has no basin of positive area. Newton's basins of the same equations interleave in thin bands, and the unstable middle state takes the largest share (57 %). Newton's basins belong to the **algorithm**, the flow's basins to the **cell**.
@@ -504,6 +506,7 @@ The starts on either side of the diagonal go to the state of the protein that st
 ### R
 
 ```r
+# toggle, J from the Background code
 classify <- function(A, tol = 1e-8) {
   lam <- eigen(A, only.values = TRUE)$values
   re <- Re(lam); im <- Im(lam)
@@ -555,6 +558,7 @@ for (i in 1:3) {
 ### Python
 
 ```python
+# toggle, J from the Background code
 
 def classify(A, tol=1e-8):
     lam = np.linalg.eigvals(A)
@@ -700,6 +704,7 @@ fn main() {
 ### R
 
 ```r
+# toggle, J from the Background code; which_state from C1
 library(rootSolve)
 fates <- function(rhs, states) {          # simulate from a 10 x 10 grid to t = 100
   g <- seq(0.2, 3.8, by = 0.4)
@@ -738,6 +743,7 @@ fates(toggle2, states2)
 ### Python
 
 ```python
+# toggle, J from the Background code; which_state from C1
 from scipy.optimize import root
 
 def fates(rhs, states):                  # simulate from a 10 x 10 grid to t = 100
@@ -855,6 +861,7 @@ The cell's fates: 45 / 10 / 45 for the symmetric switch, 58 / 0 / 42 for the bia
 ### R
 
 ```r
+# toggle2, states2 from C3; which_state from C1
 xs <- states2["middle", ]
 e <- eigen(jacobian.full(y = xs, func = toggle2))
 vs <- e$vectors[, e$values < 0]                      # stable direction of the saddle
@@ -883,6 +890,7 @@ for (u0 in c(0.1, 0.5, 1, 2, 3)) {
 ### Python
 
 ```python
+# F2, states2 from C3; fd_jacobian from C2; which_state from C1
 xs = states2["middle"]
 lam, vec = np.linalg.eig(fd_jacobian(F2, xs))
 vs = vec[:, lam < 0].ravel()                    # stable direction of the saddle
@@ -1177,6 +1185,7 @@ fn main() {
 ### R
 
 ```r
+# toggle, J from the Background code; fd_jacobian from C2
 for (al in c(3, 2.5, 2.1, 2.01, 2.001)) {
   alpha <- al
   xon <- c(al + sqrt(al^2 - 4), al - sqrt(al^2 - 4)) / 2      # "U on", exact
@@ -1208,6 +1217,7 @@ for (x in list(c(1, 1), c(1 + 1e-6, 1 - 1e-6), c(1 - 1e-6, 1 + 1e-6))) {
 ### Python
 
 ```python
+# toggle, J from the Background code; fd_jacobian from C2
 for al in [3, 2.5, 2.1, 2.01, 2.001]:
     alpha = al                                   # toggle and J read the global alpha
     xon = np.array([al + np.sqrt(al**2 - 4), al - np.sqrt(al**2 - 4)]) / 2   # "U on", exact
@@ -1314,7 +1324,7 @@ The slowest eigenvalue $-1 + 2/\alpha$ goes to 0 as $\alpha \to 2$, and the time
 
 ## Where this leads
 
-- *Stochastic simulation* (Part 8): with few molecules the toggle switch is noisy, and noise occasionally kicks a cell across the separatrix; the saddle and the eigenvalues at the stable states set how often.
-- *Nonlinear least squares and ODE fitting* (Part 9): fitting the parameters of models like these to time courses; the bifurcation at $\alpha = 2$ is one reason such fits can jump between qualitatively different behaviours.
-- *Reaction–diffusion and pattern formation* (Part 10): the same linear stability analysis, now for each spatial wavelength, explains Turing patterns.
+- [*Stochastic simulation*](../gillespie/lec.qmd) (Part 8): with few molecules the toggle switch is noisy, and noise occasionally kicks a cell across the separatrix; the saddle and the eigenvalues at the stable states set how often.
+- [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd) (Part 9): fitting the parameters of models like these to time courses; the bifurcation at $\alpha = 2$ is one reason such fits can jump between qualitatively different behaviours.
+- [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd) (Part 10): the same linear stability analysis, now for each spatial wavelength, explains Turing patterns.
 - **Numerical continuation** (AUTO, MatCont, BifurcationKit.jl) follows steady states and limit cycles as a parameter changes and detects bifurcations. It is outside this course; C6 and the lecture's outlook slide show the idea.

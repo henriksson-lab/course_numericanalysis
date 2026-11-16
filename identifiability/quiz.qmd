@@ -36,14 +36,14 @@ What do the columns $\partial C/\partial\log V$ and $\partial C/\partial\log F$ 
 
 ---
 
-**Q3.** Two fits from different starting values give $(k_a, k_e, V) = (1.015, 0.191, 20.2)$ and $(0.191, 1.015, 3.80)$, both with SSE $= 0.066467$. Is this a convergence problem? How do you decide which one to report?
+**Q3.** Two fits from different starting values give $(k_a, k_e, V) = (1.0151, 0.1906, 20.22)$ and $(0.1906, 1.0151, 3.796)$, both with SSE $= 0.06646744$. Is this a convergence problem? How do you decide which one to report?
 
 ::: {.callout-tip collapse="true" title="Hint"}
 Compare the SSE values, and look at which numbers have been swapped.
 :::
 
 ::: {.callout-note collapse="true" title="Answer"}
-No: both are exact minima with identical SSE, related by the flip-flop symmetry ($V' = Vk_e/k_a = 20.2\cdot0.191/1.015 = 3.80$). The concentration curve cannot decide. Outside knowledge must: an intravenous study gives $k_e$ directly; or the formulation is known to be absorbed faster than it is eliminated, in which case impose $k_a > k_e$ (e.g. fit $k_a = k_e + e^\delta$) and say so.
+No: both are exact minima with identical SSE, related by the flip-flop symmetry ($V' = Vk_e/k_a = 20.22\cdot0.1906/1.0151 = 3.796$). The concentration curve cannot decide. Outside knowledge must: an intravenous study gives $k_e$ directly; or the formulation is known to be absorbed faster than it is eliminated, in which case impose $k_a > k_e$ (e.g. fit $k_a = k_e + e^\delta$) and say so.
 :::
 
 ---
@@ -75,7 +75,7 @@ The patient has one $k_a$ and one $V$; the correlation describes the **estimates
 **Q6.** The singular values of the log-parameter Jacobian are $8.78$, $3.48$ and $1.01$, and $s = 0.086$. What is the standard error along each right singular vector? Why scale the columns by the parameter values first?
 
 ::: {.callout-tip collapse="true" title="Hint"}
-Noise along $v_i$ is amplified by $1/\sigma_i$ (*The SVD, rank deficiency and regularisation*).
+Noise along $v_i$ is amplified by $1/\sigma_i$ ([*The SVD, rank deficiency and regularisation*](../svd/lec.qmd)).
 :::
 
 ::: {.callout-note collapse="true" title="Answer"}
@@ -87,7 +87,7 @@ $s/\sigma_i = 0.0098$, $0.025$, $0.085$ (log units, so about 1 %, 2.5 % and 9 %)
 **Q7.** Why should you not compute standard errors with `solve(crossprod(J))` for a badly conditioned problem? What is the alternative?
 
 ::: {.callout-tip collapse="true" title="Hint"}
-*Pivoting, norms and conditioning* and the normal equations.
+[*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd) and the normal equations.
 :::
 
 ::: {.callout-note collapse="true" title="Answer"}
@@ -144,8 +144,8 @@ $(J^TJ)^{-1} = (R^TR)^{-1}$ with $R$ from the QR decomposition of $J$.
 ### R
 
 ```r
-fit <- nls(y ~ pk(t, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
-J   <- jacobian(function(p) pk(t, p[1], p[2], p[3]), coef(fit))
+fit <- nls(y ~ bateman(tt, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))
+J   <- jacobian(function(p) bateman(tt, p[1], p[2], p[3]), coef(fit))
 s2  <- deviance(fit) / (length(y) - length(coef(fit)))
 Cv  <- s2 * chol2inv(qr.R(qr(J)))        # = vcov(fit)
 se  <- sqrt(diag(Cv))
@@ -161,8 +161,8 @@ round(Cv / outer(se, se), 2)             # = cov2cor(Cv)
 ### Python
 
 ```python
-th, S, res = fit_pk(t, y, [0.5, 0.1, 10])
-J = jacobian(lambda p: pk(t, *p), th)
+th, S, res = fit_pk(tt, y, [0.5, 0.1, 10])
+J = jacobian(lambda p: bateman(tt, *p), th)
 s2 = S / (len(y) - len(th))
 Rinv = np.linalg.inv(np.linalg.qr(J, mode="r"))
 Cv = s2 * Rinv @ Rinv.T
@@ -184,10 +184,11 @@ print(np.round(Cv / np.outer(se, se), 2))
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -232,18 +233,18 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
 fn main() {
-    let r = resid(&T, &Y);
+    let r = resid(&TT, &Y);
     let th = levmar(&r, &[0.5, 0.1, 10.0]);
     let j = jacobian(&r, &th);
-    let s2 = sse(&r, &th) / (T.len() - th.len()) as f64;
+    let s2 = sse(&r, &th) / (TT.len() - th.len()) as f64;
     let rinv = j.qr().r().try_inverse().unwrap();
     let cv = &rinv * rinv.transpose() * s2;
     let se: Vec<f64> = (0..3).map(|i| cv[(i, i)].sqrt()).collect();

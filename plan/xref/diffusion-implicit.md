@@ -1,33 +1,33 @@
 # Cross-references from diffusion-implicit
 
-- diffusion-implicit/lec.qmd:33 -> diffusion-explicit (chamber, grid, FTCS), structured-sparse (Thomas algorithm), stiffness (backward Euler, stiffness, BDF) — speaker notes, plain text
-- diffusion-implicit/lec.qmd:65 -> diffusion-explicit (FTCS limit r <= 1/2), steady-state-2d (stricter limit in 2D) — notes
-- diffusion-implicit/lec.qmd:70 -> diffusion-explicit ("Recap: FTCS and its limit" slide, the chamber)
-- diffusion-implicit/lec.qmd:79 -> diffusion-explicit (chamber numbers), stiffness (stiffness argument) — notes
-- diffusion-implicit/lec.qmd:94 -> stiffness (backward Euler with Newton on the enzyme)
-- diffusion-implicit/lec.qmd:97 -> stiffness (y_{n+1} = y_n + h f(y_{n+1}), I - hJ), structured-sparse (diagonal dominance, no pivoting) — notes
-- diffusion-implicit/lec.qmd:115 -> structured-sparse (Thomas by hand) — notes
-- diffusion-implicit/lec.qmd:131 -> structured-sparse (thomas(a, b, c, d) signature and cost)
-- diffusion-implicit/lec.qmd:135 -> structured-sparse (vector convention a[1], c[m] unused) — notes
-- diffusion-implicit/lec.qmd:156 -> diffusion-explicit (D, L, N, x, exact() Fourier series) — notes
-- diffusion-implicit/lec.qmd:167 -> stiffness (A-stability on the negative real axis) — notes
-- diffusion-implicit/lec.qmd:189 -> quadrature (trapezoidal vs rectangle rule; "Numerical integration") — notes
-- diffusion-implicit/lec.qmd:235 -> diffusion-explicit (refinement with r fixed shows order 2) — notes
-- diffusion-implicit/lec.qmd:271 -> convergence-cost (reading the order off a log-log slope) — notes
-- diffusion-implicit/lec.qmd:291 -> quadrature (Richardson extrapolation) — notes
-- diffusion-implicit/lec.qmd:300 -> stiffness, runge-kutta, euler (Part 8 ODE solvers, plain "Part 8")
-- diffusion-implicit/lec.qmd:305 -> diffusion-explicit (compartment model, eigenvalue slide) — notes
-- diffusion-implicit/lec.qmd:331 -> stiffness (ode45 riding its stability limit on the enzyme), diffusion-explicit (ghost points) — notes
-- diffusion-implicit/lec.qmd:342 -> fem-outlook (finite volumes / finite elements + method of lines) — notes
-- diffusion-implicit/lec.qmd:356 -> reaction-diffusion (decay length sqrt(D/k)), structured-sparse (morphogen in a row of cells, sqrt(D/k) cells) — notes
-- diffusion-implicit/lec.qmd:391 -> diffusion-explicit (checklist "Before you trust a diffusion simulation") — notes
-- diffusion-implicit/lec.qmd:402 -> steady-state-2d (Next)
-- diffusion-implicit/lec.qmd:405 -> steady-state-2d, advection-diffusion ("Flow plus diffusion"), reaction-diffusion (IMEX splitting) — notes
-- diffusion-implicit/exercise.qmd:28 -> diffusion-explicit (Background fact 1: the chamber and exact())
-- diffusion-implicit/exercise.qmd:31 -> structured-sparse (Background fact 4: thomas)
-- diffusion-implicit/exercise.qmd:45 (and every Rust thomas doc comment in the tabs) -> structured-sparse (thomas function)
-- diffusion-implicit/exercise.qmd:"Where this leads" -> steady-state-2d, advection-diffusion, reaction-diffusion, iterative-solvers
-- (lec and exercise also cite literature [M1], [M2], [H1], [H2] from contentplan.md "Literature sources for Part 10")
+- diffusion-implicit/lec.qmd:33 -> diffusion-explicit (chamber, grid, FTCS), structured-sparse (Thomas algorithm), stiffness (backward Euler, stiffness, BDF) — speaker notes, plain text [fixed: linked diffusion-explicit, structured-sparse, stiffness]
+- diffusion-implicit/lec.qmd:65 -> diffusion-explicit (FTCS limit r <= 1/2), steady-state-2d (stricter limit in 2D) — notes [fixed: linked steady-state-2d; FTCS 2D limit 1/4 confirmed in its notes]
+- diffusion-implicit/lec.qmd:70 -> diffusion-explicit ("Recap: FTCS and its limit" slide, the chamber) [fixed: linked; eigenvalue range of A (−π²Δx²/L² .. −4) matches −0.00395 .. −3.996]
+- diffusion-implicit/lec.qmd:79 -> diffusion-explicit (chamber numbers), stiffness (stiffness argument) — notes [fixed: linked stiffness; added sentence that the grid is the same node grid (x_i = iΔx, boundary values on end nodes, µm, s)]
+- diffusion-implicit/lec.qmd:94 -> stiffness (backward Euler with Newton on the enzyme) [fixed: linked; enzyme with Newton is in stiffness]
+- diffusion-implicit/lec.qmd:97 -> stiffness (y_{n+1} = y_n + h f(y_{n+1}), I - hJ), structured-sparse (diagonal dominance, no pivoting) — notes [fixed: linked structured-sparse; I − hJ matches stiffness]
+- diffusion-implicit/lec.qmd:115 -> structured-sparse (Thomas by hand) — notes [fixed: linked]
+- diffusion-implicit/lec.qmd:131 -> structured-sparse (thomas(a, b, c, d) signature and cost) [fixed: linked; signature, a[1]/c[m] unused and ≈8N operations match structured-sparse]
+- diffusion-implicit/lec.qmd:135 -> structured-sparse (vector convention a[1], c[m] unused) — notes [ok]
+- diffusion-implicit/lec.qmd:156 -> diffusion-explicit (D, L, N, x, exact() Fourier series) — notes [ok: D, L, N, exact series and c(100 µm, 60 s) = 0.765 match]
+- diffusion-implicit/lec.qmd:167 -> stiffness (A-stability on the negative real axis) — notes [fixed: linked; A-stability defined in stiffness]
+- diffusion-implicit/lec.qmd:189 -> quadrature (trapezoidal vs rectangle rule; "Numerical integration") — notes [fixed: linked quadrature]
+- diffusion-implicit/lec.qmd:235 -> diffusion-explicit (refinement with r fixed shows order 2) — notes [ok]
+- diffusion-implicit/lec.qmd:271 -> convergence-cost (reading the order off a log-log slope) — notes [fixed: linked convergence-cost]
+- diffusion-implicit/lec.qmd:291 -> quadrature (Richardson extrapolation) — notes [fixed: Richardson was introduced in finite-differences (quadrature recaps it); now links Numerical differentiation, "used again in Numerical integration"]
+- diffusion-implicit/lec.qmd:300 -> stiffness, runge-kutta, euler (Part 8 ODE solvers, plain "Part 8") [ok: plain "Part 8"]
+- diffusion-implicit/lec.qmd:305 -> diffusion-explicit (compartment model, eigenvalue slide) — notes [ok: compartment-model reading is in diffusion-explicit notes]
+- diffusion-implicit/lec.qmd:331 -> stiffness (ode45 riding its stability limit on the enzyme), diffusion-explicit (ghost points) — notes [fixed: linked stiffness; ode45 "rides the stability limit" on the enzyme is stated there]
+- diffusion-implicit/lec.qmd:342 -> fem-outlook (finite volumes / finite elements + method of lines) — notes [fixed: linked fem-outlook (finite volumes, finite elements)]
+- diffusion-implicit/lec.qmd:356 -> reaction-diffusion (decay length sqrt(D/k)), structured-sparse (morphogen in a row of cells, sqrt(D/k) cells) — notes [fixed: linked reaction-diffusion and structured-sparse (sqrt(D/k) = 10 cells); added embryo grid sentence (N = 200, ghost points at both tips, all nodes unknown, °C)]
+- diffusion-implicit/lec.qmd:391 -> diffusion-explicit (checklist "Before you trust a diffusion simulation") — notes [ok]
+- diffusion-implicit/lec.qmd:402 -> steady-state-2d (Next) [fixed: linked]
+- diffusion-implicit/lec.qmd:405 -> steady-state-2d, advection-diffusion ("Flow plus diffusion"), reaction-diffusion (IMEX splitting) — notes [fixed: linked steady-state-2d, advection-diffusion, reaction-diffusion]
+- diffusion-implicit/exercise.qmd:28 -> diffusion-explicit (Background fact 1: the chamber and exact()) [fixed: linked; added grid sentence in Background facts]
+- diffusion-implicit/exercise.qmd:31 -> structured-sparse (Background fact 4: thomas) [fixed: linked]
+- diffusion-implicit/exercise.qmd:45 (and every Rust thomas doc comment in the tabs) -> structured-sparse (thomas function) [ok: code comments left as plain text]
+- diffusion-implicit/exercise.qmd:"Where this leads" -> steady-state-2d, advection-diffusion, reaction-diffusion, iterative-solvers [fixed: linked all four; "backward Euler and Crank–Nicolson carry over" to Flow plus diffusion corrected: that unit uses backward Euler (implicit marching) only]
+- (lec and exercise also cite literature [M1], [M2], [H1], [H2] from contentplan.md "Literature sources for Part 10") [ok: [M1], [M2], [H1], [H2] match contentplan.md; [H2] cited only in the exercise Goal]
 
 ## Running examples defined here
 
@@ -60,3 +60,8 @@
   and diffusion-explicit/lec.qmd (its plan/xref file did not exist yet when this unit was
   written). Notation follows that unit: A for the (1,-2,1) matrix, r = D dt/dx^2, N intervals.
 - The recap slide quotes diffusion-explicit's eigenvalue range -0.039 to -40 per s.
+
+
+## Pass 2
+
+- Solution code tabs (R, Python) now start with a comment naming the Background helpers they use (thomas, be_step, cn_step, exact).

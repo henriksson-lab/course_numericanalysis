@@ -23,12 +23,12 @@ The by-hand part needs pen, paper and a calculator. The code part checks the han
 
 ## Background
 
-**Facts used below.** Grid $x_i = i\,\Delta x$, $i = 0, \dots, N$; $c_i^n \approx c(x_i, t_n)$; mesh ratio $r = D\,\Delta t/\Delta x^2$; $A$ = tridiagonal matrix with $-2$ on the diagonal and $1$ beside it.
+**Facts used below.** Grid $x_i = i\,\Delta x$, $i = 0, \dots, N$; $c_i^n \approx c(x_i, t_n)$; units µm and s. This is the node grid of the previous unit: boundary values sit on the end nodes, the $N - 1$ interior nodes are the unknowns. The embryo (B5, C5) and the PCR wall (C6) use the same kind of nodes, but an end with no flux or heat loss is an unknown too (ghost point, fact 8), and the variable is a temperature in °C; mesh ratio $r = D\,\Delta t/\Delta x^2$; $A$ = tridiagonal matrix with $-2$ on the diagonal and $1$ beside it.
 
-1. **The chamber** (from *The diffusion (heat) equation by finite differences*): a channel of length $L = 500$ µm, small molecule $D = 1000$ µm²/s, $N = 50$ ($\Delta x = 10$ µm), source $c_0 = 1$, sink $c_N = 0$, empty at $t = 0$. `exact(x, t, L, D)` is its Fourier-series solution.
+1. **The chamber** (from [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd)): a channel of length $L = 500$ µm, small molecule $D = 1000$ µm²/s, $N = 50$ ($\Delta x = 10$ µm), source $c_0 = 1$, sink $c_N = 0$, empty at $t = 0$. `exact(x, t, L, D)` is its Fourier-series solution.
 2. **Backward Euler**: $-r\,c_{i-1}^{n+1} + (1 + 2r)\,c_i^{n+1} - r\,c_{i+1}^{n+1} = c_i^n$, i.e. $(I - rA)\,\mathbf c^{n+1} = \mathbf c^n + \mathbf b$; the boundary values enter $\mathbf b$ as $r c_0$ (first row) and $r c_N$ (last row).
 3. **Crank–Nicolson**: $-\tfrac r2 c_{i-1}^{n+1} + (1 + r)\,c_i^{n+1} - \tfrac r2 c_{i+1}^{n+1} = c_i^n + \tfrac r2\bigl(c_{i-1}^n - 2c_i^n + c_{i+1}^n\bigr)$, plus $\tfrac r2 c_0$ and $\tfrac r2 c_N$ in the first and last rows.
-4. **Thomas** `thomas(a, b, c, d)` from *Structure: symmetric, banded, sparse*: sub-diagonal (first entry unused), diagonal, super-diagonal (last entry unused), right-hand side; about $8N$ operations.
+4. **Thomas** `thomas(a, b, c, d)` from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd): sub-diagonal (first entry unused), diagonal, super-diagonal (last entry unused), right-hand side; about $8N$ operations.
 5. **Growth factors** for a mode with $z = 4r\sin^2(\theta/2)$ ($\theta = \pi$: the zigzag, $z = 4r$): exact $e^{-z}$, FTCS $1 - z$, backward Euler $1/(1 + z)$, Crank–Nicolson $(1 - z/2)/(1 + z/2)$.
 6. **Exact sine mode**: with $c = 0$ at both ends, $c(x, 0) = \sin(\pi x/L)$ gives $c(x, t) = e^{-D(\pi/L)^2 t}\sin(\pi x/L)$.
 7. **Error** at a fixed time $\approx C_t\,\Delta t^p + C_x\,\Delta x^2$, $p = 1$ (backward Euler), $p = 2$ (Crank–Nicolson). Halving a step divides its part by $2^p$; $\log_2$ of the error ratio is the **observed order**.
@@ -409,6 +409,7 @@ Doubling the thickness quadruples the time ($H^2$); PDMS is 7 times slower than 
 ### R
 
 ```r
+# uses be_step, cn_step, exact from the Background code at the top of this page
 c0 <- c(1, 0, 0, 0, 0)                      # B1: N = 4, r = 1
 c1 <- be_step(c0, 1)
 c1 * 21
@@ -433,6 +434,7 @@ for (dt in c(4, 1, 0.25)) {
 ### Python
 
 ```python
+# uses be_step, cn_step, exact from the Background code at the top of this page
 c0 = np.array([1.0, 0, 0, 0, 0])                 # B1: N = 4, r = 1
 c1 = be_step(c0, 1)
 print(c1 * 21)
@@ -561,6 +563,7 @@ fn main() {
 ### R
 
 ```r
+# uses be_step, cn_step from the Background code at the top of this page
 D <- 1000; L <- 500
 sine_err <- function(N, dt, step, tend = 30) {
   dx <- L / N; x <- seq(0, L, by = dx)
@@ -596,6 +599,7 @@ lines(dts, e_cn, type = "b", col = 2); lines(dts, e_cn50, type = "b", col = 2, l
 ### Python
 
 ```python
+# uses be_step, cn_step from the Background code at the top of this page
 D, L = 1000.0, 500.0
 def sine_err(N, dt, step, tend=30):
     dx = L / N; x = np.linspace(0, L, N + 1)
@@ -728,6 +732,7 @@ Backward Euler: order 1 all the way. Crank–Nicolson on the fine grid: order 2 
 ### R
 
 ```r
+# uses be_step, cn_step, exact from the Background code at the top of this page
 D <- 1000; L <- 500; N <- 50; dx <- L / N
 x <- seq(0, L, by = dx)
 r <- D * 4 / dx^2                                 # dt = 4 s, r = 40
@@ -754,6 +759,7 @@ c(plain = max(abs(c - ce)), rannacher = max(abs(cr - ce)), small = max(abs(cs - 
 ### Python
 
 ```python
+# uses be_step, cn_step, exact from the Background code at the top of this page
 D, L, N = 1000.0, 500.0, 50
 dx = L / N
 x = np.linspace(0, L, N + 1)
@@ -879,6 +885,7 @@ fn main() {
 ### R
 
 ```r
+# uses exact from the Background code at the top of this page
 library(deSolve)
 D <- 1000; L <- 500
 mol <- function(N, method, rtol = 1e-6, atol = 1e-6) {
@@ -904,6 +911,7 @@ rbind(N50_tight = mol(50, "lsoda", 1e-10, 1e-10), N200_tight = mol(200, "lsoda",
 ### Python
 
 ```python
+# uses exact from the Background code at the top of this page
 from scipy.integrate import solve_ivp
 from scipy import sparse
 D, L = 1000.0, 500.0
@@ -1045,6 +1053,7 @@ fn main() {
 ### R
 
 ```r
+# uses thomas from the Background code at the top of this page
 D <- 1.4e5; L <- 500                              # µm^2/s, µm
 tau_of <- function(R) R^2 / (2.405^2 * D)         # exchange time (s)
 embryo_steady <- function(N, R = 100) {           # steady T on nodes 0..N
@@ -1075,6 +1084,7 @@ sapply(c(50, 100, 150), function(R) width(embryo_steady(N, R), x))
 ### Python
 
 ```python
+# uses thomas from the Background code at the top of this page
 D, L = 1.4e5, 500.0                               # µm^2/s, µm
 def tau_of(R): return R**2 / (2.405**2 * D)       # exchange time (s)
 def embryo_steady(N, R=100.0):                    # steady T on nodes 0..N
@@ -1189,6 +1199,7 @@ fn main() {
 ### R
 
 ```r
+# uses thomas from the Background code at the top of this page
 mat <- list(PDMS  = c(k = 0.15, rho = 970,  cp = 1460),   # W/(m K), kg/m^3, J/(kg K)
             glass = c(k = 1.1,  rho = 2200, cp = 700))
 alpha <- sapply(mat, function(p) p[["k"]] / (p[["rho"]] * p[["cp"]]) * 1e6)  # mm^2/s
@@ -1225,6 +1236,7 @@ sapply(names(mat), function(nm) sapply(c(H1mm = 1, H2mm = 2), function(H)
 ### Python
 
 ```python
+# uses thomas from the Background code at the top of this page
 mat = {"PDMS": (0.15, 970, 1460), "glass": (1.1, 2200, 700)}   # k, rho, cp (SI)
 alpha = {nm: k / (rho * cp) * 1e6 for nm, (k, rho, cp) in mat.items()}   # mm^2/s
 print(alpha)
@@ -1324,7 +1336,7 @@ fn main() {
 
 ## Where this leads
 
-- **Steady state in two dimensions** (next unit): drop time completely and solve $D\nabla^2 c = $ sources in one step, as `embryo_steady` did in 1D. In 2D the matrix is sparse but no longer tridiagonal.
-- **Flow plus diffusion**: adding flow gives a non-symmetric matrix and new failure modes (numerical diffusion, wiggles); backward Euler and Crank–Nicolson carry over.
-- **Reaction–diffusion and pattern formation**: the exchange term of the embryo is a linear reaction; with nonlinear reactions one treats diffusion implicitly (one Thomas solve) and the reaction explicitly. The decay length $\sqrt{D/k}$ returns for morphogen gradients, including the *Drosophila* experiment of [M1].
-- **Iterative linear solvers in depth** (optional): when a 2D or 3D grid is too large for a direct solve at each implicit step.
+- [*Steady state in two dimensions*](../steady-state-2d/lec.qmd) (next unit): drop time completely and solve $D\nabla^2 c = $ sources in one step, as `embryo_steady` did in 1D. In 2D the matrix is sparse but no longer tridiagonal.
+- [*Flow plus diffusion*](../advection-diffusion/lec.qmd): adding flow gives a non-symmetric matrix and new failure modes (numerical diffusion, wiggles); backward Euler with one Thomas solve per step carries over, as the step that marches the flow down a channel.
+- [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd): the exchange term of the embryo is a linear reaction; with nonlinear reactions one treats diffusion implicitly (one Thomas solve) and the reaction explicitly. The decay length $\sqrt{D/k}$ returns for morphogen gradients, including the *Drosophila* experiment of [M1].
+- [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (optional): when a 2D or 3D grid is too large for a direct solve at each implicit step.

@@ -23,15 +23,15 @@ format:
 
 Fitting a model means finding the parameters that make a misfit (a sum of squares, a negative log-likelihood) as small as possible. With more than one parameter we need new tools.
 
-- The **gradient** (the slopes in every direction) and the **Hessian** (the curvatures). Both are Jacobians, which you met in *Newton for systems of equations*.
+- The **gradient** (the slopes in every direction) and the **Hessian** (the curvatures). Both are Jacobians, which you met in [*Newton for systems of equations*](../newton-systems/lec.qmd).
 - **Steepest descent** with a **backtracking line search**, and why it **zig-zags** when the Hessian is badly conditioned.
 - **Newton's method** for minimisation: fast near the minimum, unreliable far from it.
 - **Quasi-Newton (BFGS, L-BFGS)**: build the curvature from gradients. **Nelder–Mead**: no derivatives at all.
 - What `optim` and `scipy.optimize.minimize` do, and why **scaling** and **starting values** matter. One slide on **stochastic gradient descent**.
-- Biology: fitting a **4-parameter logistic dose–response curve** (EC50, Hill slope, top, bottom). We also explain the growth-curve failure from *Why numerical analysis?*.
+- Biology: fitting a **4-parameter logistic dose–response curve** (EC50, Hill slope, top, bottom). We also explain the growth-curve failure from [*Why numerical analysis?*](../intro/lec.qmd).
 
 ::: notes
-This is the central unit of Part 9. Everything the students do when they call optim, nls or scipy.optimize.minimize happens here. The previous unit, Optimisation in one dimension, gave the one-variable picture: a minimum has f' = 0 and f'' > 0, golden section and Brent need no derivatives, and a line search picks a step along a direction. Today we go to several variables. The new mathematics is small: the gradient and the Hessian are Jacobians, so the students already know how to compute and check them. The real content is the behaviour of the methods: which ones are slow, which ones fail, and how to tell.
+This is the central unit of Part 9. Everything the students do when they call optim, nls or scipy.optimize.minimize happens here. The previous unit, Optimisation in one dimension, gave the one-variable picture: a minimum has f' = 0 and f'' > 0, golden section and Brent need no derivatives, and Newton x - f'/f'' must check that f'' > 0 and that f decreases, shortening the step if not. That last check becomes today's line search. Today we go to several variables. The new mathematics is small: the gradient and the Hessian are Jacobians, so the students already know how to compute and check them. The real content is the behaviour of the methods: which ones are slow, which ones fail, and how to tell.
 :::
 
 ## A biology problem: a dose–response curve {.smaller}
@@ -80,11 +80,11 @@ The starting guess comes from the plot: the response runs from about 0 to about 
 
 ## What we already have {.smaller}
 
-From *Optimisation in one dimension*:
+From [*Optimisation in one dimension*](../optimisation-1d/lec.qmd):
 
-- At a minimum of $f(x)$: $f'(x^*) = 0$ and $f''(x^*) > 0$. A **line search** finds a good step along one direction.
+- At a minimum of $f(x)$: $f'(x^*) = 0$ and $f''(x^*) > 0$. Newton $x - f'/f''$ is fast, but only safe with checks: $f'' > 0$, and $f$ must **decrease** (else shorten the step).
 
-From *Newton for systems of equations*:
+From [*Newton for systems of equations*](../newton-systems/lec.qmd):
 
 - The **Jacobian** $J$ of $\mathbf F: \mathbb R^n \to \mathbb R^m$ has entries $J_{ij} = \partial F_i / \partial x_j$ (row = output, column = input).
 - Newton for $\mathbf F(\mathbf x) = \mathbf 0$: solve $J\,\boldsymbol\delta = -\mathbf F$, set $\mathbf x \leftarrow \mathbf x + \boldsymbol\delta$. Quadratic convergence near the root.
@@ -93,7 +93,7 @@ From *Newton for systems of equations*:
 Today: **minimum of $f(\mathbf x)$** = a point where all slopes are zero and the surface curves **up** in every direction.
 
 ::: notes
-One slide of recap. Two facts carry over: the one-variable conditions for a minimum, and Newton's method as "linearise, then solve a linear system". The plan for the rest of the lecture is to write "all slopes zero" as a system of n equations, the gradient equal to zero, and to reuse the Jacobian machinery on it. The idea of a line search from the previous unit comes back as the safeguard that makes every method in this lecture work from a poor start.
+One slide of recap. Two facts carry over: the one-variable conditions for a minimum, and Newton's method as "linearise, then solve a linear system". The plan for the rest of the lecture is to write "all slopes zero" as a system of n equations, the gradient equal to zero, and to reuse the Jacobian machinery on it. The check from the previous unit, "if f does not decrease, shorten the step", becomes the line search: the safeguard that makes every method in this lecture work from a poor start. Brent and golden section could also do the one-dimensional search along a direction, but an exact search is rarely worth its cost.
 :::
 
 ## The gradient: all slopes at once {.smaller}
@@ -161,7 +161,7 @@ $$f(\mathbf x + \mathbf s) \approx f(\mathbf x) + \nabla f^\mathsf{T}\mathbf s +
 - Here: eigenvalues $4 \pm \sqrt5 = 6.24,\ 1.76$, both positive. One positive, one negative: a **saddle**. Both negative: a maximum.
 
 ::: notes
-The one-variable conditions f' = 0, f'' > 0 become gradient = 0 and Hessian positive definite. The Hessian is symmetric because mixed partial derivatives do not depend on the order (for smooth f). For a 2 by 2 matrix: positive definite if and only if the determinant and the trace are both positive; here det = 11, trace = 8. The quadratic model is the one from the Taylor table in Why numerical analysis?, now with vectors: s^T H s is the curvature along the direction s, times the length squared. Eigenvectors of H are the directions of largest and smallest curvature, the axes of the elliptical contours.
+The one-variable conditions f' = 0, f'' > 0 become gradient = 0 and Hessian positive definite. The Hessian is symmetric because mixed partial derivatives do not depend on the order (for smooth f). For a 2 by 2 matrix: positive definite if and only if the determinant and the trace are both positive; here det = 11, trace = 8. The quadratic model is the Optimisation row of the Taylor table ("Where Taylor comes back") in Why numerical analysis?, now with vectors: s^T H s is the curvature along the direction s, times the length squared. Eigenvectors of H are the directions of largest and smallest curvature, the axes of the elliptical contours.
 :::
 
 ## The Hessian at the 4PL minimum {.smaller}
@@ -181,7 +181,7 @@ max(ev) / min(ev)
 ```
 
 - All four eigenvalues positive: a true **minimum**.
-- Curvature differs by a factor **550** between directions: the valley is long and narrow. This is the **condition number** $\kappa(H)$ from *Pivoting, norms and conditioning*.
+- Curvature differs by a factor **550** between directions: the valley is long and narrow. This is the **condition number** $\kappa(H)$ from [*Pivoting, norms and conditioning*](../pivoting-conditioning/lec.qmd).
 
 ::: notes
 We get the Hessian as the finite-difference Jacobian of the analytic gradient: four extra gradient evaluations. This is exactly the finite-difference Jacobian of Newton for systems, applied to F = gradient. numDeriv::hessian(sse, p) also works and needs only sse, at more cost. The eigenvalues say: along EC50 and Hill (the large entries 3611 and 3701), the SSE is steep; along bottom and top, it is shallow, with curvature about 7 to 10. Part of this is units: a change of 1 µM in EC50 is a huge change, a change of 1 % in top is a small one. Condition number of a symmetric positive definite matrix = largest over smallest eigenvalue. We will see that kappa decides the speed of steepest descent, and in Identifiability and uncertainty of fitted parameters, the same Hessian gives the standard errors.
@@ -232,7 +232,7 @@ sd_armijo(sse, grad_sse, p0)$steps
 - `isTRUE` also rejects a step that gives `NaN`. Never diverges; but **3453 steps**.
 
 ::: notes
-The Armijo (sufficient decrease) condition asks for a decrease of at least a small fraction c of what the linear model predicts: alpha times the squared gradient length. Halving guarantees that some step is accepted, because for small enough alpha the linear model is accurate. This is the backtracking line search from Optimisation in one dimension, used here along the direction -g. Production codes also enforce a curvature condition (the Wolfe conditions) so that steps are not too short, and interpolate rather than halve. The stopping tolerance 1e-4 on the gradient length is about 1e-7 of its starting size; asking for much less runs into rounding, because a line search on f cannot see decreases below about eps times f (about 7e-14 here). A real code should also cap the number of halvings.
+The Armijo (sufficient decrease) condition asks for a decrease of at least a small fraction c of what the linear model predicts: alpha times the squared gradient length. Halving guarantees that some step is accepted, because for small enough alpha the linear model is accurate. It turns the check of Optimisation in one dimension ("f must decrease, otherwise shorten the step") into a rule, used here along the direction -g. Production codes also enforce a curvature condition (the Wolfe conditions) so that steps are not too short, and interpolate rather than halve. The stopping tolerance 1e-4 on the gradient length is about 1e-7 of its starting size; asking for much less runs into rounding, because a line search on f cannot see decreases below about eps times f (about 7e-14 here). A real code should also cap the number of halvings.
 :::
 
 ## Why steepest descent zig-zags {.smaller}
@@ -321,7 +321,7 @@ Far from the minimum the SSE is not shaped like a bowl. With EC50 = 10 µM the m
 
 ## Quasi-Newton: learn the curvature from gradients {.smaller}
 
-The secant idea from *Newton and secant methods*: replace $f''$ by a slope of $f'$ between two points. In $n$ dimensions, with step $\mathbf s_k = \mathbf x_{k+1} - \mathbf x_k$ and gradient change $\mathbf y_k = \nabla f_{k+1} - \nabla f_k$:
+The secant idea from [*Newton and secant methods*](../newton/lec.qmd): replace $f''$ by a slope of $f'$ between two points. In $n$ dimensions, with step $\mathbf s_k = \mathbf x_{k+1} - \mathbf x_k$ and gradient change $\mathbf y_k = \nabla f_{k+1} - \nabla f_k$:
 
 $$\textbf{secant condition:}\quad B_{k+1}\,\mathbf y_k = \mathbf s_k \qquad (B \approx H^{-1})$$
 
@@ -464,7 +464,7 @@ Same data, same model, only the dose unit changed. Two separate problems. First,
 
 ## Back to the growth curve {.smaller}
 
-*Why numerical analysis?*: logistic fit, time in **minutes**, start $r = 0.5$ ("per hour" by habit).
+[*Why numerical analysis?*](../intro/lec.qmd): logistic fit, time in **minutes**, start $r = 0.5$ ("per hour" by habit).
 
 ```r
 grad(sse_min, c(r = 0.5, K = 1, N0 = 0.05))      # time in minutes
@@ -477,7 +477,7 @@ optim(c(r = 0.5, K = 1, N0 = 0.05), sse_h)$par   # time in hours
 # 0.5241071 1.1913604 0.0165278
 ```
 
-- At $r = 0.5$/min the model reaches $K$ within minutes, long before the first reading: $\partial\,\mathrm{SSE}/\partial r \approx 4\times10^{-23}$. BFGS never moves $r$; Nelder–Mead wanders on the plateau until its corner values agree.
+- At $r = 0.5$/min the model reaches $K$ within minutes, long before the first reading: $\partial\,\mathrm{SSE}/\partial r \approx 4\times10^{-23}$. BFGS never moves $r$; Nelder–Mead wanders on the plateau until its corner values agree (to $r = 0.68$, SSE 2.23, as in the intro).
 - In hours the natural guess is right, and $\kappa$ drops from $1.2\times10^4$ to $1.0\times10^3$. **Choose units so parameters are near 1.**
 
 ::: notes
@@ -525,7 +525,7 @@ One slide only, because students will meet it in machine learning. The noise is 
 - **Units and scale**: parameters near 1 (µM, hours, log EC50), or `parscale`.
 - **Start from the data**, and **multistart**: do the answers agree?
 - **At the answer:** gradient near 0 and Hessian eigenvalues all positive (a minimum, not a saddle or plateau). A huge $\kappa$ warns of poorly determined parameters.
-- **Method:** smooth with gradient → BFGS (L-BFGS for many parameters); noisy or non-smooth → Nelder–Mead; sum of squares → *Nonlinear least squares and ODE fitting*.
+- **Method:** smooth with gradient → BFGS (L-BFGS for many parameters); noisy or non-smooth → Nelder–Mead; sum of squares → [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd).
 
 ::: notes
 A list to keep next to the keyboard. Each item caught one of today's failures: the wrong gradient (exercise), the iteration limit (CG), the flat fits (nM start, growth curve), the bad conditioning (nM, minutes), the bad starts (Nelder-Mead multistart), and the saddle (Newton from EC50 = 10). The Hessian at the answer comes back in Identifiability and uncertainty of fitted parameters, where its inverse gives standard errors; a near-zero eigenvalue means a parameter combination the data do not determine.
@@ -539,7 +539,7 @@ A list to keep next to the keyboard. Each item caught one of today's failures: t
 - **BFGS** builds $H^{-1}$ from gradient differences; **L-BFGS** stores only a few of them. **Nelder–Mead** uses only $f$.
 - `optim` (default Nelder–Mead) and `minimize` (default BFGS) report "converged" when a stopping rule is met. Scale the parameters, start from the data, multistart, check.
 
-**Next:** *Nonlinear least squares and ODE fitting*: Gauss–Newton and Levenberg–Marquardt use the structure of a sum of squares.
+**Next:** [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd): Gauss–Newton and Levenberg–Marquardt use the structure of a sum of squares.
 
 ::: notes
 Recap the three families: first-order (steepest descent, SGD), second-order (Newton), and in between (quasi-Newton), plus the derivative-free simplex. The SSE has special structure: its Hessian is approximately 2 J^T J, using only the model Jacobian we already computed for the gradient. That is Gauss-Newton, and adding mu I to it is Levenberg-Marquardt, the method behind nls and minpack.lm: the next unit.

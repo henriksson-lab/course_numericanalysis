@@ -92,9 +92,10 @@ Brief: plan/xref-brief.md. Reports: plan/pass2/<group>.md.
 |--|--|--|
 | parts1-2 | 1–7 | running |
 | parts3-4 | 8–12 | running |
-| parts5-6 | 13–17 | running |
+| parts5-6 | 13–17 | done |
 | parts7-8a | 18–22 | running |
 | parts8b-9a | 23–26 | running |
 | part9b | 27–30 | running |
 | part10a | 31–34 | running |
 | part10b-11 | 35–37 | waits for reaction-diffusion demo |
+- pass2 parts5-6: check eigen-algorithms recap slide (dense two-column) for overflow. Optional: finite-differences note that splines used sparser/noisier run; quadrature note on trapezoid for periodic functions.

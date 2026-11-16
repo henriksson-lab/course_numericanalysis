@@ -3,10 +3,11 @@
 use nalgebra::{DMatrix, DVector};
 
 // One-compartment model with oral absorption, dose D = 100 mg (mg/L)
-fn pk(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
-    100.0 * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
+const D: f64 = 100.0; // oral dose, mg
+fn bateman(t: f64, ka: f64, ke: f64, v: f64) -> f64 {
+    D * ka / (v * (ka - ke)) * ((-ke * t).exp() - (-ka * t).exp())
 }
-const T: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+const TT: [f64; 12] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 const Y: [f64; 12] = [1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61];
 
 // Central-difference Jacobian of f at p (like numDeriv::jacobian, less refined)
@@ -51,16 +52,16 @@ fn levmar(r: &dyn Fn(&[f64]) -> Vec<f64>, p0: &[f64]) -> Vec<f64> {
     p
 }
 
-// Residuals y - C(t) for the one-compartment model at the sample times tt
-fn resid(tt: &[f64], yy: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
-    let (tt, yy) = (tt.to_vec(), yy.to_vec());
-    move |p: &[f64]| tt.iter().zip(&yy).map(|(ti, yi)| yi - pk(*ti, p[0], p[1], p[2])).collect()
+// Residuals y - C(t) for the one-compartment model at the sample times ts
+fn resid(ts: &[f64], ys: &[f64]) -> impl Fn(&[f64]) -> Vec<f64> {
+    let (ts, ys) = (ts.to_vec(), ys.to_vec());
+    move |p: &[f64]| ts.iter().zip(&ys).map(|(ti, yi)| yi - bateman(*ti, p[0], p[1], p[2])).collect()
 }
 fn sse(r: &dyn Fn(&[f64]) -> Vec<f64>, p: &[f64]) -> f64 { r(p).iter().map(|x| x * x).sum() }
 
 // fix ka, re-fit ke and V; return the minimal SSE
-fn profile_ka(ka: f64, tt: &[f64], yy: &[f64]) -> f64 {
-    let r = |q: &[f64]| -> Vec<f64> { tt.iter().zip(yy).map(|(t, y)| y - pk(*t, ka, q[0], q[1])).collect() };
+fn profile_ka(ka: f64, ts: &[f64], ys: &[f64]) -> f64 {
+    let r = |q: &[f64]| -> Vec<f64> { ts.iter().zip(ys).map(|(t, y)| y - bateman(*t, ka, q[0], q[1])).collect() };
     let q = levmar(&r, &[0.2, 20.0]);
     sse(&r, &q)
 }
@@ -78,18 +79,18 @@ fn bisect(f: &dyn Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
 fn main() {
     let grid = [0.3, 0.5, 0.7, 1.0, 1.5, 2.0, 5.0, 10.0, 30.0];
     for start in [0, 6] {                      // all samples; samples from 3 h
-        let (tt, yy) = (&T[start..], &Y[start..]);
-        let r = resid(tt, yy);
+        let (ts, ys) = (&TT[start..], &Y[start..]);
+        let r = resid(ts, ys);
         let th = levmar(&r, &[1.0, 0.2, 20.0]);
-        let (smin, s2) = (sse(&r, &th), sse(&r, &th) / (tt.len() - 3) as f64);
-        let row: Vec<String> = grid.iter().map(|&k| format!("{:.2}", (profile_ka(k, tt, yy) - smin) / s2)).collect();
+        let (smin, s2) = (sse(&r, &th), sse(&r, &th) / (ts.len() - 3) as f64);
+        let row: Vec<String> = grid.iter().map(|&k| format!("{:.2}", (profile_ka(k, ts, ys) - smin) / s2)).collect();
         println!("delta: {}", row.join(" "));
     }
     // (b) profile interval vs Wald intervals, all samples
-    let r = resid(&T, &Y);
+    let r = resid(&TT, &Y);
     let th = levmar(&r, &[1.0, 0.2, 20.0]);
     let (smin, s2) = (sse(&r, &th), sse(&r, &th) / 9.0);
-    let crit = |k: f64| (profile_ka(k, &T, &Y) - smin) / s2 - 3.84;
+    let crit = |k: f64| (profile_ka(k, &TT, &Y) - smin) / s2 - 3.84;
     let (lo, hi) = (bisect(&crit, 0.3, th[0]), bisect(&crit, th[0], 30.0));
     let j = jacobian(&r, &th);
     let se = ((j.transpose() * &j).try_inverse().unwrap()[(0, 0)] * s2).sqrt();
