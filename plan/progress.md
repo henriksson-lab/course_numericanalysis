@@ -91,7 +91,7 @@ Brief: plan/xref-brief.md. Reports: plan/pass2/<group>.md.
 | Group | Units | Status |
 |--|--|--|
 | parts1-2 | 1–7 | running |
-| parts3-4 | 8–12 | running |
+| parts3-4 | 8–12 | done |
 | parts5-6 | 13–17 | done |
 | parts7-8a | 18–22 | running |
 | parts8b-9a | 23–26 | done |

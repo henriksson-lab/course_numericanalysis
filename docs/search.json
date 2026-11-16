@@ -1994,175 +1994,325 @@
     "href": "pivoting-conditioning/lec.html#about-this-lecture",
     "title": "Pivoting, norms and conditioning",
     "section": "About this lecture",
-    "text": "About this lecture\nIn Gaussian elimination as LU we solved A\\mathbf x = \\mathbf b by elimination and assumed every step was fine. Today: two different ways the answer can still be wrong.\n\nThe algorithm’s fault. Elimination divides by the pivot. A tiny pivot destroys the answer; partial pivoting (swapping rows) fixes it.\nThe problem’s fault. Some systems amplify errors in \\mathbf b whatever the algorithm. To measure this we need sizes of vectors and matrices: norms (1, 2, \\infty).\nThe condition number \\kappa(A): lose about \\log_{10}\\kappa digits.\nResidual vs error: a small residual does not mean a small error.\nBiology: spectral unmixing in flow cytometry. Dyes with overlapping spectra give an ill-conditioned matrix, and detector noise is amplified.\n\n\nThis lecture has the same two-source structure as Error, conditioning and stability in Part 1: an unstable algorithm (elimination without pivoting) and an ill-conditioned problem (overlapping dyes). The cures differ: the first is fixed by changing the algorithm (pivoting, which every library already does); the second only by changing the experiment (the dyes or the detectors). We assume LU from the previous unit: elimination, multipliers, forward and back substitution."
+    "text": "About this lecture\nIn Gaussian elimination as LU we solved A\\mathbf x = \\mathbf b by elimination and assumed every step was fine. Today: two different ways the answer can still be wrong.\n\nThe algorithm’s fault. Elimination divides by the pivot. A tiny pivot destroys the answer; partial pivoting (swapping rows) fixes it.\nThe problem’s fault. Some systems amplify errors in \\mathbf b whatever the algorithm. To measure this we need sizes of vectors and matrices: norms (1, 2, \\infty).\nThe condition number \\kappa(A): lose about \\log_{10}\\kappa digits.\nResidual vs error: a small residual does not mean a small error.\nBiology: spectral unmixing in flow cytometry. Dyes with overlapping spectra give an ill-conditioned matrix, and detector noise is amplified.\n\n\nThis lecture has the same two-source structure as Error, conditioning and stability in Part 1: an unstable algorithm (elimination without pivoting) and an ill-conditioned problem (overlapping dyes). The cures differ: the first is fixed by changing the algorithm (pivoting, which every library already does); the second only by changing the experiment (the dyes or the detectors). We assume LU from the previous unit: elimination, multipliers, forward and back substitution.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#where-we-left-off-two-dyes",
     "href": "pivoting-conditioning/lec.html#where-we-left-off-two-dyes",
     "title": "Pivoting, norms and conditioning",
     "section": "Where we left off: two dyes",
-    "text": "Where we left off: two dyes\n\n\nAt the end of Error, conditioning and stability:\nA &lt;- matrix(c(1,    0.95,\n              0.95, 1   ), nrow = 2, byrow = TRUE)\nsolve(A, c(1.95, 1.95))\n# [1] 1 1\nsolve(A, c(1.96, 1.94))             # b off by 0.5 %\n# [1] 1.2 0.8\nkappa(A, exact = TRUE)\n# [1] 39\n\nA 0.5 % change in the detector readings moves the dye amounts by 20 %.\nToday: why 39, what \\kappa measures, and what to do about it.\n\n\n\n\n\nPick up the teaser with the same numbers. Each equation is a line in the (x1, x2) plane; the two lines are nearly parallel, so their intersection slides a long way when either one moves a little. By the end of the lecture students can compute the 39 by hand and explain why the perturbation (0.01, -0.01) was the worst possible one."
+    "text": "Where we left off: two dyes\n\n\nAt the end of Error, conditioning and stability:\nA &lt;- matrix(c(1,    0.95,\n              0.95, 1   ), nrow = 2, byrow = TRUE)\nsolve(A, c(1.95, 1.95))\n# [1] 1 1\nsolve(A, c(1.96, 1.94))             # b off by 0.5 %\n# [1] 1.2 0.8\nkappa(A, exact = TRUE)\n# [1] 39\n\nA 0.5 % change in the detector readings moves the dye amounts by 20 %.\nToday: why 39, what \\kappa measures, and what to do about it.\n\n\n\n\n\nPick up the teaser with the same numbers. Each equation is a line in the (x1, x2) plane; the two lines are nearly parallel, so their intersection slides a long way when either one moves a little. By the end of the lecture students can compute the 39 by hand and explain why the perturbation (0.01, -0.01) was the worst possible one.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#spectral-unmixing-is-amathbf-x-mathbf-b",
     "href": "pivoting-conditioning/lec.html#spectral-unmixing-is-amathbf-x-mathbf-b",
     "title": "Pivoting, norms and conditioning",
     "section": "Spectral unmixing is A\\mathbf x = \\mathbf b",
-    "text": "Spectral unmixing is A\\mathbf x = \\mathbf b\n\n\n\nEach dye emits over a range of wavelengths. Each detector sees light from several dyes.\nA_{ij} = signal in detector i per unit of dye j (measured from single-stained controls).\n\\mathbf b = detector readings for one cell; \\mathbf x = dye amounts.\nSolve A\\mathbf x = \\mathbf b for every cell: millions of times.\n\n\n\n\nTwo dyes, detectors at the two peaks: A = \\begin{pmatrix}1 & c\\\\ c & 1\\end{pmatrix}, overlap c. Close peaks give c = 0.95, our matrix.\n\nFlow cytometry compensation and spectral unmixing are the same linear algebra. Classic compensation uses one detector per dye; spectral cytometers use 30 to 60 detectors and solve a least-squares problem (Part 4). We keep it square here: as many detectors as dyes. The spectra are Gaussian with width 30 nm, a toy model of real emission spectra. With peaks 35 nm apart, detector 1 sees half as much of dye 2 as of dye 1 (c = 0.5); 10 nm apart, 95 % (c = 0.95). The same algebra appears in fluorescence microscopy (linear unmixing of spectral images) and in compensation matrices for older cytometers."
+    "text": "Spectral unmixing is A\\mathbf x = \\mathbf b\n\n\n\nEach dye emits over a range of wavelengths. Each detector sees light from several dyes.\nA_{ij} = signal in detector i per unit of dye j (measured from single-stained controls).\n\\mathbf b = detector readings for one cell; \\mathbf x = dye amounts.\nSolve A\\mathbf x = \\mathbf b for every cell: millions of times.\n\n\n\n\nTwo dyes, detectors at the two peaks: A = \\begin{pmatrix}1 & c\\\\ c & 1\\end{pmatrix}, overlap c. Close peaks give c = 0.95, our matrix.\n\nFlow cytometry compensation and spectral unmixing are the same linear algebra. Classic compensation uses one detector per dye; spectral cytometers use 30 to 60 detectors and solve a least-squares problem (Part 4). We keep it square here: as many detectors as dyes. The spectra are Gaussian with width 30 nm, a toy model of real emission spectra. With peaks 35 nm apart, detector 1 sees half as much of dye 2 as of dye 1 (c = 0.5); 10 nm apart, 95 % (c = 0.95). The same algebra appears in fluorescence microscopy (linear unmixing of spectral images) and in compensation matrices for older cytometers.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#recap-elimination-as-lu",
     "href": "pivoting-conditioning/lec.html#recap-elimination-as-lu",
     "title": "Pivoting, norms and conditioning",
     "section": "Recap: elimination as LU",
-    "text": "Recap: elimination as LU\nRow 2 minus m = a_{21}/a_{11} times row 1 (the pivot is a_{11}):\n\\begin{pmatrix}1 & 0.95\\\\ 0.95 & 1\\end{pmatrix}\n\\;\\xrightarrow{\\;m = 0.95\\;}\\;\n\\begin{pmatrix}1 & 0.95\\\\ 0 & 1 - 0.95^2\\end{pmatrix}\n= \\begin{pmatrix}1 & 0.95\\\\ 0 & 0.0975\\end{pmatrix} = U,\n\\qquad L = \\begin{pmatrix}1 & 0\\\\ 0.95 & 1\\end{pmatrix}\n\nA = LU. Solve L\\mathbf y = \\mathbf b (forward), then U\\mathbf x = \\mathbf y (back).\nEach step divides by a pivot u_{kk}. Nothing so far checks its size.\nCost \\tfrac23 n^3 for the factorisation, 2n^2 per right-hand side (from Gaussian elimination as LU).\n\n\nOne-slide recap only; the previous unit did this properly. The point to carry forward: the multipliers are entries divided by the pivot, and back substitution divides by the pivots again. If a pivot is zero the method stops; if it is tiny, we will see that it silently returns garbage. Note that the second pivot 0.0975 is already small: the near-singularity of A shows up in U."
+    "text": "Recap: elimination as LU\nRow 2 minus m = a_{21}/a_{11} times row 1 (the pivot is a_{11}):\n\\begin{pmatrix}1 & 0.95\\\\ 0.95 & 1\\end{pmatrix}\n\\;\\xrightarrow{\\;m = 0.95\\;}\\;\n\\begin{pmatrix}1 & 0.95\\\\ 0 & 1 - 0.95^2\\end{pmatrix}\n= \\begin{pmatrix}1 & 0.95\\\\ 0 & 0.0975\\end{pmatrix} = U,\n\\qquad L = \\begin{pmatrix}1 & 0\\\\ 0.95 & 1\\end{pmatrix}\n\nA = LU. Solve L\\mathbf y = \\mathbf b (forward), then U\\mathbf x = \\mathbf y (back).\nEach step divides by a pivot u_{kk}. Nothing so far checks its size.\nCost \\tfrac23 n^3 for the factorisation, 2n^2 per right-hand side (from Gaussian elimination as LU).\n\n\nOne-slide recap only; the previous unit did this properly. The point to carry forward: the multipliers are entries divided by the pivot, and back substitution divides by the pivots again. If a pivot is zero the method stops; if it is tiny, we will see that it silently returns garbage. Note that the second pivot 0.0975 is already small: the near-singularity of A shows up in U.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#a-zero-pivot-a-tiny-pivot",
     "href": "pivoting-conditioning/lec.html#a-zero-pivot-a-tiny-pivot",
     "title": "Pivoting, norms and conditioning",
     "section": "A zero pivot, a tiny pivot",
-    "text": "A zero pivot, a tiny pivot\nsolve_nopivot &lt;- function(A, b) {\n  n &lt;- nrow(A)\n  for (k in 1:(n - 1)) for (i in (k + 1):n) {\n    m &lt;- A[i, k] / A[k, k]                 # multiplier\n    A[i, ] &lt;- A[i, ] - m * A[k, ];  b[i] &lt;- b[i] - m * b[k]\n  }\n  backsolve(A, b)                          # back substitution\n}\nsolve_nopivot(matrix(c(0, 1, 1, 0.3), 2, byrow = TRUE), c(1, 1.3))\n# Error in backsolve(A, b) : singular matrix in 'backsolve'. First zero in diagonal [1]\nA1 &lt;- matrix(c(1e-20, 1, 1, 1), 2, byrow = TRUE)\nsolve_nopivot(A1, c(1, 2))\n# [1] 0 1\nsolve(A1, c(1, 2))\n# [1] 1 1\n\nZero pivot: dye 1 gives no signal in detector 1 (the order of detectors is arbitrary). The multiplier is 1/0; the method stops.\nTiny pivot: no warning, and x_1 = 0 instead of 1.\n\n\nbacksolve (https://stat.ethz.ch/R-manual/R-devel/library/base/html/backsolve.html) solves an upper triangular system by back substitution. The zero-pivot case is realistic: the rows of A are just the detectors in some order, and nothing guarantees that detector 1 sees dye 1. Both matrices are perfectly well conditioned (we will compute kappa about 2.6 for A1): the problem is easy, the algorithm fails. That is instability. solve() gets it right because it pivots."
+    "text": "A zero pivot, a tiny pivot\nsolve_nopivot &lt;- function(A, b) {\n  n &lt;- nrow(A)\n  for (k in 1:(n - 1)) for (i in (k + 1):n) {\n    m &lt;- A[i, k] / A[k, k]                 # multiplier\n    A[i, ] &lt;- A[i, ] - m * A[k, ];  b[i] &lt;- b[i] - m * b[k]\n  }\n  backsolve(A, b)                          # back substitution\n}\nsolve_nopivot(matrix(c(0, 1, 1, 0.3), 2, byrow = TRUE), c(1, 1.3))\n# Error in backsolve(A, b) : singular matrix in 'backsolve'. First zero in diagonal [1]\nA1 &lt;- matrix(c(1e-20, 1, 1, 1), 2, byrow = TRUE)\nsolve_nopivot(A1, c(1, 2))\n# [1] 0 1\nsolve(A1, c(1, 2))\n# [1] 1 1\n\nZero pivot: dye 1 gives no signal in detector 1 (the order of detectors is arbitrary). The multiplier is 1/0; the method stops.\nTiny pivot: no warning, and x_1 = 0 instead of 1.\n\n\nbacksolve (https://stat.ethz.ch/R-manual/R-devel/library/base/html/backsolve.html) solves an upper triangular system by back substitution. The zero-pivot case is realistic: the rows of A are just the detectors in some order, and nothing guarantees that detector 1 sees dye 1. Both matrices are perfectly well conditioned (we will compute kappa about 2.6 for A1): the problem is easy, the algorithm fails. That is instability. solve() gets it right because it pivots.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#what-went-wrong",
     "href": "pivoting-conditioning/lec.html#what-went-wrong",
     "title": "Pivoting, norms and conditioning",
     "section": "What went wrong",
-    "text": "What went wrong\nWith \\delta = 10^{-20}: multiplier m = 1/\\delta = 10^{20}.\n\\begin{pmatrix}\\delta & 1 & \\mid & 1\\\\ 1 & 1 & \\mid & 2\\end{pmatrix}\n\\;\\to\\;\n\\begin{pmatrix}\\delta & 1 & \\mid & 1\\\\ 0 & 1 - 10^{20} & \\mid & 2 - 10^{20}\\end{pmatrix}\n\\;\\approx\\;\n\\begin{pmatrix}\\delta & 1 & \\mid & 1\\\\ 0 & -10^{20} & \\mid & -10^{20}\\end{pmatrix}\n\n1 - 10^{20} rounds to -10^{20}: the 1 and the 2 of row 2 are lost (they are below the gap between doubles near 10^{20}).\nx_2 = 1 (fine), then x_1 = (1 - x_2)/\\delta = 0/\\delta = 0: catastrophic cancellation, divided by a tiny number.\nThe computed L and U belong to a different matrix: LU has 0 where A has 1 in position (2,2).\n\n\nDo this on the board. The huge multiplier copies row 1, scaled by 1e20, into row 2 and swamps what row 2 contained. The second equation is effectively replaced by a multiple of the first, so the information that x1 + x2 = 2 is gone. Back substitution then cancels 1 - 1 = 0. Check LU: L = [1 0; 1e20 1], U = [1e-20 1; 0 -1e20], LU = [1e-20 1; 1 0]. The (2,2) entry 1 has vanished: the backward error is 100 %, which is the precise meaning of “unstable”."
+    "text": "What went wrong\nWith \\delta = 10^{-20}: multiplier m = 1/\\delta = 10^{20}.\n\\begin{pmatrix}\\delta & 1 & \\mid & 1\\\\ 1 & 1 & \\mid & 2\\end{pmatrix}\n\\;\\to\\;\n\\begin{pmatrix}\\delta & 1 & \\mid & 1\\\\ 0 & 1 - 10^{20} & \\mid & 2 - 10^{20}\\end{pmatrix}\n\\;\\approx\\;\n\\begin{pmatrix}\\delta & 1 & \\mid & 1\\\\ 0 & -10^{20} & \\mid & -10^{20}\\end{pmatrix}\n\n1 - 10^{20} rounds to -10^{20}: the 1 and the 2 of row 2 are lost (they are below the gap between doubles near 10^{20}).\nx_2 = 1 (fine), then x_1 = (1 - x_2)/\\delta = 0/\\delta = 0: catastrophic cancellation, divided by a tiny number.\nThe computed L and U belong to a different matrix: LU has 0 where A has 1 in position (2,2).\n\n\nDo this on the board. The huge multiplier copies row 1, scaled by 1e20, into row 2 and swamps what row 2 contained. The second equation is effectively replaced by a multiple of the first, so the information that x1 + x2 = 2 is gone. Back substitution then cancels 1 - 1 = 0. Check LU: L = [1 0; 1e20 1], U = [1e-20 1; 0 -1e20], LU = [1e-20 1; 1 0]. The (2,2) entry 1 has vanished: the backward error is 100 %, which is the precise meaning of “unstable”.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#error-grows-like-varepsilondelta",
     "href": "pivoting-conditioning/lec.html#error-grows-like-varepsilondelta",
     "title": "Pivoting, norms and conditioning",
     "section": "Error grows like \\varepsilon/\\delta",
-    "text": "Error grows like \\varepsilon/\\delta\n\n\nWithout pivoting the error is about \\varepsilon/\\delta: every factor 10 smaller pivot costs one digit. Below \\delta \\approx 10^{-16}: all lost.\nWith pivoting: full accuracy for every \\delta. The problem was never hard.\n\n\nThe experiment: A = [delta 1; 1 1], b = (1, 2), exact solution known in closed form, relative error of each method. The orange triangles follow the dashed line epsilon/delta, the error-vs-parameter plot for this failure. The blue dots sit at rounding level (points at the bottom are exact). A pivot of 1e-8, which is not exotic in a larger matrix after a few elimination steps, already costs half the digits."
+    "text": "Error grows like \\varepsilon/\\delta\n\n\nWithout pivoting the error is about \\varepsilon/\\delta: every factor 10 smaller pivot costs one digit. Below \\delta \\approx 10^{-16}: all lost.\nWith pivoting: full accuracy for every \\delta. The problem was never hard.\n\n\nThe experiment: A = [delta 1; 1 1], b = (1, 2), exact solution known in closed form, relative error of each method. The orange triangles follow the dashed line epsilon/delta, the error-vs-parameter plot for this failure. The blue dots sit at rounding level (points at the bottom are exact). A pivot of 1e-8, which is not exotic in a larger matrix after a few elimination steps, already costs half the digits.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#partial-pivoting",
     "href": "pivoting-conditioning/lec.html#partial-pivoting",
     "title": "Pivoting, norms and conditioning",
     "section": "Partial pivoting",
-    "text": "Partial pivoting\nBefore eliminating column k, swap rows so the entry of largest absolute value in that column (on or below the diagonal) becomes the pivot.\n\\begin{pmatrix}\\delta & 1 & \\mid & 1\\\\ 1 & 1 & \\mid & 2\\end{pmatrix}\n\\;\\xrightarrow{\\text{swap}}\\;\n\\begin{pmatrix}1 & 1 & \\mid & 2\\\\ \\delta & 1 & \\mid & 1\\end{pmatrix}\n\\;\\xrightarrow{m = \\delta}\\;\n\\begin{pmatrix}1 & 1 & \\mid & 2\\\\ 0 & 1 - \\delta & \\mid & 1 - 2\\delta\\end{pmatrix}\n\nNow x_2 = (1-2\\delta)/(1-\\delta) \\approx 1, x_1 = 2 - x_2 \\approx 1. Correct.\nEvery multiplier satisfies |m| \\le 1, so no row is scaled up and swamps another.\nSwapping rows = reordering the equations (detectors). The solution does not change.\n\n\nThe rule is simple and cheap: one search down a column per step, O(n^2) in total, nothing next to the O(n^3) elimination. Bounded multipliers mean the entries of U cannot grow much in practice, which is what keeps the rounding errors small. “Partial” because only rows are swapped; complete pivoting also swaps columns and is rarely worth it."
+    "text": "Partial pivoting\nBefore eliminating column k, swap rows so the entry of largest absolute value in that column (on or below the diagonal) becomes the pivot.\n\\begin{pmatrix}\\delta & 1 & \\mid & 1\\\\ 1 & 1 & \\mid & 2\\end{pmatrix}\n\\;\\xrightarrow{\\text{swap}}\\;\n\\begin{pmatrix}1 & 1 & \\mid & 2\\\\ \\delta & 1 & \\mid & 1\\end{pmatrix}\n\\;\\xrightarrow{m = \\delta}\\;\n\\begin{pmatrix}1 & 1 & \\mid & 2\\\\ 0 & 1 - \\delta & \\mid & 1 - 2\\delta\\end{pmatrix}\n\nNow x_2 = (1-2\\delta)/(1-\\delta) \\approx 1, x_1 = 2 - x_2 \\approx 1. Correct.\nEvery multiplier satisfies |m| \\le 1, so no row is scaled up and swamps another.\nSwapping rows = reordering the equations (detectors). The solution does not change.\n\n\nThe rule is simple and cheap: one search down a column per step, O(n^2) in total, nothing next to the O(n^3) elimination. Bounded multipliers mean the entries of U cannot grow much in practice, which is what keeps the rounding errors small. “Partial” because only rows are swapped; complete pivoting also swaps columns and is rarely worth it.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#partial-pivoting-in-code",
     "href": "pivoting-conditioning/lec.html#partial-pivoting-in-code",
     "title": "Pivoting, norms and conditioning",
     "section": "Partial pivoting in code",
-    "text": "Partial pivoting in code\nsolve_pivot &lt;- function(A, b) {\n  n &lt;- nrow(A)\n  for (k in 1:(n - 1)) {\n    p &lt;- which.max(abs(A[k:n, k])) + k - 1   # largest entry in column k\n    A[c(k, p), ] &lt;- A[c(p, k), ];  b[c(k, p)] &lt;- b[c(p, k)]   # swap rows\n    for (i in (k + 1):n) {\n      m &lt;- A[i, k] / A[k, k]                 # now |m| &lt;= 1\n      A[i, ] &lt;- A[i, ] - m * A[k, ];  b[i] &lt;- b[i] - m * b[k]\n    }\n  }\n  backsolve(A, b)\n}\nsolve_pivot(A1, c(1, 2))\n# [1] 1 1\n\nThree extra lines. solve() calls LAPACK (dgesv), which does exactly this, in optimised code.\n\n\nwhich.max returns the position within the sub-column k:n, so we add k - 1 to get the row number. The swap uses R’s vector indexing: A[c(k, p), ] &lt;- A[c(p, k), ] exchanges two rows in one line. Students write this themselves in the exercise (C2) and compare with solve(). Python: scipy.linalg.lu_factor / lu_solve and numpy.linalg.solve use the same LAPACK routine."
+    "text": "Partial pivoting in code\nsolve_pivot &lt;- function(A, b) {\n  n &lt;- nrow(A)\n  for (k in 1:(n - 1)) {\n    p &lt;- which.max(abs(A[k:n, k])) + k - 1   # largest entry in column k\n    A[c(k, p), ] &lt;- A[c(p, k), ];  b[c(k, p)] &lt;- b[c(p, k)]   # swap rows\n    for (i in (k + 1):n) {\n      m &lt;- A[i, k] / A[k, k]                 # now |m| &lt;= 1\n      A[i, ] &lt;- A[i, ] - m * A[k, ];  b[i] &lt;- b[i] - m * b[k]\n    }\n  }\n  backsolve(A, b)\n}\nsolve_pivot(A1, c(1, 2))\n# [1] 1 1\n\nThree extra lines. solve() calls LAPACK (dgesv), which does exactly this, in optimised code.\n\n\nwhich.max returns the position within the sub-column k:n, so we add k - 1 to get the row number. The swap uses R’s vector indexing: A[c(k, p), ] &lt;- A[c(p, k), ] exchanges two rows in one line. Students write this themselves in the exercise (C2) and compare with solve(). Python: scipy.linalg.lu_factor / lu_solve and numpy.linalg.solve use the same LAPACK routine.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#pa-lu",
     "href": "pivoting-conditioning/lec.html#pa-lu",
     "title": "Pivoting, norms and conditioning",
     "section": "PA = LU",
-    "text": "PA = LU\nThe row swaps are recorded in a permutation matrix P (the identity with its rows reordered):\nPA = LU, \\qquad A\\mathbf x = \\mathbf b \\;\\Longleftrightarrow\\; L U\\mathbf x = P\\mathbf b.\n\nFactor once (\\tfrac23 n^3), then for each cell: permute \\mathbf b, forward and back substitute (2n^2).\nPartial pivoting is backward stable in practice: the computed \\mathbf x is the exact solution of (A + \\Delta A)\\mathbf x = \\mathbf b with \\|\\Delta A\\| \\approx \\varepsilon \\|A\\|. (Rare matrices defeat it; they almost never occur in applications.)\nSo after pivoting, any remaining error is the problem’s. To measure it we need the size of a vector and of a matrix.\n\n\nIn R, Matrix::lu returns the factorisation with P, L and U (expand() gives the three matrices); in Python scipy.linalg.lu. The backward-stability statement is the matrix version of “the answer is exact for a nearby input” from Error, conditioning and stability. The famous exception (Wilkinson’s matrix, entries of U growing like 2^n) is a curiosity; LAPACK and every statistics package rely on partial pivoting. Transition: the 2-dye system was solved by a pivoting solve() and still moved by 20 %. That is conditioning, and we now build the tools to measure it."
+    "text": "PA = LU\nThe row swaps are recorded in a permutation matrix P (the identity with its rows reordered):\nPA = LU, \\qquad A\\mathbf x = \\mathbf b \\;\\Longleftrightarrow\\; L U\\mathbf x = P\\mathbf b.\n\nFactor once (\\tfrac23 n^3), then for each cell: permute \\mathbf b, forward and back substitute (2n^2).\nPartial pivoting is backward stable in practice: the computed \\mathbf x is the exact solution of (A + \\Delta A)\\mathbf x = \\mathbf b with \\|\\Delta A\\| \\approx \\varepsilon \\|A\\|. (Rare matrices defeat it; they almost never occur in applications.)\nSo after pivoting, any remaining error is the problem’s. To measure it we need the size of a vector and of a matrix.\n\n\nIn R, Matrix::lu returns the factorisation with P, L and U (expand() gives the three matrices); in Python scipy.linalg.lu. The backward-stability statement is the matrix version of “the answer is exact for a nearby input” from Error, conditioning and stability. The famous exception (Wilkinson’s matrix, entries of U growing like 2^n) is a curiosity; LAPACK and every statistics package rely on partial pivoting. Transition: the 2-dye system was solved by a pivoting solve() and still moved by 20 %. That is conditioning, and we now build the tools to measure it.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#pivoting-does-not-rescue-the-two-dyes",
     "href": "pivoting-conditioning/lec.html#pivoting-does-not-rescue-the-two-dyes",
     "title": "Pivoting, norms and conditioning",
     "section": "Pivoting does not rescue the two dyes",
-    "text": "Pivoting does not rescue the two dyes\nsolve_pivot(A, c(1.96, 1.94))     # A = [1 0.95; 0.95 1]\n# [1] 1.2 0.8\n\nSame answer as solve(): it is the exact solution of the perturbed system.\nThe algorithm is innocent. The problem amplifies the 0.5 % change in \\mathbf b to 20 % in \\mathbf x.\nTo say “0.5 %” and “20 %” for vectors, we need a size: a norm.\n\n\nA short bridge slide. No pivoting is needed here (0.95 &lt; 1, so no swap), and the arithmetic is accurate to 16 digits. What is uncertain is the data b: detector readings have 1 % or worse noise. So the question becomes: how much can the solution move, relative to its size, when b moves by a given relative amount?"
+    "text": "Pivoting does not rescue the two dyes\nsolve_pivot(A, c(1.96, 1.94))     # A = [1 0.95; 0.95 1]\n# [1] 1.2 0.8\n\nSame answer as solve(): it is the exact solution of the perturbed system.\nThe algorithm is innocent. The problem amplifies the 0.5 % change in \\mathbf b to 20 % in \\mathbf x.\nTo say “0.5 %” and “20 %” for vectors, we need a size: a norm.\n\n\nA short bridge slide. No pivoting is needed here (0.95 &lt; 1, so no swap), and the arithmetic is accurate to 16 digits. What is uncertain is the data b: detector readings have 1 % or worse noise. So the question becomes: how much can the solution move, relative to its size, when b moves by a given relative amount?",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#vector-norms",
     "href": "pivoting-conditioning/lec.html#vector-norms",
     "title": "Pivoting, norms and conditioning",
     "section": "Vector norms",
-    "text": "Vector norms\nA norm \\|\\mathbf v\\| is a length. Three common ones, for \\mathbf v = (3, -4, 12):\n\n\n\n\n\n\n\n\nname\nformula\nvalue\n\n\n\n\n1-norm\n\\|\\mathbf v\\|_1 = \\sum_i \\lvert v_i\\rvert\n3 + 4 + 12 = 19\n\n\n2-norm (Euclidean)\n\\|\\mathbf v\\|_2 = \\sqrt{\\sum_i v_i^2}\n\\sqrt{9 + 16 + 144} = 13\n\n\n\\infty-norm (max)\n\\|\\mathbf v\\|_\\infty = \\max_i \\lvert v_i\\rvert\n12\n\n\n\nv &lt;- c(3, -4, 12)\nc(sum(abs(v)), sqrt(sum(v^2)), max(abs(v)))\n# [1] 19 13 12\n\nAlways \\|\\mathbf v\\|_\\infty \\le \\|\\mathbf v\\|_2 \\le \\|\\mathbf v\\|_1, and they differ by at most a factor n. For error sizes, any of them will do.\nRelative error of a vector: \\|\\hat{\\mathbf x} - \\mathbf x\\| / \\|\\mathbf x\\|.\n\n\nAll three are “lengths”: zero only for the zero vector, scale with |c| when the vector is multiplied by c, and obey the triangle inequality. The 1-norm is the total (e.g. total absolute error over all dyes), the 2-norm the ordinary distance, the infinity-norm the worst single component. For a vector of n numbers they differ by at most a factor n, so “small” means the same in all of them for small n. R’s norm() wants a matrix; norm(v, “2”) happens to work for a vector, the others need as.matrix(v). Python: np.linalg.norm(v, 1), (v), (v, np.inf)."
+    "text": "Vector norms\nA norm \\|\\mathbf v\\| is a length. Three common ones, for \\mathbf v = (3, -4, 12):\n\n\n\n\n\n\n\n\nname\nformula\nvalue\n\n\n\n\n1-norm\n\\|\\mathbf v\\|_1 = \\sum_i \\lvert v_i\\rvert\n3 + 4 + 12 = 19\n\n\n2-norm (Euclidean)\n\\|\\mathbf v\\|_2 = \\sqrt{\\sum_i v_i^2}\n\\sqrt{9 + 16 + 144} = 13\n\n\n\\infty-norm (max)\n\\|\\mathbf v\\|_\\infty = \\max_i \\lvert v_i\\rvert\n12\n\n\n\nv &lt;- c(3, -4, 12)\nc(sum(abs(v)), sqrt(sum(v^2)), max(abs(v)))\n# [1] 19 13 12\n\nAlways \\|\\mathbf v\\|_\\infty \\le \\|\\mathbf v\\|_2 \\le \\|\\mathbf v\\|_1, and they differ by at most a factor n. For error sizes, any of them will do.\nRelative error of a vector: \\|\\hat{\\mathbf x} - \\mathbf x\\| / \\|\\mathbf x\\|.\n\n\nAll three are “lengths”: zero only for the zero vector, scale with |c| when the vector is multiplied by c, and obey the triangle inequality. The 1-norm is the total (e.g. total absolute error over all dyes), the 2-norm the ordinary distance, the infinity-norm the worst single component. For a vector of n numbers they differ by at most a factor n, so “small” means the same in all of them for small n. R’s norm() wants a matrix; norm(v, “2”) happens to work for a vector, the others need as.matrix(v). Python: np.linalg.norm(v, 1), (v), (v, np.inf).",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#unit-balls",
     "href": "pivoting-conditioning/lec.html#unit-balls",
     "title": "Pivoting, norms and conditioning",
     "section": "Unit balls",
-    "text": "Unit balls\n\n\n\n\nAll vectors of norm 1, in 2D:\n\n\\|\\cdot\\|_1: a diamond. \\|\\cdot\\|_2: a circle. \\|\\cdot\\|_\\infty: a square.\nTeaser: \\Delta\\mathbf b = (0.01, -0.01), \\mathbf b = (1.95, 1.95). In the 2-norm \\|\\Delta\\mathbf b\\|_2/\\|\\mathbf b\\|_2 = 0.01/1.95 = 0.51\\,\\%.\n\\Delta\\mathbf x = (0.2, -0.2), \\mathbf x = (1, 1): \\|\\Delta\\mathbf x\\|_2/\\|\\mathbf x\\|_2 = 20\\,\\%.\nRatio: 0.2 / 0.005128 = 39.\n\n\n\nThe picture explains the name of the infinity-norm (the limit of the p-norm as p grows) and makes the inequalities visible: the diamond sits inside the circle, which sits inside the square. In the teaser both relative changes happen to be the same in all three norms, because all components have the same size. The ratio 39 is exactly kappa: the teaser perturbation is the worst case, as we will see."
+    "text": "Unit balls\n\n\n\n\nAll vectors of norm 1, in 2D:\n\n\\|\\cdot\\|_1: a diamond. \\|\\cdot\\|_2: a circle. \\|\\cdot\\|_\\infty: a square.\nTeaser: \\Delta\\mathbf b = (0.01, -0.01), \\mathbf b = (1.95, 1.95). In the 2-norm \\|\\Delta\\mathbf b\\|_2/\\|\\mathbf b\\|_2 = 0.01/1.95 = 0.51\\,\\%.\n\\Delta\\mathbf x = (0.2, -0.2), \\mathbf x = (1, 1): \\|\\Delta\\mathbf x\\|_2/\\|\\mathbf x\\|_2 = 20\\,\\%.\nRatio: 0.2 / 0.005128 = 39.\n\n\n\nThe picture explains the name of the infinity-norm (the limit of the p-norm as p grows) and makes the inequalities visible: the diamond sits inside the circle, which sits inside the square. In the teaser both relative changes happen to be the same in all three norms, because all components have the same size. The ratio 39 is exactly kappa: the teaser perturbation is the worst case, as we will see.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#matrix-norms",
     "href": "pivoting-conditioning/lec.html#matrix-norms",
     "title": "Pivoting, norms and conditioning",
     "section": "Matrix norms",
-    "text": "Matrix norms\nHow much can A stretch a vector? \\;\\|A\\| = \\max_{\\mathbf v \\ne 0} \\dfrac{\\|A\\mathbf v\\|}{\\|\\mathbf v\\|}\n\n\n\n\n\n\n\n\nnorm\nformula\nA = \\begin{pmatrix}1 & 0.95\\\\0.95 & 1\\end{pmatrix}\n\n\n\n\n\\|A\\|_1\nlargest absolute column sum\n1.95\n\n\n\\|A\\|_\\infty\nlargest absolute row sum\n1.95\n\n\n\\|A\\|_2\nlargest stretch \\sigma_{\\max}\n1.95\n\n\n\nc(norm(A, \"1\"), norm(A, \"I\"), norm(A, \"2\"))\n# [1] 1.95 1.95 1.95\nsvd(A)$d                           # singular values: all stretch factors\n# [1] 1.95 0.05\n\n\\sigma_{\\max}, \\sigma_{\\min}: the largest and smallest singular values. For a symmetric matrix they are the absolute eigenvalues (here 1.95 and 0.05).\n\n\nThe definition is “induced by the vector norm”: the largest factor by which A can lengthen any vector. For the 1 and infinity norms there are exact formulas students can do by hand (column sums, row sums). The 2-norm needs the singular values, which we only use as numbers here; The SVD, rank deficiency and regularisation (Part 4) explains them. For a symmetric A, the eigenvalues are 1 + 0.95 and 1 - 0.95, eigenvectors (1, 1) and (1, -1). norm() in R takes type “1”, “I” (infinity), “2” or “F” (Frobenius, not induced)."
+    "text": "Matrix norms\nHow much can A stretch a vector? \\;\\|A\\| = \\max_{\\mathbf v \\ne 0} \\dfrac{\\|A\\mathbf v\\|}{\\|\\mathbf v\\|}\n\n\n\n\n\n\n\n\nnorm\nformula\nA = \\begin{pmatrix}1 & 0.95\\\\0.95 & 1\\end{pmatrix}\n\n\n\n\n\\|A\\|_1\nlargest absolute column sum\n1.95\n\n\n\\|A\\|_\\infty\nlargest absolute row sum\n1.95\n\n\n\\|A\\|_2\nlargest stretch \\sigma_{\\max}\n1.95\n\n\n\nc(norm(A, \"1\"), norm(A, \"I\"), norm(A, \"2\"))\n# [1] 1.95 1.95 1.95\nsvd(A)$d                           # singular values: all stretch factors\n# [1] 1.95 0.05\n\n\\sigma_{\\max}, \\sigma_{\\min}: the largest and smallest singular values. For a symmetric matrix they are the absolute eigenvalues (here 1.95 and 0.05).\n\n\nThe definition is “induced by the vector norm”: the largest factor by which A can lengthen any vector. For the 1 and infinity norms there are exact formulas students can do by hand (column sums, row sums). The 2-norm needs the singular values, which we only use as numbers here; The SVD, rank deficiency and regularisation (Part 4) explains them. For a symmetric A, the eigenvalues are 1 + 0.95 and 1 - 0.95, eigenvectors (1, 1) and (1, -1). norm() in R takes type “1”, “I” (infinity), “2” or “F” (Frobenius, not induced).",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#a-matrix-turns-a-circle-into-an-ellipse",
     "href": "pivoting-conditioning/lec.html#a-matrix-turns-a-circle-into-an-ellipse",
     "title": "Pivoting, norms and conditioning",
     "section": "A matrix turns a circle into an ellipse",
-    "text": "A matrix turns a circle into an ellipse\n\n\nLongest axis \\sigma_{\\max}, shortest \\sigma_{\\min}. With overlap 0.95, the direction (1, -1) (dye 1 minus dye 2) is squashed to 0.05.\nSolving A\\mathbf x = \\mathbf b undoes this: it stretches that direction by 1/\\sigma_{\\min} = 20.\n\n\nThe dashed circle is all unit vectors; the orange ellipse is A times them. For c = 0.5 the ellipse is fat; for c = 0.95 it is almost a line segment along (1, 1): the detectors see the sum of the dyes well and the difference hardly at all. Inverting A must blow the thin direction back up, by 1/0.05 = 20, and any noise that lies in that direction is blown up with it. That is the whole story of ill-conditioning in one picture."
+    "text": "A matrix turns a circle into an ellipse\n\n\nLongest axis \\sigma_{\\max}, shortest \\sigma_{\\min}. With overlap 0.95, the direction (1, -1) (dye 1 minus dye 2) is squashed to 0.05.\nSolving A\\mathbf x = \\mathbf b undoes this: it stretches that direction by 1/\\sigma_{\\min} = 20.\n\n\nThe dashed circle is all unit vectors; the orange ellipse is A times them. For c = 0.5 the ellipse is fat; for c = 0.95 it is almost a line segment along (1, 1): the detectors see the sum of the dyes well and the difference hardly at all. Inverting A must blow the thin direction back up, by 1/0.05 = 20, and any noise that lies in that direction is blown up with it. That is the whole story of ill-conditioning in one picture.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#the-condition-number-of-a-matrix",
     "href": "pivoting-conditioning/lec.html#the-condition-number-of-a-matrix",
     "title": "Pivoting, norms and conditioning",
     "section": "The condition number of a matrix",
-    "text": "The condition number of a matrix\n\\kappa(A) = \\|A\\|\\,\\|A^{-1}\\| \\;\\overset{\\text{2-norm}}{=}\\; \\frac{\\sigma_{\\max}}{\\sigma_{\\min}}\nIf A\\mathbf x = \\mathbf b and A(\\mathbf x + \\Delta\\mathbf x) = \\mathbf b + \\Delta\\mathbf b, then\n\\frac{\\|\\Delta \\mathbf x\\|}{\\|\\mathbf x\\|} \\;\\le\\; \\kappa(A)\\,\\frac{\\|\\Delta \\mathbf b\\|}{\\|\\mathbf b\\|}.\n\nWhy: \\Delta\\mathbf x = A^{-1}\\Delta\\mathbf b, so \\|\\Delta\\mathbf x\\| \\le \\|A^{-1}\\|\\,\\|\\Delta\\mathbf b\\|; and \\|\\mathbf b\\| \\le \\|A\\|\\,\\|\\mathbf x\\|. Divide.\nSame idea as \\kappa = |x f'/f| in Part 1: amplification of relative errors.\n\\kappa \\ge 1 always. \\kappa = 1: no amplification. A singular: \\kappa = \\infty.\n\n\nTwo lines of algebra, both from the definition of the matrix norm. The bound is a worst case: equality needs b in the most stretched direction and Delta b in the least stretched one. Errors in A itself (the reference spectra are measured too) obey a similar bound with the same kappa, to first order. kappa depends on the norm, but only by a modest factor; “kappa = 39 or 40” is what matters, not the digits."
+    "text": "The condition number of a matrix\n\\kappa(A) = \\|A\\|\\,\\|A^{-1}\\| \\;\\overset{\\text{2-norm}}{=}\\; \\frac{\\sigma_{\\max}}{\\sigma_{\\min}}\nIf A\\mathbf x = \\mathbf b and A(\\mathbf x + \\Delta\\mathbf x) = \\mathbf b + \\Delta\\mathbf b, then\n\\frac{\\|\\Delta \\mathbf x\\|}{\\|\\mathbf x\\|} \\;\\le\\; \\kappa(A)\\,\\frac{\\|\\Delta \\mathbf b\\|}{\\|\\mathbf b\\|}.\n\nWhy: \\Delta\\mathbf x = A^{-1}\\Delta\\mathbf b, so \\|\\Delta\\mathbf x\\| \\le \\|A^{-1}\\|\\,\\|\\Delta\\mathbf b\\|; and \\|\\mathbf b\\| \\le \\|A\\|\\,\\|\\mathbf x\\|. Divide.\nSame idea as \\kappa = |x f'/f| in Error, conditioning and stability: amplification of relative errors.\n\\kappa \\ge 1 always. \\kappa = 1: no amplification. A singular: \\kappa = \\infty.\n\n\nTwo lines of algebra, both from the definition of the matrix norm. The bound is a worst case: equality needs b in the most stretched direction and Delta b in the least stretched one. Errors in A itself (the reference spectra are measured too) obey a similar bound with the same kappa, to first order. kappa depends on the norm, but only by a modest factor; “kappa = 39 or 40” is what matters, not the digits.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#two-dyes-by-hand-kappa-39",
     "href": "pivoting-conditioning/lec.html#two-dyes-by-hand-kappa-39",
     "title": "Pivoting, norms and conditioning",
     "section": "Two dyes by hand: \\kappa = 39",
-    "text": "Two dyes by hand: \\kappa = 39\nA^{-1} = \\frac{1}{1 - 0.95^2}\\begin{pmatrix}1 & -0.95\\\\ -0.95 & 1\\end{pmatrix}\n= \\begin{pmatrix}10.26 & -9.74\\\\ -9.74 & 10.26\\end{pmatrix}\n\n\\|A\\|_\\infty = 1.95, \\|A^{-1}\\|_\\infty = 10.26 + 9.74 = 20, so \\kappa_\\infty = 1.95 \\times 20 = 39.\n2-norm: \\sigma_{\\max}/\\sigma_{\\min} = 1.95/0.05 = 39. Overlap c: \\kappa = \\dfrac{1 + c}{1 - c}.\nWorst case: \\mathbf b \\propto (1, 1) (both dyes, the stretched direction), \\Delta\\mathbf b \\propto (1, -1) (anti-correlated detector errors). The teaser was exactly this: amplification 39.\nNoise along (1, 1) is not amplified at all (factor 1).\n\n\nEverything here is pen and paper; the exercise repeats it. Point out that the inverse has large entries of opposite sign: the unmixed dye 1 is about 10 times detector 1 minus 10 times detector 2, a difference of two large, nearly equal numbers. That is cancellation again, and it is built into the problem, not the algorithm. kappa = (1 + c)/(1 - c): c = 0.5 gives 3, c = 0.9 gives 19, c = 0.99 gives 199."
+    "text": "Two dyes by hand: \\kappa = 39\nA^{-1} = \\frac{1}{1 - 0.95^2}\\begin{pmatrix}1 & -0.95\\\\ -0.95 & 1\\end{pmatrix}\n= \\begin{pmatrix}10.26 & -9.74\\\\ -9.74 & 10.26\\end{pmatrix}\n\n\\|A\\|_\\infty = 1.95, \\|A^{-1}\\|_\\infty = 10.26 + 9.74 = 20, so \\kappa_\\infty = 1.95 \\times 20 = 39.\n2-norm: \\sigma_{\\max}/\\sigma_{\\min} = 1.95/0.05 = 39. Overlap c: \\kappa = \\dfrac{1 + c}{1 - c}.\nWorst case: \\mathbf b \\propto (1, 1) (both dyes, the stretched direction), \\Delta\\mathbf b \\propto (1, -1) (anti-correlated detector errors). The teaser was exactly this: amplification 39.\nNoise along (1, 1) is not amplified at all (factor 1).\n\n\nEverything here is pen and paper; the exercise repeats it. Point out that the inverse has large entries of opposite sign: the unmixed dye 1 is about 10 times detector 1 minus 10 times detector 2, a difference of two large, nearly equal numbers. That is cancellation again, and it is built into the problem, not the algorithm. kappa = (1 + c)/(1 - c): c = 0.5 gives 3, c = 0.9 gives 19, c = 0.99 gives 199.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#computing-kappa-in-r",
     "href": "pivoting-conditioning/lec.html#computing-kappa-in-r",
     "title": "Pivoting, norms and conditioning",
     "section": "Computing \\kappa in R",
-    "text": "Computing \\kappa in R\nkappa(A, exact = TRUE)          # 2-norm, from the singular values\n# [1] 39\nkappa(A)                        # default: a fast estimate\n# [1] 39.95\n1 / rcond(A)                    # 1-norm estimate, from the LU factors\n# [1] 39\n\nkappa() without exact = TRUE is an estimate, good to a small factor; enough for counting digits.\nexact = TRUE costs an SVD (O(n^3), a few times dearer than solve()). rcond() costs only O(n^2) once the LU factors exist.\nPython: np.linalg.cond(A); Rust (nalgebra): singular_values(), max / min.\n\n\nThree routes to the same number. The default kappa() works from a QR factorisation and a triangular estimate; it is off by 2 % here, which never matters for the digits rule. rcond is the reciprocal condition number in the 1-norm, estimated by LAPACK from the LU factors; a value near .Machine$double.eps (about 1e-16) means “numerically singular”, and solve() itself refuses with “system is computationally singular: reciprocal condition number = …” when it falls below that. Never compute kappa as norm(A) * norm(solve(A)) for a large matrix: forming the inverse is wasteful."
+    "text": "Computing \\kappa in R\nkappa(A, exact = TRUE)          # 2-norm, from the singular values\n# [1] 39\nkappa(A)                        # default: a fast estimate\n# [1] 39.95\n1 / rcond(A)                    # 1-norm estimate, from the LU factors\n# [1] 39\n\nkappa() without exact = TRUE is an estimate, good to a small factor; enough for counting digits.\nexact = TRUE costs an SVD (O(n^3), a few times dearer than solve()). rcond() costs only O(n^2) once the LU factors exist.\nPython: np.linalg.cond(A); Rust (nalgebra): singular_values(), max / min.\n\n\nThree routes to the same number. The default kappa() works from a QR factorisation and a triangular estimate; it is off by 2 % here, which never matters for the digits rule. rcond is the reciprocal condition number in the 1-norm, estimated by LAPACK from the LU factors; a value near .Machine$double.eps (about 1e-16) means “numerically singular”, and solve() itself refuses with “system is computationally singular: reciprocal condition number = …” when it falls below that. Never compute kappa as norm(A) * norm(solve(A)) for a large matrix: forming the inverse is wasteful.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#rule-of-thumb-lose-log_10kappa-digits",
     "href": "pivoting-conditioning/lec.html#rule-of-thumb-lose-log_10kappa-digits",
     "title": "Pivoting, norms and conditioning",
     "section": "Rule of thumb: lose \\log_{10}\\kappa digits",
-    "text": "Rule of thumb: lose \\log_{10}\\kappa digits\n\n\nSix dyes, peaks moved closer: \\kappa from 1.6 to 10^{10}. Blue: only rounding (\\le \\kappa\\varepsilon). Orange: 1 % noise (\\approx \\kappa \\times 0.01).\n16 digits survive \\kappa = 10^6; 2-digit data survive only \\kappa \\lesssim 10.\n\n\nThe panel: 6 Gaussian spectra of width 30 nm, peaks spaced 60 nm down to 4 nm, detectors at the peaks. Exact abundances x = (5, 1, 3, 2, 4, 1), b = A x computed in double precision, then solve(). The blue points lose about log10 kappa digits from 16, below the kappa times epsilon line because the bound is a worst case. The orange points add 1 % multiplicative noise to every detector (median over 200 noise draws) and follow kappa times 0.01: with kappa = 100 the unmixed values are off by 100 %. This is the asymmetry from Part 1 again: rounding errors need a huge kappa to hurt, measurement errors only a modest one."
+    "text": "Rule of thumb: lose \\log_{10}\\kappa digits\n\n\nSix dyes, peaks moved closer: \\kappa from 1.6 to 10^{10}. Blue: only rounding (\\le \\kappa\\varepsilon). Orange: 1 % noise (\\approx \\kappa \\times 0.01).\n16 digits survive \\kappa = 10^6; 2-digit data survive only \\kappa \\lesssim 10.\n\n\nThe panel: 6 Gaussian spectra of width 30 nm, peaks spaced 60 nm down to 4 nm, detectors at the peaks. Exact abundances x = (5, 1, 3, 2, 4, 1), b = A x computed in double precision, then solve(). The blue points lose about log10 kappa digits from 16, below the kappa times epsilon line because the bound is a worst case. The orange points add 1 % multiplicative noise to every detector (median over 200 noise draws) and follow kappa times 0.01: with kappa = 100 the unmixed values are off by 100 %. This is the asymmetry from Part 1 again: rounding errors need a huge kappa to hurt, measurement errors only a modest one.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#residual-vs-error",
     "href": "pivoting-conditioning/lec.html#residual-vs-error",
     "title": "Pivoting, norms and conditioning",
     "section": "Residual vs error",
-    "text": "Residual vs error\nThe residual \\mathbf r = \\mathbf b - A\\hat{\\mathbf x} is computable; the error \\hat{\\mathbf x} - \\mathbf x is not (we do not know \\mathbf x).\nb &lt;- c(1.95, 1.95); x &lt;- c(1, 1)                   # true dye amounts\nrel &lt;- function(u, v) sqrt(sum((u - v)^2)) / sqrt(sum(v^2))\nxa &lt;- c(1.2, 0.8); xb &lt;- c(1.01, 1.01)             # two candidate answers\nc(resid = rel(A %*% xa, b), error = rel(xa, x))\n#       resid       error\n# 0.005128205 0.200000000\nc(resid = rel(A %*% xb, b), error = rel(xb, x))\n# resid error\n#  0.01  0.01\n\nxa has the smaller residual but a 20 times larger error.\nBound: \\dfrac{\\|\\hat{\\mathbf x} - \\mathbf x\\|}{\\|\\mathbf x\\|} \\le \\kappa(A)\\,\\dfrac{\\|\\mathbf r\\|}{\\|\\mathbf b\\|}.\n\n\nThe residual measures how well x-hat fits the equations; the error, how close it is to the truth. With an ill-conditioned A they disagree: xa = (1.2, 0.8) changes x in the squashed direction (1, -1), which A hardly sees, so the fit stays good. xb changes x in the stretched direction (1, 1), which A sees fully. The bound is the same as before with Delta b replaced by the residual: x-hat is the exact solution for b - r. So a small residual guarantees a small error only when kappa is small."
+    "text": "Residual vs error\nThe residual \\mathbf r = \\mathbf b - A\\hat{\\mathbf x} is computable; the error \\hat{\\mathbf x} - \\mathbf x is not (we do not know \\mathbf x).\nb &lt;- c(1.95, 1.95); x &lt;- c(1, 1)                   # true dye amounts\nrel &lt;- function(u, v) sqrt(sum((u - v)^2)) / sqrt(sum(v^2))\nxa &lt;- c(1.2, 0.8); xb &lt;- c(1.01, 1.01)             # two candidate answers\nc(resid = rel(A %*% xa, b), error = rel(xa, x))\n#       resid       error\n# 0.005128205 0.200000000\nc(resid = rel(A %*% xb, b), error = rel(xb, x))\n# resid error\n#  0.01  0.01\n\nxa has the smaller residual but a 20 times larger error.\nBound: \\dfrac{\\|\\hat{\\mathbf x} - \\mathbf x\\|}{\\|\\mathbf x\\|} \\le \\kappa(A)\\,\\dfrac{\\|\\mathbf r\\|}{\\|\\mathbf b\\|}.\n\n\nThe residual measures how well x-hat fits the equations; the error, how close it is to the truth. With an ill-conditioned A they disagree: xa = (1.2, 0.8) changes x in the squashed direction (1, -1), which A hardly sees, so the fit stays good. xb changes x in the stretched direction (1, 1), which A sees fully. The bound is the same as before with Delta b replaced by the residual: x-hat is the exact solution for b - r. So a small residual guarantees a small error only when kappa is small.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#a-stable-solver-always-has-a-small-residual",
     "href": "pivoting-conditioning/lec.html#a-stable-solver-always-has-a-small-residual",
     "title": "Pivoting, norms and conditioning",
     "section": "A stable solver always has a small residual",
-    "text": "A stable solver always has a small residual\npanel &lt;- function(n, spacing, width = 30) {     # Gaussian spectra\n  peak &lt;- 500 + spacing * (0:(n - 1))           # dye peaks = detectors (nm)\n  outer(peak, peak, function(d, p) exp(-(d - p)^2 / (2 * width^2)))\n}\nP &lt;- panel(6, 6); xt &lt;- c(5, 1, 3, 2, 4, 1)     # 6 dyes, peaks 6 nm apart\nb6 &lt;- drop(P %*% xt);  xh &lt;- solve(P, b6)\nc(kappa = kappa(P, exact = TRUE), resid = rel(P %*% xh, b6), error = rel(xh, xt))\n#        kappa        resid        error\n# 1.141239e+08 1.431645e-16 5.182116e-09\n\nResidual at rounding level: solve() did its job (backward stable).\nError \\approx 10^{8}\\times larger: that is \\kappa, the problem.\nCheck: residual tells you about the algorithm; \\kappa tells you about the problem.\n\n\nThis is the practical consequence of backward stability: pivoted LU returns an x-hat whose residual is about epsilon times norm(A) norm(x-hat), whatever kappa is. So checking the residual of solve() output is a test of the solver (and of bugs in your own code), not of the answer’s accuracy. Here the error is 5e-9, eight digits lost out of 16, as log10(1.1e8) = 8.06 predicts. outer() builds the matrix of spectrum values: entry (i, j) is dye j’s emission at detector i."
+    "text": "A stable solver always has a small residual\npanel &lt;- function(n, spacing, width = 30) {     # Gaussian spectra\n  peak &lt;- 500 + spacing * (0:(n - 1))           # dye peaks = detectors (nm)\n  outer(peak, peak, function(d, p) exp(-(d - p)^2 / (2 * width^2)))\n}\nP &lt;- panel(6, 6); xt &lt;- c(5, 1, 3, 2, 4, 1)     # 6 dyes, peaks 6 nm apart\nb6 &lt;- drop(P %*% xt);  xh &lt;- solve(P, b6)\nc(kappa = kappa(P, exact = TRUE), resid = rel(P %*% xh, b6), error = rel(xh, xt))\n#        kappa        resid        error\n# 1.141239e+08 1.431645e-16 5.182116e-09\n\nResidual at rounding level: solve() did its job (backward stable).\nError \\approx 10^{8}\\times larger: that is \\kappa, the problem.\nCheck: residual tells you about the algorithm; \\kappa tells you about the problem.\n\n\nThis is the practical consequence of backward stability: pivoted LU returns an x-hat whose residual is about epsilon times norm(A) norm(x-hat), whatever kappa is. So checking the residual of solve() output is a test of the solver (and of bugs in your own code), not of the answer’s accuracy. Here the error is 5e-9, eight digits lost out of 16, as log10(1.1e8) = 8.06 predicts. outer() builds the matrix of spectrum values: entry (i, j) is dye j’s emission at detector i.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#detector-noise-in-unmixed-cells",
     "href": "pivoting-conditioning/lec.html#detector-noise-in-unmixed-cells",
     "title": "Pivoting, norms and conditioning",
     "section": "Detector noise in unmixed cells",
-    "text": "Detector noise in unmixed cells\n\n\n1000 cells, both dyes at 1 unit, 1 % detector noise. Overlap 0.95: spread \\times 9.5, along dye 1 - dye 2.\nCytometrists call this spillover spreading: populations smear out after unmixing.\n\n\nThe same noise draws unmixed with c = 0.5 (kappa 3) and c = 0.95 (kappa 39). The sd of the unmixed dye 1 goes from 0.015 to 0.142. The per-component factor is the 2-norm of a row of A^-1 (1.49 and 14.2, times the noise sd 0.01), smaller than kappa because kappa is the worst case over all directions. Note the shape: the cloud is stretched along (1, -1), exactly the squashed direction of the ellipse. Real data show this as diagonal smears and negative values in unmixed plots, a familiar sight to anyone who has run a large spectral panel."
+    "text": "Detector noise in unmixed cells\n\n\n1000 cells, both dyes at 1 unit, 1 % detector noise. Overlap 0.95: spread \\times 9.5, along dye 1 - dye 2.\nCytometrists call this spillover spreading: populations smear out after unmixing.\n\n\nThe same noise draws unmixed with c = 0.5 (kappa 3) and c = 0.95 (kappa 39). The sd of the unmixed dye 1 goes from 0.015 to 0.142. The per-component factor is the 2-norm of a row of A^-1 (1.49 and 14.2, times the noise sd 0.01), smaller than kappa because kappa is the worst case over all directions. Note the shape: the cloud is stretched along (1, -1), exactly the squashed direction of the ellipse. Real data show this as diagonal smears and negative values in unmixed plots, a familiar sight to anyone who has run a large spectral panel.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#what-to-do-about-an-ill-conditioned-unmixing",
     "href": "pivoting-conditioning/lec.html#what-to-do-about-an-ill-conditioned-unmixing",
     "title": "Pivoting, norms and conditioning",
     "section": "What to do about an ill-conditioned unmixing",
-    "text": "What to do about an ill-conditioned unmixing\n\n\n\n\n\n\n\n\n\n\n\npeak spacing (6 dyes, width 30 nm)\n60 nm\n30 nm\n20 nm\n10 nm\n5 nm\n\n\n\n\n\\kappa\n1.6\n29\n705\n6.4\\times10^5\n7.2\\times10^8\n\n\n\nsapply(c(60, 30, 20, 10, 5), function(s) kappa(panel(6, s), exact = TRUE))\n# [1] 1.644646e+00 2.876870e+01 7.053382e+02 6.373920e+05 7.210988e+08\n\nNo algorithm helps; change the problem. Choose dyes with distinct spectra (panel design tools report the condition number of the spectra matrix, e.g. a “complexity index”).\nMore detectors than dyes (spectral cytometers): least squares, Least squares: normal equations vs QR (Part 4).\nAccept a little bias for less noise: regularisation, The SVD, rank deficiency and regularisation.\n\n\nThe table is the panel designer’s view of conditioning: kappa grows extremely fast as peaks crowd together, because neighbouring columns of A become nearly parallel. Cytek’s panel-design software reports a “complexity index”, which is the condition number of the matrix of reference spectra; panels are designed to keep it low. The two numerical remedies (more measurements, regularisation) are the subject of Part 4. Pivoting, higher precision or a different solve routine do not help: the amplification is in the problem."
+    "text": "What to do about an ill-conditioned unmixing\n\n\n\n\n\n\n\n\n\n\n\npeak spacing (6 dyes, width 30 nm)\n60 nm\n30 nm\n20 nm\n10 nm\n5 nm\n\n\n\n\n\\kappa\n1.6\n29\n705\n6.4\\times10^5\n7.2\\times10^8\n\n\n\nsapply(c(60, 30, 20, 10, 5), function(s) kappa(panel(6, s), exact = TRUE))\n# [1] 1.644646e+00 2.876870e+01 7.053382e+02 6.373920e+05 7.210988e+08\n\nNo algorithm helps; change the problem. Choose dyes with distinct spectra (panel design tools report the condition number of the spectra matrix, e.g. a “complexity index”).\nMore detectors than dyes (spectral cytometers): least squares, Least squares: normal equations vs QR (Part 4).\nAccept a little bias for less noise: regularisation, The SVD, rank deficiency and regularisation.\n\n\nThe table is the panel designer’s view of conditioning: kappa grows extremely fast as peaks crowd together, because neighbouring columns of A become nearly parallel. Cytek’s panel-design software reports a “complexity index”, which is the condition number of the matrix of reference spectra; panels are designed to keep it low. The two numerical remedies (more measurements, regularisation) are the subject of Part 4. Pivoting, higher precision or a different solve routine do not help: the amplification is in the problem.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#checklist-solving-amathbf-x-mathbf-b",
     "href": "pivoting-conditioning/lec.html#checklist-solving-amathbf-x-mathbf-b",
     "title": "Pivoting, norms and conditioning",
     "section": "Checklist: solving A\\mathbf x = \\mathbf b",
-    "text": "Checklist: solving A\\mathbf x = \\mathbf b\n\nUse the library (solve, np.linalg.solve, nalgebra lu().solve): it pivots. Your own elimination without pivoting can fail silently.\nCompute \\kappa (kappa(A), 1/rcond(A), np.linalg.cond). Expect to lose \\log_{10}\\kappa digits of your data’s accuracy.\nResidual small but answer odd? Then the problem is ill-conditioned; a small residual does not certify the answer.\nPerturb \\mathbf b by its noise level and re-solve: the spread of \\mathbf x is your real uncertainty.\nsolve() error “computationally singular”: \\kappa \\gtrsim 10^{16}. Do not just switch to a different solver; rethink the model.\n\n\nThese are the habits to take away. Step 4 is the matrix version of kappa_num from Part 1: nudging the input and watching the output works for any pipeline, and it gives the error in the directions your noise actually has, not the worst case. Step 5: switching to a pseudo-inverse or a generalised inverse to silence the error does not create information that the measurements do not contain."
+    "text": "Checklist: solving A\\mathbf x = \\mathbf b\n\nUse the library (solve, np.linalg.solve, nalgebra lu().solve): it pivots. Your own elimination without pivoting can fail silently.\nCompute \\kappa (kappa(A), 1/rcond(A), np.linalg.cond). Expect to lose \\log_{10}\\kappa digits of your data’s accuracy.\nResidual small but answer odd? Then the problem is ill-conditioned; a small residual does not certify the answer.\nPerturb \\mathbf b by its noise level and re-solve: the spread of \\mathbf x is your real uncertainty.\nsolve() error “computationally singular”: \\kappa \\gtrsim 10^{16}. Do not just switch to a different solver; rethink the model.\n\n\nThese are the habits to take away. Step 4 is the matrix version of kappa_num from Part 1: nudging the input and watching the output works for any pipeline, and it gives the error in the directions your noise actually has, not the worst case. Step 5: switching to a pseudo-inverse or a generalised inverse to silence the error does not create information that the measurements do not contain.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "pivoting-conditioning/lec.html#summary",
     "href": "pivoting-conditioning/lec.html#summary",
     "title": "Pivoting, norms and conditioning",
     "section": "Summary",
-    "text": "Summary\n\nElimination divides by pivots. Tiny pivot without pivoting: error \\approx \\varepsilon/\\delta, silently. Partial pivoting (largest entry in the column, |m| \\le 1) gives PA = LU and is backward stable in practice; solve() does it.\nVector norms: \\|\\cdot\\|_1 (sum), \\|\\cdot\\|_2 (length), \\|\\cdot\\|_\\infty (max). Matrix norm: largest stretch; column sums, row sums, \\sigma_{\\max}.\nCondition number \\kappa(A) = \\|A\\|\\|A^{-1}\\| = \\sigma_{\\max}/\\sigma_{\\min}: relative error in \\mathbf x \\le \\kappa \\times relative error in \\mathbf b. Lose about \\log_{10}\\kappa digits.\nResidual vs error: a stable solver gives a tiny residual; the error can still be \\kappa times larger.\nTwo dyes with overlap c: \\kappa = (1+c)/(1-c); c = 0.95 gives 39 and a tenfold spread of unmixed cells. Cure the experiment, not the algorithm.\nNext, Structure: symmetric, banded, sparse: faster solves when A has structure.\n\n\nRecap the two failure types once more: pivoting fixes the algorithm, nothing fixes the problem except better data or a different question. The next unit keeps the same LU machinery but exploits structure (Cholesky for symmetric positive definite matrices, banded and sparse matrices). Conditioning returns in Part 4 (least squares squares kappa in the normal equations) and in Identifiability and uncertainty of fitted parameters (Part 9)."
+    "text": "Summary\n\nElimination divides by pivots. Tiny pivot without pivoting: error \\approx \\varepsilon/\\delta, silently. Partial pivoting (largest entry in the column, |m| \\le 1) gives PA = LU and is backward stable in practice; solve() does it.\nVector norms: \\|\\cdot\\|_1 (sum), \\|\\cdot\\|_2 (length), \\|\\cdot\\|_\\infty (max). Matrix norm: largest stretch; column sums, row sums, \\sigma_{\\max}.\nCondition number \\kappa(A) = \\|A\\|\\|A^{-1}\\| = \\sigma_{\\max}/\\sigma_{\\min}: relative error in \\mathbf x \\le \\kappa \\times relative error in \\mathbf b. Lose about \\log_{10}\\kappa digits.\nResidual vs error: a stable solver gives a tiny residual; the error can still be \\kappa times larger.\nTwo dyes with overlap c: \\kappa = (1+c)/(1-c); c = 0.95 gives 39 and a tenfold spread of unmixed cells. Cure the experiment, not the algorithm.\nNext, Structure: symmetric, banded, sparse: faster solves when A has structure.\n\n\nRecap the two failure types once more: pivoting fixes the algorithm, nothing fixes the problem except better data or a different question. The next unit keeps the same LU machinery but exploits structure (Cholesky for symmetric positive definite matrices, banded and sparse matrices). Conditioning returns in Part 4 (least squares squares kappa in the normal equations) and in Identifiability and uncertainty of fitted parameters (Part 9).",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "bisection-fixedpoint/lec.html#about-this-lecture",
@@ -5174,7 +5324,13 @@
     "href": "pivoting-conditioning/lec.html#try-it-overlap-kappa-and-spreading",
     "title": "Pivoting, norms and conditioning",
     "section": "Try it: overlap, \\kappa and spreading",
-    "text": "Try it: overlap, \\kappa and spreading\n\n\n\n\nTwo dyes, Gaussian spectra of width 30 nm, detectors at the peaks, A = [1 c; c 1], computed live. Left: the spectra; the dot is c, dye 2’s signal in detector 1. Middle: detector readings of 400 cells with 1 unit of each dye and noise sd 0.01, plus one red cell you can drag. Right: the unmixed amounts, with the two equations of the red cell as lines. Start at c = 0.95 and click Delta b = (+0.01, -0.01): the dashed lines move a little, their crossing jumps to (1.2, 0.8), relative changes 0.51 % and 20 %, amplification 39 = kappa: the teaser. Click (+0.01, +0.01): amplification 1. Drag the red point round the circle: the amplification swings between 1 and 39, never above. Back to Delta b = 0, untick “lines”: the round cloud in the middle becomes a thin ellipse along dye 1 minus dye 2, sd of dye 1 = 0.14, 14 times the detector noise. Click c = 0.5 (kappa 3, sd 0.015), then 0.99 (kappa 199, sd 0.7, many cells off the plot). Finish by moving the noise slider: the cloud scales with the noise, but its shape and the factor 14 only change with c, the choice of dyes."
+    "text": "Try it: overlap, \\kappa and spreading\n\n\n\n\nTwo dyes, Gaussian spectra of width 30 nm, detectors at the peaks, A = [1 c; c 1], computed live. Left: the spectra; the dot is c, dye 2’s signal in detector 1. Middle: detector readings of 400 cells with 1 unit of each dye and noise sd 0.01, plus one red cell you can drag. Right: the unmixed amounts, with the two equations of the red cell as lines. Start at c = 0.95 and click Delta b = (+0.01, -0.01): the dashed lines move a little, their crossing jumps to (1.2, 0.8), relative changes 0.51 % and 20 %, amplification 39 = kappa: the teaser. Click (+0.01, +0.01): amplification 1. Drag the red point round the circle: the amplification swings between 1 and 39, never above. Back to Delta b = 0, untick “lines”: the round cloud in the middle becomes a thin ellipse along dye 1 minus dye 2, sd of dye 1 = 0.14, 14 times the detector noise. Click c = 0.5 (kappa 3, sd 0.015), then 0.99 (kappa 199, sd 0.7, many cells off the plot). Finish by moving the noise slider: the cloud scales with the noise, but its shape and the factor 14 only change with c, the choice of dyes.",
+    "crumbs": [
+      "Home",
+      "Part 3: Linear systems",
+      "Pivoting, norms and conditioning",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "structured-sparse/exercise.html",
