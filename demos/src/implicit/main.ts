@@ -307,7 +307,7 @@ function buildRace(box: HTMLElement, ds: DOMStringMap, uid: number): () => void 
 
   // ---- plots ----
   const plots = htmlEl("div", "im-plots", "", box);
-  const H = 350, WA = 560, WB = 540, WT = WA + WB;
+  const H = 330, WA = 560, WB = 540, WT = WA + WB;
   const svgA = svgEl("svg", { viewBox: `0 0 ${WA} ${H}`, role: "img", "aria-label": "Concentration profile" }, plots);
   svgA.style.width = `calc(${(100 * WA / WT).toFixed(2)}% - 5px)`;
   const svgB = svgEl("svg", { viewBox: `0 0 ${WB} ${H}`, role: "img", "aria-label": "Error against time step, log-log" }, plots);
@@ -363,13 +363,12 @@ function buildRace(box: HTMLElement, ds: DOMStringMap, uid: number): () => void 
     }
     // legend
     const lg = (txt: string, i: number, c: string, op = 1) => {
-      const x = WA - 230, y = top + 24 + 24 * i;
+      const x = WA - 210, y = top + 24 + 24 * i;
       svgEl("line", { x1: x, x2: x + 22, y1: y - 6, y2: y - 6, stroke: c, "stroke-width": 3, "stroke-opacity": op }, svgA);
       const t = svgEl("text", { x: x + 28, y, "font-weight": 600 }, svgA);
       t.style.fill = c; t.style.fillOpacity = String(op); t.textContent = txt;
     };
-    lg("exact", 0, COL.exact, 0.6);
-    SCHEMES.forEach((s, i) => lg(LABEL[s], i + 1, COL[s], st.show[s] ? 1 : 0.35));
+    lg("exact (series)", 0, COL.exact, 0.6);
     if (st.show.ftcs && (s0.blownAt.ftcs >= 0 || Math.abs(s0.c.ftcs[N >> 1]) > 2 || maxAbs(s0.c.ftcs) > 3)) {
       const t = svgEl("text", { x: la + 10, y: bot - 12, "font-weight": 700 }, svgA);
       t.style.fill = COL.warn;

@@ -31,7 +31,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 26 | optimisation-1d | done | done | done |
 | 27 | gradient-methods | done | running | |
 | 28 | nonlinear-least-squares | done | done | done |
-| 29 | identifiability | done | running | |
+| 29 | identifiability | done | done | done |
 | 30 | constrained-lp | done | done | done |
 | 31 | diffusion-explicit | done | done | done |
 | 32 | diffusion-implicit | done | running | |

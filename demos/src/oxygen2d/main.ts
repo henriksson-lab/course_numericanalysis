@@ -20,7 +20,7 @@ import {
 
 const NAME = "oxygen2d";
 // Okabe-Ito, as in make-steady-state-2d-figs.R; viridis (hcl.colors) for the map
-const COL = { line: "#0072B2", hyp: "#D55E00", cells: "#E69F00", open: "#56B4E9", sealed: "#555", ghost: "#999", neg: "#a8a8a8", ink: "#222" };
+const COL = { line: "#0072B2", hyp: "#D55E00", cells: "#CC79A7", open: "#56B4E9", sealed: "#555", ghost: "#999", neg: "#a8a8a8", ink: "#222" };
 const VIR = ["#4B0055", "#403173", "#00588B", "#007B97", "#009B95", "#00B785", "#53CC67", "#B2DC3C", "#FDE333"];
 const STYLE = `
 [data-demo="${NAME}"].qb-demo { flex-direction: column; gap: .35em; }
@@ -148,6 +148,9 @@ function mount(host: HTMLElement): void {
 
   // ------------------------------------------------------------------ controls
   const r1 = htmlEl("div", "ox-row", "", host);
+  const r2 = htmlEl("div", "ox-row", "", host);
+  const r3 = htmlEl("div", "ox-row", "", host);
+  // row 1: uptake law, cell density, reset
   const ug = htmlEl("div", "ox-group", "", r1);
   htmlEl("span", "", "uptake:", ug);
   const UP: Uptake[] = ["constant", "linear", "mm"];
@@ -157,19 +160,21 @@ function mount(host: HTMLElement): void {
     { label: "Michaelis–Menten", apply: () => setUptake("mm") },
   ]);
   const rhoS = slider(r1, "cells (10⁵/cm²)", 0, 4, 0.05, st.rho, v => { st.rho = v; changed(false); }, v => v.toFixed(2));
-
-  const r2 = htmlEl("div", "ox-row", "", host);
-  const thrS = slider(r2, "hypoxic below (µM)", 1, 50, 1, st.thr, v => { st.thr = v; draw(); }, v => v.toFixed(0));
+  // row 2: grid, threshold, open edges
   const hg = htmlEl("div", "ox-group", "", r2);
   htmlEl("span", "", "grid h (µm):", hg);
   const hBtns = presets(hg, HS.map(h => ({ label: fmtH(h), apply: () => setH(h) })));
-  const pg = htmlEl("div", "ox-group", "", r2);
-  const pBtns = presets(pg, [
-    { label: "cross-section", apply: () => { st.panel = "section"; draw(); } },
-    { label: "grid check", apply: () => { st.panel = "check"; kick(); draw(); } },
-  ]);
-
-  const r3 = htmlEl("div", "ox-row", "", host);
+  const thrS = slider(r2, "hypoxic < (µM)", 1, 50, 1, st.thr, v => { st.thr = v; draw(); }, v => v.toFixed(0));
+  const eg = htmlEl("div", "ox-group", "", r2);
+  htmlEl("span", "", "open:", eg);
+  const eKeys: (keyof Edges)[] = ["l", "r", "b", "t"];
+  const eLab = { l: "left", r: "right", b: "bottom", t: "top" };
+  const eBoxes = eKeys.map(key => checkbox(eg, eLab[key], st.edges[key], v => {
+    st.edges[key] = v;
+    if (!eKeys.some(q => st.edges[q])) { st.edges[key] = true; eBoxes[eKeys.indexOf(key)].checked = true; note = "At least one edge must stay open: without supply there is no steady state with oxygen."; draw(); return; }
+    setEdges(g, st.edges); changed(false);
+  }));
+  // row 3: cells, mouse mode, cut direction, right panel
   const cg = htmlEl("div", "ox-group", "", r3);
   htmlEl("span", "", "cells:", cg);
   presets(cg, [
@@ -179,7 +184,7 @@ function mount(host: HTMLElement): void {
     { label: "none", apply: () => setCells("none") },
   ]).forEach(b => b.addEventListener("click", () => b.classList.remove("active")));
   const mg = htmlEl("div", "ox-group", "", r3);
-  htmlEl("span", "", "mouse:", mg);
+  htmlEl("span", "", "drag:", mg);
   const mBtns = presets(mg, [
     { label: "move cut", apply: () => { st.mode = "cut"; draw(); } },
     { label: "paint", apply: () => { st.mode = "paint"; draw(); } },
@@ -187,19 +192,15 @@ function mount(host: HTMLElement): void {
   ]);
   const xg = htmlEl("div", "ox-group", "", r3);
   const cutBtns = presets(xg, [
-    { label: "cut along x", apply: () => { if (st.cut !== "x") { st.cut = "x"; st.cutPos = 1000; } ghost = null; draw(); } },
-    { label: "along y", apply: () => { if (st.cut !== "y") { st.cut = "y"; st.cutPos = 2000; } ghost = null; draw(); } },
+    { label: "cut x", apply: () => { if (st.cut !== "x") { st.cut = "x"; st.cutPos = 1000; } ghost = null; draw(); } },
+    { label: "cut y", apply: () => { if (st.cut !== "y") { st.cut = "y"; st.cutPos = 2000; } ghost = null; draw(); } },
   ]);
-  const eg = htmlEl("div", "ox-group", "", r3);
-  htmlEl("span", "", "open:", eg);
-  const eKeys: (keyof Edges)[] = ["l", "r", "b", "t"];
-  const eLab = { l: "left", r: "right", b: "bottom", t: "top" };
-  const eBoxes = eKeys.map(key => checkbox(eg, eLab[key], st.edges[key], v => {
-    st.edges[key] = v;
-    if (!eKeys.some(q => st.edges[q])) { st.edges[key] = true; eBoxes[eKeys.indexOf(key)].checked = true; note = "At least one edge must stay open: without supply there is no steady state with oxygen."; draw(); return; }
-    setEdges(g, st.edges); changed(false);
-  }));
-  button(r3, "reset", () => {
+  const pg = htmlEl("div", "ox-group", "", r3);
+  const pBtns = presets(pg, [
+    { label: "section", apply: () => { st.panel = "section"; draw(); } },
+    { label: "grid check", apply: () => { st.panel = "check"; kick(); draw(); } },
+  ]);
+  button(r1, "reset", () => {
     st.uptake = start.uptake; st.rho = start.rho; st.thr = start.thr; st.edges = { ...start.edges };
     st.cut = start.cut as "x" | "y"; st.cutPos = st.cut === "x" ? 1000 : 2000; st.mode = "cut"; st.panel = start.panel as "section" | "check";
     rhoS.set(st.rho); thrS.set(st.thr); eKeys.forEach((q, i) => (eBoxes[i].checked = st.edges[q]));
@@ -210,7 +211,7 @@ function mount(host: HTMLElement): void {
 
   // ------------------------------------------------------------------ plots
   const plots = htmlEl("div", "ox-plots", "", host);
-  const WA = 650, WB = 470, H = 340, WT = WA + WB;
+  const WA = 660, WB = 470, H = 362, WT = WA + WB;
   const svgA = svgEl("svg", { viewBox: `0 0 ${WA} ${H}`, role: "img", "aria-label": "Oxygen in the chamber, top view" }, plots);
   svgA.style.width = `calc(${(100 * WA / WT).toFixed(2)}% - 4px)`;
   svgA.style.touchAction = "none";
@@ -220,7 +221,7 @@ function mount(host: HTMLElement): void {
   let note = "";
 
   // map geometry: 0.125 px per µm
-  const ML = 66, MT = 44, MW = 500, MH = 250;
+  const ML = 80, MT = 44, MW = 500, MH = 250;
   const mx = (x: number) => ML + x * MW / LX, my = (y: number) => MT + MH - y * MH / LY;
   const mxInv = (px: number) => (px - ML) * LX / MW, myInv = (py: number) => (MT + MH - py) * LY / MH;
 
@@ -232,7 +233,7 @@ function mount(host: HTMLElement): void {
   const img = svgEl("image", { x: 0, y: 0, width: 1, height: 1, preserveAspectRatio: "none", "clip-path": `url(#${clip.id})` }, svgA);
   const negPath = svgEl("path", { fill: "none", stroke: "#fff", "stroke-width": 2.5, "stroke-dasharray": "7 5" }, svgA);
   const hypPath = svgEl("path", { fill: "none", stroke: COL.hyp, "stroke-width": 3.5 }, svgA);
-  const cellPath = svgEl("path", { fill: "none", stroke: COL.cells, "stroke-width": 2.5, "stroke-dasharray": "3 4" }, svgA);
+  const cellPath = svgEl("path", { fill: "none", stroke: COL.cells, "stroke-width": 3, "stroke-dasharray": "4 4" }, svgA);
   const cutLine = svgEl("line", { stroke: COL.ink, "stroke-width": 2, "stroke-dasharray": "10 5" }, svgA);
   const edgeLines = eKeys.map(() => svgEl("line", { "stroke-width": 7, "stroke-linecap": "square" }, svgA));
   const minMark = svgEl("circle", { r: 6, fill: "none", stroke: "#fff", "stroke-width": 2.5 }, svgA);
@@ -258,7 +259,6 @@ function mount(host: HTMLElement): void {
   svgEl("text", { x: CBX - 4, y: MT - 10, class: "sm" }, svgA).textContent = "µM";
   svgEl("rect", { x: CBX, y: MT + MH + 12, width: 16, height: 16, fill: COL.neg }, svgA);
   svgEl("text", { x: CBX + 20, y: MT + MH + 26, class: "sm" }, svgA).textContent = "< 0";
-  const modeTxt = svgEl("text", { x: WA - 8, y: 24, "text-anchor": "end", class: "sm" }, svgA);
 
   // ------------------------------------------------------------------ mouse
   let painting = false;
@@ -410,12 +410,11 @@ function mount(host: HTMLElement): void {
       const x = Math.round(st.cutPos / h) * h;
       Object.entries({ x1: mx(x), x2: mx(x), y1: my(0), y2: my(LY) }).forEach(([a, v]) => cutLine.setAttribute(a, String(v)));
     }
-    modeTxt.textContent = st.mode === "cut" ? "drag: move the cut" : st.mode === "paint" ? "drag: paint cells" : "drag: erase cells";
   }
 
   function drawSection(s0: { min: number }): void {
     svgB.replaceChildren();
-    const L = 74, R = WB - 14, T = 44, B = 294;
+    const L = 74, R = WB - 26, T = 44, B = 294;
     if (st.panel === "check") { drawCheck(); return; }
     const sec = section(g);
     const len = st.cut === "x" ? LX : LY;
