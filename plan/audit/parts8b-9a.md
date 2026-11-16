@@ -48,4 +48,4 @@ the demo answers where they can be computed) were checked against code. No Rust 
 
 ## Renders
 
-See the end of this file.
+All 12 pages render. Several renders first failed on `.quarto`/site_libs races with other workers; each of these succeeded on a retry. The decks still have 26/26/27/28 slides; none was added. A headless overflow probe after the edits: stiffness (the two edited code slides included) and optimisation-1d have no slide over 720 px. The phase-plane and gillespie decks were changed only in the notes.
