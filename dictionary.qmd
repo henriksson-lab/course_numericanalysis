@@ -132,16 +132,1511 @@ It changes the constant, not the exponent.
 12 bytes per non-zero in compressed sparse column (CSC) format, against 8 bytes
 for *every* entry of a dense matrix.
 
-<!-- Terms to add as later parts are written:
-  - fixed point, bisection, Newton's method, secant method
-  - LU / Cholesky / QR factorisation, pivoting
-  - normal equations, SVD, pseudoinverse, rank deficiency, regularisation
-  - power iteration, Rayleigh quotient, Krylov method
-  - interpolation, Runge phenomenon, spline, FFT, aliasing
-  - finite difference, quadrature, Richardson extrapolation, Monte Carlo
-  - initial value problem, Euler, Runge–Kutta, adaptive step, stiffness
-  - Gillespie algorithm
-  - gradient descent, Newton / quasi-Newton (BFGS), Nelder–Mead,
-    Gauss–Newton, Levenberg–Marquardt, local vs global minimum, identifiability
-  - finite-difference stencil, CFL condition, Péclet number, method of lines
--->
+<!-- BEGIN GENERATED (plan/glossary.py) -->
+
+## Part 2: Solving nonlinear equations
+
+### Bisection and fixed-point iteration
+
+See [Bisection and fixed-point iteration](bisection-fixedpoint/lec.qmd).
+
+**Root** — a number x* with f(x*) = 0.
+
+**Bracket** — an interval [a, b] where f(a) and f(b) have opposite signs; for continuous f it contains a root.
+
+**Intermediate value theorem** — a continuous function that changes sign on an interval has a root in it.
+
+**Bisection** — root finding by halving a bracket and keeping the half with the sign change; linear convergence with rate 1/2.
+
+**Double root** — a root where f touches zero without changing sign (f and f' both zero); invisible to bracketing methods.
+
+**Pole** — a point where f becomes infinite; it can produce a sign change without a root.
+
+**Residual** — the value f(x) at a computed root; should be close to zero.
+
+**Stopping criterion** — the rule that ends an iteration: bracket width or step size below an absolute plus relative tolerance, or a maximum number of iterations.
+
+**Fixed point** — a number x* with g(x*) = x*.
+
+**Fixed-point iteration** — repeating x_{k+1} = g(x_k) to find a fixed point of g.
+
+**Cobweb plot** — picture of a fixed-point iteration: alternate vertical steps to y = g(x) and horizontal steps to the diagonal y = x.
+
+**Attracting (stable) fixed point** — a fixed point with |g'(x*)| < 1; nearby iterates converge to it.
+
+**Repelling (unstable) fixed point** — a fixed point with |g'(x*)| > 1; nearby iterates move away from it.
+
+**Rate of linear convergence** — the factor L = |g'(x*)| by which the error shrinks each step.
+
+**Steady state (equilibrium)** — a population size that does not change from one generation to the next, N* = g(N*).
+
+**Beverton–Holt model** — discrete-time population model N_{t+1} = R N_t / (1 + (R-1) N_t / K); always approaches K monotonically.
+
+**Ricker model** — discrete-time population model N_{t+1} = N_t exp(r (1 - N_t/K)); overshoots, cycles or becomes chaotic for large r.
+
+**Maximum sustainable yield** — the largest constant harvest for which a steady state exists.
+
+**Cycle (period-k orbit)** — a set of k values that an iteration visits in turn forever, e.g. a 2-cycle of boom and bust years.
+
+**Bifurcation diagram** — plot of the long-run values of an iteration against a parameter.
+
+**Chaos** — bounded, non-periodic behaviour of a deterministic iteration with sensitive dependence on the starting value.
+
+**Sensitive dependence on initial conditions** — tiny differences in the start (or rounding errors) grow exponentially.
+
+**Brent's method** — safeguarded root finder used by uniroot and brentq: keeps a bracket like bisection but takes faster interpolation steps.
+
+### Newton and secant methods
+
+See [Newton and secant methods](newton/lec.qmd).
+
+**Newton's method** — Root-finding iteration x_{k+1} = x_k - f(x_k)/f'(x_k): solve the tangent line instead of f.
+
+**Tangent line** — First-order Taylor polynomial f(x_k) + f'(x_k)(x - x_k); Newton's local model of f.
+
+**Secant method** — Newton's method with f' replaced by the slope of the chord through the last two iterates; no derivative needed.
+
+**Quadratic convergence** — Error squared each step, e_{k+1} ≈ C e_k^2; the number of correct digits roughly doubles (order 2).
+
+**Superlinear convergence** — Faster than linear (order p > 1) but not necessarily quadratic; the secant method has p ≈ 1.618.
+
+**Order of convergence** — The power p in e_{k+1} ≈ C e_k^p; estimated as log(e_{k+1}/e_k) / log(e_k/e_{k-1}).
+
+**Golden ratio** — (1 + √5)/2 ≈ 1.618, the order of convergence of the secant method.
+
+**Simple root** — A root x* with f'(x*) ≠ 0; Newton converges quadratically near it.
+
+**Double (multiple) root** — A root where f'(x*) = 0 as well, e.g. (x - 1)^2; Newton converges only linearly and no sign change exists.
+
+**Score function** — Derivative of the log-likelihood with respect to a parameter; the maximum-likelihood estimate is a root of it.
+
+**Observed information** — Minus the second derivative of the log-likelihood at the MLE, -S'(θ̂); 1/√ of it is the usual standard error.
+
+**Zero-truncated Poisson** — Poisson distribution conditioned on a count ≥ 1, for data where zeros are not observed.
+
+**EC50 / c50** — Dose that gives 50 % of the response; for a single Hill curve it equals K, for mixtures it must be found by root finding.
+
+**Two-site (biphasic) dose–response** — Response that is a weighted sum of two Hill curves, e.g. from two receptor subtypes.
+
+**Cycling** — An iteration that returns to earlier values and repeats forever instead of converging (e.g. Newton on a sigmoid from a bad start).
+
+**Safeguarded method** — Root finder that keeps a sign-change bracket and falls back to bisection when a fast step would leave it.
+
+**Brent's method** — Safeguarded root finder combining bisection, secant and inverse quadratic interpolation; R `uniroot`, Python `scipy.optimize.brentq`.
+
+**Inverse quadratic interpolation** — Fit x as a quadratic function of f through three points and evaluate at f = 0; the fast step in Brent's method.
+
+**Function evaluation count** — Number of calls of f (and f'); the fair measure of a root finder's cost.
+
+### Newton for systems of equations
+
+See [Newton for systems of equations](newton-systems/lec.qmd).
+
+**Partial derivative** — the derivative of a function of several variables with respect to one of them, all others held fixed; written $\partial F/\partial x_j$.
+
+**Jacobian** — the matrix of all first partial derivatives of a vector function $\mathbf F$: entry $(i, j)$ is $\partial F_i/\partial x_j$ (row = equation, column = variable).
+
+**Linearisation** — the approximation $\mathbf F(\mathbf x + \boldsymbol\delta) \approx \mathbf F(\mathbf x) + J(\mathbf x)\,\boldsymbol\delta$, valid for small steps $\boldsymbol\delta$.
+
+**Newton's method for systems** — iteration that solves $J(\mathbf x_k)\boldsymbol\delta = -\mathbf F(\mathbf x_k)$ and sets $\mathbf x_{k+1} = \mathbf x_k + \boldsymbol\delta$; one linear solve per step.
+
+**Residual** — the value $\mathbf F(\mathbf x)$ at an approximate root; its length $\|\mathbf F(\mathbf x)\|$ measures how far the equations are from being satisfied.
+
+**Euclidean norm** — the length of a vector, $\|\mathbf a\| = \sqrt{a_1^2 + \dots + a_n^2}$.
+
+**Singular matrix** — a square matrix with determinant 0, which has no inverse; a singular Jacobian is the system analogue of $f'(x) = 0$.
+
+**Finite-difference Jacobian** — an approximate Jacobian built column by column as $(\mathbf F(\mathbf x + h_j\mathbf e_j) - \mathbf F(\mathbf x))/h_j$, with $h_j \approx \sqrt\varepsilon\,\max(|x_j|, 1)$.
+
+**Steady state** — a state where all rates of change are zero, i.e. a root of the right-hand side of an ODE system.
+
+**Bistability** — the existence of two stable steady states for the same parameters, so the system's state depends on its history (cellular memory).
+
+**Toggle switch** — a two-gene circuit in which each gene's protein represses the other gene, giving bistability for strong enough promoters.
+
+**Hill function** — a sigmoidal dose–response $\alpha/(1 + x^n)$ (repression) or $\alpha x^n/(1 + x^n)$ (activation); $n$ is the Hill coefficient (cooperativity).
+
+**Basin of attraction (of a root finder)** — the set of starting points from which an iteration converges to a given root.
+
+**Damped Newton** — Newton's method with step length $t\boldsymbol\delta$, $0 < t \le 1$, shortened until the step is acceptable (e.g. the residual does not grow).
+
+**Trust region** — a safeguard that limits each step to a region where the linear model is trusted; used by MINPACK's hybrid method (`scipy.optimize.root`).
+
+## Part 3: Linear systems
+
+### Gaussian elimination as LU
+
+See [Gaussian elimination as LU](lu/lec.qmd).
+
+**Gaussian elimination** — Solving a linear system by subtracting multiples of one row from the rows below it until the matrix is upper triangular.
+
+**Pivot** — The diagonal entry $u_{kk}$ used at step $k$ of elimination to zero out the entries below it.
+
+**Multiplier** — The factor $\ell_{ik} = u_{ik}/u_{kk}$ by which the pivot row is multiplied before subtracting it from row $i$.
+
+**LU factorisation** — Writing a square matrix as $A = LU$, with $L$ unit lower triangular (the multipliers) and $U$ upper triangular (the eliminated matrix); with row swaps, $A = PLU$.
+
+**Lower / upper triangular matrix** — A matrix whose entries above (lower) or below (upper) the diagonal are all zero; unit lower triangular has 1s on the diagonal.
+
+**Forward substitution** — Solving a lower triangular system $L\mathbf y = \mathbf b$ from the first row down, about $n^2$ operations.
+
+**Back substitution** — Solving an upper triangular system $U\mathbf x = \mathbf y$ from the last row up, about $n^2$ operations.
+
+**Factor once, solve many** — Computing the LU factorisation ($\approx \tfrac23 n^3$ operations) once and reusing it for every new right-hand side ($\approx 2n^2$ each).
+
+**Permutation matrix** — An identity matrix with its rows reordered; multiplying by it swaps rows, and $P$ in $A = PLU$ records the row swaps of pivoting.
+
+**Zero pivot** — A pivot equal to 0, which stops elimination without row swaps; it does not by itself mean the matrix is singular.
+
+**Partial pivoting** — Swapping rows so that the pivot is the entry of largest absolute value in its column (treated in Pivoting, norms and conditioning).
+
+**Residual** — The vector $\mathbf r = \mathbf b - A\mathbf x$ for a computed $\mathbf x$; a stable solver makes it as small as rounding allows.
+
+**Isotope mixing model** — A linear system expressing a consumer's isotope signatures as a weighted average of its diet sources, with the weights (diet fractions) summing to 1.
+
+### Pivoting, norms and conditioning
+
+See [Pivoting, norms and conditioning](pivoting-conditioning/lec.qmd).
+
+**Pivot** — the diagonal entry $a_{kk}$ that elimination divides by when clearing column $k$.
+
+**Partial pivoting** — swapping rows before each elimination step so the largest entry (in absolute value) of the current column becomes the pivot; keeps all multipliers at most 1 in size.
+
+**Permutation matrix** — the identity matrix with its rows reordered; multiplying by it reorders rows, as in $PA = LU$.
+
+**Vector norm** — a measure of the length of a vector; the common ones are the 1-norm (sum of absolute values), 2-norm (Euclidean length) and $\infty$-norm (largest absolute value).
+
+**Matrix norm** — the largest factor by which a matrix can stretch a vector, $\max \|A\mathbf v\|/\|\mathbf v\|$; the 1-norm is the largest column sum, the $\infty$-norm the largest row sum, the 2-norm the largest singular value.
+
+**Singular value** — a stretch factor of a matrix along one of its principal directions; $\sigma_{\max}$ and $\sigma_{\min}$ are the largest and smallest.
+
+**Condition number of a matrix** — $\kappa(A) = \|A\|\,\|A^{-1}\| = \sigma_{\max}/\sigma_{\min}$; the largest factor by which relative errors in $\mathbf b$ are amplified in the solution of $A\mathbf x = \mathbf b$.
+
+**Ill-conditioned matrix** — a matrix with large $\kappa$; solving with it loses about $\log_{10}\kappa$ digits of the data's accuracy.
+
+**Residual** — $\mathbf r = \mathbf b - A\hat{\mathbf x}$, how far a computed solution is from satisfying the equations; computable, unlike the error.
+
+**Backward stable (linear solve)** — the computed solution is the exact solution of a system with $A$ changed by about machine epsilon; true of LU with partial pivoting in practice.
+
+**Spectral unmixing** — recovering the amounts of several dyes from detector readings by solving $A\mathbf x = \mathbf b$, where $A$ holds the dyes' signals in each detector.
+
+**Spillover spreading** — the extra spread of unmixed cytometry data caused by detector noise amplified through an ill-conditioned unmixing matrix.
+
+### Structure: symmetric, banded, sparse
+
+See [Structure: symmetric, banded, sparse](structured-sparse/lec.qmd).
+
+**Symmetric positive definite (SPD)** — a symmetric matrix with x^T A x > 0 for every non-zero x; equivalently, all eigenvalues positive (e.g. covariance, kinship).
+
+**Positive semidefinite** — symmetric with x^T A x >= 0; some eigenvalues may be zero (e.g. a covariance from fewer samples than variables).
+
+**Cholesky factorisation** — A = L L^T with L lower triangular, for SPD A; half the cost of LU and no pivoting needed.
+
+**Log-determinant** — log det A; from Cholesky as 2 * sum(log(diag(L))), avoiding the under- or overflow of det A itself.
+
+**Shrinkage (ridge, nugget)** — adding lambda I to a covariance matrix to make it positive definite.
+
+**Banded matrix** — a matrix whose non-zeros lie within p diagonals of the main diagonal; elimination without pivoting stays inside the band.
+
+**Tridiagonal matrix** — a banded matrix with only the main diagonal and the diagonals directly above and below it.
+
+**Thomas algorithm** — Gaussian elimination for a tridiagonal system without pivoting, about 8n operations.
+
+**Diagonal dominance** — |a_ii| >= sum of |a_ij| over j != i in every row; makes elimination without pivoting and Jacobi iteration safe.
+
+**Sparse matrix** — a matrix with so many zeros that storing only the non-zeros pays off.
+
+**nnz** — the number of stored non-zero entries of a sparse matrix.
+
+**Compressed sparse column (CSC)** — sparse storage by columns: values, row indices and one pointer per column (plus one); about 12 bytes per non-zero.
+
+**Fill-in** — zero entries of A that become non-zero in its factors during elimination.
+
+**Fill-reducing ordering** — a renumbering of the unknowns (e.g. AMD, COLAMD, nested dissection) chosen before factorising to keep fill-in small.
+
+**Arrow matrix** — a sparse matrix with a full first (or last) row and column plus the diagonal, as from a hub gene linked to all others.
+
+**Iterative solver** — a method that improves an approximate solution using only matrix-vector products, instead of factorising.
+
+**Jacobi iteration** — x <- x + D^{-1}(b - A x) with D the diagonal of A; converges for diagonally dominant A.
+
+**Conjugate gradient (CG)** — an iterative solver for SPD systems that chooses a new search direction each step; converges much faster than Jacobi.
+
+**Residual** — r = b - A x; a cheap check of a computed solution and the stopping criterion of iterative solvers.
+
+## Part 4: Least squares
+
+### Least squares: normal equations vs QR
+
+See [Least squares: normal equations vs QR](least-squares-qr/lec.qmd).
+
+**Overdetermined system** — A linear system with more equations than unknowns ($m > n$); in general no exact solution exists.
+
+**Design matrix** — The matrix $A$ (R: `model.matrix`) with one row per measurement and one column per model parameter.
+
+**Residual** — The part of the data the model misses, $\mathbf r = \mathbf b - A\mathbf x$.
+
+**Least squares** — Choosing $\mathbf x$ to minimise the sum of squared residuals $\|\mathbf b - A\mathbf x\|^2$.
+
+**Standard curve (calibration curve)** — A fit of instrument readings against known amounts, used to read off the amount in unknown samples.
+
+**Column space** — The set of all vectors $A\mathbf x$; least squares projects the data onto it.
+
+**Orthogonal projection** — The closest point in a subspace; the difference to it is perpendicular to the subspace ($A^T\mathbf r = \mathbf 0$).
+
+**Normal equations** — $A^TA\mathbf x = A^T\mathbf b$, the square system whose solution is the least-squares fit; they square the condition number.
+
+**Vandermonde matrix** — A matrix whose columns are powers $1, x, x^2, \dots$ of the data points; the design matrix of a polynomial fit.
+
+**Orthonormal columns** — Columns that are mutually perpendicular and of length 1, so that $Q^TQ = I$.
+
+**Orthogonal matrix** — A square matrix with $Q^TQ = I$; it rotates or reflects and keeps all lengths.
+
+**QR factorisation** — $A = QR$ with $Q$ having orthonormal columns and $R$ upper triangular; least squares becomes $R\mathbf x = Q^T\mathbf b$.
+
+**Gram–Schmidt** — Building orthonormal columns one at a time by subtracting the components along the earlier ones.
+
+**Modified Gram–Schmidt** — Gram–Schmidt that projects the partly cleaned vector instead of the original column; loses orthogonality like $\kappa\varepsilon$ rather than $\kappa^2\varepsilon$.
+
+**Loss of orthogonality** — How far a computed $Q$ is from orthonormal, measured by $\|Q^TQ - I\|$.
+
+**Householder reflection** — The orthogonal matrix $I - 2\mathbf v\mathbf v^T/\mathbf v^T\mathbf v$ that mirrors a vector onto a coordinate axis; the building block of library QR.
+
+**Läuchli matrix** — A classic example ($\delta$ entries below a row of ones) where forming $A^TA$ rounds away all the information.
+
+**Aliased coefficient** — A coefficient `lm` cannot estimate because its column is a linear combination of others; reported as `NA`.
+
+**Numerical rank** — The number of columns that are independent above a tolerance (`qr()$rank`, `np.linalg.matrix_rank`).
+
+**Minimum-norm solution** — Among all least-squares solutions of a rank-deficient problem, the one with the smallest $\|\mathbf x\|$; what `np.linalg.lstsq` returns.
+
+**Orthogonal polynomials** — Polynomial basis columns that are mutually perpendicular on the data (R: `poly()`); a well-conditioned alternative to powers of $x$.
+
+**Amplification efficiency** — For qPCR, $E = 10^{-1/\text{slope}} - 1$ from the standard curve; 100 % means doubling per cycle.
+
+### The SVD, rank deficiency and regularisation
+
+See [The SVD, rank deficiency and regularisation](svd/lec.qmd).
+
+**Singular value decomposition (SVD)** — Factorisation A = UΣVᵀ of any matrix into orthonormal U and V and a diagonal Σ of non-negative singular values.
+
+**Singular value** — A diagonal entry σᵢ of Σ; the stretch factor of A along the direction vᵢ (A vᵢ = σᵢ uᵢ).
+
+**Left / right singular vectors** — The columns uᵢ of U (data space) and vᵢ of V (parameter space).
+
+**Thin (economy) SVD** — The SVD with U of size m×n instead of m×m; what `svd()` and `np.linalg.svd(full_matrices=False)` return.
+
+**Spectral norm (2-norm of a matrix)** — The largest stretch ‖A‖₂ = σ₁.
+
+**Condition number (2-norm)** — κ(A) = σ₁/σₙ, the ratio of largest to smallest singular value.
+
+**Numerical rank** — The number of singular values above a tolerance (max(m,n)·ε·σ₁ for rounding, the noise level for data).
+
+**Rank deficiency** — Columns of a matrix that are (exactly or nearly) linear combinations of each other, so some parameter combinations are not determined.
+
+**Collinearity** — Rank deficiency among predictors in a regression; shows as `NA` coefficients in `lm` or as small singular values.
+
+**Pseudoinverse (Moore–Penrose)** — A⁺ = VΣ⁺Uᵀ, inverting only the non-zero singular values; A⁺b is the minimum-norm least-squares solution.
+
+**Minimum-norm solution** — Among all least-squares solutions, the one with the smallest ‖x‖.
+
+**Truncated SVD (TSVD)** — Least-squares solution keeping only the k largest singular values.
+
+**Regularisation** — Changing an ill-conditioned problem to damp the noise-dominated components, at the price of bias.
+
+**Tikhonov (ridge) regularisation** — Minimising ‖Ax − b‖² + λ²‖x‖²; damps components with σᵢ below λ.
+
+**Filter factor** — The weight fᵢ multiplying SVD component i of a regularised solution; σᵢ²/(σᵢ² + λ²) for ridge, 1 or 0 for TSVD.
+
+**Picard plot** — Log plot of σᵢ and |uᵢᵀb| against i; shows where noise takes over the data coefficients.
+
+**L-curve** — Log–log plot of solution norm against residual norm over λ; its corner is a common choice of λ.
+
+**Discrepancy principle** — Choose the regularisation so that the residual is about as large as the expected noise.
+
+**Non-negative least squares (NNLS)** — Least squares subject to x ≥ 0.
+
+**Active-set method (Lawson–Hanson)** — NNLS algorithm that holds some variables at 0 and solves ordinary least squares on the others, updating the sets until the optimality conditions hold.
+
+**Signature matrix** — Genes × cell types matrix of reference expression profiles used to deconvolve bulk samples.
+
+**Deconvolution (bulk RNA-seq)** — Estimating cell-type proportions p from a bulk profile b ≈ S p.
+
+## Part 5: Eigenvalue problems
+
+### Power iteration and friends
+
+See [Power iteration and friends](power-iteration/lec.qmd).
+
+**Eigenvalue / eigenvector** — A number $\lambda$ and nonzero vector $\mathbf v$ with $A\mathbf v = \lambda\mathbf v$: a direction the matrix only stretches.
+
+**Dominant eigenvalue** — The eigenvalue of largest modulus, $|\lambda_1|$; strictly dominant if no other has the same modulus.
+
+**Characteristic polynomial** — $\det(A - \lambda I)$; its roots are the eigenvalues (practical by hand only for 2 × 2 and 3 × 3).
+
+**Leslie matrix** — An age-structured population matrix with fertilities in the first row and survival probabilities on the subdiagonal; $\mathbf n_{t+1} = L\mathbf n_t$.
+
+**Long-term growth rate** — The dominant eigenvalue $\lambda_1$ of a population projection matrix; the population grows ($\lambda_1 > 1$) or declines ($\lambda_1 < 1$) by this factor per time step in the long run.
+
+**Stable age (stage) distribution** — The dominant eigenvector of a projection matrix, rescaled to proportions; the age mix the population settles into.
+
+**Semelparous / iteroparous** — Reproducing once and then dying / reproducing in several seasons; semelparity can make all eigenvalues of a Leslie matrix equal in modulus.
+
+**Damping ratio** — $\lambda_1/|\lambda_2|$ of a projection matrix: how fast a population forgets its initial structure; its reciprocal is the convergence rate of power iteration.
+
+**Transition matrix (stochastic matrix)** — A Markov chain matrix with $P_{ij}$ = probability of moving from state $i$ to state $j$; rows sum to 1.
+
+**Stationary distribution** — Proportions $\boldsymbol\pi$ with $\boldsymbol\pi P = \boldsymbol\pi$: the eigenvector of $P^T$ for eigenvalue 1, rescaled to sum 1.
+
+**Relaxation time** — How many steps a Markov chain needs to approach its stationary distribution, set by $|\lambda_2|$ (e.g. halving time $\log 0.5/\log|\lambda_2|$).
+
+**Perron–Frobenius theorem** — A nonnegative matrix some power of which is entirely positive has a real, positive, strictly dominant eigenvalue with a positive eigenvector.
+
+**Power iteration (power method)** — Repeating $\mathbf x \leftarrow A\mathbf x/\|A\mathbf x\|$; converges to the dominant eigenvector at rate $|\lambda_2/\lambda_1|$.
+
+**Normalisation** — Rescaling the iterate every step (by its sum, 2-norm or largest entry) to avoid overflow or underflow; it does not change the direction.
+
+**Eigen-residual** — $\|A\mathbf x - \lambda\mathbf x\|$; zero for an exact eigenpair, the quantity to stop on.
+
+**False convergence** — A tiny change per step while the error is still large, typical when the convergence rate is close to 1; error $\approx$ change $\cdot\,c/(1-c)$.
+
+**Rayleigh quotient** — $R(\mathbf x) = \mathbf x^TA\mathbf x/\mathbf x^T\mathbf x$, the best eigenvalue estimate for a given vector; error of order $\delta^2$ for symmetric $A$.
+
+**Inverse iteration** — Power iteration with $(A - \sigma I)^{-1}$ (one linear solve per step); finds the eigenvalue nearest the shift $\sigma$.
+
+**Shift** — The number $\sigma$ subtracted from the diagonal in inverse iteration; the closer it is to the wanted eigenvalue (and the further from the others), the faster the convergence.
+
+**Rayleigh quotient iteration** — Inverse iteration with the shift updated to the current Rayleigh quotient each step; cubic convergence for symmetric matrices.
+
+**Integral projection model (IPM)** — A population model with a continuous trait (e.g. body size) discretised into many classes; a large Leslie-like matrix.
+
+### How `eigen()` works, and big problems
+
+See [How `eigen()` works, and big problems](eigen-algorithms/lec.qmd).
+
+**QR algorithm** — Repeat $A_k = Q_kR_k$, $A_{k+1} = R_kQ_k$; a sequence of orthogonal similarity transforms that converges to (block) triangular form with the eigenvalues on the diagonal.
+
+**Similarity transform** — $A \mapsto S^{-1}AS$; it keeps the eigenvalues. With orthogonal $S$ it is $Q^TAQ$.
+
+**Simultaneous (subspace) iteration** — Power iteration on several vectors at once, re-orthonormalised by QR after each step; the QR algorithm is this in disguise.
+
+**Hessenberg matrix** — A matrix with zeros below the first subdiagonal; reducing to it first makes each QR step cost $O(n^2)$ instead of $O(n^3)$.
+
+**Tridiagonal matrix** — Non-zeros only on the diagonal and the two neighbouring diagonals; the Hessenberg form of a symmetric matrix.
+
+**Shift** — Running a QR step on $A - \mu I$ and adding $\mu I$ back, to speed up convergence near $\mu$.
+
+**Wilkinson shift** — The eigenvalue of the trailing 2 × 2 block closest to $a_{nn}$; the shift used by LAPACK for symmetric matrices.
+
+**Deflation** — Removing a converged eigenvalue (last row and column) and continuing on the smaller matrix.
+
+**Real Schur form** — Upper triangular with 1 × 1 and 2 × 2 diagonal blocks; where the real QR algorithm stops on a nonsymmetric matrix, one 2 × 2 block per complex pair.
+
+**Complex conjugate pair** — Eigenvalues $a \pm bi$ of a real matrix; in a linear ODE model an oscillation with period $2\pi/b$.
+
+**Defective matrix** — A matrix with fewer independent eigenvectors than its size (e.g. a chain of identical compartments); its eigenvalues are extremely sensitive.
+
+**Eigenvalue sensitivity** — How far eigenvalues move when the matrix entries change; at most $\|E\|$ for symmetric matrices, up to $\kappa(V)\|E\|$ (Bauer–Fike) or $\|E\|^{1/n}$ otherwise.
+
+**Bauer–Fike bound** — For $A = VDV^{-1}$, a perturbation $E$ moves each eigenvalue by at most $\kappa(V)\|E\|$.
+
+**Transit compartments** — A chain of identical first-order compartments used to model a delay (drug absorption, cell maturation).
+
+**Krylov subspace** — $\text{span}\{\mathbf q, A\mathbf q, \dots, A^{m-1}\mathbf q\}$: all the vectors power iteration produces.
+
+**Lanczos method** — Builds an orthonormal Krylov basis for a symmetric matrix with a three-term recurrence, giving a small tridiagonal matrix $T_m$.
+
+**Ritz value** — An eigenvalue of $T_m = Q_m^TAQ_m$; an approximation to an eigenvalue of $A$ from the Krylov subspace.
+
+**Ghost eigenvalue** — A spurious copy of a converged eigenvalue produced by Lanczos when its vectors lose orthogonality.
+
+**Reorthogonalisation** — Removing from each new Lanczos vector its components along all earlier ones, to keep the basis orthonormal.
+
+**Implicit restart** — Shrinking the Krylov basis while keeping its useful part, so that memory stays small (ARPACK, irlba).
+
+**Matrix-free method** — A method that needs only a function computing $A\mathbf v$, never the matrix itself.
+
+**Implicit centring** — Computing $X_c\mathbf v = X\mathbf v - \mathbf 1(\boldsymbol\mu^T\mathbf v)$ so that a sparse $X$ never has to be centred (and made dense).
+
+**Truncated eigensolver** — A method that computes only the top $k$ eigenpairs or singular triplets (`irlba`, `RSpectra::eigs_sym`, `scipy.sparse.linalg.eigsh`, `svds`).
+
+**Residual (eigenpair)** — $\|A\mathbf v - \lambda\mathbf v\|$; small means $(\lambda, \mathbf v)$ is an exact eigenpair of a nearby matrix.
+
+## Part 6: Interpolation and approximation
+
+### Polynomial interpolation
+
+See [Polynomial interpolation](polynomial-interpolation/lec.qmd).
+
+**Interpolation** — Constructing a function that passes exactly through given data points, used to estimate values between them.
+
+**Interpolating polynomial** — The unique polynomial of degree at most $n$ through $n+1$ points with distinct $x$-values.
+
+**Nodes** — The points $t_0, \dots, t_n$ (e.g. sampling times) at which the data are given.
+
+**Vandermonde matrix** — The matrix with entries $t_i^{\,j}$; solving $V\mathbf c = \mathbf y$ gives the monomial coefficients of the interpolant, but it is badly conditioned.
+
+**Lagrange form** — The interpolant written as $\sum_i y_i L_i(t)$, a weighted sum of the readings.
+
+**Lagrange basis polynomial** — $L_i(t) = \prod_{j\ne i}(t - t_j)/(t_i - t_j)$: 1 at node $t_i$, 0 at the other nodes.
+
+**Newton form** — The interpolant written as $a_0 + a_1(t-t_0) + a_2(t-t_0)(t-t_1) + \dots$; adding a node adds one term.
+
+**Divided difference** — The recursively defined quotient $f[t_0, \dots, t_k]$; the Newton coefficients, equal to $f^{(k)}(\xi)/k!$ for some $\xi$.
+
+**Interpolation error formula** — $f(t) - p(t) = f^{(n+1)}(\xi)\,w(t)/(n+1)!$: a derivative of the curve times the node polynomial.
+
+**Node polynomial** — $w(t) = \prod_i (t - t_i)$; depends only on where the data were sampled.
+
+**Runge phenomenon** — Growing oscillations near the ends of the interval when a high-degree polynomial interpolates at equally spaced nodes.
+
+**Chebyshev nodes** — Points $\cos((2k+1)\pi/(2n+2))$ (mapped to $[a, b]$), crowded at the ends; they minimise $\max|w(t)|$ and avoid the Runge phenomenon.
+
+**Lebesgue constant** — $\max_t \sum_i |L_i(t)|$, the worst-case factor by which errors in the data are amplified by interpolation (89 for 13 equispaced nodes, 2.6 for 13 Chebyshev nodes).
+
+**Barycentric formula** — $p(t) = \sum_j \frac{w_j y_j}{t - t_j} \big/ \sum_j \frac{w_j}{t - t_j}$; the stable $O(n)$-per-point way to evaluate an interpolating polynomial.
+
+**Barycentric weights** — $w_j = 1/\prod_{k\ne j}(t_j - t_k)$; only their ratios matter.
+
+**Piecewise linear interpolation** — Joining neighbouring readings by straight lines (R `approx`, `np.interp`); error at most $h^2\max|f''|/8$.
+
+**Extrapolation** — Evaluating an interpolant or fit outside the range of the data; for polynomials, unreliable.
+
+**Interpolation vs fitting** — Interpolation passes through every point (as many parameters as points); fitting (least squares) uses fewer parameters and averages out noise.
+
+### Splines
+
+See [Splines](splines/lec.qmd).
+
+**Piecewise linear interpolation** — Joining neighbouring data points by straight lines; error at most $\tfrac{h^2}{8}\max|f''|$, never overshoots.
+
+**Spline** — A function made of polynomial pieces joined smoothly at the data points (knots).
+
+**Knot** — A point where two pieces of a spline meet; for interpolating and smoothing splines, the data points.
+
+**Cubic spline** — A piecewise cubic that interpolates the data with continuous value, slope and second derivative.
+
+**Boundary (end) condition** — One of the two extra equations a cubic spline needs, imposed at the ends of the data.
+
+**Natural spline** — A cubic spline with zero second derivative at both ends; only $O(h^2)$ accurate near the ends.
+
+**Clamped spline** — A cubic spline whose slopes at the two ends are prescribed.
+
+**Not-a-knot condition** — End condition making the third derivative continuous at the second and second-to-last knot; scipy's default.
+
+**fmm end condition** — R's default for `spline`/`splinefun`: end conditions taken from cubics through the four points at each end (Forsythe, Malcolm, Moler).
+
+**Overshoot** — An interpolant swinging beyond the range of neighbouring data, e.g. negative expression after a steep drop.
+
+**Monotone (shape-preserving) interpolation** — A piecewise cubic (PCHIP, Fritsch–Carlson) whose slopes are chosen so that it is monotone wherever the data are.
+
+**Smoothing spline** — The curve minimising misfit plus $\lambda\int f''^2$; a natural cubic spline with knots at the data that does not pass through them.
+
+**Smoothing parameter ($\lambda$)** — The weight of the roughness penalty; its size depends on the units of $t$ and $y$.
+
+**Roughness penalty** — $\int f''(t)^2\,dt$, the total squared curvature of a curve.
+
+**Bias–noise (bias–variance) trade-off** — Too little smoothing lets noise through; too much smoothing distorts the true curve.
+
+**Hat matrix** — The matrix $A$ of a linear smoother, mapping the data to the fitted values, $\hat{\mathbf y} = A\mathbf y$.
+
+**Equivalent degrees of freedom (df)** — The trace of the hat matrix; from 2 (straight line) to $n$ (interpolation); the unit-free measure of smoothing.
+
+**Leave-one-out cross-validation (CV)** — Choosing $\lambda$ by how well each point is predicted by a fit without it; $\frac1n\sum((y_i - \hat y_i)/(1 - A_{ii}))^2$.
+
+**Generalised cross-validation (GCV)** — $n\,\text{RSS}/(n - \text{df})^2$, CV with the leverages $A_{ii}$ replaced by their average; `smooth.spline`'s default criterion.
+
+**Reinsch form** — Writing the smoothing spline as the banded system $(R + \lambda Q^TQ)\boldsymbol\gamma = Q^T\mathbf y$ for the second derivatives.
+
+**Pseudotime** — An ordering of single cells along a developmental trajectory, inferred from their expression profiles.
+
+### Fourier series and the FFT
+
+See [Fourier series and the FFT](fourier-fft/lec.qmd).
+
+**Trigonometric interpolation** — Interpolating equispaced samples of periodic data with a sum of sines and cosines with whole numbers of cycles per record.
+
+**Discrete Fourier transform (DFT)** — X_k = Σ_j x_j e^{-2πijk/n}: the coefficients of the trigonometric interpolant, in complex form.
+
+**DFT matrix** — The n×n matrix F with entries w^{jk}, w = e^{-2πi/n}; its columns are orthogonal and F⁻¹ = F̄ᵀ/n.
+
+**Fast Fourier transform (FFT)** — Algorithm computing the DFT in O(n log n) by recursively splitting even and odd samples (Cooley–Tukey).
+
+**Twiddle factor** — The factor w^k that combines the even and odd half-size DFTs in an FFT.
+
+**Unnormalised transform** — Convention (R's `fft`, numpy's `fft`, rustfft) with no 1/n factor in the forward transform; R's inverse also omits it.
+
+**Frequency bin** — One DFT coefficient X_k, belonging to k cycles per record (period T/k).
+
+**Amplitude spectrum** — The amplitudes 2|X_k|/n plotted against frequency.
+
+**Phase** — The position of a cosine in its cycle, −arg X_k; gives the peak time of a rhythm.
+
+**Cosinor** — Least-squares fit of a mean plus one cosine and sine of known period, used to estimate amplitude and peak time of a rhythm.
+
+**Sampling interval** — The time Δt between successive samples.
+
+**Nyquist frequency** — f_N = 1/(2Δt), the highest frequency equispaced samples can represent.
+
+**Aliasing** — A frequency above Nyquist producing exactly the same samples as a lower one, so it is reported at the wrong period.
+
+**Anti-aliasing filter** — A low-pass filter applied before sampling to remove frequencies above Nyquist.
+
+**Frequency resolution** — The spacing 1/T between DFT frequencies, set by the record length T.
+
+**Spectral leakage** — Spreading of a peak over all frequencies when the record does not hold a whole number of cycles.
+
+**Window (Hann window)** — A taper, w_j = ½ − ½cos(2πj/n) for Hann, multiplied into the data before the FFT to reduce leakage.
+
+**Zero-padding** — Appending zeros before the FFT: gives a finer frequency grid or a linear instead of circular convolution, but no extra resolution.
+
+**Low-pass filter** — Keeping only low frequencies (slow variation) and removing high ones (noise).
+
+**Gibbs phenomenon (ringing)** — Oscillation near a jump when it is represented by a truncated sum of sines and cosines.
+
+**Convolution** — (h * y)_j = Σ_m h_m y_{j−m}; a moving average, a blur.
+
+**Circular convolution** — Convolution in which indices wrap around the end of the record; what a product of DFTs gives.
+
+**Convolution theorem** — The DFT of a (circular) convolution is the entrywise product of the DFTs.
+
+**Gain (transfer function)** — |H_k|, the factor by which a filter scales the amplitude at frequency k.
+
+**Point spread function (PSF)** — The image of a single point source; a microscope image is the true image convolved with it.
+
+**Deconvolution** — Undoing a convolution by dividing by the transform of the kernel; ill-conditioned when that transform is small.
+
+**Bluestein's algorithm** — An FFT method for any length, including primes, in O(n log n).
+
+## Part 7: Numerical differentiation and integration
+
+### Numerical differentiation
+
+See [Numerical differentiation](finite-differences/lec.qmd).
+
+**Finite difference** — an estimate of a derivative from function values at nearby points, divided by a power of the step h.
+
+**Stencil** — the set of offsets and weights of a finite-difference formula, e.g. (1, −2, 1)/h² for the second derivative.
+
+**Forward difference** — (f(x+h) − f(x))/h; first-order estimate of f′, error (h/2) f″.
+
+**Backward difference** — (f(x) − f(x−h))/h; first-order estimate of f′ using only past values.
+
+**Central difference** — (f(x+h) − f(x−h))/(2h); second-order estimate of f′, error (h²/6) f‴.
+
+**One-sided difference** — a stencil using points on one side only, e.g. (−3f(x) + 4f(x+h) − f(x+2h))/(2h) at the start of a data set.
+
+**Second difference** — (f(x+h) − 2f(x) + f(x−h))/h²; second-order estimate of f″, the stencil of the diffusion term.
+
+**Method of undetermined coefficients** — finding stencil weights by matching Taylor terms, a small linear system.
+
+**Optimal step size** — the h that balances truncation error C hᵖ against rounding error ε/hᵏ; about ε^(1/(p+k)).
+
+**Richardson extrapolation** — combining estimates at h and h/2 to cancel the leading error term, e.g. (4D(h/2) − D(h))/3.
+
+**Richardson table** — repeated Richardson extrapolation, each column one order higher; used by numDeriv::grad.
+
+**Noise amplification** — differentiating measured data divides the measurement noise by the step, so the derivative is noisier than the data.
+
+**Smoothing before differentiating** — fitting a smooth curve (local fit, smoothing spline) to noisy data and differentiating the curve.
+
+**Savitzky–Golay filter** — a local least-squares polynomial fit in a moving window, used to smooth or differentiate sampled data.
+
+**Gradient** — the vector of partial derivatives of a scalar function, e.g. of a log-likelihood with respect to the parameters.
+
+**Gradient check** — comparing a hand-written or AD gradient with a finite-difference gradient to find bugs.
+
+**Complex-step derivative** — Im f(x + ih)/h; a derivative without subtraction, accurate to rounding for code that accepts complex numbers.
+
+**Automatic differentiation (AD)** — applying the chain rule to every elementary operation of a program to get derivatives exact to rounding.
+
+**Forward-mode AD** — AD that carries (value, derivative) pairs through the computation; one pass per input direction.
+
+**Reverse-mode AD** — AD that records the computation and applies the chain rule backwards; the whole gradient for a few function evaluations (backpropagation).
+
+### Numerical integration
+
+See [Numerical integration](quadrature/lec.qmd).
+
+**Quadrature** — Numerical computation of an integral as a weighted sum of function values, ∑ w_i f(x_i).
+
+**Area under the curve (AUC)** — Integral of drug concentration over time (mg·h/L); the standard measure of total drug exposure.
+
+**Riemann sum** — Approximation of an integral by rectangles of width h; the left-endpoint version has order 1.
+
+**Midpoint rule** — Rectangles with height f at the centre of each interval; order 2, never evaluates f at the endpoints.
+
+**Trapezoid rule** — Straight line between neighbouring points, area h(f_{i-1} + f_i)/2 per interval; order 2.
+
+**Simpson's rule** — Parabola through three equally spaced points, weights h/3 (1, 4, 1); order 4, exact for cubics.
+
+**Composite rule** — A simple rule applied on each of n subintervals and summed.
+
+**Order of a quadrature rule** — The power p in error ≈ C h^p; minus the slope of error against n on a log–log plot.
+
+**Euler–Maclaurin formula** — Expansion of the trapezoid error in even powers h², h⁴, … with coefficients from derivatives at the endpoints.
+
+**Romberg integration** — Repeated Richardson extrapolation of trapezoid sums with h, h/2, h/4, …, removing h², h⁴, … in turn.
+
+**Adaptive quadrature** — Estimate the error on each piece by comparing two rules and subdivide only pieces that fail the tolerance.
+
+**Adaptive Simpson** — Adaptive quadrature comparing Simpson on one panel and on two half-panels; |S2 − S1|/15 estimates the error.
+
+**Gaussian (Gauss–Legendre) quadrature** — Rule with optimally chosen points and weights; n points integrate polynomials of degree 2n − 1 exactly.
+
+**Gauss–Kronrod rule** — A Gauss rule extended with extra points so the difference of the two gives an error estimate; QUADPACK uses 10 + 11 = 21 points.
+
+**QUADPACK** — Fortran library of adaptive quadrature routines (QAGS, QAGI) behind R's integrate and SciPy's quad.
+
+**Double-exponential (tanh–sinh) rule** — Quadrature after a change of variables that packs points towards both ends; robust to endpoint singularities (Rust quadrature crate).
+
+**Error estimate** — The routine's own guess of its error, computed from the same points as the value; can be 0 when every point misses a feature.
+
+**Absolute / relative tolerance** — Stopping thresholds of a quadrature routine; an integral smaller than the absolute tolerance is accepted after one rough estimate.
+
+**Integrable singularity** — A point where the integrand is infinite but the area is finite, e.g. 1/√x at 0.
+
+**Substitution (change of variables)** — Rewrite the integral in a new variable (x = u², x = t/(1 − t), x = sin²θ) to remove a singularity or an infinite interval.
+
+**Normalising constant** — The integral Z of an unnormalised density, so that density/Z integrates to 1; the marginal likelihood in Bayesian work.
+
+**Jeffreys prior** — For a proportion, the Beta(½, ½) density ∝ 1/√(x(1 − x)); normalising constant π.
+
+**Linear-up / log-down rule** — AUC rule using the trapezoid while concentrations rise and the area of an exponential, Δt (C1 − C2)/ln(C1/C2), while they fall.
+
+**Terminal slope (λz)** — Elimination rate from a straight-line fit of log concentration over the last samples; used to extrapolate AUC to infinity as C_last/λz.
+
+**Non-compartmental analysis (NCA)** — Pharmacokinetic analysis directly from sampled concentrations (AUC by quadrature), without fitting a model.
+
+**Bioequivalence** — Two formulations are judged equivalent when the ratio of their AUCs (and Cmax) lies within 80–125 %.
+
+**Peak area** — Integral of a chromatography or mass-spectrometry signal over a peak; the quantity used for quantification, more robust than peak height.
+
+### Random numbers and Monte Carlo
+
+See [Random numbers and Monte Carlo](monte-carlo/lec.qmd).
+
+**Pseudo-random number generator** — A deterministic algorithm that produces a long sequence of numbers that behave like independent uniform draws.
+
+**Seed** — The starting state of a pseudo-random generator; the same seed (and software) gives the same stream.
+
+**Linear congruential generator (LCG)** — The generator x_{n+1} = (a x_n + c) mod m; simple, short period, lattice structure.
+
+**Period** — The number of steps after which a generator's sequence repeats.
+
+**Mersenne Twister** — R's default generator (period 2^19937 − 1).
+
+**PCG64** — numpy's default generator, used by `np.random.default_rng`.
+
+**ChaCha12 / StdRng** — The default seeded generator of Rust's `rand` crate.
+
+**Inverse-transform sampling** — Drawing X = F⁻¹(U) with U uniform, so that X has CDF F.
+
+**Rejection sampling** — Drawing from a proposal g and accepting with probability f/(M g); accepted points follow f, the acceptance rate is 1/M.
+
+**Monte Carlo integration** — Estimating an integral as (b − a) times the average of f at random points.
+
+**Standard error (Monte Carlo)** — s/√N, the standard deviation of a Monte Carlo estimate; ±2 SE is an approximate 95% error bar.
+
+**1/√N convergence** — The Monte Carlo error rate, independent of the dimension when the variance is finite.
+
+**Infinite variance** — When ∫ f² diverges; the estimate still converges but slowly and in jumps, and the SE is unreliable.
+
+**Curse of dimensionality** — The cost of a grid with n points per axis grows as n^d, so its error for a fixed budget N falls only like N^(−p/d).
+
+**Marginal likelihood (evidence)** — Z = ∫ L(θ) π(θ) dθ, the normalising constant of the posterior; used in Bayes factors.
+
+**Permutation-style (randomisation) test** — Computing a p-value by simulating the data many times under the null (e.g. shuffling genomic positions).
+
+**Simulated p-value** — (k + 1)/(B + 1) for k of B simulations at least as extreme as the data.
+
+**Importance sampling** — Drawing from a proposal g and weighting by w = f/g to estimate an integral with respect to f.
+
+**Proposal distribution** — The distribution actually sampled from in rejection or importance sampling.
+
+**Importance weight** — w(x) = f(x)/g(x), the correction for sampling from g instead of f.
+
+**Effective sample size (ESS)** — (Σw)²/Σw², the number of equally weighted draws a weighted sample is worth.
+
+**Rare event** — An event with probability so small that plain Monte Carlo rarely or never sees it.
+
+## Part 8: Ordinary differential equations
+
+### Initial value problems and Euler's method
+
+See [Initial value problems and Euler's method](euler/lec.qmd).
+
+**Ordinary differential equation (ODE)** — Equation for the rate of change of a quantity, y' = f(t, y), in terms of the quantity itself (and time).
+
+**Initial value problem (IVP)** — An ODE together with a start value y(t0) = y0; its solution is the curve that starts there and follows the slope f.
+
+**Rate in − rate out** — Modelling principle: write the derivative of each quantity as the sum of flows into it minus flows out of it.
+
+**Steady state (equilibrium)** — A value y* where f(y*) = 0, so the solution stays constant if it starts there.
+
+**Direction field (slope field)** — Picture of an ODE: a short line with slope f(t, y) at each point of the (t, y) plane; solutions are tangent to it.
+
+**Autonomous ODE** — ODE whose right-hand side does not depend on t explicitly, y' = f(y).
+
+**Logistic growth** — N' = rN(1 - N/K): growth at per-capita rate r that slows to zero at the carrying capacity K.
+
+**Carrying capacity** — The stable equilibrium K of the logistic model, the density at which growth stops.
+
+**Euler's method** — Explicit one-step ODE method y_{n+1} = y_n + h f(t_n, y_n): follow the tangent for a step h.
+
+**Step size** — The time increment h between successive approximations y_n ≈ y(t_n).
+
+**Local error** — Error made in a single step started on the exact solution; O(h^2) for Euler.
+
+**Global error** — Difference y_n - y(t_n) after all steps from the start; O(h) for Euler.
+
+**Order of a method** — The power p with global error ≈ C h^p; the slope on a log–log plot of error against h. Euler has order 1.
+
+**Step halving** — Running with h and h/2 and using the difference as an error estimate (for order 1, y_h - y_{h/2} ≈ error of y_{h/2}).
+
+**Numerical instability (of an ODE method)** — Growth of errors from step to step because the step is too large, e.g. |1 - kh| > 1 for Euler on y' = -ky.
+
+**Stability bound** — The largest stable step, h < 2/k for Euler on y' = -ky.
+
+**Linearisation** — Replacing f near an equilibrium y* by f'(y*)(y - y*); gives the local decay rate k = -f'(y*) that sets the stability bound.
+
+**Spurious oscillation / cycle** — An oscillation or cycle produced by the numerical method, absent from the true solution; it disappears when the step is reduced.
+
+**System of ODEs** — Several coupled ODEs written as one vector equation y' = f(t, y); Euler applies unchanged with vectors.
+
+**SIR model** — Epidemic model with susceptible, infected and recovered compartments: S' = -βSI/N, I' = βSI/N - γI, R' = γI.
+
+**Basic reproduction number R0** — Expected number of new infections caused by one infected person in a fully susceptible population; β/γ in the SIR model.
+
+**Conserved quantity (invariant)** — A combination of the variables that the exact solution keeps constant (S + I + R; an oscillator's amplitude); useful as a check.
+
+**Higher-order ODE** — ODE involving second or higher derivatives; rewritten as a first-order system by naming x, x', x'', … as new variables.
+
+**Harmonic oscillator** — x'' = -ω²x, solutions cos and sin with period 2π/ω; Euler makes its amplitude grow for every step size.
+
+**Phase plane** — Plot of one variable against another (e.g. x against x'/ω) instead of against time.
+
+**Stiffness** — Situation where a fast rate forces a small step for stability long after the fast process is over (treated in a later unit).
+
+### Runge–Kutta and adaptive step size
+
+See [Runge–Kutta and adaptive step size](runge-kutta/lec.qmd).
+
+**Runge–Kutta method** — A one-step ODE method that evaluates the slope at several points inside the step and combines them with fixed weights.
+
+**Stage** — One evaluation of the right-hand side f inside a Runge–Kutta step; the cost of a step is its number of stages.
+
+**Midpoint method** — Second-order Runge–Kutta method that uses the slope at a half Euler step for the whole step.
+
+**Heun's method** — Second-order Runge–Kutta method that averages the slopes at the start and at the Euler end point (explicit trapezoid rule).
+
+**RK4 (classical Runge–Kutta)** — Fourth-order method with four slopes (start, midpoint twice, end) and weights 1, 2, 2, 1 over 6.
+
+**Function evaluation** — One call of the ODE right-hand side f; the natural measure of the cost of an ODE solver.
+
+**Embedded pair** — Two Runge–Kutta formulas of different order sharing the same stages; their difference estimates the local error.
+
+**Local extrapolation** — Continuing with the higher-order answer of an embedded pair although the error estimate refers to the lower-order one.
+
+**Adaptive step size** — Choosing each step size from an error estimate so that the estimated error per step meets a tolerance.
+
+**Step rejection** — Discarding a step whose estimated error exceeds the tolerance and retrying it with a smaller step.
+
+**Step-size controller** — The rule h_new = h · min(facmax, max(facmin, 0.9 · err^(-1/(q+1)))) that sets the next step from the scaled error.
+
+**Dormand–Prince 5(4)** — The standard 7-stage embedded pair of orders 5 and 4 behind ode45, RK45 and Dopri5.
+
+**FSAL (first same as last)** — Property of a pair whose last stage equals the first stage of the next step, saving one evaluation per step.
+
+**Relative tolerance (rtol)** — The allowed error per step as a fraction of the size of each variable.
+
+**Absolute tolerance (atol)** — The allowed error per step that applies when a variable is small; it has the units of the variable.
+
+**Dense output** — A polynomial through each step, built from its stages, that gives the solution at any time inside the step.
+
+**Event** — A time at which a chosen function g(t, y) of the solution crosses zero, located by the solver (e.g. an epidemic peak or a threshold).
+
+**Conserved quantity (invariant)** — A function of the state that stays constant along exact solutions; its drift measures the error of a numerical solution.
+
+**Lotka–Volterra model** — Predator–prey ODE model whose solutions are closed orbits around an equilibrium.
+
+**Repressilator** — A synthetic ring of three repressor genes (Elowitz & Leibler 2000) that oscillates.
+
+### Stiffness and implicit methods
+
+See [Stiffness and implicit methods](stiffness/lec.qmd).
+
+**Test equation** — the linear ODE $y' = \lambda y$ (with $\lambda$ possibly complex), used to study how a method treats one mode of a linearised system.
+
+**Amplification factor** — the factor $R(z)$, $z = h\lambda$, by which one step of a method multiplies the solution of the test equation; Euler $1 + z$, backward Euler $1/(1 - z)$.
+
+**Stability region** — the set of $z = h\lambda$ in the complex plane where $|R(z)| \le 1$, so errors do not grow from step to step.
+
+**A-stable** — a method whose stability region contains the whole left half-plane, so it is stable for every decaying mode at every step size (backward Euler, BDF2, Radau).
+
+**Stiff problem** — an ODE with widely separated time scales, where the step size of an explicit method is set by stability (the fastest mode) rather than by the accuracy needed for the solution of interest.
+
+**Stiffness ratio** — the ratio of the largest to the smallest $|\text{Re}\,\lambda|$ of the Jacobian over the simulated time; ratios of $10^3$ and more signal stiffness.
+
+**Explicit method** — a method that computes $\mathbf y_{n+1}$ from known values only (Euler, RK4, RK45); its stability region is bounded.
+
+**Implicit method** — a method whose step formula contains the unknown $\mathbf y_{n+1}$ on both sides, so each step requires solving an equation (backward Euler, BDF, Radau).
+
+**Backward Euler** — the implicit step $\mathbf y_{n+1} = \mathbf y_n + h\,\mathbf f(t_{n+1}, \mathbf y_{n+1})$; order 1, A-stable.
+
+**BDF (backward differentiation formula)** — implicit multistep methods that fit a polynomial through past values and match its slope at the new point to $\mathbf f$; BDF1 is backward Euler, orders up to 5 are used in practice.
+
+**Radau method** — an implicit Runge–Kutta method (order 5 in common solvers), A-stable, with several coupled stages per step.
+
+**Newton matrix** — the matrix $I - hJ$ (or $I - \gamma hJ$) whose linear system is solved in each Newton iteration of an implicit step; $J$ is the Jacobian of $\mathbf f$.
+
+**Modified Newton** — Newton iterations that reuse an old Jacobian and its LU factorisation over several iterations or steps, to save cost.
+
+**LSODA** — an ODE solver (ODEPACK) that switches automatically between a non-stiff Adams method and a stiff BDF method; the default of `deSolve::ode`.
+
+**Adams method** — an explicit-type linear multistep method for non-stiff problems, used by LSODA in its non-stiff mode.
+
+**Quasi-steady-state approximation (QSSA)** — replacing a fast variable by its momentary equilibrium value ($C' \approx 0$), which removes the fast time scale; gives Michaelis–Menten kinetics for $E + S \rightleftharpoons C \to E + P$.
+
+**Michaelis–Menten kinetics** — the rate law $v = V_{\max}S/(K_m + S)$ with $V_{\max} = k_{cat}E_0$ and $K_m = (k_r + k_{cat})/k_f$, valid when $E_0 \ll S_0 + K_m$.
+
+**Mass-action kinetics** — reaction rates proportional to the product of the reactant concentrations, e.g. $k_f E S$ for binding.
+
+**Robertson's problem** — a three-species chemical kinetics model (Robertson 1966) with rate constants spanning nine orders of magnitude; the standard test problem for stiff solvers.
+
+**Numerical damping** — the artificial decay of an oscillation caused by a method whose amplification factor on the imaginary axis is below 1 (backward Euler).
+
+### Equilibria, stability and the phase plane
+
+See [Equilibria, stability and the phase plane](phase-plane/lec.qmd).
+
+**Phase plane** — the plane of the two state variables of a two-variable ODE, on which the flow is drawn as arrows and trajectories.
+
+**Trajectory (orbit)** — the curve traced in state space by one solution of an ODE as time runs.
+
+**Vector field (direction field)** — the velocity (right-hand side of the ODE) drawn as an arrow at each point of state space.
+
+**Nullcline** — the curve on which one variable does not change (e.g. du/dt = 0); the flow crosses it vertically or horizontally.
+
+**Fixed point (equilibrium, steady state)** — a state where all derivatives are zero, F(x*) = 0.
+
+**Stable fixed point** — small perturbations die out; for an ODE, all eigenvalues of J have negative real part.
+
+**Linearisation** — replacing the ODE near a fixed point by dδ/dt = J δ, with J the Jacobian at the fixed point.
+
+**Node** — fixed point with real eigenvalues of the same sign; trajectories approach (stable) or leave (unstable) without rotating.
+
+**Saddle** — fixed point with real eigenvalues of opposite sign; attracting in one direction, repelling in another; unstable.
+
+**Spiral (focus)** — fixed point with complex eigenvalues; trajectories rotate while approaching (Re λ < 0) or leaving (Re λ > 0).
+
+**Centre** — fixed point with purely imaginary eigenvalues; linearisation predicts closed orbits but cannot decide stability.
+
+**Trace–determinant plane** — classification of 2×2 fixed points by τ = tr J and Δ = det J: Δ < 0 saddle, τ < 0 < Δ stable, τ² < 4Δ spiral.
+
+**Basin of attraction** — the set of starting states from which the ODE ends at a given stable state.
+
+**Separatrix** — the curve (stable manifold of a saddle) separating two basins of attraction; computed by integrating backwards in time from the saddle.
+
+**Stable manifold** — the set of states whose trajectories converge to a given saddle.
+
+**Backward integration** — solving an ODE with decreasing time (equivalently, dx/dt = −F forwards); turns attracting directions into repelling ones.
+
+**Limit cycle** — an isolated closed trajectory; nearby trajectories approach it (stable) and the system oscillates with a fixed period and amplitude.
+
+**Bistability** — two stable steady states for the same parameters; the state reached depends on history.
+
+**Bifurcation** — a parameter value at which the number or stability of steady states (or cycles) changes; an eigenvalue crosses Re λ = 0 there.
+
+**Pitchfork bifurcation** — one stable state becomes unstable and two new stable states branch off (the symmetric toggle at α = 2).
+
+**Hopf bifurcation** — a pair of complex eigenvalues crosses the imaginary axis and a limit cycle is born or dies.
+
+**Bifurcation diagram** — steady states (and cycles) plotted against a parameter, stable and unstable branches drawn differently.
+
+**Numerical continuation** — following a steady state as a parameter changes: predict from the previous solution, correct with Newton, monitor eigenvalues.
+
+**Critical slowing down** — near a bifurcation the slowest eigenvalue approaches 0, so perturbations decay very slowly and simulations take very long to settle.
+
+**Rightmost eigenvalue** — the eigenvalue with the largest real part; it decides stability (not the eigenvalue of largest modulus).
+
+### Stochastic simulation
+
+See [Stochastic simulation](gillespie/lec.qmd).
+
+**Copy number** — the whole number of molecules of a species in one cell.
+
+**Propensity** — $a_j(\mathbf x)$: probability per unit time that reaction $j$ happens next in state $\mathbf x$.
+
+**Stoichiometry vector** — the change in molecule counts caused by one firing of a reaction (a column of the stoichiometry matrix).
+
+**Chemical master equation (CME)** — linear ODE system for the probabilities of all states of a reaction network; one equation per state.
+
+**Birth–death process** — production at a constant rate and first-order decay; its steady state is Poisson.
+
+**Gillespie algorithm (SSA, direct method)** — exact simulation of the CME: exponential waiting time with rate $a_0$, reaction chosen with probability $a_j/a_0$.
+
+**Total propensity** — $a_0 = \sum_j a_j$, the rate at which any reaction happens.
+
+**Telegraph (two-state) promoter model** — promoter switches between off and on; transcription only when on, giving bursts of mRNA.
+
+**Transcriptional bursting** — mRNA made in bursts separated by silent periods, causing cell-to-cell variability.
+
+**Burst size** — mean number of mRNA per burst, $k_m/k_\text{off}$ in the telegraph model.
+
+**Fano factor** — variance divided by mean of a count; 1 for Poisson, > 1 for bursty production; depends on units.
+
+**Constitutive expression** — transcription at a constant rate, giving Poisson mRNA numbers.
+
+**Extinction (stochastic)** — reaching an absorbing state with zero individuals, which the ODE never reaches.
+
+**Tau-leaping** — approximate SSA: in a fixed step $\tau$, each reaction fires a Poisson$(a_j\tau)$ number of times.
+
+**Chemical Langevin equation** — SDE approximation of the CME: drift = ODE right-hand side, noise variance = sum of propensities.
+
+**Euler–Maruyama method** — Euler's method for SDEs: an Euler step plus a normal kick with standard deviation proportional to $\sqrt h$.
+
+**Stochastic differential equation (SDE)** — an ODE with a random noise term driven by Brownian motion $W$.
+
+## Part 9: Optimisation and model fitting
+
+### Optimisation in one dimension
+
+See [Optimisation in one dimension](optimisation-1d/lec.qmd).
+
+**Objective function** — The function to be minimised (cost, loss), e.g. minus a log-likelihood or a sum of squared errors.
+
+**Negative log-likelihood** — Minus the log-likelihood; minimising it gives the maximum-likelihood estimate (the convention of all optimisers).
+
+**Stationary point** — A point where f'(x) = 0: a minimum, a maximum or a flat inflection point.
+
+**Local minimum** — A point lower than all nearby points; not necessarily the lowest point overall.
+
+**Global minimum** — The lowest value of f on the whole interval (or domain) considered.
+
+**Unimodal function** — A function with a single minimum on an interval: decreasing before it, increasing after it.
+
+**Bracket (for a minimum)** — Three points a < c < b with f(c) < f(a) and f(c) < f(b); a local minimum lies in (a, b).
+
+**Golden-section search** — Bracketing minimiser that compares two interior points and shrinks the bracket by 0.618 per function evaluation (linear convergence).
+
+**Golden-section ratio** — g = (√5 − 1)/2 ≈ 0.618, the factor that lets golden-section search reuse one point per step.
+
+**Parabolic interpolation** — Fit a parabola through three points of f and jump to its vertex; superlinear (order ≈ 1.32) but unsafe far from the minimum.
+
+**Brent's method (minimisation)** — Golden-section search combined with parabolic steps; R `optimize`, Python `scipy.optimize.minimize_scalar`, Rust argmin `BrentOpt`.
+
+**Newton's method for minimisation** — x_{k+1} = x_k − f'(x_k)/f''(x_k): jump to the vertex of the local quadratic model; Newton's method on f'.
+
+**Local quadratic model** — Second-order Taylor polynomial f(x_k) + f'(x_k)(x − x_k) + ½ f''(x_k)(x − x_k)^2.
+
+**Convex function** — A function with f'' ≥ 0 everywhere on an interval; every chord lies above the graph and every local minimum is global.
+
+**Curvature (at a minimum)** — f''(x*); a large curvature means a sharply defined minimum, for a likelihood a small standard error.
+
+**Flat bottom (√ε limit)** — Near a minimum f changes only quadratically, so methods comparing f values locate x* only to about √ε relative.
+
+**Profile (over linear parameters)** — Objective of the remaining nonlinear parameter after the linear ones are fitted exactly for each value, e.g. RSS(T) for a sine wave.
+
+**Multistart** — Running a local optimiser from many starting points (or intervals) and keeping the best result, to find the global minimum.
+
+**Grid search** — Evaluating the objective on a grid of parameter values; used to find the right basin before a local refinement.
+
+**Half-life** — Time for a quantity decaying at rate k to halve: ln 2 / k.
+
+### Gradient descent, Newton and quasi-Newton
+
+See [Gradient descent, Newton and quasi-Newton](gradient-methods/lec.qmd).
+
+**Gradient** — the vector of partial derivatives $\partial f/\partial x_j$ of a scalar function; the Jacobian of $f$, written as a column. It points uphill.
+
+**Hessian** — the matrix of second partial derivatives $\partial^2 f/\partial x_i\partial x_j$; the Jacobian of the gradient. Symmetric.
+
+**Positive definite matrix** — a symmetric matrix with all eigenvalues positive; a Hessian that is positive definite at a point with zero gradient marks a minimum.
+
+**Saddle point** — a point with zero gradient where the Hessian has eigenvalues of both signs: uphill in some directions, downhill in others.
+
+**Quadratic model** — the second-order Taylor approximation $f(\mathbf x + \mathbf s) \approx f + \nabla f^\mathsf T\mathbf s + \tfrac12\mathbf s^\mathsf TH\mathbf s$.
+
+**Steepest descent** — iteration $\mathbf x_{k+1} = \mathbf x_k - \alpha_k\nabla f(\mathbf x_k)$; converges linearly at a rate set by the condition number of the Hessian.
+
+**Step size (learning rate)** — the multiplier $\alpha$ of the search direction in one iteration.
+
+**Line search** — choosing the step size along a given search direction.
+
+**Backtracking (Armijo) line search** — start with $\alpha = 1$ and halve until $f$ decreases by at least $c\,\alpha$ times the predicted decrease (sufficient decrease, $c \approx 10^{-4}$).
+
+**Descent direction** — a direction $\mathbf s$ with $\nabla f^\mathsf T\mathbf s < 0$, along which $f$ decreases for small steps.
+
+**Zig-zagging** — the back-and-forth path of steepest descent across a long narrow valley (badly conditioned Hessian).
+
+**Newton's method for minimisation** — solve $H\mathbf s = -\nabla f$ and step to the minimum of the quadratic model; quadratic convergence near a minimum.
+
+**Modified Newton** — Newton with the Hessian shifted to $H + \mu I$ so that it is positive definite and every step goes downhill.
+
+**Trust region** — a safeguard that limits each step to a region where the quadratic model is trusted, instead of a line search.
+
+**Quasi-Newton method** — a method that builds an approximation of the Hessian (or its inverse) from changes of the gradient, without second derivatives.
+
+**Secant condition** — the requirement $B\mathbf y = \mathbf s$ that the curvature model reproduces the observed change of gradient $\mathbf y$ along the last step $\mathbf s$.
+
+**BFGS** — the standard quasi-Newton update (Broyden, Fletcher, Goldfarb, Shanno), a rank-2 update of the approximate inverse Hessian that keeps it positive definite.
+
+**L-BFGS** — limited-memory BFGS: stores only the last few step and gradient-change pairs, for problems with very many parameters.
+
+**Nelder–Mead method** — derivative-free minimisation that moves a simplex of $n + 1$ points by reflection, expansion, contraction and shrinking.
+
+**Simplex** — $n + 1$ points in $n$ dimensions (a triangle in 2-D), as used by Nelder–Mead.
+
+**Conjugate gradient (nonlinear)** — a first-order method that combines the new gradient with the previous direction, using only $O(n)$ memory.
+
+**Parameter scaling** — rescaling parameters (units, logs, `parscale`) so that they are of similar size; it lowers the condition number of the Hessian.
+
+**Multistart** — running a local optimiser from many starting values and comparing the results.
+
+**Four-parameter logistic (4PL)** — the dose–response model $b + (t-b)/(1 + (\mathrm{EC50}/c)^h)$ with bottom, top, EC50 and Hill slope.
+
+**Stochastic gradient descent (SGD)** — steepest descent using the gradient of a small random subset (minibatch) of the data terms at each step.
+
+### Nonlinear least squares and ODE fitting
+
+See [Nonlinear least squares and ODE fitting](nonlinear-least-squares/lec.qmd).
+
+**Nonlinear least squares** — Minimising the sum of squared residuals when the model depends nonlinearly on its parameters; solved iteratively.
+
+**Residual sum of squares (RSS)** — $\sum_i (y_i - m_i(\mathbf p))^2$, the quantity a least-squares fit minimises (`deviance()` for `nls`).
+
+**Sensitivity** — The change in a model prediction per unit change of a parameter; one entry of the Jacobian.
+
+**Gauss–Newton method** — Linearise the model at the current parameters, solve the linear least-squares problem for the step (by QR), repeat.
+
+**Levenberg–Marquardt method** — Gauss–Newton with a damping term $\lambda\|D\boldsymbol\delta\|^2$; small $\lambda$ gives Gauss–Newton, large $\lambda$ a short gradient-descent step.
+
+**Damping parameter** — The $\lambda$ in Levenberg–Marquardt; increased after a rejected step, decreased after an accepted one.
+
+**Marquardt scaling** — Damping with the column lengths of $J$ on the diagonal, so that the step does not depend on the units of the parameters.
+
+**Step halving** — Shortening a Gauss–Newton step until the RSS decreases; what `nls` does.
+
+**Singular gradient** — `nls`'s error when the Jacobian is numerically rank deficient at some trial point.
+
+**Log-parameterisation** — Fitting $\log p$ instead of $p$, so that positive parameters stay positive and steps are relative.
+
+**Bateman function** — The closed-form plasma concentration of the one-compartment model with first-order absorption.
+
+**Absorption rate constant ($k_a$)** — First-order rate at which an oral drug moves from the gut into plasma.
+
+**Elimination rate constant ($k_e$)** — First-order rate at which a drug is removed from plasma; half-life $\ln 2/k_e$.
+
+**Volume of distribution ($V$)** — The volume that relates the amount of drug in the body to its plasma concentration.
+
+**Flip-flop kinetics** — The symmetry $k_a \leftrightarrow k_e$ (with $V \to Vk_e/k_a$) under which oral plasma data are identical.
+
+**Multistart** — Running a local optimiser from many starting points and comparing the results.
+
+**Inner tolerance** — The `rtol`/`atol` of the ODE solver called inside the residual function of a fit.
+
+**Forward sensitivity equations** — Extra ODEs whose solution is the derivative of the state with respect to a parameter; an exact alternative to finite-difference Jacobians.
+
+### Identifiability and uncertainty of fitted parameters
+
+See [Identifiability and uncertainty of fitted parameters](identifiability/lec.qmd).
+
+**Identifiable parameter** — a parameter whose value is determined by the model output: different values give different predictions.
+
+**Structural non-identifiability** — the model equations give identical output for different parameter values (e.g. F and V only as F/V); no data can fix it.
+
+**Practical non-identifiability** — the model could determine the parameter, but the available data (too few, too noisy, badly timed) do not.
+
+**Flip-flop** — the symmetry of the oral one-compartment model: (ka, ke, V) and (ke, ka, V·ke/ka) give the same concentration curve.
+
+**Apparent volume (V/F)** — the identifiable combination of volume and bioavailability after an oral dose.
+
+**Standard error (of a fitted parameter)** — square root of a diagonal element of the approximate covariance matrix s²(JᵀJ)⁻¹.
+
+**Wald interval** — estimate ± 1.96 standard errors; relies on the sum of squares being a quadratic bowl.
+
+**Fisher information** — JᵀJ/σ² for least squares with Gaussian noise (in general the Hessian of −log L); its inverse approximates the covariance of the estimates.
+
+**Correlation matrix of estimates** — covariance scaled by the standard errors; |r| near 1 means two parameters can compensate each other.
+
+**Sensitivity (relative)** — θⱼ ∂C/∂θⱼ, the change in the output per relative change in a parameter; a column of the log-parameter Jacobian.
+
+**Profile likelihood** — the minimal sum of squares (or −log L) over all other parameters with one parameter held fixed; its rise above the minimum gives a confidence interval.
+
+**Flat profile** — a profile that stays below the 3.84 threshold in one or both directions: the parameter is not bounded there by the data.
+
+**Sloppy model** — a model whose JᵀJ eigenvalues (in log-parameters) are spread over many decades without a gap: a few stiff and many poorly determined parameter combinations.
+
+**Delta method** — propagating the parameter covariance to a derived quantity g: Var g ≈ ∇gᵀ Cov ∇g.
+
+**Optimal experimental design** — choosing sample times (or doses) to make JᵀJ large in the directions of interest, before the experiment.
+
+**Prior as a residual** — adding (log θ − μ)/τ to the residual vector; equivalent to ridge regularisation and to the maximum a posteriori estimate with a log-normal prior.
+
+### Constraints and linear programming
+
+See [Constraints and linear programming](constrained-lp/lec.qmd).
+
+**Constraint** — A restriction on the parameters of an optimisation problem, either an equality ($\sum_i p_i = 1$) or an inequality ($c \ge 0$).
+
+**Feasible set** — The set of parameter values that satisfy all constraints.
+
+**Active constraint** — An inequality constraint that holds with equality at a solution; inactive constraints do not change the answer.
+
+**Bound constraint** — A constraint of the form $\ell \le \theta \le u$ on a single parameter, handled by L-BFGS-B.
+
+**L-BFGS-B** — Limited-memory BFGS with bound constraints: steps that would leave the box are projected back onto it.
+
+**Reparameterisation** — Optimising a free parameter $\theta$ mapped into the allowed set, e.g. $c = e^\theta$ for positivity or softmax for proportions.
+
+**Softmax** — The map $p_i = e^{\theta_i}/\sum_j e^{\theta_j}$, which turns any real vector into positive proportions summing to 1.
+
+**Lagrange multiplier** — The number $\lambda$ in $\nabla f = \lambda \nabla g$ at a constrained optimum; the rate at which the optimal value changes when the constraint level changes.
+
+**Shadow price** — The change in the optimal objective per unit relaxation of a constraint; zero for an inactive constraint.
+
+**KKT conditions** — Optimality conditions for inequality-constrained problems: gradient balanced by multipliers, multipliers $\ge 0$, and zero for inactive constraints.
+
+**Linear program (LP)** — An optimisation problem with a linear objective and linear equality and inequality constraints.
+
+**Feasible polytope** — The convex polygon (in higher dimensions, polytope) of points satisfying the constraints of an LP.
+
+**Vertex (corner)** — A point of the feasible polytope where as many independent constraints are active as there are variables; an LP optimum, if it exists, is attained at one.
+
+**Simplex method** — Dantzig's LP algorithm that moves from vertex to vertex along edges that improve the objective until no edge does.
+
+**Ratio test** — The simplex step that finds how far one can move along an edge before the first constraint becomes active.
+
+**Interior-point method** — An LP (or nonlinear) algorithm that follows a path through the inside of the feasible set using Newton steps.
+
+**Degenerate vertex** — A vertex where more constraints are active than needed to define it; shadow prices there are not unique.
+
+**Unbounded LP** — An LP whose objective can be improved without limit, usually because a constraint is missing.
+
+**Infeasible LP** — An LP whose constraints cannot all be satisfied at once.
+
+**Stoichiometric matrix** — The matrix $S$ with one row per metabolite and one column per reaction, entry = molecules made (+) or used (−).
+
+**Flux** — The rate of a reaction in a metabolic network (e.g. mmol per gram dry weight per hour).
+
+**Steady state (FBA)** — The assumption $S\mathbf v = \mathbf 0$: every internal metabolite is produced as fast as it is consumed.
+
+**Exchange reaction** — A pseudo-reaction for uptake from or secretion to the medium; its bounds encode nutrient availability.
+
+**Biomass reaction** — A pseudo-reaction draining precursors and energy in the proportions needed to make new cells; its flux is the growth rate.
+
+**Flux balance analysis (FBA)** — Maximising an objective (usually the biomass flux) subject to $S\mathbf v = \mathbf 0$ and flux bounds, as a linear program.
+
+**Flux variability analysis (FVA)** — Fixing the objective at its optimum and minimising and maximising each flux, giving the range of each flux over all optimal solutions.
+
+**Synthetic lethal pair** — Two reactions (genes) each dispensable alone but lethal when both are removed.
+
+**Overflow metabolism** — Secretion of fermentation products (e.g. acetate) even when respiration is possible, here because oxygen limits respiration.
+
+**COBRA / cobrapy** — Standard toolboxes (MATLAB / Python) for constraint-based modelling of genome-scale metabolic networks.
+
+## Part 10: Diffusion and heat: finite-difference PDEs
+
+### The diffusion (heat) equation by finite differences
+
+See [The diffusion (heat) equation by finite differences](diffusion-explicit/lec.qmd).
+
+**Partial differential equation (PDE)** — Equation linking partial derivatives of a function of several variables, e.g. c(x, t) in space and time.
+
+**Partial derivative** — Slope with respect to one variable while the others are held fixed; ∂c/∂x is the gradient at a fixed time, ∂c/∂t the rate of change at a fixed place.
+
+**Fick's law** — Diffusive flux is proportional to the concentration gradient and runs downhill: J = −D ∂c/∂x.
+
+**Diffusion coefficient** — The constant D in Fick's law, in m²/s; about 1e-9 m²/s (1000 µm²/s) for a small molecule and 1e-10 m²/s for a small protein in water.
+
+**Diffusion equation (heat equation)** — ∂c/∂t = D ∂²c/∂x², from Fick's law and a mass balance; heat conduction obeys the same equation with thermal diffusivity α.
+
+**Thermal diffusivity** — The heat-equation analogue of D, α = k/(ρ c_p); about 1.4e-7 m²/s for water.
+
+**Diffusion time scale** — L²/D, the time for diffusion over a distance L; doubling L quadruples it.
+
+**Initial condition** — The profile c(x, 0) at the start of a PDE simulation.
+
+**Boundary condition** — What holds at the ends of the domain for all times; needed at each end of a 1D diffusion problem.
+
+**Dirichlet boundary condition** — A fixed value at the boundary, e.g. a large reservoir holding the concentration constant.
+
+**No-flux (Neumann) boundary condition** — Zero flux through the boundary, ∂c/∂x = 0, as at a wall.
+
+**Ghost point** — A fictitious grid point outside the domain, set so that a boundary condition holds (c_{N+1} = c_{N−1} for no flux), letting the central stencil be used at the boundary.
+
+**Grid (mesh)** — The points x_i = iΔx and times t_n = nΔt at which a PDE solution is approximated by values c_i^n.
+
+**Method of lines** — Discretising a PDE in space only, which turns it into a large system of ODEs in time.
+
+**FTCS scheme** — Forward-time, centred-space: Euler in time with the (1, −2, 1) stencil in space, c_i^{n+1} = c_i^n + r(c_{i−1}^n − 2c_i^n + c_{i+1}^n).
+
+**Explicit scheme** — A time-stepping scheme in which each new value is computed directly from old values, without solving a system.
+
+**Mesh ratio** — r = D Δt / Δx², the single number that governs the stability of FTCS.
+
+**Stability limit of FTCS** — r ≤ 1/2, i.e. Δt ≤ Δx²/(2D); larger steps make a grid-scale zigzag grow without bound.
+
+**Zigzag (sawtooth) mode** — The shortest wave on a grid, c_i = (−1)^i; the fastest-decaying mode of the diffusion grid and the one that limits explicit steps.
+
+**Maximum principle** — Diffusion never creates values above the largest or below the smallest initial/boundary value; violating it signals instability or a bug.
+
+**Second-difference matrix** — Tridiagonal matrix with −2 on the diagonal and 1 beside it; its eigenvalues −4 sin²(kπ/2N) give the decay rates of the grid modes.
+
+**Nondimensionalisation** — Rescaling variables (x/L, tD/L²) so that the parameters drop out; all diffusion chambers become one problem.
+
+**Fourier-series solution** — Exact solution of the diffusion equation as a sum of sine modes, each decaying at rate n²π²D/L².
+
+**Grid refinement** — Repeating a simulation on finer grids to check that the answer converges at the expected order (here error ÷4 per halving of Δx).
+
+**Chemotaxis chamber (diffusion-based gradient generator)** — A flow-free channel between a source and a sink reservoir in which diffusion sets up a linear concentration gradient for migrating cells.
+
+### Implicit schemes and the method of lines
+
+See [Implicit schemes and the method of lines](diffusion-implicit/lec.qmd).
+
+**Implicit scheme** — a time-stepping method in which the new values appear on both sides of the update, so each step requires solving an equation (here a linear tridiagonal system).
+
+**Backward Euler (for diffusion)** — the second difference evaluated at the new time level: (I - rA) c^{n+1} = c^n + b; first order in time, unconditionally stable, damps fast modes.
+
+**Crank–Nicolson** — the second difference averaged over the old and new time levels (trapezoidal rule in time); second order in time, unconditionally stable, but flips fast modes (growth factor near -1).
+
+**Mesh ratio** — r = D Δt / Δx², the single number through which the time step, grid spacing and diffusion coefficient enter a diffusion scheme.
+
+**Growth (amplification) factor** — the factor by which one time step multiplies a Fourier mode of the grid; |g| ≤ 1 for every mode means the scheme is stable.
+
+**Unconditional stability** — stability for every time step, as for backward Euler and Crank–Nicolson on the diffusion equation.
+
+**Rannacher start** — a few backward Euler steps before switching to Crank–Nicolson, to damp the high-frequency content of sharp initial data.
+
+**Maximum principle** — for pure diffusion, the solution never exceeds the largest (or falls below the smallest) initial or boundary value; a violation signals instability or oscillation.
+
+**Method of lines** — discretising space only, turning a PDE into a large system of ODEs in time that is handed to an ODE solver.
+
+**Banded Jacobian** — a Jacobian whose non-zeros lie near the diagonal (tridiagonal for 1D diffusion); telling a stiff solver about it (`ode.1D`, `jac_sparsity`, `lband`/`uband`) makes each step O(N).
+
+**Exact-solution test** — verifying a solver on a problem with a known solution, such as a sine mode decaying as e^{-D k² t}, and checking the observed order.
+
+**Observed order** — log2 of the ratio of errors (or of successive differences) when a step is halved; should match the design order once in the asymptotic range.
+
+**Asymptotic range** — step sizes small enough that the leading error term dominates and the observed order equals the design order.
+
+**Error floor** — the level at which the error stops decreasing when one step (Δt or Δx) is refined, because the error from the other one dominates.
+
+**Error cancellation** — accidental near-cancellation of time and space errors of opposite sign at one particular step size, making a single run look more accurate than the method is.
+
+**Thermal diffusivity** — D = k/(ρ c_p), the diffusion coefficient of heat; about 1.4×10⁻⁷ m²/s for water, about 1×10⁻⁷ for PDMS and 7×10⁻⁷ for glass.
+
+**Biot number** — Bi = hH/k, the ratio of heat loss at a surface to conduction through a wall of thickness H; sets the steady temperature drop across the wall.
+
+### Steady state in two dimensions
+
+See [Steady state in two dimensions](steady-state-2d/lec.qmd).
+
+**Steady state** — a solution that no longer changes in time; for diffusion, set dc/dt = 0.
+
+**Boundary value problem (BVP)** — a differential equation with conditions on the boundary of the domain instead of an initial condition.
+
+**Poisson equation** — D times the Laplacian of c equals a given source or sink term.
+
+**Laplace equation** — the Poisson equation without sources: the Laplacian of c is zero.
+
+**Laplacian** — the sum of the second derivatives in all directions, d2c/dx2 + d2c/dy2.
+
+**Five-point stencil (five-point Laplacian)** — the finite-difference Laplacian on a 2D grid: (sum of the four neighbours - 4 times the centre) / h^2.
+
+**Kronecker product** — A (x) B: the block matrix with blocks a_pq B; builds 2D grid matrices from 1D ones.
+
+**Column-major / row-major** — storing a matrix column by column (R, Fortran) or row by row (numpy default, C); decides which index runs fastest when a grid is flattened.
+
+**Manufactured solution** — a chosen smooth function whose derivatives are known exactly, used to test a discretisation.
+
+**Maximum principle** — without sources, a diffusion solution cannot exceed its largest or fall below its smallest boundary value.
+
+**Zero-order uptake** — consumption at a constant rate, independent of concentration.
+
+**Michaelis–Menten uptake** — consumption R0 c / (Km + c): constant at high c, proportional to c at low c.
+
+**Spurious root** — a solution of the discrete equations that has no physical meaning (e.g. negative concentration).
+
+**Clipping (projected Newton step)** — replacing values outside the physical range (e.g. c < 0) by the boundary of that range after each step.
+
+**Fill-reducing ordering** — a renumbering of the unknowns (AMD, nested dissection) that reduces fill-in in a sparse factorisation.
+
+**Mother machine** — a microfluidic device with dead-end trenches, each holding a line of bacteria fed from a channel at the open end.
+
+**Hypoxia** — oxygen below the level cells need for normal function (here: below 10 µM, about 1 % O2).
+
+### Flow plus diffusion
+
+See [Flow plus diffusion](advection-diffusion/lec.qmd).
+
+**Advection** — transport of a dissolved substance by the flow of the fluid that carries it.
+
+**Advection–diffusion equation** — $\partial c/\partial t + u\,\partial c/\partial x = D\,\partial^2 c/\partial x^2$: mass balance with a flux $uc - D\,\partial c/\partial x$.
+
+**Péclet number** — $\text{Pe} = uL/D$, the ratio of the diffusion time $L^2/D$ to the flow time $L/u$; Pe ≫ 1 means advection dominates.
+
+**Cell Péclet number** — $u\Delta x/D$, the Péclet number of one grid cell; central differences wiggle when it exceeds 2.
+
+**Mixing length** — distance $\approx \bar u w^2/D$ that side-by-side streams travel before diffusion mixes them across a channel of width $w$.
+
+**Boundary layer** — thin region (here of thickness $D/u$) where a solution changes steeply; the grid must resolve it.
+
+**Central difference (advection)** — $(c_{i+1} - c_{i-1})/(2\Delta x)$ for $\partial c/\partial x$; second order but can give oscillating solutions.
+
+**Upwind difference** — one-sided difference taken on the side the flow comes from, e.g. $(c_i - c_{i-1})/\Delta x$ for $u > 0$; first order, never wiggles.
+
+**Wiggles** — spurious point-to-point oscillations in a discrete solution, here from central differences with cell Péclet number > 2.
+
+**Numerical diffusion** — artificial extra diffusion introduced by a scheme; upwind adds $u\Delta x/2$ (steady) or $u\Delta x(1 - C)/2$ (explicit in time).
+
+**Courant number** — $C = u\Delta t/\Delta x$, the number of grid cells the flow moves in one time step.
+
+**CFL condition** — Courant–Friedrichs–Lewy stability limit $C \le 1$ for explicit advection; with diffusion, $C + 2r \le 1$ for explicit upwind.
+
+**Poiseuille profile** — the parabolic velocity profile $u(y) = 6\bar u (y/w)(1 - y/w)$ of slow pressure-driven flow between two walls.
+
+**Plug flow** — idealised flow with the same speed across the whole channel.
+
+**Marching** — solving a steady problem with Pe ≫ 1 step by step in the downstream coordinate, treating it like time.
+
+**T-sensor** — microfluidic device in which two streams flow side by side; the diffusion interface between them is used to measure concentrations or diffusion coefficients.
+
+**H-filter** — membrane-free microfluidic filter: small molecules diffuse from a sample stream into a buffer stream while cells and large molecules stay behind.
+
+**Christmas-tree gradient generator** — microfluidic network that repeatedly splits, mixes and recombines inlet streams to produce a concentration gradient of a chosen shape.
+
+### Reaction–diffusion and pattern formation
+
+See [Reaction–diffusion and pattern formation](reaction-diffusion/lec.qmd).
+
+**Reaction–diffusion equation** — a PDE in which a concentration both diffuses and is produced or consumed locally, $\partial c/\partial t = D\nabla^2 c + f(c)$.
+
+**Synthesis–diffusion–degradation (SDD) model** — a morphogen made at a source, spreading by diffusion and degraded at rate $k$; gives an exponential steady gradient.
+
+**Decay length** — $\lambda = \sqrt{D/k}$, the distance over which an SDD gradient falls by a factor $e$.
+
+**Morphogen** — a signalling molecule whose concentration tells cells their position (e.g. Bicoid, Dorsal, Fgf8).
+
+**Local accumulation time** — $\tau(x) = \int_0^\infty (1 - c(x,t)/c_s(x))\,dt$, a mean time for the gradient at $x$ to reach steady state.
+
+**Ghost point** — a fictitious grid point outside the domain used to impose a flux or no-flux boundary condition to second order.
+
+**Mass balance (gradient)** — at steady state total degradation $k\int c\,dx$ equals the influx $j$; a check that needs no exact solution.
+
+**IMEX scheme** — implicit–explicit time stepping: stiff linear terms (diffusion) implicit, non-stiff or nonlinear terms (reaction) explicit.
+
+**Operator splitting** — advancing each part of an equation (diffusion, reaction) separately within a time step.
+
+**Lie splitting** — one full step of each part in turn; first-order accurate.
+
+**Strang splitting** — half step of one part, full step of the other, half step of the first; second-order accurate.
+
+**Splitting error** — the error of a splitting scheme even with exact sub-steps; zero only when the parts commute.
+
+**Commutator** — $AB - BA$; zero when the order of applying two operators does not matter.
+
+**Turing instability** — a uniform steady state that is stable without diffusion becomes unstable with diffusion at some wavelengths.
+
+**Activator–inhibitor (activator–substrate) system** — two species where one promotes its own production and a faster-diffusing partner limits it.
+
+**Schnakenberg model** — a simple two-species reaction ($a - u + u^2v$, $b - u^2v$) that shows Turing patterns.
+
+**Wavenumber** — $q = 2\pi/\text{wavelength}$; a cosine perturbation $\cos(qx)$ turns $\nabla^2$ into $-q^2$.
+
+**Dispersion relation** — the growth rate (largest real eigenvalue part) of a perturbation as a function of wavenumber.
+
+**Numerical artefact (pattern)** — structure in a simulation produced by the grid or time step rather than the model; it changes when $\Delta x$ or $\Delta t$ is refined.
+
+**Periodic boundary condition** — the domain wraps around (left edge joins right edge); natural for rings such as an embryo's circumference.
+
+## Part 11: Further reading (optional)
+
+### Beyond rectangles: finite elements and flow
+
+See [Beyond rectangles: finite elements and flow](fem-outlook/lec.qmd).
+
+**Finite volume method** — Discretisation that writes one conservation balance (flux in − flux out = source) per cell of a mesh; conserves mass exactly.
+
+**Finite element method (FEM)** — Discretisation that writes the unknown as a sum of simple basis functions on a mesh and asks the equation to hold in a weighted-average (weak) sense.
+
+**Mesh** — A division of the domain into elements (intervals, triangles, tetrahedra), possibly of different sizes, that can follow curved walls.
+
+**Element** — One piece of a mesh (an interval in 1D, a triangle in 2D) on which the approximation is a simple polynomial.
+
+**Node** — A mesh point where an unknown value lives; in linear elements, the corners of the elements.
+
+**Hat function** — Piecewise linear basis function equal to 1 at its own node and 0 at all others.
+
+**Weak form** — The equation multiplied by a test function and integrated (with integration by parts), so that only first derivatives appear.
+
+**Natural boundary condition** — A flux condition (e.g. no flux) that the weak form satisfies automatically, with no extra equation.
+
+**Element matrix** — The small matrix (2 × 2 in 1D, 3 × 3 for linear triangles) that one element contributes to the global system.
+
+**Assembly** — Adding all element matrices into the rows and columns of their nodes to build the global sparse matrix.
+
+**Stiffness matrix** — The assembled matrix of the diffusion term, $\int D\varphi_i'\varphi_j'$.
+
+**Mass lumping** — Replacing the consistent reaction (mass) matrix by a diagonal one; in 1D on a uniform mesh it gives back finite differences.
+
+**Graded mesh** — A mesh with small elements where the solution changes fast and large elements elsewhere.
+
+**Adaptive mesh refinement** — Automatically splitting the elements where an error estimate is largest and solving again.
+
+**Reynolds number** — $Re = \rho U \ell/\mu$, the ratio of inertial to viscous forces in a flow; small in microfluidics.
+
+**Stokes flow** — Flow at $Re \ll 1$, where inertia is negligible: $\mu\nabla^2\mathbf u = \nabla p$, $\nabla\cdot\mathbf u = 0$; linear and laminar.
+
+**Navier–Stokes equations** — The equations of mass and momentum conservation for a viscous fluid, including the nonlinear inertia term.
+
+**Poiseuille flow** — Pressure-driven flow in a straight channel with a parabolic velocity profile, peak 1.5 × mean between plates.
+
+**COMSOL Multiphysics** — Commercial graphical finite element package, widely used for microfluidic chip design.
+
+**FEniCS / Firedrake** — Open-source Python finite element frameworks in which the weak form is written almost as on paper.
+
+### Iterative linear solvers in depth
+
+See [Iterative linear solvers in depth](iterative-solvers/lec.qmd).
+
+**Iterative solver** — a method that improves a guess for the solution of Ax = b using only products with A, instead of factorising A.
+
+**Splitting** — writing A = M - N with M easy to solve, giving the iteration x <- x + M^{-1}(b - Ax).
+
+**Jacobi method** — the splitting with M = diagonal of A: every unknown is updated from the old values of its neighbours.
+
+**Gauss–Seidel method** — the splitting with M = lower triangle of A: unknowns are updated in turn, using new values as soon as they exist.
+
+**Iteration matrix** — T = I - M^{-1}A; the error of a splitting is multiplied by T in every step.
+
+**Spectral radius** — the largest absolute value of the eigenvalues of a matrix, rho(T); a splitting converges if and only if rho(T) < 1, and gains one digit every ln 10 / (-ln rho) steps.
+
+**Krylov space** — span{b, Ab, ..., A^{k-1} b}: all vectors that can be made from b with k - 1 products with A.
+
+**Conjugate gradient (CG)** — Krylov method for symmetric positive definite matrices that picks the best point in the Krylov space with a short recurrence; needs about sqrt(kappa) iterations.
+
+**A-conjugate** — two directions p, q with p^T A q = 0; CG's search directions are mutually A-conjugate.
+
+**Preconditioner** — a matrix M close to A that is cheap to solve with; the solver works on M^{-1}A, which has a smaller condition number.
+
+**Jacobi (diagonal) preconditioner** — M = diagonal of A; removes bad scaling between rows, nothing more.
+
+**Incomplete Cholesky (IC(0))** — Cholesky factorisation in which every fill-in entry is dropped, so L keeps the sparsity pattern of A and LL^T only approximates A.
+
+**GMRES** — generalised minimal residual method: the Krylov method for nonsymmetric matrices that minimises the residual; stores one basis vector per iteration.
+
+**Restarted GMRES, GMRES(k)** — GMRES restarted from the current iterate every k steps to limit memory; can converge more slowly or stall.
+
+**Arnoldi process** — Gram–Schmidt orthogonalisation of the Krylov vectors; produces the basis and the small Hessenberg matrix used by GMRES.
+
+**Smoother** — a few sweeps of Gauss–Seidel or damped Jacobi, which remove high-frequency (wiggly) error quickly but smooth error slowly.
+
+**Multigrid** — solver that smooths on the fine grid and corrects the remaining smooth error on coarser grids (V-cycle); iteration count independent of the grid spacing.
+
+**V-cycle** — one multigrid iteration: smooth and restrict down to the coarsest grid, solve there, interpolate and smooth back up.
+
+**Algebraic multigrid (AMG)** — multigrid that builds its coarse levels from the matrix alone, without a geometric grid.
+
