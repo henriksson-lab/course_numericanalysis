@@ -1,0 +1,143 @@
+---
+title: "Quiz: Newton for systems of equations"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of partial derivatives, the Jacobian and Newton's method for systems. The toggle switch is $F_1 = \dfrac{3}{1+v^2} - u$, $F_2 = \dfrac{3}{1+u^2} - v$. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** What is $\dfrac{\partial}{\partial u}\big(u^2 v^3\big)$, and what is its value at $(u, v) = (2, 1)$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Treat $v$ as a fixed number.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$2u v^3$; at $(2, 1)$ it is $4$. ($v^3$ is a constant factor, like the 5 in $5u^2$.)
+:::
+
+---
+
+**Q2.** In the toggle switch, $\partial F_1/\partial u = -1$ everywhere. What biological process does this entry describe, and why is it constant?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which term of $du/dt$ contains $u$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Degradation and dilution of protein U: the term $-u$ in $du/dt$. It is linear in $u$ (first-order decay, rate 1 in the chosen time units), so its derivative is the constant $-1$. Production of U depends only on $v$, so it does not contribute to $\partial F_1/\partial u$.
+:::
+
+---
+
+**Q3.** For a model of 50 genes (50 equations in 50 unknowns), what is the size of the Jacobian? What does entry $(7, 12)$ tell you?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Row = equation, column = variable.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$50 \times 50$. Entry $(7, 12)$ is $\partial F_7/\partial x_{12}$: how fast the net rate of change of gene 7 responds to a change in the level of gene 12. If gene 12 does not regulate gene 7, it is 0, so for a sparse network most entries are 0.
+:::
+
+---
+
+**Q4.** In one-variable Newton we divide by $f'(x_k)$. What replaces the division in Newton for systems, and when does it fail?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is the "derivative" of $\mathbf F$, and how do you "divide" by a matrix?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Solving the linear system $J(\mathbf x_k)\,\boldsymbol\delta = -\mathbf F(\mathbf x_k)$: in R, `solve(J(x), -F(x))`. It fails when $J$ is singular ($\det J = 0$, the analogue of $f' = 0$), and behaves badly when $J$ is nearly singular: the step becomes huge.
+:::
+
+---
+
+**Q5.** Newton for the toggle switch gives these errors: $4\times10^{-1}$, $6\times10^{-2}$, $2\times10^{-3}$, $3\times10^{-6}$, $6\times10^{-12}$. What kind of convergence is this, and roughly what will the next error be?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at the exponents.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Quadratic: the exponent roughly doubles each step ($-3 \to -6 \to -12$), $e_{k+1} \approx C e_k^2$ with $C \approx 0.66$. The next would be about $0.66 \cdot (6\times10^{-12})^2 \approx 2\times10^{-23}$, but rounding stops it at about $10^{-16}$.
+:::
+
+---
+
+**Q6.** You approximate the Jacobian of a 10-gene model by forward differences. How many evaluations of $\mathbf F$ does one Jacobian cost, which step $h$ do you use, and about how many correct digits do you get?
+
+::: {.callout-tip collapse="true" title="Hint"}
+One nudge per variable, plus the unshifted point. The step balances truncation and rounding error.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+11 evaluations ($n + 1$). $h_j = \sqrt\varepsilon\,\max(|x_j|, 1) \approx 1.5\times10^{-8}\max(|x_j|, 1)$. About 8 correct digits (half of the 16), which is enough for Newton to converge practically as fast as with the exact Jacobian.
+:::
+
+---
+
+**Q7.** A Newton run for the toggle switch from $(u_0, v_0) = (2, 2)$ converges to $(1.2134, 1.2134)$ with residual $10^{-16}$. A colleague concludes that the switch has one steady state. What is wrong with that conclusion?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What happens to a Newton iterate that starts with $u = v$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+One Newton run finds one root. From a start with $u = v$ every iterate stays on the diagonal (by symmetry), so it can only find the symmetric middle state. The switch also has $(2.618, 0.382)$ and $(0.382, 2.618)$, the two stable states. Run from many starts and collect the distinct roots. Also, the middle state is unstable: no real cell sits there.
+:::
+
+---
+
+**Q8.** True or false: "Newton converges to the steady state that the cell would reach from the same starting concentrations."
+
+::: {.callout-tip collapse="true" title="Hint"}
+Recall the two basin pictures in the lecture.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+False. Newton follows tangent-plane jumps, not the dynamics. From $(1, 0.2)$ the cell switches U on, but Newton lands on "V on"; and more than half of the starts in $[0, 4]^2$ go to the **unstable** middle state, which the cell never reaches. Newton locates steady states; stability is a separate question (eigenvalues of $J$, *Equilibria, stability and the phase plane*).
+:::
+
+---
+
+**Q9.** A Newton step takes $(u, v)$ from $(1.9, 0.5)$ to $(-5.14, 4.43)$. What went wrong, and what two checks would have flagged it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is $\det J$ at the start? What do you know about concentrations?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The Jacobian at the start is nearly singular ($\det J \approx -0.03$), so the linear model is almost flat in one direction and the step is huge. Checks: the step length $\|\boldsymbol\delta\| \approx 8$ is far larger than the scale of the problem; and $u < 0$ is not a concentration (check `all(x >= 0)` and `all(is.finite(x))`). A damped step or a trust-region solver avoids this.
+:::
+
+---
+
+**Q10.** `multiroot` returns `root = 2.61803398875534 0.38196601124783` with `f.root` about $10^{-12}$. The exact root is $(2.618033988749895, 0.381966011250105)$. Is `multiroot` broken?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look up its default tolerances.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. It stopped when its tolerances (`atol` $= 10^{-8}$, `rtol` $= 10^{-6}$ by default) were met, which here left an error of about $5\times10^{-12}$: 11–12 correct digits. That is plenty for biology; if you need more, pass tighter `atol`/`rtol` and the exact `jacfunc`. Always look at `f.root`.
+:::
+
+---
+
+**Q11.** For the symmetric toggle switch with $n = 2$, the two "decided" steady states satisfy $u + v = \alpha$ and $uv = 1$. For which promoter strengths $\alpha$ is the switch bistable, and why does Newton struggle exactly at the boundary?
+
+::: {.callout-tip collapse="true" title="Hint"}
+When does $t^2 - \alpha t + 1 = 0$ have real roots? What is $\det J$ at $u = v = 1$ for $\alpha = 2$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Bistable for $\alpha > 2$ (real roots need $\alpha^2 \ge 4$). At $\alpha = 2$ the three states merge at $(1, 1)$, where the off-diagonal entries of $J$ are $-2\cdot2\cdot1/(1+1)^2 = -1$, so $\det J = 1 - 1 = 0$: the Jacobian is singular at the root. Like a double root in one variable, Newton then converges only linearly.
+:::

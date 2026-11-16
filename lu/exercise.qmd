@@ -1,0 +1,1118 @@
+---
+title: "Exercise: Gaussian elimination as LU"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- run Gaussian elimination on a 3×3 matrix by hand and record the **multipliers**,
+- write the result as an **LU factorisation** $A = LU$ and check it by multiplying out,
+- solve $A\mathbf x = \mathbf b$ for a new $\mathbf b$ by **forward and back substitution** alone,
+- count the operations: about $\tfrac23 n^3$ to factorise, $2n^2$ per solve, and use that to choose between **factor once, solve many** and refactorising,
+- explain why `solve(A) %*% b` is slower and less accurate than `solve(A, b)`,
+- recognise a **zero or tiny pivot**, and run the checks (`is.finite`, the residual) that catch it.
+
+The biology throughout is the **isotope mixing model**: which fraction of a consumer's diet came from each source. The by-hand part uses pen and paper only.
+
+## Background
+
+A consumer's isotope signature is a weighted average of its diet sources (after correcting for trophic enrichment). With $k$ isotopes and $k+1$ sources, the mass balance for each isotope plus "fractions sum to 1" gives a square system $A\mathbf f = \mathbf b$: the columns of $A$ are the sources, $\mathbf b$ is the consumer.
+
+**Facts used below:**
+
+1. **Elimination.** At step $k$, the **pivot** is $u_{kk}$; row $i > k$ gets row $k$ times the **multiplier** $\ell_{ik} = u_{ik}/u_{kk}$ subtracted from it. After $n-1$ steps the matrix is upper triangular, $U$.
+2. **LU.** Put the multipliers below the diagonal of a unit lower triangular $L$ (1s on the diagonal). Then $A = LU$.
+3. **Solving with the factors.** $L\mathbf y = \mathbf b$ by **forward substitution** (top to bottom), then $U\mathbf x = \mathbf y$ by **back substitution** (bottom to top).
+4. **Cost.** Factorising $\approx \tfrac23 n^3$ operations; each forward + back substitution $\approx 2n^2$. A computer does roughly $10^9$ simple operations per second per core.
+5. **Inverse.** Computing $A^{-1}$ costs $\approx 2n^3$, and multiplying by it is less accurate than substituting.
+6. **Pivots.** A zero pivot stops elimination (division by zero); a tiny one gives huge multipliers and a wrong answer. Libraries **reorder rows** (partial pivoting): $A = PLU$. Pivoting is the topic of *Pivoting, norms and conditioning*.
+7. **Residual** $\mathbf r = \mathbf b - A\mathbf x$. A good solver gives $\max|r_i|$ near $\varepsilon\cdot\max|a_{ij}|\cdot\max|x_j|$.
+
+A salt-marsh example: a ribbed mussel feeds on *Spartina* (marsh grass, $\delta^{13}$C $= -13$ ‰, $\delta^{34}$S $= +6$ ‰), phytoplankton ($-21$, $+18$) and upland C3 plant detritus ($-27$, $+2$). The basic tools in each language:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+A <- rbind(c(  1,   1,   1),      # fractions sum to 1
+           c(-13, -21, -27),      # d13C: Spartina, phytoplankton, upland C3
+           c(  6,  18,   2))      # d34S
+b <- c(1, -18.4, 11.6)            # one ribbed mussel
+solve(A, b)                       # factorise + substitute, in one call
+# [1] 0.4 0.5 0.1
+F <- lu(A)                        # factorise once ...
+solve(F, b)                       # ... substitute as often as needed
+# [1] 0.4 0.5 0.1
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import lu_factor, lu_solve
+
+A = np.array([[  1,   1,   1],          # fractions sum to 1
+              [-13, -21, -27],          # d13C: Spartina, phytoplankton, upland C3
+              [  6,  18,   2]], float)  # d34S
+b = np.array([1, -18.4, 11.6])          # one ribbed mussel
+print(np.linalg.solve(A, b))            # factorise + substitute, in one call
+# [0.4 0.5 0.1]
+F = lu_factor(A)                        # factorise once ...
+print(lu_solve(F, b))                   # ... substitute as often as needed
+# [0.4 0.5 0.1]
+```
+
+### Rust
+
+```rust
+// rust/examples/lu_background.rs  —  cargo run --example lu_background
+use nalgebra::{dmatrix, dvector};
+
+fn main() {
+    let a = dmatrix![  1.0,   1.0,   1.0;      // fractions sum to 1
+                     -13.0, -21.0, -27.0;      // d13C: Spartina, phytoplankton, upland C3
+                       6.0,  18.0,   2.0];     // d34S
+    let b = dvector![1.0, -18.4, 11.6];        // one ribbed mussel
+    let f = a.clone().lu();                    // factorise once ...
+    let x = f.solve(&b).expect("singular");    // ... substitute as often as needed
+    println!("{:?}", x.as_slice());
+}
+
+// Output:
+// [0.39999999999999997, 0.5, 0.1]
+```
+
+:::
+
+R prints 7 significant digits, numpy 8, and Rust's `{:?}` prints every digit needed to identify the double, so Rust shows `0.39999999999999997` where R shows `0.4`. They are the same number up to the last bit or two. Python's library calls are [`numpy.linalg.solve`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html), [`scipy.linalg.lu_factor`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_factor.html) and [`scipy.linalg.lu_solve`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_solve.html); Rust uses [`nalgebra`'s `LU`](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.LU.html) (`.lu()`, `.solve()`).
+
+## By hand
+
+**B1. Elimination, as in your first course.** The mussel above has signature $\delta^{13}$C $= -18.4$ ‰, $\delta^{34}$S $= 11.6$ ‰.
+(a) Write the system $A\mathbf f = \mathbf b$ as an augmented matrix $[A \mid \mathbf b]$.
+(b) Eliminate below the diagonal. Write down each multiplier $\ell_{ik}$ as you use it.
+(c) Back-substitute for $f_1, f_2, f_3$. What fraction of the mussel's diet is phytoplankton?
+
+**B2. The multipliers make $L$.**
+(a) From B1, write $L$ (multipliers below the diagonal, 1s on it) and $U$ (the eliminated $A$, without the $\mathbf b$ column).
+(b) Multiply out $LU$ and check that you get $A$.
+(c) Look at the $\mathbf b$ column at the end of B1(b). Which triangular system with $L$ does that column solve?
+
+**B3. A second mussel, without eliminating again.** A second mussel has $\delta^{13}$C $= -22.4$ ‰, $\delta^{34}$S $= 7.6$ ‰.
+(a) Solve $L\mathbf y = \mathbf b$ by forward substitution, then $U\mathbf f = \mathbf y$ by back substitution.
+(b) Count the multiplications, additions/subtractions and divisions in (a). Then count those that eliminating $A$ itself took in B1(b) (ignore the $\mathbf b$ column). Which part would you redo for a third mussel?
+
+**B4. An LU with no biology.** Factorise
+$$A = \begin{pmatrix} 2 & 1 & 1 \\ 4 & 3 & 3 \\ 8 & 7 & 9 \end{pmatrix}.$$
+(a) Give $L$ and $U$.
+(b) The determinant of a triangular matrix is the product of its diagonal, and $\det(LU) = \det L \cdot \det U$. What is $\det A$?
+(c) Solve $A\mathbf x = (4, 10, 24)^T$ with your factors.
+
+**B5. A zero pivot.** Three diet sources: C3 plants ($\delta^{13}$C $= -26$, $\delta^{15}$N $= 2$), freshwater fish ($-26$, $10$) and maize ($-10$, $6$). Rows: sum to 1, $\delta^{13}$C, $\delta^{15}$N.
+(a) Write $A$ and do the first elimination step. What goes wrong at step 2?
+(b) Swap rows 2 and 3 of $A$ (and of $\mathbf b$), and factorise again. Give $L$ and $U$.
+(c) Solve for a consumer with $\delta^{13}$C $= -20$, $\delta^{15}$N $= 6.5$.
+(d) Now suppose the fish had $\delta^{15}$N $= 2$ as well (the same signature as the C3 plants in both isotopes). Eliminate. Does any row swap help? What does that mean for the diet estimate?
+
+**B6. Counting the cost.**
+(a) Use B3(b) to give the exact operation counts for $n = 3$. Compare with $\tfrac23 n^3$ and $2n^2$.
+(b) For $n = 1000$, how many operations are one factorisation and one solve? Roughly how many seconds at $10^9$ operations per second?
+(c) An implicit model of tracer diffusion in tissue (Part 10) solves a system with the **same** $5000 \times 5000$ matrix at each of 1000 time steps. Estimate the time if you factorise at every step, and if you factorise once. (Treat the matrix as dense.)
+(d) A study has 10 000 consumers and a 3×3 mixing matrix. Does the choice between refactorising and factor-once matter for the operation count?
+
+**B7. Why not the inverse.**
+(a) **Accuracy, $1 \times 1$.** Work in decimal arithmetic with **3 significant digits** (round after every operation). Solve $7x = 63$ (i) by division, $x = 63/7$, and (ii) via the inverse, $x = (1/7) \cdot 63$.
+(b) **Cost.** Computing $A^{-1}$ means solving $A\mathbf x_j = \mathbf e_j$ for $j = 1, \dots, n$. With the counts from the lecture, what does that cost, compared with one factorisation? (Use $2n^2$ per column, ignoring that the $\mathbf e_j$ are mostly zeros.)
+(c) For $m$ right-hand sides, write the total cost of the inverse route and of the factor-once route. Does the inverse ever win?
+
+## In code
+
+**C1. Write it yourself.** Write `lu_nopivot(A)`, `forward_sub(L, b)` and `back_sub(U, y)` (the lecture has the R versions).
+(a) Check your B1–B3 answers: print $L$, $U$, $\max|LU - A|$, and $\mathbf y$ and $\mathbf f$ for both mussels.
+(b) Check B4: $L$, $U$, and $\det A$ from the diagonal of $U$; compare with the built-in determinant.
+
+**C2. The library LU.** Factorise the salt-marsh $A$ with [`Matrix::lu`](https://rdrr.io/cran/Matrix/man/lu-methods.html) (Python: [`scipy.linalg.lu`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu.html) for $P, L, U$ and `lu_factor` for solving; Rust: `a.lu()`).
+(a) Print $L$ and $U$. Why are they different from yours? Which row became the first pivot row, and why that one?
+(b) Check that $PLU$ (or $P^TLU$, depending on the convention) gives back $A$.
+(c) Solve for both mussels with **one** call, putting the two right-hand sides as columns of a matrix.
+
+**C3. Many consumers.** A four-source model with three isotopes:
+
+| source | $\delta^{13}$C | $\delta^{15}$N | $\delta^{34}$S |
+|---|---|---|---|
+| *Spartina* | $-13$ | 6 | 6 |
+| phytoplankton | $-21$ | 8 | 18 |
+| upland C3 | $-27$ | 4 | 2 |
+| benthic microalgae | $-17$ | 5 | 10 |
+
+(a) Build all 286 diets whose fractions are multiples of 0.1 and sum to 1 (loop $i, j, k$ from 0 with $i + j + k \le 10$, fractions $(i, j, k, 10 - i - j - k)/10$, in that loop order), compute each consumer's signature, and add the deterministic "measurement noise" $0.2\sin t$, $0.2\cos t$, $0.2\sin 2t$ to the three isotopes of consumer $t = 1, \dots, 286$.
+(b) Solve for all 286 diets with **one** factorisation. Check that every column sums to 1.
+(c) How many consumers get a negative fraction? How many below $-0.1$? What is the largest error compared with the true diets? What does that say about using 0.2 ‰ measurement noise with these four sources?
+
+**C4. Cost of factorising vs substituting.** For random $n \times n$ matrices with $n = 250, 500, 1000, 2000$, time one factorisation and one solve with the factors (repeat each several times and average). Print the times and their ratio. Compare the doubling ratios with 8 and 4. (Optional: start R or Python with the environment variable `OPENBLAS_NUM_THREADS=1` to time on one core; in Rust use `--release`.)
+
+**C5. Factor once, solve many.** For a random $1000 \times 1000$ matrix and 200 right-hand sides used **one at a time** (in a loop), time three strategies: (i) `solve(A, b)` for each $\mathbf b$, (ii) factorise once, then solve with the factors for each $\mathbf b$, (iii) invert once, then multiply each $\mathbf b$ by the inverse. Predict the ratio of (i) to (ii) from C4 first.
+
+**C6. The inverse is less accurate.** The four-source matrix from the lecture has sources 1 and 2 that differ by $d$ in every isotope:
+$$A_4 = \begin{pmatrix} 1 & 1 & 1 & 1 \\ -26 & -26 + d & -10 & -18 \\ 2 & 2 + d & 6 & 14 \\ 4 & 4 + 2d & 3 & 19 \end{pmatrix}, \qquad \mathbf f = (0.3, 0.2, 0.4, 0.1)^T.$$
+For $d = 1, 10^{-1}, \dots, 10^{-6}$, compute $\mathbf b = A_4\mathbf f$, then $\mathbf x$ both with `solve(A4, b)` and with `solve(A4) %*% b` (Python: [`np.linalg.inv`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.inv.html)). Print the maximum residual and the maximum error of each. Which of the two is consistently better, and in which quantity?
+
+**C7. Zero and tiny pivots.**
+(a) Run your `lu_nopivot` on the matrix from B5. Write a one-line check that detects the failure. Then swap rows 2 and 3, factorise, and solve for the consumer in B5(c).
+(b) Run `lu_nopivot` with forward and back substitution on $\begin{pmatrix} 10^{-20} & 1 \\ 1 & 1\end{pmatrix}\mathbf x = \begin{pmatrix} 1 \\ 2\end{pmatrix}$. Does your check from (a) catch this? Compute the residual of your answer and of the library's.
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — elimination and multipliers (B1, B2, B4)"}
+The multiplier is (entry to be zeroed) / (pivot), and you **subtract** multiplier × pivot row. With a negative entry below a pivot of 1, the multiplier is negative and you end up **adding** a multiple. Keep each multiplier in the position of the zero it created: that is $L$. To check $LU = A$, row $i$ of $LU$ is $\sum_k \ell_{ik} \times$ (row $k$ of $U$).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — forward and back substitution (B3)"}
+Forward: $y_1 = b_1$ (the diagonal of $L$ is 1), then $y_2 = b_2 - \ell_{21}y_1$, $y_3 = b_3 - \ell_{31}y_1 - \ell_{32}y_2$. Back: $x_3 = y_3/u_{33}$, then $x_2 = (y_2 - u_{23}x_3)/u_{22}$, $x_1 = (y_1 - u_{12}x_2 - u_{13}x_3)/u_{11}$. Count one multiplication and one subtraction for each off-diagonal term.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — zero pivots (B5, C7)"}
+A zero pivot means you cannot divide. Look below it in the same column: if there is a nonzero entry, swapping that row up fixes the problem; if the whole column below (and including) the pivot is zero, the matrix is singular. In code, a division by zero gives `Inf` or `NaN` without an error: test with [`is.finite`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/is.finite.html) (Python [`np.isfinite`](https://numpy.org/doc/stable/reference/generated/numpy.isfinite.html), Rust `f64::is_finite`).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — costs (B6, B7)"}
+$\tfrac23 \cdot 1000^3 \approx 6.7\times10^8$; $\tfrac23 \cdot 5000^3 \approx 8.3\times10^{10}$; $2 \cdot 5000^2 = 5\times10^7$. One day is $8.64\times10^4$ s. For the inverse: one factorisation plus $n$ solves.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — library functions (C2, C3, C5)"}
+R: [`lu()`](https://rdrr.io/cran/Matrix/man/lu-methods.html) in the Matrix package, [`expand2()`](https://rdrr.io/cran/Matrix/man/expand-methods.html) to get $P$, $L$, $U$ with $A = P_1 L U$, and `solve(F, b)` on the `lu` object; [`solve(A, B)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html) with a matrix `B` solves for every column with one factorisation. Base R also has [`forwardsolve` and `backsolve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/backsolve.html). Python: [`scipy.linalg.lu`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu.html) returns `P, L, U` with `A = P @ L @ U`; [`lu_factor`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_factor.html) / [`lu_solve`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_solve.html) keep the factors compactly; [`solve_triangular`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_triangular.html) does one substitution. Rust: [`nalgebra::linalg::LU`](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.LU.html) has `.l()`, `.u()`, `.p()` (with $PA = LU$), `.solve()` and `.try_inverse()`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — timing (C4, C5)"}
+R: [`system.time(for (k in 1:5) F <- lu(A))["elapsed"] / 5`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/system.time.html). Python: `time.perf_counter()` before and after a loop. Rust: `std::time::Instant::now()` and `.elapsed().as_secs_f64()`, built with `--release`. A single solve takes well under a millisecond, so repeat it 100 times inside one timing.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a)
+$$\left(\begin{array}{ccc|c} 1 & 1 & 1 & 1 \\ -13 & -21 & -27 & -18.4 \\ 6 & 18 & 2 & 11.6 \end{array}\right)$$
+(b) Step 1, pivot $1$: $\ell_{21} = -13$, $\ell_{31} = 6$.
+$R_2 + 13R_1 = (0, -8, -14 \mid -5.4)$; $R_3 - 6R_1 = (0, 12, -4 \mid 5.6)$.
+Step 2, pivot $-8$: $\ell_{32} = 12/(-8) = -1.5$.
+$R_3 + 1.5R_2 = (0, 0, -4 - 21 \mid 5.6 - 8.1) = (0, 0, -25 \mid -2.5)$.
+(c) $f_3 = -2.5/(-25) = 0.1$; $f_2 = (-5.4 + 14 \cdot 0.1)/(-8) = 0.5$; $f_1 = 1 - 0.5 - 0.1 = 0.4$. Half of the diet is phytoplankton, 40 % *Spartina*, 10 % upland plants.
+
+**B2.**
+(a)
+$$L = \begin{pmatrix} 1 & 0 & 0 \\ -13 & 1 & 0 \\ 6 & -1.5 & 1 \end{pmatrix}, \qquad U = \begin{pmatrix} 1 & 1 & 1 \\ 0 & -8 & -14 \\ 0 & 0 & -25 \end{pmatrix}$$
+(b) Row 1: $(1, 1, 1)$. Row 2: $-13(1, 1, 1) + (0, -8, -14) = (-13, -21, -27)$. Row 3: $6(1, 1, 1) - 1.5(0, -8, -14) + (0, 0, -25) = (6, 18, 2)$. ✓
+(c) The final $\mathbf b$ column $(1, -5.4, -2.5)$ is $\mathbf y$, the solution of $L\mathbf y = \mathbf b$. Carrying $\mathbf b$ along in the augmented matrix **is** forward substitution.
+
+**B3.**
+(a) $y_1 = 1$; $y_2 = -22.4 + 13 = -9.4$; $y_3 = 7.6 - 6 \cdot 1 - (-1.5)(-9.4) = 1.6 - 14.1 = -12.5$.
+$f_3 = -12.5/(-25) = 0.5$; $f_2 = (-9.4 + 14 \cdot 0.5)/(-8) = 0.3$; $f_1 = 1 - 0.3 - 0.5 = 0.2$.
+(b) Forward: row 2 one multiply–subtract pair, row 3 two pairs: **6** operations (no divisions, since $\ell_{ii} = 1$). Back: row 3 one division; row 2 one pair and one division; row 1 two pairs and one division: **9** operations. Total **15**.
+Eliminating $A$ (B1(b) without the $\mathbf b$ column): step 1, two rows, each 1 division and 2 pairs (columns 2 and 3): $2 \times 5 = 10$; step 2, one row, 1 division and 1 pair: 3. Total **13**. For a third mussel you redo only the 15 operations of the substitutions; the 13 for $A$ are done.
+
+**B4.**
+(a) $\ell_{21} = 2$, $\ell_{31} = 4$: rows become $(0, 1, 1)$ and $(0, 3, 5)$. $\ell_{32} = 3$: row 3 becomes $(0, 0, 2)$.
+$$L = \begin{pmatrix} 1 & 0 & 0 \\ 2 & 1 & 0 \\ 4 & 3 & 1 \end{pmatrix}, \qquad U = \begin{pmatrix} 2 & 1 & 1 \\ 0 & 1 & 1 \\ 0 & 0 & 2 \end{pmatrix}$$
+(b) $\det L = 1$, $\det U = 2 \cdot 1 \cdot 2 = 4$, so $\det A = 4$. (This is how software computes determinants: from the LU, never by cofactor expansion, which costs $n!$.)
+(c) $\mathbf y = (4, 10 - 8, 24 - 16 - 6) = (4, 2, 2)$; $x_3 = 1$, $x_2 = 2 - 1 = 1$, $x_1 = (4 - 1 - 1)/2 = 1$. So $\mathbf x = (1, 1, 1)$.
+
+**B5.**
+(a)
+$$A = \begin{pmatrix} 1 & 1 & 1 \\ -26 & -26 & -10 \\ 2 & 10 & 6 \end{pmatrix} \to \begin{pmatrix} 1 & 1 & 1 \\ 0 & 0 & 16 \\ 0 & 8 & 4 \end{pmatrix}$$
+with $\ell_{21} = -26$, $\ell_{31} = 2$. The step-2 pivot is $0$: $\ell_{32} = 8/0$ is undefined. The carbon row cannot tell C3 plants from freshwater fish, so after removing the first source it has nothing left in column 2.
+(b) Rows in the order (sum, $\delta^{15}$N, $\delta^{13}$C): $\ell_{21} = 2$, $\ell_{31} = -26$ give rows $(0, 8, 4)$ and $(0, 0, 16)$; then $\ell_{32} = 0/8 = 0$.
+$$L = \begin{pmatrix} 1 & 0 & 0 \\ 2 & 1 & 0 \\ -26 & 0 & 1 \end{pmatrix}, \qquad U = \begin{pmatrix} 1 & 1 & 1 \\ 0 & 8 & 4 \\ 0 & 0 & 16 \end{pmatrix}$$
+(c) With the swapped $\mathbf b = (1, 6.5, -20)$: $\mathbf y = (1, 4.5, 6)$; $f_3 = 6/16 = 0.375$, $f_2 = (4.5 - 4 \cdot 0.375)/8 = 0.375$, $f_1 = 0.25$.
+(d) With $\delta^{15}$N $= 2$ for the fish, row 3 after step 1 is $(0, 0, 4)$ and row 2 is $(0, 0, 16)$: the **whole** column below the first row is zero, and no swap gives a nonzero pivot. The matrix is **singular**: the first two columns are equal. Two sources with identical signatures in every isotope cannot be told apart; only their **sum** $f_1 + f_2$ is determined. A zero pivot that a row swap fixes (a) is an accident of row order; one that no swap fixes (d) is a property of the problem.
+
+**B6.**
+(a) $n = 3$: 13 operations to factorise ($\tfrac23 n^3 = 18$), 15 to solve ($2n^2 = 18$). For $n = 3$ the lower-order terms still matter; the formulas are for large $n$.
+(b) Factorise $6.7\times10^8$ (about 0.7 s); solve $2\times10^6$ (about 2 ms). Ratio $n/3 \approx 333$.
+(c) Refactorising: $1000 \times 8.3\times10^{10} = 8.3\times10^{13}$ operations, $8.3\times10^4$ s $\approx$ **23 hours**. Factor once: $8.3\times10^{10} + 1000 \times 5\times10^7 = 1.3\times10^{11}$, about **2 minutes**. (The real diffusion matrix is banded, which makes both far cheaper: *Structure: symmetric, banded, sparse*.)
+(d) No: factorising a 3×3 is 13 operations, solving 15. Even $10^4$ refactorisations are $3\times10^5$ operations, a fraction of a millisecond. For small $n$ the cost that matters in R or Python is the **overhead per function call** (microseconds each), which is why `solve(A, B)` with all consumers as columns is still the right call.
+
+**B7.**
+(a) (i) $63/7 = 9.00$, exact. (ii) $1/7 = 0.142857\ldots$ rounds to $0.143$; $0.143 \times 63 = 9.009$ rounds to $9.01$, wrong in the last digit. The inverse adds a rounding step (storing $1/7$), and the product magnifies its error by $63$. The same happens with matrices, with more steps.
+(b) Factorise $\tfrac23 n^3$, plus $n$ columns at $2n^2$ each $= 2n^3$: about $\tfrac83 n^3$, or 4 times one factorisation. (Using the zeros in $\mathbf e_j$ brings it down to $2n^3$, 3 times; LAPACK does this.)
+(c) Inverse: $2n^3 + m \cdot 2n^2$. Factor once: $\tfrac23 n^3 + m \cdot 2n^2$. The per-$\mathbf b$ costs are equal, so the inverse is always behind by $\tfrac43 n^3$ and never wins on cost; it also loses on accuracy (C6).
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+lu_nopivot <- function(A) {
+  n <- nrow(A); L <- diag(n); U <- A
+  for (k in 1:(n - 1)) {
+    for (i in (k + 1):n) {
+      L[i, k] <- U[i, k] / U[k, k]                       # multiplier l_ik
+      U[i, k:n] <- U[i, k:n] - L[i, k] * U[k, k:n]       # row i minus l_ik * row k
+    }
+  }
+  list(L = L, U = U)
+}
+forward_sub <- function(L, b) {          # solve L y = b, top to bottom
+  n <- length(b); y <- numeric(n)
+  for (i in 1:n) {
+    j <- seq_len(i - 1)                  # columns 1..i-1
+    y[i] <- (b[i] - sum(L[i, j] * y[j])) / L[i, i]
+  }
+  y
+}
+back_sub <- function(U, y) {             # solve U x = y, bottom to top
+  n <- length(y); x <- numeric(n)
+  for (i in n:1) {
+    j <- seq_len(n - i) + i              # columns i+1..n
+    x[i] <- (y[i] - sum(U[i, j] * x[j])) / U[i, i]
+  }
+  x
+}
+
+A <- rbind(c(1, 1, 1), c(-13, -21, -27), c(6, 18, 2))
+F <- lu_nopivot(A)
+F$L
+#      [,1] [,2] [,3]
+# [1,]    1  0.0    0
+# [2,]  -13  1.0    0
+# [3,]    6 -1.5    1
+F$U
+#      [,1] [,2] [,3]
+# [1,]    1    1    1
+# [2,]    0   -8  -14
+# [3,]    0    0  -25
+max(abs(F$L %*% F$U - A))
+# [1] 0
+B <- cbind(c(1, -18.4, 11.6), c(1, -22.4, 7.6))    # two mussels
+for (j in 1:2) {
+  y <- forward_sub(F$L, B[, j])
+  print(y)
+  print(back_sub(F$U, y))
+}
+# [1]  1.0 -5.4 -2.5
+# [1] 0.4 0.5 0.1
+# [1]   1.0  -9.4 -12.5
+# [1] 0.2 0.3 0.5
+
+A2 <- rbind(c(2, 1, 1), c(4, 3, 3), c(8, 7, 9))
+F2 <- lu_nopivot(A2)
+F2$L
+#      [,1] [,2] [,3]
+# [1,]    1    0    0
+# [2,]    2    1    0
+# [3,]    4    3    1
+F2$U
+#      [,1] [,2] [,3]
+# [1,]    2    1    1
+# [2,]    0    1    1
+# [3,]    0    0    2
+prod(diag(F2$U))
+# [1] 4
+det(A2)
+# [1] 4
+```
+
+### Python
+
+```python
+import numpy as np
+
+def lu_nopivot(A):
+    n = A.shape[0]
+    L = np.eye(n)
+    U = A.astype(float).copy()
+    for k in range(n - 1):                       # pivot column k
+        for i in range(k + 1, n):                # rows below the pivot
+            L[i, k] = U[i, k] / U[k, k]          # multiplier l_ik
+            U[i, k:] = U[i, k:] - L[i, k] * U[k, k:]   # row i - l_ik * row k
+    return L, U
+
+def forward_sub(L, b):                           # solve L y = b, top to bottom
+    n = len(b)
+    y = np.zeros(n)
+    for i in range(n):
+        y[i] = (b[i] - L[i, :i] @ y[:i]) / L[i, i]
+    return y
+
+def back_sub(U, y):                              # solve U x = y, bottom to top
+    n = len(y)
+    x = np.zeros(n)
+    for i in range(n - 1, -1, -1):
+        x[i] = (y[i] - U[i, i + 1:] @ x[i + 1:]) / U[i, i]
+    return x
+
+A = np.array([[1, 1, 1], [-13, -21, -27], [6, 18, 2]], float)
+L, U = lu_nopivot(A)
+print(L)
+# [[  1.    0.    0. ]
+#  [-13.    1.    0. ]
+#  [  6.   -1.5   1. ]]
+print(U)
+# [[  1.   1.   1.]
+#  [  0.  -8. -14.]
+#  [  0.   0. -25.]]
+print(np.max(np.abs(L @ U - A)))
+# 0.0
+B = np.array([[1, -18.4, 11.6], [1, -22.4, 7.6]]).T     # two mussels, one per column
+for j in range(2):
+    y = forward_sub(L, B[:, j])
+    print(y)
+    print(back_sub(U, y))
+# [ 1.  -5.4 -2.5]
+# [0.4 0.5 0.1]
+# [  1.   -9.4 -12.5]
+# [0.2 0.3 0.5]
+
+A2 = np.array([[2, 1, 1], [4, 3, 3], [8, 7, 9]], float)
+L2, U2 = lu_nopivot(A2)
+print(L2)
+# [[1. 0. 0.]
+#  [2. 1. 0.]
+#  [4. 3. 1.]]
+print(U2)
+# [[2. 1. 1.]
+#  [0. 1. 1.]
+#  [0. 0. 2.]]
+print(np.prod(np.diag(U2)))
+# 4.0
+print(np.linalg.det(A2))
+# 3.999999999999999
+```
+
+### Rust
+
+```rust
+// rust/examples/lu_c1.rs  —  cargo run --example lu_c1
+use nalgebra::{dmatrix, dvector, DMatrix, DVector};
+
+fn lu_nopivot(a: &DMatrix<f64>) -> (DMatrix<f64>, DMatrix<f64>) {
+    let n = a.nrows();
+    let mut l = DMatrix::<f64>::identity(n, n);
+    let mut u = a.clone();
+    for k in 0..n - 1 {                           // pivot column k
+        for i in k + 1..n {                       // rows below the pivot
+            l[(i, k)] = u[(i, k)] / u[(k, k)];    // multiplier l_ik
+            for j in k..n {                       // row i - l_ik * row k
+                u[(i, j)] -= l[(i, k)] * u[(k, j)];
+            }
+        }
+    }
+    (l, u)
+}
+
+fn forward_sub(l: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = b.len();
+    let mut y = DVector::<f64>::zeros(n);
+    for i in 0..n {                               // top to bottom
+        let s: f64 = (0..i).map(|j| l[(i, j)] * y[j]).sum();
+        y[i] = (b[i] - s) / l[(i, i)];
+    }
+    y
+}
+
+fn back_sub(u: &DMatrix<f64>, y: &DVector<f64>) -> DVector<f64> {
+    let n = y.len();
+    let mut x = DVector::<f64>::zeros(n);
+    for i in (0..n).rev() {                       // bottom to top
+        let s: f64 = (i + 1..n).map(|j| u[(i, j)] * x[j]).sum();
+        x[i] = (y[i] - s) / u[(i, i)];
+    }
+    x
+}
+
+fn show(m: &DMatrix<f64>) {
+    for r in m.row_iter() {
+        println!("{:?}", r.iter().collect::<Vec<_>>());
+    }
+}
+
+fn main() {
+    let a = dmatrix![1.0, 1.0, 1.0; -13.0, -21.0, -27.0; 6.0, 18.0, 2.0];
+    let (l, u) = lu_nopivot(&a);
+    show(&l);
+    show(&u);
+    println!("{:e}", (&l * &u - &a).abs().max());
+    for b in [dvector![1.0, -18.4, 11.6], dvector![1.0, -22.4, 7.6]] {   // two mussels
+        let y = forward_sub(&l, &b);
+        println!("{:?}", y.as_slice());
+        println!("{:?}", back_sub(&u, &y).as_slice());
+    }
+    let a2 = dmatrix![2.0, 1.0, 1.0; 4.0, 3.0, 3.0; 8.0, 7.0, 9.0];
+    let (l2, u2) = lu_nopivot(&a2);
+    show(&l2);
+    show(&u2);
+    println!("{}", u2.diagonal().product());
+    println!("{}", a2.clone().lu().determinant());
+}
+
+// Output:
+// [1.0, 0.0, 0.0]
+// [-13.0, 1.0, 0.0]
+// [6.0, -1.5, 1.0]
+// [1.0, 1.0, 1.0]
+// [0.0, -8.0, -14.0]
+// [0.0, 0.0, -25.0]
+// 0e0
+// [1.0, -5.399999999999999, -2.4999999999999982]
+// [0.40000000000000013, 0.49999999999999994, 0.09999999999999992]
+// [1.0, -9.399999999999999, -12.499999999999998]
+// [0.20000000000000018, 0.29999999999999993, 0.49999999999999994]
+// [1.0, 0.0, 0.0]
+// [2.0, 1.0, 0.0]
+// [4.0, 3.0, 1.0]
+// [2.0, 1.0, 1.0]
+// [0.0, 1.0, 1.0]
+// [0.0, 0.0, 2.0]
+// 4
+// 4
+```
+
+:::
+
+Everything matches B1–B4. The mussel numbers are not exact in the last digits (Rust shows them): $-18.4$ and $11.6$ are not exact in binary (*How computers store numbers*). `np.linalg.det` gives $3.999999999999999$: it multiplies the diagonal of a **pivoted** LU, whose entries are not whole numbers, and rounds along the way.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+A <- rbind(c(1, 1, 1), c(-13, -21, -27), c(6, 18, 2))
+B <- cbind(c(1, -18.4, 11.6), c(1, -22.4, 7.6))
+F <- lu(A)
+e <- expand2(F)                  # A = P1. %*% L %*% U
+e$P1.
+# 3 x 3 sparse Matrix of class "pMatrix"
+#
+# [1,] . . |
+# [2,] | . .
+# [3,] . | .
+e$L
+# 3 x 3 Matrix of class "dtrMatrix" (unitriangular)
+#             [,1]        [,2]        [,3]
+# [1,]  1.00000000           .           .
+# [2,] -0.46153846  1.00000000           .
+# [3,] -0.07692308 -0.07407407  1.00000000
+e$U
+# 3 x 3 Matrix of class "dtrMatrix"
+#            [,1]       [,2]       [,3]
+# [1,] -13.000000 -21.000000 -27.000000
+# [2,]          .   8.307692 -10.461538
+# [3,]          .          .  -1.851852
+max(abs(e$P1. %*% e$L %*% e$U - A))
+# [1] 1.110223e-16
+solve(F, B)                      # both mussels, one factorisation
+# 3 x 2 Matrix of class "dgeMatrix"
+#      [,1] [,2]
+# [1,]  0.4  0.2
+# [2,]  0.5  0.3
+# [3,]  0.1  0.5
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import lu, lu_factor, lu_solve
+A = np.array([[1, 1, 1], [-13, -21, -27], [6, 18, 2]], float)
+B = np.array([[1, -18.4, 11.6], [1, -22.4, 7.6]]).T
+P, L, U = lu(A)                    # A = P @ L @ U
+print(P)
+# [[0. 0. 1.]
+#  [1. 0. 0.]
+#  [0. 1. 0.]]
+print(L)
+# [[ 1.          0.          0.        ]
+#  [-0.46153846  1.          0.        ]
+#  [-0.07692308 -0.07407407  1.        ]]
+print(U)
+# [[-13.         -21.         -27.        ]
+#  [  0.           8.30769231 -10.46153846]
+#  [  0.           0.          -1.85185185]]
+print(np.max(np.abs(P @ L @ U - A)))
+# 1.1102230246251565e-16
+F = lu_factor(A)                   # compact form (LU in one array + pivots) for lu_solve
+print(lu_solve(F, B))              # both mussels, one factorisation
+# [[0.4 0.2]
+#  [0.5 0.3]
+#  [0.1 0.5]]
+```
+
+### Rust
+
+```rust
+// rust/examples/lu_c2.rs  —  cargo run --example lu_c2
+use nalgebra::{dmatrix, DMatrix};
+
+fn show(m: &DMatrix<f64>) {
+    for r in m.row_iter() {
+        println!("{:?}", r.iter().collect::<Vec<_>>());
+    }
+}
+
+fn main() {
+    let a = dmatrix![1.0, 1.0, 1.0; -13.0, -21.0, -27.0; 6.0, 18.0, 2.0];
+    let b = dmatrix![1.0, 1.0; -18.4, -22.4; 11.6, 7.6];   // two mussels, one per column
+    let f = a.clone().lu();
+    let (l, u) = (f.l(), f.u());
+    show(&l);
+    show(&u);
+    let mut plu = &l * &u;              // = P A: undo the row swaps to get A back
+    f.p().inv_permute_rows(&mut plu);
+    println!("{:e}", (plu - &a).abs().max());
+    show(&f.solve(&b).expect("singular"));   // both mussels, one factorisation
+}
+
+// Output:
+// [1.0, 0.0, 0.0]
+// [-0.46153846153846156, 1.0, 0.0]
+// [-0.07692307692307693, -0.0740740740740741, 1.0]
+// [-13.0, -21.0, -27.0]
+// [0.0, 8.307692307692307, -10.461538461538462]
+// [0.0, 0.0, -1.8518518518518523]
+// 2.220446049250313e-16
+// [0.39999999999999997, 0.19999999999999998]
+// [0.5, 0.29999999999999993]
+// [0.1, 0.5]
+```
+
+:::
+
+(a) The library reorders the rows before eliminating. The first pivot is $-13$, the entry of **largest absolute value** in column 1 (the $\delta^{13}$C row), not the 1 we used. With that choice every multiplier has $|\ell_{ik}| \le 1$ (compare our $-13$ and $6$). Why that matters is the topic of *Pivoting, norms and conditioning*. (b) The conventions differ: R and scipy return $A = PLU$, nalgebra stores $PA = LU$; all three reproduce $A$ to rounding. (c) Same diets as B1 and B3.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+S <- rbind(1,
+           c(-13, -21, -27, -17),    # d13C: Spartina, phytoplankton, upland C3, microalgae
+           c(  6,   8,   4,   5),    # d15N
+           c(  6,  18,   2,  10))    # d34S
+# all diets with fractions in steps of 0.1 (286 consumers), one per column
+Ftrue <- NULL
+for (i in 0:10) for (j in 0:(10 - i)) for (k in 0:(10 - i - j))
+  Ftrue <- cbind(Ftrue, c(i, j, k, 10 - i - j - k) / 10)
+m <- ncol(Ftrue)
+B <- S %*% Ftrue
+t <- 1:m                                   # deterministic "measurement noise"
+B[2, ] <- B[2, ] + 0.2 * sin(t)
+B[3, ] <- B[3, ] + 0.2 * cos(t)
+B[4, ] <- B[4, ] + 0.2 * sin(2 * t)
+X <- solve(S, B)                           # one factorisation, m solves
+m
+# [1] 286
+max(abs(colSums(X) - 1))
+# [1] 4.440892e-16
+sum(apply(X, 2, min) < 0)                  # consumers with a negative fraction
+# [1] 141
+sum(apply(X, 2, min) < -0.1)
+# [1] 16
+round(range(X), 3)
+# [1] -0.142  1.013
+max(abs(X - Ftrue))
+# [1] 0.1423137
+```
+
+### Python
+
+```python
+import numpy as np
+S = np.array([[  1,   1,   1,   1],
+              [-13, -21, -27, -17],     # d13C: Spartina, phytoplankton, upland C3, microalgae
+              [  6,   8,   4,   5],     # d15N
+              [  6,  18,   2,  10]], float)   # d34S
+# all diets with fractions in steps of 0.1 (286 consumers), one per column
+cols = [[i, j, k, 10 - i - j - k] for i in range(11) for j in range(11 - i)
+        for k in range(11 - i - j)]
+Ftrue = np.array(cols, float).T / 10
+m = Ftrue.shape[1]
+B = S @ Ftrue
+t = np.arange(1, m + 1)                  # deterministic "measurement noise"
+B[1] += 0.2 * np.sin(t)
+B[2] += 0.2 * np.cos(t)
+B[3] += 0.2 * np.sin(2 * t)
+X = np.linalg.solve(S, B)                # one factorisation, m solves
+print(m)
+# 286
+print(np.max(np.abs(X.sum(axis=0) - 1)))
+# 4.440892098500626e-16
+print(np.sum(X.min(axis=0) < 0))         # consumers with a negative fraction
+# 141
+print(np.sum(X.min(axis=0) < -0.1))
+# 16
+print(np.round([X.min(), X.max()], 3))
+# [-0.142  1.013]
+print(np.max(np.abs(X - Ftrue)))
+# 0.14231366859947778
+```
+
+### Rust
+
+```rust
+// rust/examples/lu_c3.rs  —  cargo run --example lu_c3
+use nalgebra::{dmatrix, DMatrix};
+
+fn main() {
+    let s = dmatrix![  1.0,   1.0,   1.0,   1.0;
+                     -13.0, -21.0, -27.0, -17.0;   // d13C: Spartina, phytoplankton, upland C3, microalgae
+                       6.0,   8.0,   4.0,   5.0;   // d15N
+                       6.0,  18.0,   2.0,  10.0];  // d34S
+    // all diets with fractions in steps of 0.1 (286 consumers), one per column
+    let mut cols: Vec<f64> = Vec::new();
+    for i in 0..=10 {
+        for j in 0..=(10 - i) {
+            for k in 0..=(10 - i - j) {
+                cols.extend([i, j, k, 10 - i - j - k].map(|v| v as f64 / 10.0));
+            }
+        }
+    }
+    let m = cols.len() / 4;
+    let ftrue = DMatrix::from_column_slice(4, m, &cols);
+    let mut b = &s * &ftrue;
+    for c in 0..m {                                // deterministic "measurement noise"
+        let t = (c + 1) as f64;
+        b[(1, c)] += 0.2 * t.sin();
+        b[(2, c)] += 0.2 * t.cos();
+        b[(3, c)] += 0.2 * (2.0 * t).sin();
+    }
+    let x = s.lu().solve(&b).expect("singular");  // one factorisation, m solves
+    println!("{m}");
+    let colsum_err = x.column_iter().map(|c| (c.sum() - 1.0).abs()).fold(0.0, f64::max);
+    println!("{:e}", colsum_err);
+    let mins: Vec<f64> = x.column_iter().map(|c| c.min()).collect();
+    println!("{}", mins.iter().filter(|&&v| v < 0.0).count());  // a negative fraction
+    println!("{}", mins.iter().filter(|&&v| v < -0.1).count());
+    println!("[{:.3}, {:.3}]", x.min(), x.max());
+    println!("{}", (&x - &ftrue).abs().max());
+}
+
+// Output:
+// 286
+// 6.661338147750939e-16
+// 141
+// 16
+// [-0.142, 1.013]
+// 0.1423136685994767
+```
+
+:::
+
+The columns sum to 1 to rounding (the first row of $S$ enforces it exactly). Of the 286 consumers, 202 have a true fraction of exactly 0 (they sit on an edge or face of the source polyhedron), so any noise can push them outside, and 141 come out with a negative fraction; 16 below $-0.1$. The worst diet fraction is off by 0.14 although the noise is only 0.2 ‰, against source differences of several ‰. That amplification is not a fault of LU: the four-source problem itself magnifies noise. Measuring it is the **condition number** in *Pivoting, norms and conditioning*. In practice, Bayesian mixing models handle such uncertainty and keep fractions in $[0, 1]$.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+set.seed(1)
+for (n in c(250, 500, 1000, 2000)) {
+  A <- matrix(rnorm(n * n), n); b <- rnorm(n)
+  t_fac <- system.time(for (k in 1:5) F <- lu(A))["elapsed"] / 5
+  t_sol <- system.time(for (k in 1:100) x <- solve(F, b))["elapsed"] / 100
+  cat(sprintf("%5d  factor %.4f s  solve %.6f s  ratio %4.0f\n",
+              n, t_fac, t_sol, t_fac / t_sol))
+}
+#   250  factor 0.0008 s  solve 0.000070 s  ratio   11
+#   500  factor 0.0060 s  solve 0.000130 s  ratio   46
+#  1000  factor 0.0474 s  solve 0.000470 s  ratio  101
+#  2000  factor 0.2018 s  solve 0.002580 s  ratio   78
+```
+
+### Python
+
+```python
+import time
+import numpy as np
+from scipy.linalg import lu_factor, lu_solve
+rng = np.random.default_rng(1)
+for n in [250, 500, 1000, 2000]:
+    A = rng.standard_normal((n, n)); b = rng.standard_normal(n)
+    t0 = time.perf_counter()
+    for k in range(5): F = lu_factor(A)
+    t_fac = (time.perf_counter() - t0) / 5
+    t0 = time.perf_counter()
+    for k in range(100): x = lu_solve(F, b)
+    t_sol = (time.perf_counter() - t0) / 100
+    print(f"{n:5d}  factor {t_fac:.4f} s  solve {t_sol:.6f} s  ratio {t_fac / t_sol:4.0f}")
+#   250  factor 0.0015 s  solve 0.000025 s  ratio   60
+#   500  factor 0.0095 s  solve 0.000152 s  ratio   62
+#  1000  factor 0.0330 s  solve 0.000373 s  ratio   89
+#  2000  factor 0.1581 s  solve 0.001879 s  ratio   84
+```
+
+### Rust
+
+```rust
+// rust/examples/lu_c4.rs  —  cargo run --release --example lu_c4
+use nalgebra::{DMatrix, DVector};
+use rand::{rngs::StdRng, SeedableRng};
+use rand_distr::{Distribution, StandardNormal};
+use std::time::Instant;
+
+fn main() {
+    let mut rng = StdRng::seed_from_u64(1);
+    for n in [250, 500, 1000, 2000] {
+        let a = DMatrix::<f64>::from_fn(n, n, |_, _| StandardNormal.sample(&mut rng));
+        let b = DVector::<f64>::from_fn(n, |_, _| StandardNormal.sample(&mut rng));
+        let t0 = Instant::now();
+        let mut f = a.clone().lu();
+        for _ in 0..4 { f = a.clone().lu(); }
+        let t_fac = t0.elapsed().as_secs_f64() / 5.0;
+        let t0 = Instant::now();
+        let mut x = f.solve(&b).unwrap();
+        for _ in 0..99 { x = f.solve(&b).unwrap(); }
+        let t_sol = t0.elapsed().as_secs_f64() / 100.0;
+        assert!(x[0].is_finite());
+        println!("{n:5}  factor {t_fac:.4} s  solve {t_sol:.6} s  ratio {:4.0}", t_fac / t_sol);
+    }
+}
+
+// Output:
+//   250  factor 0.0024 s  solve 0.000022 s  ratio  108
+//   500  factor 0.0191 s  solve 0.000124 s  ratio  154
+//  1000  factor 0.1923 s  solve 0.000456 s  ratio  421
+//  2000  factor 2.0646 s  solve 0.003069 s  ratio  673
+```
+
+:::
+
+Your times will differ (these are one core on a shared, busy server, so they are noisy). R and Python call the same LAPACK routine through OpenBLAS. Their factorisation doubling ratios scatter between 3.5 and 8, mostly below the 8 of $n^3$: the blocked algorithm gets more operations per second as $n$ grows, and with these short timings noise is large (the lecture's plot, with repeated timings up to $n = 8000$, has ratios 5.5, 6.3, 6.5, approaching 8). The substitution ratios scatter around 4. nalgebra's LU is a plain, unblocked loop: its factorisation ratios are 8–11 and it is 4–10 times slower than LAPACK at $n = 1000$–$2000$, because it uses the memory cache less well. The factorisation/solve ratio is far above 1 and mostly grows with $n$, as $n/3$ predicts, though it stays below $n/3$: a substitution does only two operations per number read from memory, so it runs at a lower rate than the factorisation.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+set.seed(1)
+n <- 1000; m <- 200
+A  <- matrix(rnorm(n * n), n)
+Bm <- matrix(rnorm(n * m), n)              # m right-hand sides, used one at a time
+t_each <- system.time(for (j in 1:m) x <- solve(A, Bm[, j]))["elapsed"]
+t_once <- system.time({ F <- lu(A); for (j in 1:m) x <- solve(F, Bm[, j]) })["elapsed"]
+t_inv  <- system.time({ Ai <- solve(A); for (j in 1:m) x <- Ai %*% Bm[, j] })["elapsed"]
+round(c(each = t_each, once = t_once, inverse = t_inv), 3)
+#    each.elapsed    once.elapsed inverse.elapsed
+#           6.145           0.120           0.248
+```
+
+### Python
+
+```python
+import time
+import numpy as np
+from scipy.linalg import lu_factor, lu_solve
+rng = np.random.default_rng(1)
+n, m = 1000, 200
+A  = rng.standard_normal((n, n))
+Bm = rng.standard_normal((n, m))          # m right-hand sides, used one at a time
+t0 = time.perf_counter()
+for j in range(m): x = np.linalg.solve(A, Bm[:, j])
+t_each = time.perf_counter() - t0
+t0 = time.perf_counter()
+F = lu_factor(A)
+for j in range(m): x = lu_solve(F, Bm[:, j])
+t_once = time.perf_counter() - t0
+t0 = time.perf_counter()
+Ai = np.linalg.inv(A)
+for j in range(m): x = Ai @ Bm[:, j]
+t_inv = time.perf_counter() - t0
+print(f"each {t_each:.3f}  once {t_once:.3f}  inverse {t_inv:.3f}")
+# each 4.990  once 0.106  inverse 0.179
+```
+
+### Rust
+
+```rust
+// rust/examples/lu_c5.rs  —  cargo run --release --example lu_c5
+use nalgebra::DMatrix;
+use rand::{rngs::StdRng, SeedableRng};
+use rand_distr::{Distribution, StandardNormal};
+use std::time::Instant;
+
+fn main() {
+    let mut rng = StdRng::seed_from_u64(1);
+    let (n, m) = (1000, 200);
+    let a = DMatrix::<f64>::from_fn(n, n, |_, _| StandardNormal.sample(&mut rng));
+    let bm = DMatrix::<f64>::from_fn(n, m, |_, _| StandardNormal.sample(&mut rng));
+
+    let t0 = Instant::now();
+    for j in 0..m {
+        let _x = a.clone().lu().solve(&bm.column(j)).unwrap();   // factorise every time
+    }
+    let t_each = t0.elapsed().as_secs_f64();
+
+    let t0 = Instant::now();
+    let f = a.clone().lu();                                      // factorise once
+    for j in 0..m {
+        let _x = f.solve(&bm.column(j)).unwrap();
+    }
+    let t_once = t0.elapsed().as_secs_f64();
+
+    let t0 = Instant::now();
+    let ai = a.clone().lu().try_inverse().unwrap();              // inverse once
+    for j in 0..m {
+        let _x = &ai * bm.column(j);
+    }
+    let t_inv = t0.elapsed().as_secs_f64();
+    println!("each {t_each:.3}  once {t_once:.3}  inverse {t_inv:.3}");
+}
+
+// Output:
+// each 31.050  once 0.243  inverse 0.702
+```
+
+:::
+
+Prediction from C4 (R): (i) $200 \times 0.047 \approx 9$ s; (ii) $0.047 + 200 \times 0.00047 \approx 0.14$ s; ratio about 65. Measured: 6.1 s vs 0.12 s, a factor 50. Factor-once beats refactorising by a factor 50 (R, Python) to 130 (Rust, where the factorisation is relatively slower). The inverse route is in between: one inversion (3–4 factorisations' worth) plus cheap products. For one right-hand side or two hundred, it never beats keeping the factors.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+f <- c(0.3, 0.2, 0.4, 0.1)
+for (d in 10^-(0:6)) {
+  A4 <- rbind(1,
+              c(-26, -26 + d, -10, -18),     # d13C: sources 1 and 2 differ by d
+              c(  2,   2 + d,   6,  14),     # d15N
+              c(  4,   4 + 2 * d, 3,  19))   # d34S
+  b <- A4 %*% f
+  x_lu  <- solve(A4, b)
+  x_inv <- solve(A4) %*% b
+  cat(sprintf("d = %.0e  residual LU %.1e  inv %.1e   error LU %.1e  inv %.1e\n", d,
+              max(abs(b - A4 %*% x_lu)), max(abs(b - A4 %*% x_inv)),
+              max(abs(x_lu - f)), max(abs(x_inv - f))))
+}
+# d = 1e+00  residual LU 1.1e-16  inv 4.4e-15   error LU 1.5e-15  inv 3.7e-15
+# d = 1e-01  residual LU 1.1e-16  inv 3.6e-14   error LU 1.0e-14  inv 4.8e-14
+# d = 1e-02  residual LU 0.0e+00  inv 4.7e-12   error LU 2.1e-13  inv 4.8e-13
+# d = 1e-03  residual LU 0.0e+00  inv 3.8e-11   error LU 5.6e-13  inv 1.2e-12
+# d = 1e-04  residual LU 0.0e+00  inv 1.3e-11   error LU 1.8e-11  inv 1.1e-11
+# d = 1e-05  residual LU 0.0e+00  inv 3.6e-09   error LU 1.0e-10  inv 3.7e-10
+# d = 1e-06  residual LU 8.9e-16  inv 1.7e-08   error LU 5.6e-10  inv 4.7e-09
+```
+
+### Python
+
+```python
+import numpy as np
+f = np.array([0.3, 0.2, 0.4, 0.1])
+for d in 10.0 ** -np.arange(7):
+    A4 = np.array([[  1,   1,         1,   1],
+                   [-26, -26 + d,   -10, -18],    # d13C: sources 1 and 2 differ by d
+                   [  2,   2 + d,     6,  14],    # d15N
+                   [  4,   4 + 2 * d, 3,  19]])   # d34S
+    b = A4 @ f
+    x_lu = np.linalg.solve(A4, b)
+    x_inv = np.linalg.inv(A4) @ b
+    print(f"d = {d:.0e}  residual LU {np.max(np.abs(b - A4 @ x_lu)):.1e}"
+          f"  inv {np.max(np.abs(b - A4 @ x_inv)):.1e}"
+          f"   error LU {np.max(np.abs(x_lu - f)):.1e}  inv {np.max(np.abs(x_inv - f)):.1e}")
+# d = 1e+00  residual LU 8.9e-16  inv 2.7e-15   error LU 1.7e-16  inv 1.6e-15
+# d = 1e-01  residual LU 0.0e+00  inv 7.1e-15   error LU 1.0e-14  inv 4.7e-14
+# d = 1e-02  residual LU 8.9e-16  inv 5.9e-12   error LU 8.7e-14  inv 4.1e-13
+# d = 1e-03  residual LU 0.0e+00  inv 7.1e-11   error LU 5.6e-13  inv 1.6e-12
+# d = 1e-04  residual LU 8.9e-16  inv 3.6e-15   error LU 1.8e-11  inv 1.0e-11
+# d = 1e-05  residual LU 0.0e+00  inv 3.0e-09   error LU 2.6e-10  inv 5.1e-10
+# d = 1e-06  residual LU 0.0e+00  inv 4.4e-15   error LU 5.6e-10  inv 4.5e-09
+```
+
+### Rust
+
+```rust
+// rust/examples/lu_c6.rs  —  cargo run --example lu_c6
+use nalgebra::{dmatrix, dvector};
+
+fn main() {
+    let f = dvector![0.3, 0.2, 0.4, 0.1];
+    for p in 0..=6 {
+        let d = 10f64.powi(-p);
+        let a4 = dmatrix![  1.0,  1.0,           1.0,   1.0;
+                          -26.0, -26.0 + d,    -10.0, -18.0;   // d13C: sources 1, 2 differ by d
+                            2.0,   2.0 + d,      6.0,  14.0;   // d15N
+                            4.0,   4.0 + 2.0 * d, 3.0, 19.0];  // d34S
+        let b = &a4 * &f;
+        let lu = a4.clone().lu();
+        let x_lu = lu.solve(&b).unwrap();
+        let x_inv = lu.try_inverse().unwrap() * &b;   // inverse via the same LU
+        println!("d = {:.0e}  residual LU {:.1e}  inv {:.1e}   error LU {:.1e}  inv {:.1e}", d,
+                 (&b - &a4 * &x_lu).abs().max(), (&b - &a4 * &x_inv).abs().max(),
+                 (&x_lu - &f).abs().max(), (&x_inv - &f).abs().max());
+    }
+}
+
+// Output:
+// d = 1e0  residual LU 8.9e-16  inv 2.8e-14   error LU 2.0e-15  inv 2.5e-15
+// d = 1e-1  residual LU 1.1e-16  inv 1.8e-13   error LU 1.4e-14  inv 2.6e-14
+// d = 1e-2  residual LU 0.0e0  inv 2.9e-12   error LU 1.9e-13  inv 1.8e-13
+// d = 1e-3  residual LU 8.9e-16  inv 4.7e-11   error LU 1.8e-12  inv 1.6e-12
+// d = 1e-4  residual LU 1.1e-16  inv 7.6e-10   error LU 2.6e-11  inv 3.2e-11
+// d = 1e-5  residual LU 1.1e-16  inv 1.1e-14   error LU 3.2e-10  inv 4.0e-10
+// d = 1e-6  residual LU 8.9e-16  inv 7.3e-8   error LU 8.5e-10  inv 4.5e-9
+```
+
+:::
+
+The **residual** of the LU solve is at rounding level ($\le 10^{-15}$) for every $d$, in every language. The inverse's residual is usually orders of magnitude larger, growing as $d$ shrinks (up to $10^{-8}$), though by luck it is sometimes small. The **error** grows as $d$ shrinks for **both** methods: two nearly identical sources make the problem ill-conditioned, and no algorithm fixes that (next unit). The inverse's error is mostly somewhat larger, up to 10 times. The consistent difference is in the residual: `solve` returns the exact answer to a system within rounding of yours (it is backward stable, *Error, conditioning and stability*), the inverse route does not. The individual numbers differ between languages because R, numpy and nalgebra round differently inside their routines.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses lu_nopivot, forward_sub, back_sub from C1
+A0 <- rbind(c(1, 1, 1), c(-26, -26, -10), c(2, 10, 6))
+b0 <- c(1, -20, 6.5)
+F0 <- lu_nopivot(A0)
+all(is.finite(F0$U))                         # the check
+# [1] FALSE
+p <- c(1, 3, 2)                              # swap rows 2 and 3
+F0s <- lu_nopivot(A0[p, ])
+F0s$L
+#      [,1] [,2] [,3]
+# [1,]    1    0    0
+# [2,]    2    1    0
+# [3,]  -26    0    1
+F0s$U
+#      [,1] [,2] [,3]
+# [1,]    1    1    1
+# [2,]    0    8    4
+# [3,]    0    0   16
+back_sub(F0s$U, forward_sub(F0s$L, b0[p]))
+# [1] 0.250 0.375 0.375
+
+As <- rbind(c(1e-20, 1), c(1, 1)); bs <- c(1, 2)
+Fs <- lu_nopivot(As)
+xs <- back_sub(Fs$U, forward_sub(Fs$L, bs))
+xs
+# [1] 0 1
+bs - As %*% xs                               # residual
+#      [,1]
+# [1,]    0
+# [2,]    1
+x_ok <- solve(As, bs)
+bs - As %*% x_ok
+#      [,1]
+# [1,]    0
+# [2,]    0
+```
+
+### Python
+
+```python
+# uses lu_nopivot, forward_sub, back_sub from C1
+A0 = np.array([[1, 1, 1], [-26, -26, -10], [2, 10, 6]], float)
+b0 = np.array([1, -20, 6.5])
+L0, U0 = lu_nopivot(A0)                     # numpy warns: divide by zero
+# RuntimeWarning: divide by zero encountered in scalar divide
+# RuntimeWarning: invalid value encountered in multiply
+print(np.all(np.isfinite(U0)))              # the check
+# False
+p = [0, 2, 1]                               # swap rows 2 and 3
+L0s, U0s = lu_nopivot(A0[p])
+print(L0s)
+# [[  1.   0.   0.]
+#  [  2.   1.   0.]
+#  [-26.   0.   1.]]
+print(U0s)
+# [[ 1.  1.  1.]
+#  [ 0.  8.  4.]
+#  [ 0.  0. 16.]]
+print(back_sub(U0s, forward_sub(L0s, b0[p])))
+# [0.25  0.375 0.375]
+
+As = np.array([[1e-20, 1], [1, 1]]); bs = np.array([1.0, 2.0])
+Ls, Us = lu_nopivot(As)
+xs = back_sub(Us, forward_sub(Ls, bs))
+print(xs)
+# [0. 1.]
+print(bs - As @ xs)                         # residual
+# [0. 1.]
+x_ok = np.linalg.solve(As, bs)
+print(bs - As @ x_ok)
+# [0. 0.]
+```
+
+### Rust
+
+```rust
+// rust/examples/lu_c7.rs  —  cargo run --example lu_c7
+use nalgebra::{dmatrix, dvector, DMatrix, DVector};
+// lu_nopivot, forward_sub, back_sub and show: as in lu_c1.rs (in the file; not repeated here)
+
+fn main() {
+    let a0 = dmatrix![1.0, 1.0, 1.0; -26.0, -26.0, -10.0; 2.0, 10.0, 6.0];
+    let b0 = dvector![1.0, -20.0, 6.5];
+    let (_l0, u0) = lu_nopivot(&a0);
+    println!("{}", u0.iter().all(|v| v.is_finite()));      // the check
+    let mut a0s = a0.clone();
+    a0s.swap_rows(1, 2);                                   // swap rows 2 and 3
+    let mut b0s = b0.clone();
+    b0s.swap_rows(1, 2);
+    let (l0s, u0s) = lu_nopivot(&a0s);
+    show(&l0s);
+    show(&u0s);
+    println!("{:?}", back_sub(&u0s, &forward_sub(&l0s, &b0s)).as_slice());
+
+    let a_s = dmatrix![1e-20, 1.0; 1.0, 1.0];
+    let b_s = dvector![1.0, 2.0];
+    let (ls, us) = lu_nopivot(&a_s);
+    let xs = back_sub(&us, &forward_sub(&ls, &b_s));
+    println!("{:?}", xs.as_slice());
+    println!("{:?}", (&b_s - &a_s * &xs).as_slice());      // residual
+    let x_ok = a_s.clone().lu().solve(&b_s).unwrap();
+    println!("{:?}", (&b_s - &a_s * &x_ok).as_slice());
+}
+
+// Output:
+// false
+// [1.0, 0.0, 0.0]
+// [2.0, 1.0, 0.0]
+// [-26.0, 0.0, 1.0]
+// [1.0, 1.0, 1.0]
+// [0.0, 8.0, 4.0]
+// [0.0, 0.0, 16.0]
+// [0.25, 0.375, 0.375]
+// [0.0, 1.0]
+// [0.0, 1.0]
+// [0.0, 0.0]
+```
+
+:::
+
+(a) The zero pivot produces `Inf` and `NaN` in $U$ without an error (numpy at least warns); `all(is.finite(U))` catches it. With the rows swapped, the factorisation and the diet match B5. (b) The tiny pivot gives **finite** but wrong numbers, $\mathbf x = (0, 1)$ instead of $(1, 1)$, so the `is.finite` check passes. The **residual** $(0, 1)$ is the check that catches it: it should be near $10^{-16}$. The library pivots and gets residual 0. Partial pivoting is the cure: *Pivoting, norms and conditioning*.
+:::
+
+## Where this leads
+
+- ***Pivoting, norms and conditioning*** (next unit): why the library chose $-13$ as the first pivot, why that makes elimination stable, and the **condition number** of a matrix, which explains the error growth in C3 and C6 that no algorithm removes. The biology there is spectral unmixing in flow cytometry, a mixing model with overlapping spectra.
+- ***Structure: symmetric, banded, sparse***: when $A$ is symmetric positive definite (a covariance matrix), banded or mostly zeros, special LU-like factorisations (Cholesky, tridiagonal solvers, sparse LU) are much cheaper than $\tfrac23 n^3$.
+- **Factor once, solve many** returns in *Stiffness and implicit methods* (Part 8) and *Implicit schemes and the method of lines* (Part 10), where every time step solves a system with the same matrix, and in *Newton for systems of equations*, where a Jacobian can be reused for several steps.
+- Mixing models with more sources than isotopes have no unique solution; least squares and its pitfalls are in *Least squares: normal equations vs QR*.

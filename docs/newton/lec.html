@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-html/tabby.min.js"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/light-border.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-662ae1889177880cb371f83234c0a158.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
+  <meta name="generator" content="quarto-1.7.30">
+
+  <meta name="author" content="Numerical analysis for biologists">
+  <title>Numerical analysis for biologists – Newton and secant methods</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reset.css">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reveal.css">
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+      }
+    pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+    div.sourceCode
+      { color: #24292e;  }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span { color: #24292e; } /* Normal */
+    code span.al { color: #ff5555; font-weight: bold; } /* Alert */
+    code span.an { color: #6a737d; } /* Annotation */
+    code span.at { color: #d73a49; } /* Attribute */
+    code span.bn { color: #005cc5; } /* BaseN */
+    code span.bu { color: #d73a49; } /* BuiltIn */
+    code span.cf { color: #d73a49; } /* ControlFlow */
+    code span.ch { color: #032f62; } /* Char */
+    code span.cn { color: #005cc5; } /* Constant */
+    code span.co { color: #6a737d; } /* Comment */
+    code span.cv { color: #6a737d; } /* CommentVar */
+    code span.do { color: #6a737d; } /* Documentation */
+    code span.dt { color: #d73a49; } /* DataType */
+    code span.dv { color: #005cc5; } /* DecVal */
+    code span.er { color: #ff5555; text-decoration: underline; } /* Error */
+    code span.ex { color: #d73a49; font-weight: bold; } /* Extension */
+    code span.fl { color: #005cc5; } /* Float */
+    code span.fu { color: #6f42c1; } /* Function */
+    code span.im { color: #032f62; } /* Import */
+    code span.in { color: #6a737d; } /* Information */
+    code span.kw { color: #d73a49; } /* Keyword */
+    code span.op { color: #24292e; } /* Operator */
+    code span.ot { color: #6f42c1; } /* Other */
+    code span.pp { color: #d73a49; } /* Preprocessor */
+    code span.re { color: #6a737d; } /* RegionMarker */
+    code span.sc { color: #005cc5; } /* SpecialChar */
+    code span.ss { color: #032f62; } /* SpecialString */
+    code span.st { color: #032f62; } /* String */
+    code span.va { color: #e36209; } /* Variable */
+    code span.vs { color: #032f62; } /* VerbatimString */
+    code span.wa { color: #ff5555; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/theme/quarto-bf56578b9c06c165c166475cd19dbcd1.css">
+  <script>window.backupDefine = window.define; window.define = undefined;</script><script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css">
+  <link href="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/quarto-support/footer.css" rel="stylesheet">
+  <style type="text/css">
+    .reveal div.sourceCode {
+      margin: 0;
+      overflow: auto;
+    }
+    .reveal div.hanging-indent {
+      margin-left: 1em;
+      text-indent: -1em;
+    }
+    .reveal .slide:not(.center) {
+      height: 100%;
+    }
+    .reveal .slide.scrollable {
+      overflow-y: auto;
+    }
+    .reveal .footnotes {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .reveal .slide .absolute {
+      position: absolute;
+      display: block;
+    }
+    .reveal .footnotes ol {
+      counter-reset: ol;
+      list-style-type: none; 
+      margin-left: 0;
+    }
+    .reveal .footnotes ol li:before {
+      counter-increment: ol;
+      content: counter(ol) ". "; 
+    }
+    .reveal .footnotes ol li > p:first-child {
+      display: inline-block;
+    }
+    .reveal .slide ul,
+    .reveal .slide ol {
+      margin-bottom: 0.5em;
+    }
+    .reveal .slide ul li,
+    .reveal .slide ol li {
+      margin-top: 0.4em;
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide ul[role="tablist"] li {
+      margin-bottom: 0;
+    }
+    .reveal .slide ul li > *:first-child,
+    .reveal .slide ol li > *:first-child {
+      margin-block-start: 0;
+    }
+    .reveal .slide ul li > *:last-child,
+    .reveal .slide ol li > *:last-child {
+      margin-block-end: 0;
+    }
+    .reveal .slide .columns:nth-child(3) {
+      margin-block-start: 0.8em;
+    }
+    .reveal blockquote {
+      box-shadow: none;
+    }
+    .reveal .tippy-content>* {
+      margin-top: 0.2em;
+      margin-bottom: 0.7em;
+    }
+    .reveal .tippy-content>*:last-child {
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide > img.stretch.quarto-figure-center,
+    .reveal .slide > img.r-stretch.quarto-figure-center {
+      display: block;
+      margin-left: auto;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-left,
+    .reveal .slide > img.r-stretch.quarto-figure-left  {
+      display: block;
+      margin-left: 0;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-right,
+    .reveal .slide > img.r-stretch.quarto-figure-right  {
+      display: block;
+      margin-left: auto;
+      margin-right: 0; 
+    }
+  </style>
+</head>
+<body class="quarto-light">
+  <div class="reveal">
+    <div class="slides">
+
+<section id="title-slide" class="quarto-title-block center">
+  <h1 class="title">Newton and secant methods</h1>
+  <p class="subtitle">Part 2 — Solving nonlinear equations</p>
+
+<div class="quarto-title-authors">
+<div class="quarto-title-author">
+<div class="quarto-title-author-name">
+Numerical analysis for biologists 
+</div>
+</div>
+</div>
+
+</section>
+<section id="about-this-lecture" class="slide level2 smaller">
+<h2>About this lecture</h2>
+<p>Bisection is safe but slow: one binary digit per step. This lecture is about the fast methods, and about how they fail.</p>
+<ul>
+<li><strong>Newton’s method</strong> replaces <span class="math inline">f</span> by its tangent line and solves that instead. Near a root the number of correct digits <strong>doubles</strong> every step (quadratic convergence).</li>
+<li>The <strong>secant method</strong> uses a line through the last two points instead of the tangent, so it needs no derivative. Order about 1.6.</li>
+<li>Both can <strong>fail</strong>: a flat derivative throws the iterate far away, a bad start runs off to a meaningless root, some starts <strong>cycle</strong> forever.</li>
+<li>Production root finders (<strong>Brent’s method</strong>: R’s <code>uniroot</code>, Python’s <code>scipy.optimize.brentq</code>) keep a bracket for safety and take fast steps when they can.</li>
+<li>Biology: the dose giving 50 % response of a <strong>two-site dose–response curve</strong>, and a <strong>maximum-likelihood estimate</strong> as the root of the score function.</li>
+</ul>
+<aside class="notes">
+<p>This is the second unit of Part 2. The previous unit (Bisection and fixed-point iteration) gave us a method that always works but is slow; this one gives methods that are fast but can fail, and ends with the combination that every library uses. The two biology examples run through the whole lecture: an EC50 that has no closed form, and a maximum-likelihood estimate of a rate that has no closed form either. Both are things students already compute with black boxes (drc, nls, glm, fitdistr); here we open the box.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="recap-bracketing-and-fixed-points" class="slide level2 smaller">
+<h2>Recap: bracketing and fixed points</h2>
+<p>From <em>Bisection and fixed-point iteration</em>:</p>
+<ul>
+<li><strong>Bisection</strong> keeps an interval <span class="math inline">[a, b]</span> with <span class="math inline">f(a)\,f(b) &lt; 0</span> and halves it. It <strong>always</strong> converges, but only linearly: the error halves each step, about <strong>0.3 decimal digits per step</strong>, ~50 steps for full precision.</li>
+<li><strong>Fixed-point iteration</strong> <span class="math inline">x_{k+1} = g(x_k)</span> converges near <span class="math inline">x^*</span> if <span class="math inline">|g'(x^*)| &lt; 1</span>, and the error shrinks by about <span class="math inline">|g'(x^*)|</span> per step.</li>
+<li>Stopping: stop when the step (or bracket) is below a <strong>relative</strong> tolerance, and always cap the number of steps.</li>
+</ul>
+<p>Question for today: can we use more information about <span class="math inline">f</span> (its slope) to go faster?</p>
+<aside class="notes">
+<p>One slide only. Remind them of the two facts we build on: bisection is the safe fallback, and a fixed-point iteration converges at a rate set by |g’(x<em>)|. That second fact explains Newton’s speed in a few slides: Newton is a fixed-point iteration with g’(x</em>) = 0. In Convergence and cost we already saw Newton for sqrt(2) gain digits much faster than halving; now we see where it comes from.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-biology-problem-ec50-of-a-two-site-drug" class="slide level2 smaller">
+<h2>A biology problem: EC50 of a two-site drug</h2>
+<div class="columns">
+<div class="column" style="width:55%;">
+<p><img data-src="fig01-two-site.svg" style="width:100.0%"></p>
+</div><div class="column" style="width:45%;">
+<p>A drug binds two receptor subtypes: a high-affinity site (<span class="math inline">K_1 = 0.1\,\mu</span>M, 30 % of the response) and a low-affinity site (<span class="math inline">K_2 = 5\,\mu</span>M, Hill coefficient 2, 70 %):</p>
+<p><span class="math display">R(c) = 0.3\,\frac{c}{0.1 + c} + 0.7\,\frac{c^2}{25 + c^2}</span></p>
+<p>Which dose <span class="math inline">c_{50}</span> gives <span class="math inline">R = 0.5</span>?</p>
+</div></div>
+<ul>
+<li>For <strong>one</strong> Hill curve, <span class="math inline">c_{50} = K</span>, by algebra. For the sum of two, there is <strong>no formula</strong>: we must solve <span class="math inline">f(c) = R(c) - 0.5 = 0</span> numerically.</li>
+</ul>
+<aside class="notes">
+<p>Two-site (or biphasic) dose-response curves are common: receptor subtypes, two binding sites on a protein, a drug with an on-target and an off-target effect. The single Hill curve c^n / (K^n + c^n) has c50 = K, which is why papers report EC50 as a fitted parameter. As soon as the model is a mixture, the dose that gives 50 % response is not a parameter any more and must be found by root finding. Setting R(c) = 0.5 and clearing denominators gives a quartic in c here, which has an ugly formula; for non-integer Hill coefficients there is no formula at all. Note the log dose axis, as usual in pharmacology.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-function-and-its-derivative-in-r" class="slide level2">
+<h2>The function and its derivative in R</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a aria-hidden="true" tabindex="-1"></a>R  <span class="ot">&lt;-</span> <span class="cf">function</span>(c) <span class="fl">0.3</span> <span class="sc">*</span> c <span class="sc">/</span> (<span class="fl">0.1</span> <span class="sc">+</span> c) <span class="sc">+</span> <span class="fl">0.7</span> <span class="sc">*</span> c<span class="sc">^</span><span class="dv">2</span> <span class="sc">/</span> (<span class="dv">25</span> <span class="sc">+</span> c<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a>f  <span class="ot">&lt;-</span> <span class="cf">function</span>(c) <span class="fu">R</span>(c) <span class="sc">-</span> <span class="fl">0.5</span>                       <span class="co"># root = c50</span></span>
+<span id="cb1-3"><a aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> <span class="cf">function</span>(c) <span class="fl">0.03</span> <span class="sc">/</span> (<span class="fl">0.1</span> <span class="sc">+</span> c)<span class="sc">^</span><span class="dv">2</span> <span class="sc">+</span> <span class="dv">35</span> <span class="sc">*</span> c <span class="sc">/</span> (<span class="dv">25</span> <span class="sc">+</span> c<span class="sc">^</span><span class="dv">2</span>)<span class="sc">^</span><span class="dv">2</span></span>
+<span id="cb1-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">f</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">10</span>))</span>
+<span id="cb1-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -0.2003497 -0.0243833  0.3570297</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><span class="math inline">f(3) &lt; 0 &lt; f(10)</span>: the root lies between 3 and 10. Bisection would work.</li>
+<li><code>df</code> is <span class="math inline">f'(c)</span>, by hand: quotient rule on each term, <span class="math inline">\frac{d}{dc}\frac{c}{0.1 + c} = \frac{0.1}{(0.1 + c)^2}</span> and <span class="math inline">\frac{d}{dc}\frac{c^2}{25 + c^2} = \frac{50c}{(25 + c^2)^2}</span>.</li>
+<li>Check the derivative before trusting it (exercise C1): compare with <span class="math inline">\bigl(f(c + h) - f(c)\bigr)/h</span>.</li>
+</ul>
+<aside class="notes">
+<p>Newton needs the derivative. Here it is short to derive by hand; the exercise asks them to check it against a finite difference, as in Convergence and cost. A wrong derivative is the single most common Newton bug: the iteration then often still converges, but only linearly, or not at all. The sign change between 3 and 10 tells us a root exists there; remember it for when Newton goes astray.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="newtons-idea-follow-the-tangent" class="slide level2 smaller">
+<h2>Newton’s idea: follow the tangent</h2>
+<p>Near <span class="math inline">x_k</span>, Taylor says <span class="math inline">f(x) \approx f(x_k) + f'(x_k)\,(x - x_k)</span>: a straight line. Set the line to zero and solve for <span class="math inline">x</span>:</p>
+<p><span class="math display">x_{k+1} = x_k - \frac{f(x_k)}{f'(x_k)}</span></p>
+
+<img data-src="fig02-newton-secant.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:88.0%"><aside class="notes">
+<p>This is the whole derivation: keep the first two terms of Taylor (the tangent), throw away the rest, and solve the linear equation. The left panel starts at c0 = 7, on the concave side of the curve: the tangent overshoots to c1 = 1.28, but from there the tangent lands at c2 = 3.54, already close to 3.26. The right panel is the secant method, which comes later in the lecture: same idea, but with a line through the last two points. Point out that the further you are from the root, the worse the tangent approximates the curve; close to the root it is excellent.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="one-newton-step-with-numbers" class="slide level2">
+<h2>One Newton step with numbers</h2>
+<p>Start at <span class="math inline">c_0 = 1</span>:</p>
+<ul>
+<li><span class="math inline">f(1) = 0.3 \cdot \tfrac{1}{1.1} + 0.7 \cdot \tfrac{1}{26} - 0.5 = 0.27273 + 0.02692 - 0.5 = -0.20035</span></li>
+<li><span class="math inline">f'(1) = \tfrac{0.03}{1.21} + \tfrac{35}{676} = 0.02479 + 0.05178 = 0.07657</span></li>
+<li><span class="math inline">c_1 = 1 - \tfrac{-0.20035}{0.07657} = 1 + 2.6166 = 3.6166</span></li>
+</ul>
+<p>The true <span class="math inline">c_{50} = 3.2613</span>: from an error of <span class="math inline">2.26</span> to <span class="math inline">0.355</span> in one step.</p>
+<aside class="notes">
+<p>Do this on the board, with a calculator. The step is minus f over f-prime: f is negative and the curve is rising, so we step to the right. The step size 2.6 is large because the slope is small. The exercise asks for the next step by hand too (on a simpler Hill curve with a known answer).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="newton-in-r-watch-the-digits" class="slide level2">
+<h2>Newton in R: watch the digits</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a aria-hidden="true" tabindex="-1"></a>c50 <span class="ot">&lt;-</span> <span class="fl">3.261305265055212</span>            <span class="co"># converged value, see later</span></span>
+<span id="cb2-2"><a aria-hidden="true" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>) {</span>
+<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a>  x <span class="ot">&lt;-</span> x <span class="sc">-</span> <span class="fu">f</span>(x) <span class="sc">/</span> <span class="fu">df</span>(x)</span>
+<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(k, <span class="fu">sprintf</span>(<span class="st">"%.15f"</span>, x), <span class="fu">sprintf</span>(<span class="st">"%.1e"</span>, <span class="fu">abs</span>(x <span class="sc">-</span> c50)), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 1 3.616605460641865 3.6e-01</span></span>
+<span id="cb2-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 2 3.254817195760261 6.5e-03</span></span>
+<span id="cb2-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 3 3.261303701902960 1.6e-06</span></span>
+<span id="cb2-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 4 3.261305265055122 9.1e-14</span></span>
+<span id="cb2-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 5 3.261305265055212 0.0e+00</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Correct digits: 0, 2, 6, 13, 16. The number of correct digits roughly <strong>doubles</strong> each step.</li>
+<li>Bisection on <span class="math inline">[1, 10]</span> needs about 50 steps for the same accuracy.</li>
+</ul>
+<aside class="notes">
+<p>This is the quadratic convergence promised in Convergence and cost, now on a real problem. The first step is a long jump with no correct digits; once close, the digit count doubles: 2, 6, 13, then all of them. Step 5 hits the reference value exactly, to the last bit. Of course in practice we do not know c50; the next slide shows how to stop without it.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-reusable-newton-function" class="slide level2">
+<h2>A reusable Newton function</h2>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>newton <span class="ot">&lt;-</span> <span class="cf">function</span>(f, df, x0, <span class="at">tol =</span> <span class="fl">1e-12</span>, <span class="at">maxit =</span> <span class="dv">50</span>) {</span>
+<span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a>  x <span class="ot">&lt;-</span> x0</span>
+<span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>maxit) {</span>
+<span id="cb3-4"><a aria-hidden="true" tabindex="-1"></a>    step <span class="ot">&lt;-</span> <span class="fu">f</span>(x) <span class="sc">/</span> <span class="fu">df</span>(x)</span>
+<span id="cb3-5"><a aria-hidden="true" tabindex="-1"></a>    x <span class="ot">&lt;-</span> x <span class="sc">-</span> step</span>
+<span id="cb3-6"><a aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="fu">abs</span>(step) <span class="sc">&lt;=</span> tol <span class="sc">*</span> <span class="fu">abs</span>(x)) <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">root =</span> x, <span class="at">iter =</span> k))</span>
+<span id="cb3-7"><a aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb3-8"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">warning</span>(<span class="st">"no convergence after "</span>, maxit, <span class="st">" steps"</span>)</span>
+<span id="cb3-9"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">root =</span> x, <span class="at">iter =</span> maxit)</span>
+<span id="cb3-10"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-11"><a aria-hidden="true" tabindex="-1"></a><span class="fu">newton</span>(f, df, <span class="at">x0 =</span> <span class="dv">1</span>)<span class="sc">$</span>root        <span class="co"># 5 iterations</span></span>
+<span id="cb3-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 3.261305</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><strong>Stop</strong> when the step is small <strong>relative</strong> to <span class="math inline">x</span>. Near a root the step is a good estimate of the error, because the next step is much smaller.</li>
+<li><strong>Cap</strong> the number of steps and <strong>warn</strong>, never fail silently.</li>
+<li>Check afterwards: is <span class="math inline">|f(\text{root})|</span> small, and is the root in the range that makes biological sense (<span class="math inline">c &gt; 0</span>)?</li>
+</ul>
+<aside class="notes">
+<p>Ten lines, the hand-written version the design principles ask for. The stopping rule uses the size of the last step: with quadratic convergence the error after the step is far smaller than the step, so |step| is a slightly pessimistic estimate of the error before the step. A relative tolerance makes the rule work for doses in nM and in mM alike; tol = 1e-12 asks for about 12 digits. (For a root at exactly 0 a relative test never succeeds; add an absolute tolerance in that case.) maxit and the warning are the safety net for the failures later in the lecture. The post-checks are cheap and catch most of them.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="why-digits-double" class="slide level2 smaller">
+<h2>Why digits double</h2>
+<p>Write <span class="math inline">e_k = x_k - x^*</span>. Taylor to <strong>second</strong> order around <span class="math inline">x_k</span>, then one line of algebra:</p>
+<p><span class="math display">e_{k+1} \approx \frac{f''(x^*)}{2 f'(x^*)}\; e_k^2</span></p>
+<p>Check on our run (error ratio <span class="math inline">e_{k+1}/e_k^2</span>):</p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th><span class="math inline">k</span></th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">e_k</span></td>
+<td><span class="math inline">3.6\times10^{-1}</span></td>
+<td><span class="math inline">6.5\times10^{-3}</span></td>
+<td><span class="math inline">1.6\times10^{-6}</span></td>
+<td><span class="math inline">9.1\times10^{-14}</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">e_{k+1}/e_k^2</span></td>
+<td>0.051</td>
+<td>0.037</td>
+<td>0.037</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>and <span class="math inline">|f''(c_{50}) / (2 f'(c_{50}))| = 0.0374</span>. Squaring the error doubles the digits; the constant only shifts them a little.</p>
+<ul>
+<li>Another view: Newton is fixed-point iteration with <span class="math inline">g(x) = x - f(x)/f'(x)</span>, and <span class="math inline">g'(x^*) = 0</span>, the best possible case of <span class="math inline">|g'(x^*)| &lt; 1</span>.</li>
+</ul>
+<aside class="notes">
+<p>The derivation: 0 = f(x<em>) = f(x_k) - f’(x_k) e_k + f’‘/2 e_k^2 + …, divide by f’(x_k) and use the Newton update; the first-order terms cancel and what is left is the e_k^2 term. We do not do this in full on the slide; the exercise has a guided version. The table is the experimental check: the ratio settles at 0.037, which matches f’‘/(2f’) computed at the root (with numDeriv). The constant tells you what can spoil quadratic convergence: f’ = 0 at the root (a double root, the quiz) or a huge f’‘. The fixed-point view links back to the previous unit: g’(x</em>) = 0 means the error is not shrunk by a constant factor but squared.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="second-biology-problem-a-rate-from-truncated-counts" class="slide level2 smaller">
+<h2>Second biology problem: a rate from truncated counts</h2>
+<p>A gene’s UMI counts, recorded only in the 100 cells where it was <strong>detected</strong> (count ≥ 1):</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>count</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>cells</td>
+<td>52</td>
+<td>30</td>
+<td>12</td>
+<td>5</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<p>Model: Poisson with rate <span class="math inline">\lambda</span>, <strong>zero-truncated</strong> (zeros are not seen). Log-likelihood and its derivative, the <strong>score</strong>:</p>
+<p><span class="math display">\ell(\lambda) = \textstyle\sum_i x_i \log\lambda - n\lambda - n\log(1 - e^{-\lambda}) + \text{const}, \qquad S(\lambda) = \ell'(\lambda) = \frac{\sum_i x_i}{\lambda} - \frac{n}{1 - e^{-\lambda}}</span></p>
+<ul>
+<li>The MLE <span class="math inline">\hat\lambda</span> solves <span class="math inline">S(\lambda) = 0</span>, i.e.&nbsp;<span class="math inline">\bar x = \lambda / (1 - e^{-\lambda})</span>. <strong>No closed form.</strong></li>
+<li>The naive mean <span class="math inline">\bar x = 1.73</span> overestimates <span class="math inline">\lambda</span>, because the zeros were thrown away.</li>
+</ul>
+<aside class="notes">
+<p>Zero-truncated data are common in biology: counts recorded only where something was seen (UMIs in cells where a gene is detected, eggs in nests that have at least one, number of infected cells per infected well). For a plain Poisson the score is sum(x)/lambda - n and the MLE is the mean. The truncation adds the log(1 - e^-lambda) term, and the equation for the MLE becomes transcendental. Every maximum-likelihood fit you have run (glm, fitdistr, nls with likelihoods) solves an equation score = 0 like this one, usually with Newton or a relative of it. The maximisation view comes back in Part 9 (Gradient descent, Newton and quasi-Newton).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="newton-on-the-score" class="slide level2">
+<h2>Newton on the score</h2>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, <span class="at">times =</span> <span class="fu">c</span>(<span class="dv">52</span>, <span class="dv">30</span>, <span class="dv">12</span>, <span class="dv">5</span>, <span class="dv">1</span>))   <span class="co"># UMI counts, cells with &gt;= 1 UMI</span></span>
+<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="fu">length</span>(x); sx <span class="ot">&lt;-</span> <span class="fu">sum</span>(x)</span>
+<span id="cb4-3"><a aria-hidden="true" tabindex="-1"></a>S  <span class="ot">&lt;-</span> <span class="cf">function</span>(l) sx <span class="sc">/</span> l <span class="sc">-</span> n <span class="sc">/</span> (<span class="sc">-</span><span class="fu">expm1</span>(<span class="sc">-</span>l))        <span class="co"># score; -expm1(-l) = 1 - exp(-l)</span></span>
+<span id="cb4-4"><a aria-hidden="true" tabindex="-1"></a>dS <span class="ot">&lt;-</span> <span class="cf">function</span>(l) <span class="sc">-</span>sx <span class="sc">/</span> l<span class="sc">^</span><span class="dv">2</span> <span class="sc">+</span> n <span class="sc">*</span> <span class="fu">exp</span>(<span class="sc">-</span>l) <span class="sc">/</span> <span class="fu">expm1</span>(<span class="sc">-</span>l)<span class="sc">^</span><span class="dv">2</span></span>
+<span id="cb4-5"><a aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">newton</span>(S, dS, <span class="at">x0 =</span> <span class="fu">mean</span>(x))</span>
+<span id="cb4-6"><a aria-hidden="true" tabindex="-1"></a>fit<span class="sc">$</span>root; fit<span class="sc">$</span>iter</span>
+<span id="cb4-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.21847</span></span>
+<span id="cb4-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 6</span></span>
+<span id="cb4-9"><a aria-hidden="true" tabindex="-1"></a><span class="dv">1</span> <span class="sc">/</span> <span class="fu">sqrt</span>(<span class="sc">-</span><span class="fu">dS</span>(fit<span class="sc">$</span>root))                           <span class="co"># standard error of lambda-hat</span></span>
+<span id="cb4-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.1325479</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><span class="math inline">\hat\lambda = 1.218</span>, not 1.73. Starting at <span class="math inline">\bar x</span> (a sensible guess from the data) converges in 6 steps.</li>
+<li><span class="math inline">-S'(\hat\lambda)</span> is the <strong>observed information</strong>; <span class="math inline">1/\sqrt{-S'(\hat\lambda)}</span> is the usual standard error. Newton computes it for free.</li>
+<li><code>expm1</code> from <em>How computers store numbers</em> keeps <span class="math inline">1 - e^{-\lambda}</span> accurate for small <span class="math inline">\lambda</span>.</li>
+</ul>
+<aside class="notes">
+<p>The same ten-line newton function, now on a statistical problem. S’ is the second derivative of the log-likelihood; minus it is the observed Fisher information, so the standard error comes out of the last Newton step at no cost. That is why Newton-type methods are standard in likelihood fitting (glm’s iteratively reweighted least squares is Fisher scoring, a Newton variant). Uncertainty of fitted parameters gets its own unit in Part 9 (Identifiability and uncertainty of fitted parameters). expm1 matters for rates near 0, where 1 - exp(-l) cancels.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-secant-method-no-derivative-needed" class="slide level2 smaller">
+<h2>The secant method: no derivative needed</h2>
+<p>Often <span class="math inline">f'</span> is tedious or impossible to write down (an ODE solution, a simulation). Replace the tangent by the line through the last <strong>two</strong> points:</p>
+<p><span class="math display">x_{k+1} = x_k - f(x_k)\,\frac{x_k - x_{k-1}}{f(x_k) - f(x_{k-1})}</span></p>
+<ul>
+<li>The fraction is <span class="math inline">1/\text{slope}</span> of the chord, an estimate of <span class="math inline">1/f'(x_k)</span>.</li>
+<li><strong>One</strong> new function evaluation per step (<span class="math inline">f(x_k)</span>; <span class="math inline">f(x_{k-1})</span> is reused). Newton needs <strong>two</strong> (<span class="math inline">f</span> and <span class="math inline">f'</span>).</li>
+<li>Needs two starting values. Unlike bisection, they need <strong>not</strong> bracket the root.</li>
+</ul>
+<aside class="notes">
+<p>Point back to the right panel of the tangent picture. The secant method is Newton with the derivative replaced by a finite difference that uses points we already have, so it is free. The two start points do not need opposite signs; this is not regula falsi (false position), which keeps a bracket. In practice derivatives are often unavailable: if f involves solving an ODE or running a simulation, a hand-derived f’ does not exist.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="secant-in-r" class="slide level2">
+<h2>Secant in R</h2>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a aria-hidden="true" tabindex="-1"></a>secant <span class="ot">&lt;-</span> <span class="cf">function</span>(f, x0, x1, <span class="at">tol =</span> <span class="fl">1e-12</span>, <span class="at">maxit =</span> <span class="dv">50</span>) {</span>
+<span id="cb5-2"><a aria-hidden="true" tabindex="-1"></a>  f0 <span class="ot">&lt;-</span> <span class="fu">f</span>(x0); f1 <span class="ot">&lt;-</span> <span class="fu">f</span>(x1)</span>
+<span id="cb5-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>maxit) {</span>
+<span id="cb5-4"><a aria-hidden="true" tabindex="-1"></a>    step <span class="ot">&lt;-</span> f1 <span class="sc">*</span> (x1 <span class="sc">-</span> x0) <span class="sc">/</span> (f1 <span class="sc">-</span> f0)</span>
+<span id="cb5-5"><a aria-hidden="true" tabindex="-1"></a>    x0 <span class="ot">&lt;-</span> x1; f0 <span class="ot">&lt;-</span> f1                           <span class="co"># shift the pair</span></span>
+<span id="cb5-6"><a aria-hidden="true" tabindex="-1"></a>    x1 <span class="ot">&lt;-</span> x1 <span class="sc">-</span> step; f1 <span class="ot">&lt;-</span> <span class="fu">f</span>(x1)</span>
+<span id="cb5-7"><a aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="fu">abs</span>(step) <span class="sc">&lt;=</span> tol <span class="sc">*</span> <span class="fu">abs</span>(x1)) <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">root =</span> x1, <span class="at">iter =</span> k))</span>
+<span id="cb5-8"><a aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb5-9"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">warning</span>(<span class="st">"no convergence after "</span>, maxit, <span class="st">" steps"</span>)</span>
+<span id="cb5-10"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">root =</span> x1, <span class="at">iter =</span> maxit)</span>
+<span id="cb5-11"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb5-12"><a aria-hidden="true" tabindex="-1"></a><span class="fu">secant</span>(f, <span class="dv">1</span>, <span class="dv">2</span>)<span class="sc">$</span>iter;  <span class="fu">secant</span>(S, <span class="dv">1</span>, <span class="dv">2</span>)<span class="sc">$</span>iter     <span class="co"># c50: 6 steps; lambda-hat: 8 steps</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Same structure as <code>newton</code>; only <code>df</code> is gone.</li>
+<li>Danger: if <span class="math inline">f_1 = f_0</span> the step is <span class="math inline">0/0</span> or <span class="math inline">\pm\infty</span>. Production code tests for it.</li>
+</ul>
+<aside class="notes">
+<p>Line by line the same as newton, with the slope computed from the stored pair. Storing f0 and f1 is what makes it one evaluation per step. Near convergence f1 - f0 becomes tiny and both are dominated by rounding; the stopping test usually fires first, but a robust implementation checks for f1 == f0 (the exercise does). Six steps for c50 against Newton’s five, but Newton’s five steps cost ten evaluations.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="digits-per-step-bisection-secant-newton" class="slide level2 smaller">
+<h2>Digits per step: bisection, secant, Newton</h2>
+<div class="columns">
+<div class="column" style="width:55%;">
+<p><img data-src="fig03-convergence.svg" style="width:100.0%"></p>
+</div><div class="column" style="width:45%;">
+<p>Correct digits of <span class="math inline">c_{50}</span> after step <span class="math inline">k</span>:</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th><span class="math inline">k</span></th>
+<th>bisect</th>
+<th>secant</th>
+<th>Newton</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>0.2</td>
+<td>1.3</td>
+<td>1.0</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>2.5</td>
+<td>3.2</td>
+<td>2.7</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td>0.5</td>
+<td>5.3</td>
+<td>6.3</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td>0.8</td>
+<td>9.4</td>
+<td>13.6</td>
+</tr>
+<tr class="odd">
+<td>5</td>
+<td>1.1</td>
+<td>15.6</td>
+<td>all</td>
+</tr>
+</tbody>
+</table>
+</div></div>
+<ul>
+<li><strong>Order</strong> <span class="math inline">p</span>: <span class="math inline">e_{k+1} \approx C e_k^p</span>. Bisection <span class="math inline">p = 1</span>, secant <span class="math inline">p = 1.618</span> (the golden ratio), Newton <span class="math inline">p = 2</span>.</li>
+<li>Per <strong>function evaluation</strong>, secant (1.62) beats Newton (<span class="math inline">\sqrt2 = 1.41</span>): two secant steps cost as much as one Newton step.</li>
+</ul>
+<aside class="notes">
+<p>Digits = -log10(relative error). Bisection’s midpoint error wobbles (step 2 is a lucky hit), but its bound halves every step; it ends at about 12 digits after 40 steps. The secant digit counts grow by a factor of about 1.6 per step: 3.2, 5.3, 9.4, 15.6. Newton’s double. The flat part at the bottom is machine precision, eps times c50. The per-evaluation comparison: two Newton evaluations multiply the order by 2, so per evaluation the order is sqrt(2); a secant evaluation multiplies by 1.618. When f’ costs as much as f, the secant method is usually faster in time. Estimating p from three consecutive errors is in the exercise.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="failure-1-a-flat-tangent-throws-you-far-away" class="slide level2">
+<h2>Failure 1: a flat tangent throws you far away</h2>
+<div class="columns">
+<div class="column" style="width:55%;">
+<p><img data-src="fig05-flat.svg" style="width:100.0%"></p>
+</div><div class="column" style="width:45%;">
+<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a>r <span class="ot">&lt;-</span> <span class="fu">newton</span>(f, df, <span class="at">x0 =</span> <span class="dv">10</span>)<span class="sc">$</span>root</span>
+<span id="cb6-2"><a aria-hidden="true" tabindex="-1"></a>r</span>
+<span id="cb6-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -3.04997</span></span>
+<span id="cb6-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">f</span>(r)</span>
+<span id="cb6-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0             # a root!</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div></div>
+<ul>
+<li>At <span class="math inline">c_0 = 10</span> the curve is nearly flat (<span class="math inline">f' = 0.023</span>), so <span class="math inline">f/f'</span> is a huge step, to <span class="math inline">c_1 = -5.73</span>.</li>
+<li>Newton then converges, <strong>quickly and quietly</strong>, to an exact root at a <strong>negative dose</strong>. No warning.</li>
+<li><strong>Check:</strong> is the root in the meaningful range? Plot <span class="math inline">f</span>. Start inside a bracket.</li>
+</ul>
+<aside class="notes">
+<p>The formula for R accepts negative c, and it happens to have another root there. Newton does not know that doses are positive. This is the “confident wrong answer” of the introduction: converged, f is exactly zero in floating point, and biologically meaningless. Whenever f’ is small compared with f, the step f/f’ is large; near a plateau of a saturating curve that is always the case. The checks: look at the answer (negative dose), plot f over the plausible range, and start from a point inside a bracket where f changes sign. Solving in log dose would make negative doses impossible, but has its own failure (two slides on).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="failure-2-a-bad-start-for-the-mle" class="slide level2">
+<h2>Failure 2: a bad start for the MLE</h2>
+<div class="columns">
+<div class="column" style="width:55%;">
+<p><img data-src="fig04-score.svg" style="width:100.0%"></p>
+</div><div class="column" style="width:45%;">
+<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a>l <span class="ot">&lt;-</span> <span class="dv">3</span>                       <span class="co"># start</span></span>
+<span id="cb7-2"><a aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">6</span>) {</span>
+<span id="cb7-3"><a aria-hidden="true" tabindex="-1"></a>  l <span class="ot">&lt;-</span> l <span class="sc">-</span> <span class="fu">S</span>(l) <span class="sc">/</span> <span class="fu">dS</span>(l)</span>
+<span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">signif</span>(l, <span class="dv">4</span>), <span class="st">""</span>)</span>
+<span id="cb7-5"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb7-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># -0.4704 -1.066 -2.587</span></span>
+<span id="cb7-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># -6.032 -12.33 -24.67</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div></div>
+<ul>
+<li>The score is convex and flattens for large <span class="math inline">\lambda</span>; from <span class="math inline">\lambda_0 = 3</span> the tangent crosses zero at <span class="math inline">\lambda_1 = -0.47</span>. From there Newton runs off to <span class="math inline">-\infty</span>.</li>
+<li>Starts up to about 2.7 converge; from 2.8 on they do not. The start must be <strong>close enough</strong>.</li>
+<li><strong>Check:</strong> <span class="math inline">\lambda &gt; 0</span> at every step; the log-likelihood should <strong>increase</strong> at every step.</li>
+</ul>
+<aside class="notes">
+<p>Newton converges only from close enough. “Close enough” is not a fixed distance; it depends on the shape of f.&nbsp;For large lambda the score behaves like sum(x)/lambda - n, and Newton on 1/lambda type functions overshoots badly: the exercise derives that the iteration for 1/x - a only converges from 0 &lt; x0 &lt; 2/a. Here that predicts trouble from about 2 x-bar = 3.5; the true limit is between 2.7 and 2.8. A good start (the mean, a method-of-moments estimate) avoids it, and so does a bracket. Optimisation routines check that each step increases the log-likelihood and shorten the step if not (line search, Part 9).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="failure-3-cycling-forever" class="slide level2">
+<h2>Failure 3: cycling forever</h2>
+<div class="columns">
+<div class="column" style="width:55%;">
+<p><img data-src="fig06-cycle.svg" style="width:100.0%"></p>
+</div><div class="column" style="width:45%;">
+<p>Michaelis–Menten, in log substrate <span class="math inline">u = \ln(S/K_m)</span>: solve <span class="math inline">v/V_{\max} = 0.5</span> (root <span class="math inline">S = K_m</span>). Newton’s step is <span class="math inline">u_{k+1} = u_k - \sinh u_k</span>.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a aria-hidden="true" tabindex="-1"></a>u <span class="ot">&lt;-</span> <span class="fl">2.1773189849653</span>  <span class="co"># S0 = 8.82 Km</span></span>
+<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">6</span>) {</span>
+<span id="cb8-3"><a aria-hidden="true" tabindex="-1"></a>  u <span class="ot">&lt;-</span> u <span class="sc">-</span> <span class="fu">sinh</span>(u); <span class="fu">cat</span>(<span class="fu">signif</span>(u, <span class="dv">4</span>), <span class="st">""</span>)</span>
+<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb8-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># -2.177 2.177 -2.177 2.177 -2.177 2.177</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div></div>
+<ul>
+<li>Start at <span class="math inline">8.82\,K_m</span>: the tangents bounce between <span class="math inline">8.82\,K_m</span> and <span class="math inline">K_m/8.82</span> <strong>forever</strong>. Start at <span class="math inline">10\,K_m</span>: <span class="math inline">u</span> grows, <code>Inf</code>, then <code>NaN</code>. Start at <span class="math inline">5\,K_m</span>: converges.</li>
+<li><strong>Check:</strong> cap the number of steps (<code>maxit</code>) and look at the last few iterates.</li>
+</ul>
+<aside class="notes">
+<p>Working in log dose is good practice (doses are positive, curves are symmetric), but Newton can still fail on a sigmoid. For the logistic curve in u the Newton step simplifies to u - sinh(u) (exercise). A 2-cycle needs u - sinh(u) = -u, i.e.&nbsp;sinh(u) = 2u, at u = 2.177, S = 8.82 Km. Beyond it Newton diverges (u = 2.3 gives -2.64, 4.31, -33, 1e14, -Inf, NaN), inside it converges. Exact cycles are rare, but near-cycles that wander for many steps before escaping are common. The maxit cap plus a warning is what turns an endless loop into a message.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="failures-and-checks-at-a-glance" class="slide level2 smaller">
+<h2>Failures and checks at a glance</h2>
+<table class="caption-top">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>What goes wrong</th>
+<th>Symptom</th>
+<th>Check / fix</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Start far from root, <span class="math inline">f'</span> small</td>
+<td>huge first step</td>
+<td>plot <span class="math inline">f</span>; start inside a bracket</td>
+</tr>
+<tr class="even">
+<td>Converges to the wrong root</td>
+<td>root outside the meaningful range</td>
+<td>check sign and range of the answer</td>
+</tr>
+<tr class="odd">
+<td>Divergence</td>
+<td>iterates grow, <code>Inf</code>, <code>NaN</code></td>
+<td><code>is.finite()</code> on each iterate; <code>maxit</code></td>
+</tr>
+<tr class="even">
+<td>Cycling</td>
+<td>iterates repeat</td>
+<td><code>maxit</code> plus warning; print the last iterates</td>
+</tr>
+<tr class="odd">
+<td>Wrong derivative</td>
+<td>slow (linear) or no convergence</td>
+<td>compare <code>df</code> with a finite difference</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">f'(x^*) = 0</span> (double root)</td>
+<td>linear convergence, few digits</td>
+<td>look at the digits-per-step</td>
+</tr>
+<tr class="odd">
+<td>Secant: <span class="math inline">f(x_k) = f(x_{k-1})</span></td>
+<td>division by 0</td>
+<td>test before dividing</td>
+</tr>
+</tbody>
+</table>
+<p>The cure for most of them: <strong>never leave a bracket</strong>.</p>
+<aside class="notes">
+<p>A summary table to keep. Most of these failures share one cause: Newton and secant only use local information, so nothing stops them from leaving the region where the root is. If we know an interval with a sign change, we can refuse any step that leaves it. That is the idea of safeguarded methods, next. The double-root case is in the quiz: a tangency, e.g.&nbsp;at a saddle-node bifurcation, where f touches zero without crossing it; bracketing does not help there either, because there is no sign change.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="safeguarding-brents-method" class="slide level2 smaller">
+<h2>Safeguarding: Brent’s method</h2>
+<p>Keep a bracket <span class="math inline">[a, b]</span> with a sign change, <strong>and</strong> try a fast step:</p>
+<ol type="1">
+<li>Propose a fast step: secant, or <strong>inverse quadratic interpolation</strong> (a parabola <span class="math inline">x(f)</span> through the last three points, evaluated at <span class="math inline">f = 0</span>).</li>
+<li>If the proposal falls <strong>outside</strong> the bracket, or the bracket has not shrunk enough lately, take a <strong>bisection</strong> step instead.</li>
+<li>Evaluate <span class="math inline">f</span> at the new point and keep the half that still has the sign change.</li>
+</ol>
+<ul>
+<li><strong>Guaranteed</strong> to converge, like bisection: never worse than about bisection’s pace.</li>
+<li><strong>Superlinear</strong> (order up to ~1.8) once close, like secant. No derivative needed.</li>
+<li>This is R’s <a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html"><code>uniroot</code></a> and Python’s <code>scipy.optimize.brentq</code>.</li>
+</ul>
+<aside class="notes">
+<p>Brent (1973), building on Dekker. The details of when to switch are fiddly, but the idea fits on a slide: a fast method on a leash. Inverse quadratic interpolation fits x as a quadratic function of f through three points and reads off x at f = 0; it converges with order about 1.84. The bisection fallback guarantees that the bracket keeps shrinking, so the method cannot diverge, cycle or leave the interval. We do not implement Brent; we use it, and the exercise compares its function-evaluation count with ours.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="uniroot-in-practice" class="slide level2">
+<h2><code>uniroot</code> in practice</h2>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a aria-hidden="true" tabindex="-1"></a>r <span class="ot">&lt;-</span> <span class="fu">uniroot</span>(f, <span class="at">interval =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="dv">100</span>))</span>
+<span id="cb9-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">root =</span> r<span class="sc">$</span>root, <span class="at">iter =</span> r<span class="sc">$</span>iter, <span class="at">estim.prec =</span> r<span class="sc">$</span>estim.prec)</span>
+<span id="cb9-3"><a aria-hidden="true" tabindex="-1"></a><span class="co">#         root         iter   estim.prec</span></span>
+<span id="cb9-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 3.261305e+00 9.000000e+00 6.103516e-05</span></span>
+<span id="cb9-5"><a aria-hidden="true" tabindex="-1"></a>r<span class="sc">$</span>root <span class="sc">-</span> c50</span>
+<span id="cb9-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -1.360226e-07                            # only ~7 digits!</span></span>
+<span id="cb9-7"><a aria-hidden="true" tabindex="-1"></a>r <span class="ot">&lt;-</span> <span class="fu">uniroot</span>(f, <span class="at">interval =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="dv">100</span>), <span class="at">tol =</span> <span class="fl">1e-12</span>)</span>
+<span id="cb9-8"><a aria-hidden="true" tabindex="-1"></a>r<span class="sc">$</span>root <span class="sc">-</span> c50; r<span class="sc">$</span>iter</span>
+<span id="cb9-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 4.440892e-16</span></span>
+<span id="cb9-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 10</span></span>
+<span id="cb9-11"><a aria-hidden="true" tabindex="-1"></a><span class="fu">uniroot</span>(f, <span class="fu">c</span>(<span class="dv">5</span>, <span class="dv">100</span>))          <span class="co"># Error: f() values at end points not of opposite sign</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The default <code>tol</code> is <span class="math inline">\varepsilon^{1/4} \approx 1.2\times10^{-4}</span>, an <strong>absolute</strong> tolerance: set <code>tol</code> yourself.</li>
+<li>It needs a sign change; <code>extendInt = "yes"</code> widens a bad interval for you.</li>
+</ul>
+<aside class="notes">
+<p>Three practical points. First, uniroot’s default tolerance is loose: fine for an EC50 reported to 3 digits, not fine if the root feeds into further computation (e.g.&nbsp;a derivative by finite differences, or an outer optimisation). estim.prec reports the achieved bracket width. Second, with a sensible tol it reaches machine precision in 10 iterations from a 10 000-fold wide bracket; bisection would need 50. Third, it refuses intervals without a sign change, which is exactly the safety we wanted. brentq in scipy has a tighter default (xtol = 2e-12, plus a relative rtol), but the same idea.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="back-to-the-mle-safely" class="slide level2">
+<h2>Back to the MLE, safely</h2>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">uniroot</span>(S, <span class="at">interval =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="dv">10</span>), <span class="at">tol =</span> <span class="fl">1e-10</span>)<span class="sc">$</span>root</span>
+<span id="cb10-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.21847</span></span>
+<span id="cb10-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">S</span>(<span class="fu">c</span>(<span class="fl">0.01</span>, <span class="dv">10</span>))</span>
+<span id="cb10-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 7249.91667  -82.70454</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>A <strong>wide</strong> bracket of plausible rates is easy to give: <span class="math inline">S &gt; 0</span> for small <span class="math inline">\lambda</span>, <span class="math inline">S &lt; 0</span> for large <span class="math inline">\lambda</span>.</li>
+<li>No start value to choose, no derivative, no run-off to negative rates.</li>
+<li>When you need the derivative anyway (standard error), polish with one or two Newton steps from the bracketed answer.</li>
+</ul>
+<p>Rule of thumb: <strong>bracket first</strong> (<code>uniroot</code>, <code>brentq</code>), use hand-written Newton when you need speed in a loop over thousands of genes, and then <strong>with</strong> a good start and checks.</p>
+<aside class="notes">
+<p>The bracket [0.01, 10] covers any plausible rate for these data. uniroot finds the same 1.21847 that Newton found from the mean, and cannot fail the way Newton did from 3. In practice: for one-off roots, use uniroot with tol set. For a root inside a loop over 20 000 genes, Newton from a good start (the mean) converges in a handful of steps and is cheaper; add a fallback to uniroot for the genes where the checks fail.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="checklist-before-you-trust-a-root" class="slide level2">
+<h2>Checklist: before you trust a root</h2>
+<ul>
+<li><strong>Plot <span class="math inline">f</span></strong> over the plausible range. How many roots? Where?</li>
+<li><strong>Bracket</strong> the root if you can, and use a bracketing method (<code>uniroot</code>, <code>brentq</code>).</li>
+<li><strong>Set the tolerance</strong> yourself; know whether it is absolute or relative.</li>
+<li><strong>Check the answer:</strong> <span class="math inline">|f(x)|</span> small, <span class="math inline">x</span> in the meaningful range (positive dose, positive rate).</li>
+<li><strong>Hand-written Newton:</strong> check <code>df</code> against a finite difference; cap the iterations; warn on failure.</li>
+<li><strong>Look at the convergence:</strong> digits should double (Newton) or grow by ~1.6× (secant). If they grow by a fixed amount per step, something is wrong (derivative, double root).</li>
+</ul>
+<aside class="notes">
+<p>Read through it once. The last point is the diagnostic that comes from this lecture: the digits-per-step table is not just a picture of the theory, it is a debugging tool. Linear convergence from a method that should be quadratic almost always means a wrong derivative or a root where f’ = 0.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="summary" class="slide level2 smaller">
+<h2>Summary</h2>
+<ul>
+<li><strong>Newton</strong>: <span class="math inline">x_{k+1} = x_k - f(x_k)/f'(x_k)</span>, from the tangent line (first-order Taylor). Near a simple root, <strong>quadratic</strong>: <span class="math inline">e_{k+1} \approx \frac{f''}{2f'}\,e_k^2</span>, digits double each step.</li>
+<li><strong>Secant</strong>: the tangent replaced by the chord through the last two points. No derivative, one evaluation per step, order <strong>1.618</strong>.</li>
+<li>Both converge only from <strong>close enough</strong>. Failures: a flat derivative sends the iterate far away (negative dose), a bad start diverges (negative rate), some starts <strong>cycle</strong>. Detect with range checks, <code>is.finite()</code>, <code>maxit</code>, and a plot of <span class="math inline">f</span>.</li>
+<li><strong>Brent’s method</strong> (<code>uniroot</code>, <code>brentq</code>) keeps a sign-change bracket and uses fast steps inside it: guaranteed and fast. Set <code>tol</code> yourself.</li>
+<li>Biology: an EC50 of a two-site curve and a maximum-likelihood rate are both roots with <strong>no closed form</strong>; the observed information <span class="math inline">-S'(\hat\lambda)</span> from Newton gives the standard error.</li>
+</ul>
+<p><strong>Next:</strong> <em>Newton for systems of equations</em>, where <span class="math inline">f'</span> becomes the Jacobian matrix and each step is a linear solve.</p>
+<aside class="notes">
+<p>Recap the two methods, the convergence orders and the failure modes with their checks. Next unit: two or more unknowns (steady states of a toggle switch); Newton generalises directly, with the derivative replaced by the matrix of partial derivatives. The secant idea generalises too (Broyden, and later quasi-Newton optimisation in Part 9).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+
+
+</section>
+    </div>
+  <div class="quarto-auto-generated-content" style="display: none;">
+<div class="footer footer-default">
+
+</div>
+</div></div>
+
+  <script>window.backupDefine = window.define; window.define = undefined;</script>
+  <script src="../site_libs/revealjs/dist/reveal.js"></script>
+  <!-- reveal.js plugins -->
+  <script src="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.js"></script>
+  <script src="../site_libs/revealjs/plugin/pdf-export/pdfexport.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/quarto-support/support.js"></script>
+  
+
+  <script src="../site_libs/revealjs/plugin/notes/notes.js"></script>
+  <script src="../site_libs/revealjs/plugin/search/search.js"></script>
+  <script src="../site_libs/revealjs/plugin/zoom/zoom.js"></script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://revealjs.com/config/
+      Reveal.initialize({
+'controlsAuto': false,
+'previewLinksAuto': false,
+'pdfSeparateFragments': false,
+'autoAnimateEasing': "ease",
+'autoAnimateDuration': 1,
+'autoAnimateUnmatched': true,
+'jumpToSlide': true,
+'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
+'smaller': false,
+ 
+        // Display controls in the bottom right corner
+        controls: true,
+
+        // Help the user learn the controls by providing hints, for example by
+        // bouncing the down arrow when they first encounter a vertical slide
+        controlsTutorial: false,
+
+        // Determines where controls appear, "edges" or "bottom-right"
+        controlsLayout: 'edges',
+
+        // Visibility rule for backwards navigation arrows; "faded", "hidden"
+        // or "visible"
+        controlsBackArrows: 'visible',
+
+        // Display a presentation progress bar
+        progress: true,
+
+        // Display the page number of the current slide
+        slideNumber: 'c/t',
+
+        // 'all', 'print', or 'speaker'
+        showSlideNumber: 'all',
+
+        // Add the current slide number to the URL hash so that reloading the
+        // page/copying the URL will return you to the same slide
+        hash: true,
+
+        // Start with 1 for the hash rather than 0
+        hashOneBasedIndex: false,
+
+        // Flags if we should monitor the hash and change slides accordingly
+        respondToHashChanges: true,
+
+        // Push each slide change to the browser history
+        history: false,
+
+        // Enable keyboard shortcuts for navigation
+        keyboard: true,
+
+        // Enable the slide overview mode
+        overview: true,
+
+        // Disables the default reveal.js slide layout (scaling and centering)
+        // so that you can use custom CSS layout
+        disableLayout: false,
+
+        // Vertical centering of slides
+        center: false,
+
+        // Enables touch navigation on devices with touch input
+        touch: true,
+
+        // Loop the presentation
+        loop: false,
+
+        // Change the presentation direction to be RTL
+        rtl: false,
+
+        // see https://revealjs.com/vertical-slides/#navigation-mode
+        navigationMode: 'linear',
+
+        // Randomizes the order of slides each time the presentation loads
+        shuffle: false,
+
+        // Turns fragments on and off globally
+        fragments: true,
+
+        // Flags whether to include the current fragment in the URL,
+        // so that reloading brings you to the same fragment position
+        fragmentInURL: false,
+
+        // Flags if the presentation is running in an embedded mode,
+        // i.e. contained within a limited portion of the screen
+        embedded: false,
+
+        // Flags if we should show a help overlay when the questionmark
+        // key is pressed
+        help: true,
+
+        // Flags if it should be possible to pause the presentation (blackout)
+        pause: true,
+
+        // Flags if speaker notes should be visible to all viewers
+        showNotes: false,
+
+        // Global override for autoplaying embedded media (null/true/false)
+        autoPlayMedia: null,
+
+        // Global override for preloading lazy-loaded iframes (null/true/false)
+        preloadIframes: null,
+
+        // Number of milliseconds between automatically proceeding to the
+        // next slide, disabled when set to 0, this value can be overwritten
+        // by using a data-autoslide attribute on your slides
+        autoSlide: 0,
+
+        // Stop auto-sliding after user input
+        autoSlideStoppable: true,
+
+        // Use this method for navigation when auto-sliding
+        autoSlideMethod: null,
+
+        // Specify the average time in seconds that you think you will spend
+        // presenting each slide. This is used to show a pacing timer in the
+        // speaker view
+        defaultTiming: null,
+
+        // Enable slide navigation via mouse wheel
+        mouseWheel: false,
+
+        // The display mode that will be used to show slides
+        display: 'block',
+
+        // Hide cursor if inactive
+        hideInactiveCursor: true,
+
+        // Time before the cursor is hidden (in ms)
+        hideCursorTime: 5000,
+
+        // Opens links in an iframe preview overlay
+        previewLinks: false,
+
+        // Transition style (none/fade/slide/convex/concave/zoom)
+        transition: 'none',
+
+        // Transition speed (default/fast/slow)
+        transitionSpeed: 'default',
+
+        // Transition style for full page slide backgrounds
+        // (none/fade/slide/convex/concave/zoom)
+        backgroundTransition: 'none',
+
+        // Number of slides away from the current that are visible
+        viewDistance: 3,
+
+        // Number of slides away from the current that are visible on mobile
+        // devices. It is advisable to set this to a lower number than
+        // viewDistance in order to save resources.
+        mobileViewDistance: 2,
+
+        // The "normal" size of the presentation, aspect ratio will be preserved
+        // when the presentation is scaled to fit different resolutions. Can be
+        // specified using percentage units.
+        width: 1280,
+
+        height: 720,
+
+        // Factor of the display size that should remain empty around the content
+        margin: 0.1,
+
+        // reveal.js plugins
+        plugins: [QuartoLineHighlight, PdfExport, RevealMenu, QuartoSupport,
+
+          RevealNotes,
+          RevealSearch,
+          RevealZoom
+        ]
+      });
+    </script>
+    <script id="quarto-html-after-body" type="application/javascript">
+      window.document.addEventListener("DOMContentLoaded", function (event) {
+        const tabsets =  window.document.querySelectorAll(".panel-tabset-tabby")
+        tabsets.forEach(function(tabset) {
+          const tabby = new Tabby('#' + tabset.id);
+        });
+        const isCodeAnnotation = (el) => {
+          for (const clz of el.classList) {
+            if (clz.startsWith('code-annotation-')) {                     
+              return true;
+            }
+          }
+          return false;
+        }
+        const onCopySuccess = function(e) {
+          // button target
+          const button = e.trigger;
+          // don't keep focus
+          button.blur();
+          // flash "checked"
+          button.classList.add('code-copy-button-checked');
+          var currentTitle = button.getAttribute("title");
+          button.setAttribute("title", "Copied!");
+          let tooltip;
+          if (window.bootstrap) {
+            button.setAttribute("data-bs-toggle", "tooltip");
+            button.setAttribute("data-bs-placement", "left");
+            button.setAttribute("data-bs-title", "Copied!");
+            tooltip = new bootstrap.Tooltip(button, 
+              { trigger: "manual", 
+                customClass: "code-copy-button-tooltip",
+                offset: [0, -8]});
+            tooltip.show();    
+          }
+          setTimeout(function() {
+            if (tooltip) {
+              tooltip.hide();
+              button.removeAttribute("data-bs-title");
+              button.removeAttribute("data-bs-toggle");
+              button.removeAttribute("data-bs-placement");
+            }
+            button.setAttribute("title", currentTitle);
+            button.classList.remove('code-copy-button-checked');
+          }, 1000);
+          // clear code selection
+          e.clearSelection();
+        }
+        const getTextToCopy = function(trigger) {
+            const codeEl = trigger.previousElementSibling.cloneNode(true);
+            for (const childEl of codeEl.children) {
+              if (isCodeAnnotation(childEl)) {
+                childEl.remove();
+              }
+            }
+            return codeEl.innerText;
+        }
+        const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+          text: getTextToCopy
+        });
+        clipboard.on('success', onCopySuccess);
+        if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+          const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+            text: getTextToCopy,
+            container: window.document.getElementById('quarto-embedded-source-code-modal')
+          });
+          clipboardModal.on('success', onCopySuccess);
+        }
+          var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+          var mailtoRegex = new RegExp(/^mailto:/);
+            var filterRegex = new RegExp('/' + window.location.host + '/');
+          var isInternal = (href) => {
+              return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+          }
+          // Inspect non-navigation links and adorn them if external
+         var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+          for (var i=0; i<links.length; i++) {
+            const link = links[i];
+            if (!isInternal(link.href)) {
+              // undo the damage that might have been done by quarto-nav.js in the case of
+              // links that we want to consider external
+              if (link.dataset.originalHref !== undefined) {
+                link.href = link.dataset.originalHref;
+              }
+            }
+          }
+        function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+          const config = {
+            allowHTML: true,
+            maxWidth: 500,
+            delay: 100,
+            arrow: false,
+            appendTo: function(el) {
+                return el.closest('section.slide') || el.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'light-border',
+            placement: 'bottom-start',
+          };
+          if (contentFn) {
+            config.content = contentFn;
+          }
+          if (onTriggerFn) {
+            config.onTrigger = onTriggerFn;
+          }
+          if (onUntriggerFn) {
+            config.onUntrigger = onUntriggerFn;
+          }
+            config['offset'] = [0,0];
+            config['maxWidth'] = 700;
+          window.tippy(el, config); 
+        }
+        const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+        for (var i=0; i<noterefs.length; i++) {
+          const ref = noterefs[i];
+          tippyHover(ref, function() {
+            // use id or data attribute instead here
+            let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+            try { href = new URL(href).hash; } catch {}
+            const id = href.replace(/^#\/?/, "");
+            const note = window.document.getElementById(id);
+            if (note) {
+              return note.innerHTML;
+            } else {
+              return "";
+            }
+          });
+        }
+        const findCites = (el) => {
+          const parentEl = el.parentElement;
+          if (parentEl) {
+            const cites = parentEl.dataset.cites;
+            if (cites) {
+              return {
+                el,
+                cites: cites.split(' ')
+              };
+            } else {
+              return findCites(el.parentElement)
+            }
+          } else {
+            return undefined;
+          }
+        };
+        var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+        for (var i=0; i<bibliorefs.length; i++) {
+          const ref = bibliorefs[i];
+          const citeInfo = findCites(ref);
+          if (citeInfo) {
+            tippyHover(citeInfo.el, function() {
+              var popup = window.document.createElement('div');
+              citeInfo.cites.forEach(function(cite) {
+                var citeDiv = window.document.createElement('div');
+                citeDiv.classList.add('hanging-indent');
+                citeDiv.classList.add('csl-entry');
+                var biblioDiv = window.document.getElementById('ref-' + cite);
+                if (biblioDiv) {
+                  citeDiv.innerHTML = biblioDiv.innerHTML;
+                }
+                popup.appendChild(citeDiv);
+              });
+              return popup.innerHTML;
+            });
+          }
+        }
+      });
+      </script>
+    
+
+</body></html>

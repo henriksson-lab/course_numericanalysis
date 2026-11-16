@@ -1,0 +1,987 @@
+---
+title: "Exercise: pivoting, norms and conditioning"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- explain why Gaussian elimination **without pivoting** fails on a tiny pivot, and show it with 3-digit arithmetic,
+- carry out **partial pivoting** by hand and write $PA = LU$ for a $3\times 3$ matrix,
+- compute the **1-, 2- and $\infty$-norms** of a vector and the 1- and $\infty$-norms of a matrix,
+- compute the **condition number** $\kappa(A)$ of a $2\times2$ matrix by hand and with [`kappa()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kappa.html) / [`np.linalg.cond`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html) / nalgebra's `singular_values()`,
+- use the rule "lose about $\log_{10}\kappa$ digits" for rounding errors and for measurement noise,
+- tell the **residual** from the **error**, and say what each one checks,
+- predict how much detector noise is amplified when **unmixing** dyes with overlapping spectra.
+
+The by-hand part uses pen and paper (and a calculator for B1, where you must round to 3 digits on purpose). The code part checks the hand answers and then works at sizes where only code works.
+
+## Background
+
+**Spectral unmixing.** A cell carries unknown amounts $\mathbf x$ of several dyes. Detector $i$ records $b_i = \sum_j A_{ij} x_j$, where $A_{ij}$ is the signal of one unit of dye $j$ in detector $i$ (measured from single-stained controls). Unmixing one cell means solving $A\mathbf x = \mathbf b$. Our running example is two dyes with detectors at their two peaks and overlap $c$:
+
+$$A = \begin{pmatrix}1 & c\\ c & 1\end{pmatrix}, \qquad c = 0.95 \text{ (peaks about 10 nm apart)}.$$
+
+**Facts used below:**
+
+1. **Elimination** (from *Gaussian elimination as LU*) subtracts $m = a_{ik}/a_{kk}$ times row $k$ from row $i$. The **pivot** $a_{kk}$ is divided by twice: in the multiplier and in back substitution. A tiny pivot gives huge multipliers, and the rows below are swamped by rounding.
+2. **Partial pivoting**: before eliminating column $k$, swap rows so that the entry of largest absolute value in column $k$ (on or below the diagonal) is the pivot. Then $|m| \le 1$. The swaps are collected in a permutation matrix $P$: $PA = LU$.
+3. **Vector norms**: $\|\mathbf v\|_1 = \sum_i |v_i|$, $\|\mathbf v\|_2 = \sqrt{\sum_i v_i^2}$, $\|\mathbf v\|_\infty = \max_i |v_i|$. Relative error of a vector: $\|\hat{\mathbf x} - \mathbf x\|/\|\mathbf x\|$.
+4. **Matrix norms**: $\|A\| = \max_{\mathbf v\ne 0}\|A\mathbf v\|/\|\mathbf v\|$, the largest stretch. $\|A\|_1$ = largest absolute column sum, $\|A\|_\infty$ = largest absolute row sum, $\|A\|_2 = \sigma_{\max}$, the largest singular value (for a symmetric matrix: the largest $|\lambda|$).
+5. **Condition number** $\kappa(A) = \|A\|\,\|A^{-1}\|$; in the 2-norm $\kappa = \sigma_{\max}/\sigma_{\min}$. If $A\mathbf x = \mathbf b$ and $A(\mathbf x + \Delta\mathbf x) = \mathbf b + \Delta\mathbf b$, then
+   $$\frac{\|\Delta\mathbf x\|}{\|\mathbf x\|} \le \kappa(A)\,\frac{\|\Delta\mathbf b\|}{\|\mathbf b\|}, \qquad \text{digits lost} \approx \log_{10}\kappa.$$
+6. **Residual vs error.** The residual $\mathbf r = \mathbf b - A\hat{\mathbf x}$ can be computed; the error $\hat{\mathbf x} - \mathbf x$ cannot. $\|\hat{\mathbf x} - \mathbf x\|/\|\mathbf x\| \le \kappa(A)\,\|\mathbf r\|/\|\mathbf b\|$. A backward-stable solver (LU with partial pivoting) always returns a residual near rounding level, whatever $\kappa$ is.
+7. **Inverse of a $2\times2$**: $\begin{pmatrix}a & b\\ c & d\end{pmatrix}^{-1} = \dfrac{1}{ad - bc}\begin{pmatrix}d & -b\\ -c & a\end{pmatrix}$.
+
+The basic tools in each language:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+A <- matrix(c(1,    0.95,
+              0.95, 1   ), nrow = 2, byrow = TRUE)
+solve(A, c(1.96, 1.94))                      # LU with partial pivoting
+# [1] 1.2 0.8
+v <- c(3, -4, 12)
+c(sum(abs(v)), sqrt(sum(v^2)), max(abs(v)))  # 1-, 2- and inf-norm
+# [1] 19 13 12
+c(norm(A, "1"), norm(A, "I"), norm(A, "2"))  # matrix norms
+# [1] 1.95 1.95 1.95
+kappa(A, exact = TRUE)                       # condition number (2-norm)
+# [1] 39
+```
+
+### Python
+
+```python
+import numpy as np
+
+A = np.array([[1,    0.95],
+              [0.95, 1   ]])
+print(np.linalg.solve(A, [1.96, 1.94]))      # LU with partial pivoting
+# [1.2 0.8]
+v = np.array([3, -4, 12])
+print(np.linalg.norm(v, 1), np.linalg.norm(v), np.linalg.norm(v, np.inf))
+# 19.0 13.0 12.0
+print(np.linalg.norm(A, 1), np.linalg.norm(A, np.inf), np.linalg.norm(A, 2))
+# 1.95 1.95 1.9500000000000002
+print(np.linalg.cond(A))                     # condition number (2-norm)
+# 39.00000000000007
+```
+
+### Rust
+
+```rust
+// rust/examples/pivoting_conditioning_background.rs  —  cargo run --example pivoting_conditioning_background
+// Solve, norms and condition number with nalgebra
+// (R: solve, norm, kappa; numpy: linalg.solve, linalg.norm, linalg.cond).
+use nalgebra::{matrix, vector};
+
+fn main() {
+    let a = matrix![1.0,  0.95;
+                    0.95, 1.0];
+    let x = a.lu().solve(&vector![1.96, 1.94]).unwrap(); // LU with partial pivoting
+    println!("{}  {}", x[0], x[1]);
+    let v = vector![3.0, -4.0, 12.0];
+    println!("{} {} {}", v.lp_norm(1), v.norm(), v.amax()); // 1-, 2- and inf-norm
+    // nalgebra has no induced 1- and inf-norm. row_sum() adds up the rows, giving
+    // the column sums (1-norm); column_sum() gives the row sums (inf-norm).
+    let abs_a = a.abs();
+    let s = a.singular_values();
+    println!("{} {} {}", abs_a.row_sum().max(), abs_a.column_sum().max(), s.max());
+    println!("{}", s.max() / s.min());                   // condition number (2-norm)
+}
+
+// Output:
+// 1.1999999999999995  0.8000000000000005
+// 19 13 12
+// 1.95 1.95 1.95
+// 38.999999999999964
+```
+
+:::
+
+R's [`solve()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html), numpy's [`np.linalg.solve`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html) and nalgebra's `lu().solve()` all use LU with partial pivoting. The last digits differ between languages (`0.8000000000000005`, `39.00000000000007`): different libraries round differently in the last place. R prints only 7 significant digits by default, which hides this.
+
+## By hand
+
+**B1. A tiny pivot in 3-digit arithmetic.** Solve
+$$\begin{pmatrix}0.0001 & 1\\ 1 & 1\end{pmatrix}\begin{pmatrix}x_1\\x_2\end{pmatrix} = \begin{pmatrix}1\\2\end{pmatrix}$$
+on a "computer" that rounds **every** intermediate result to 3 significant digits.
+(a) Without pivoting: compute the multiplier, the new row 2, then $x_2$ and $x_1$.
+(b) With partial pivoting: swap the rows first and repeat.
+(c) The exact solution is $x_1 = 1/0.9999 = 1.0001\ldots$, $x_2 = 0.9998/0.9999 = 0.9999\ldots$. Which answer is right to 3 digits? Where exactly was the information lost in (a)?
+
+**B2. $PA = LU$ by hand.** Use partial pivoting on
+$$A = \begin{pmatrix}2 & 1 & 1\\ 4 & 3 & 3\\ 8 & 7 & 9\end{pmatrix}, \qquad \mathbf b = \begin{pmatrix}4\\10\\24\end{pmatrix}.$$
+(a) Which row becomes the first pivot row? Eliminate column 1 and write down the multipliers.
+(b) Which row becomes the second pivot row? Eliminate column 2.
+(c) Write $P$, $L$ (unit lower triangular, holding the multipliers) and $U$. Check that $PA = LU$ in at least one row.
+(d) Solve $A\mathbf x = \mathbf b$ using $L\mathbf y = P\mathbf b$ and $U\mathbf x = \mathbf y$.
+
+**B3. Vector norms.**
+(a) Compute $\|\mathbf v\|_1$, $\|\mathbf v\|_2$ and $\|\mathbf v\|_\infty$ for $\mathbf v = (3, -4, 12)$ and for $\mathbf w = (1, 1, 1, 1)$.
+(b) Two dyes, true amounts $\mathbf x = (1, 1)$, unmixed $\hat{\mathbf x} = (1.2, 0.8)$. Compute the relative error in all three norms.
+(c) Sketch the sets $\|\mathbf v\| = 1$ in 2D for the three norms. For which vectors is $\|\mathbf v\|_1 = \|\mathbf v\|_\infty$?
+
+**B4. The condition number of the two-dye matrix.** $A = \begin{pmatrix}1 & 0.95\\ 0.95 & 1\end{pmatrix}$.
+(a) Compute $\|A\|_1$ and $\|A\|_\infty$.
+(b) Compute $A^{-1}$ (fact 7), then $\|A^{-1}\|_\infty$ and $\kappa_\infty(A)$.
+(c) The eigenvalues of $A$ are $1 + 0.95$ and $1 - 0.95$, with eigenvectors $(1, 1)$ and $(1, -1)$. What are $\sigma_{\max}$, $\sigma_{\min}$ and $\kappa_2(A)$?
+(d) For general overlap $0 \le c < 1$, show that $\kappa_2 = (1 + c)/(1 - c)$. Evaluate it for $c = 0.5, 0.9, 0.99$.
+(e) The detector readings have 3 significant digits. About how many digits of the dye amounts can you trust for $c = 0.5$, $0.95$ and $0.99$?
+
+**B5. Worst and best directions.** Keep $A$ from B4 and $\mathbf b = (1.95, 1.95)$, so $\mathbf x = (1, 1)$. Use the 2-norm.
+(a) For $\Delta\mathbf b = (0.01, -0.01)$, find $\Delta\mathbf x = A^{-1}\Delta\mathbf b$ and the amplification $\dfrac{\|\Delta\mathbf x\|/\|\mathbf x\|}{\|\Delta\mathbf b\|/\|\mathbf b\|}$.
+(b) Same for $\Delta\mathbf b = (0.01, 0.01)$.
+(c) Explain the two answers with the eigenvectors from B4(c). What kind of detector error is dangerous?
+
+**B6. Residual vs error.** Still $A$ from B4, $\mathbf b = (1.95, 1.95)$, true $\mathbf x = (1, 1)$. Two programs return $\hat{\mathbf x}_a = (1.2, 0.8)$ and $\hat{\mathbf x}_b = (1.01, 1.01)$.
+(a) Compute both residuals $\mathbf r = \mathbf b - A\hat{\mathbf x}$ and the relative residuals $\|\mathbf r\|_\infty/\|\mathbf b\|_\infty$.
+(b) Compute both relative errors $\|\hat{\mathbf x} - \mathbf x\|_\infty/\|\mathbf x\|_\infty$.
+(c) Which answer would you pick by looking at the residual? Check the bound $\text{error} \le \kappa_\infty \times \text{residual}$ for $\hat{\mathbf x}_a$.
+
+**B7. A zero pivot in a well-conditioned matrix.** Detector 1 sees no dye 1:
+$$A = \begin{pmatrix}0 & 1\\ 1 & 0.3\end{pmatrix}, \qquad \mathbf b = \begin{pmatrix}1\\1.3\end{pmatrix}.$$
+(a) What happens if you eliminate without pivoting?
+(b) Solve with partial pivoting.
+(c) Compute $\kappa_\infty(A)$. Is the problem hard? Whose fault was the failure in (a)?
+
+## In code
+
+**C1. Elimination without pivoting.** Write `solve_nopivot(A, b)` (elimination, then back substitution). For $A = \begin{pmatrix}\delta & 1\\ 1 & 1\end{pmatrix}$, $\mathbf b = (1, 2)$ and $\delta = 10^{-2}, 10^{-5}, \ldots, 10^{-20}$, compute the relative error (2-norm) against the exact solution $x_1 = 1/(1-\delta)$, $x_2 = (1-2\delta)/(1-\delta)$, and compare it with $\varepsilon/\delta$.
+
+**C2. Partial pivoting.**
+(a) Add partial pivoting to your function (`solve_pivot`) and repeat C1.
+(b) Solve B2 with `solve_pivot` and compare $P$, $L$ and $U$ with a library: [`Matrix::lu`](https://rdrr.io/cran/Matrix/man/lu.html) with `expand()` in R, [`scipy.linalg.lu`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu.html) in Python, nalgebra's `lu()` with `.l()`, `.u()`, `.p()` in Rust. Careful: R and scipy return $A = PLU$, so their $P$ is the transpose of ours.
+
+**C3. Norms.**
+(a) Check B3(a)–(b) in code.
+(b) Compute $\|A\|_1$, $\|A\|_\infty$ and $\|A\|_2$ of the two-dye matrix from the formulas (column sums, row sums, largest singular value) and with [`norm()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/norm.html) / [`np.linalg.norm`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.norm.html).
+(c) **The 2-norm as the largest stretch.** Compute $\|A\mathbf v\|_2$ for 1001 unit vectors $\mathbf v = (\cos\theta, \sin\theta)$, $\theta \in [0, 2\pi]$. Compare the largest and smallest values with $\sigma_{\max}$ and $\sigma_{\min}$.
+
+**C4. Condition number and overlap.** For $c = 0.5, 0.9, 0.95, 0.99, 0.999$, compute $\kappa_2$ of $\begin{pmatrix}1 & c\\ c & 1\end{pmatrix}$ with `kappa(A, exact = TRUE)` (Python: `np.linalg.cond(A)`; Rust: largest over smallest of `singular_values()`) and compare with $(1+c)/(1-c)$ from B4(d). In R, also print the default estimate `kappa(A)` and [`1 / rcond(A)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kappa.html); in Python, `np.linalg.cond(A, 1)`.
+
+**C5. Lose $\log_{10}\kappa$ digits.** A panel of 6 dyes with Gaussian emission spectra (width 30 nm), detectors at the peaks, peaks `spacing` nm apart:
+
+$$A_{ij} = \exp\!\left(-\frac{(p_i - p_j)^2}{2\cdot 30^2}\right), \qquad p_i = 500 + \text{spacing}\cdot(i - 1).$$
+
+For spacing $= 60, 30, 20, 10, 5$ nm, take the true amounts $\mathbf x = (5, 1, 3, 2, 4, 1)$, compute $\mathbf b = A\mathbf x$, solve, and print $\kappa$, the relative error, the number of correct digits $-\log_{10}(\text{error})$ and the prediction $16 - \log_{10}\kappa$.
+
+**C6. Residual vs error.** For the panel with spacing 6 nm, solve as in C5 and print $\kappa$, the relative residual $\|\mathbf b - A\hat{\mathbf x}\|/\|\mathbf b\|$, the relative error, and the bound $\kappa\times$ residual. What does the residual tell you about `solve()`? What does it tell you about the answer?
+
+**C7. Detector noise in unmixed cells.** Simulate 1000 cells that all carry 1 unit of each of two dyes. Add independent Gaussian noise with standard deviation 0.01 to both detector readings of every cell, and unmix all cells with $c = 0.5$ and with $c = 0.95$. Compare the standard deviation of the unmixed dye 1 with the prediction $0.01 \times \|\text{row 1 of } A^{-1}\|_2$ and with $\kappa$.
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — 3-digit arithmetic (B1)"}
+Round after **every** operation: $1 - 10000 = -9999$ becomes $-1.00\times10^4$ with 3 significant digits. Keep the exact numbers next to the rounded ones so you see which digits disappear.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — partial pivoting by hand (B2, B7)"}
+At step $k$, look only at column $k$ from the diagonal down. Swap the row with the largest $|a_{ik}|$ into position $k$ (swap the whole row, including $b_i$, and the multipliers already stored in that row of $L$). $P$ is the identity with its rows in the final pivot order; $P\mathbf b$ is $\mathbf b$ in that order.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — norms of a 2 × 2 matrix (B4, C3)"}
+1-norm: add the absolute values in each **column**, take the largest. $\infty$-norm: same with **rows**. For a symmetric matrix, the singular values are the absolute values of the eigenvalues. In code: R [`norm(A, "1")`, `norm(A, "I")`, `norm(A, "2")`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/norm.html) and [`svd(A)$d`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/svd.html); Python [`np.linalg.norm(A, 1)`, `np.linalg.norm(A, np.inf)`, `np.linalg.norm(A, 2)`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.norm.html) and [`np.linalg.svd(A, compute_uv=False)`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html); Rust nalgebra `v.lp_norm(1)`, `v.norm()`, `v.amax()`, `a.singular_values()` ([docs](https://docs.rs/nalgebra/latest/nalgebra/base/struct.Matrix.html)).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — κ for overlap c (B4(d))"}
+The eigenvalues of $\begin{pmatrix}1 & c\\ c & 1\end{pmatrix}$ are $1 + c$ (eigenvector $(1, 1)$) and $1 - c$ (eigenvector $(1, -1)$). Check by multiplying.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — writing the elimination (C1, C2)"}
+Loop over $k = 1, \ldots, n-1$ and $i = k+1, \ldots, n$. Back substitution runs $i = n, \ldots, 1$: $x_i = (b_i - \sum_{j>i} a_{ij}x_j)/a_{ii}$. R has [`backsolve()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/backsolve.html) for the last step, Python [`scipy.linalg.solve_triangular`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_triangular.html). To find the pivot row: [`which.max(abs(A[k:n, k])) + k - 1`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/which.min.html) in R, `k + np.argmax(np.abs(A[k:, k]))` in Python. Swap rows with `A[c(k, p), ] <- A[c(p, k), ]` (R) or `A[[k, p], :] = A[[p, k], :]` (Python). In Python, copy the inputs first (`A = A.astype(float).copy()`), or you will overwrite the caller's matrix.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — building the spectra matrix (C5, C6)"}
+R: [`outer(p, p, function(d, q) exp(-(d - q)^2 / (2 * 30^2)))`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/outer.html). Python: broadcasting, `np.exp(-(p[:, None] - p[None, :])**2 / (2 * 30**2))`. Rust: `DMatrix::from_fn(n, n, |i, j| ...)`. The relative error is `sqrt(sum((xh - x)^2)) / sqrt(sum(x^2))` in R and `np.linalg.norm(xh - x) / np.linalg.norm(x)` in Python.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — many cells at once (C7)"}
+Put the readings of all cells in a $2\times 1000$ matrix $B$ (one column per cell); `solve(A, B)` (R) or `np.linalg.solve(A, B)` (Python) solves all 1000 systems with one LU factorisation. Generate the noise with [`rnorm(2 * 1000, sd = 0.01)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Normal.html) (R) or [`rng.normal(0, 0.01, size=(2, 1000))`](https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.normal.html) (Python).
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $m = 1/0.0001 = 10^4$. Row 2: $1 - 10^4\cdot 1 = -9999 \to -1.00\times10^4$; right side $2 - 10^4\cdot 1 = -9998 \to -1.00\times10^4$. So $x_2 = 1.00$, and $x_1 = (1 - 1.00)/0.0001 = 0$.
+(b) Swap: $\begin{pmatrix}1 & 1 & | & 2\\ 0.0001 & 1 & | & 1\end{pmatrix}$, $m = 0.0001$. Row 2: $1 - 0.0001 = 0.9999 \to 1.00$; right side $1 - 0.0002 = 0.9998 \to 1.00$. So $x_2 = 1.00$, $x_1 = 2 - 1.00 = 1.00$.
+(c) (b) is right to 3 digits; (a) has $x_1 = 0$, 100 % wrong. The information was lost when $1 - 10^4$ and $2 - 10^4$ were rounded: the 1 and the 2 of the second equation fell below the third digit of $10^4$. Then $x_1 = (1 - x_2)/0.0001$ is a cancellation divided by a tiny pivot. Doubles behave the same way with $\delta$ below about $10^{-16}$ (C1).
+
+**B2.**
+(a) Largest $|a_{i1}|$ is 8 (row 3): swap rows 1 and 3. Multipliers $4/8 = 0.5$ (row with 4) and $2/8 = 0.25$ (row with 2):
+$$\begin{pmatrix}8 & 7 & 9\\ 4 & 3 & 3\\ 2 & 1 & 1\end{pmatrix} \to \begin{pmatrix}8 & 7 & 9\\ 0 & -0.5 & -1.5\\ 0 & -0.75 & -1.25\end{pmatrix}.$$
+(b) In column 2, $|-0.75| > |-0.5|$: swap rows 2 and 3 (with their multipliers). Multiplier $-0.5/-0.75 = 2/3$; new $(3,3)$ entry $-1.5 - \tfrac23(-1.25) = -\tfrac23$.
+(c) Pivot order: original rows 3, 1, 2.
+$$P = \begin{pmatrix}0 & 0 & 1\\ 1 & 0 & 0\\ 0 & 1 & 0\end{pmatrix},\quad L = \begin{pmatrix}1 & 0 & 0\\ 0.25 & 1 & 0\\ 0.5 & \tfrac23 & 1\end{pmatrix},\quad U = \begin{pmatrix}8 & 7 & 9\\ 0 & -0.75 & -1.25\\ 0 & 0 & -\tfrac23\end{pmatrix}.$$
+Check row 3 of $LU$: $0.5\cdot(8, 7, 9) + \tfrac23(0, -0.75, -1.25) + (0, 0, -\tfrac23) = (4, 3.5 - 0.5, 4.5 - 0.8333 - 0.6667) = (4, 3, 3)$, which is row 3 of $PA$ (original row 2). All multipliers have $|m| \le 1$.
+(d) $P\mathbf b = (24, 4, 10)$. Forward: $y_1 = 24$, $y_2 = 4 - 0.25\cdot 24 = -2$, $y_3 = 10 - 0.5\cdot 24 - \tfrac23(-2) = -\tfrac23$. Back: $x_3 = (-\tfrac23)/(-\tfrac23) = 1$, $x_2 = (-2 + 1.25\cdot 1)/(-0.75) = 1$, $x_1 = (24 - 7 - 9)/8 = 1$. So $\mathbf x = (1, 1, 1)$.
+
+**B3.**
+(a) $\mathbf v$: $19$, $13$, $12$. $\mathbf w$: $4$, $2$, $1$. (For $\mathbf w$ the three norms differ by the largest possible factors, $n = 4$ and $\sqrt n = 2$.)
+(b) $\hat{\mathbf x} - \mathbf x = (0.2, -0.2)$. 1-norm: $0.4/2 = 0.2$. 2-norm: $0.2\sqrt2/\sqrt2 = 0.2$. $\infty$-norm: $0.2/1 = 0.2$. A 20 % error in every norm (because all components have the same size).
+(c) Diamond (1-norm), circle (2-norm), square ($\infty$-norm). $\|\mathbf v\|_1 = \|\mathbf v\|_\infty$ exactly when at most one component is nonzero: the corners of the diamond, where it touches the square.
+
+**B4.**
+(a) Column sums and row sums are all $1.95$: $\|A\|_1 = \|A\|_\infty = 1.95$.
+(b) $\det A = 1 - 0.9025 = 0.0975$.
+$$A^{-1} = \frac{1}{0.0975}\begin{pmatrix}1 & -0.95\\ -0.95 & 1\end{pmatrix} = \begin{pmatrix}10.256 & -9.744\\ -9.744 & 10.256\end{pmatrix}.$$
+$\|A^{-1}\|_\infty = 1.95/0.0975 = 20$, so $\kappa_\infty = 1.95 \times 20 = 39$.
+(c) $\sigma_{\max} = 1.95$, $\sigma_{\min} = 0.05$, $\kappa_2 = 39$. (Here all three norms give the same $\kappa$; in general they differ by a modest factor.)
+(d) Eigenvalues $1 \pm c$, both positive for $0 \le c < 1$, so $\kappa_2 = (1 + c)/(1 - c)$: $c = 0.5$: 3; $c = 0.9$: 19; $c = 0.99$: 199.
+(e) Digits left $\approx 3 - \log_{10}\kappa$: $c = 0.5$: $3 - 0.5 = 2.5$; $c = 0.95$: $3 - 1.6 = 1.4$; $c = 0.99$: $3 - 2.3 = 0.7$, less than one digit. Rounding errors of the computer ($16 - 2.3$ digits left) are irrelevant; the 3-digit data decide.
+
+**B5.**
+(a) $\Delta\mathbf x = A^{-1}(0.01, -0.01) = \frac{0.01}{0.0975}(1 + 0.95, -0.95 - 1) = (0.2, -0.2)$. Relative changes: $\|\Delta\mathbf x\|/\|\mathbf x\| = 0.2$ and $\|\Delta\mathbf b\|/\|\mathbf b\| = 0.01/1.95 = 0.005128$. Amplification $0.2/0.005128 = 39 = \kappa$.
+(b) $\Delta\mathbf x = \frac{0.01}{0.0975}(1 - 0.95, -0.95 + 1) = (0.005128, 0.005128)$. Relative changes $0.005128$ and $0.005128$: amplification **1**.
+(c) $\mathbf b = (1.95, 1.95)$ points along the eigenvector $(1, 1)$ with eigenvalue $1.95$ (stretched): $\|\mathbf x\| = \|\mathbf b\|/1.95$ is as small as it can be relative to $\|\mathbf b\|$. A $\Delta\mathbf b$ along $(1, -1)$ is divided by the eigenvalue $0.05$: $\|\Delta\mathbf x\| = \|\Delta\mathbf b\|/0.05$. Together $1.95/0.05 = 39$, the worst case. A $\Delta\mathbf b$ along $(1, 1)$ is divided by $1.95$, like $\mathbf b$ itself: no amplification. **Anti-correlated** detector errors (one detector reads high, the other low) are dangerous; a common gain error in both detectors is harmless.
+
+**B6.**
+(a) $A\hat{\mathbf x}_a = (1.2 + 0.76, 1.14 + 0.8) = (1.96, 1.94)$, $\mathbf r_a = (-0.01, 0.01)$, relative residual $0.01/1.95 = 0.0051$. $A\hat{\mathbf x}_b = (1.9695, 1.9695)$, $\mathbf r_b = (-0.0195, -0.0195)$, relative residual $0.0195/1.95 = 0.01$.
+(b) Errors: $\hat{\mathbf x}_a$: $0.2$ (20 %); $\hat{\mathbf x}_b$: $0.01$ (1 %).
+(c) By residual you would pick $\hat{\mathbf x}_a$, which is 20 times **worse**. Bound: $\kappa_\infty \times 0.005128 = 39 \times 0.005128 = 0.2$, exactly the error of $\hat{\mathbf x}_a$: it is the worst case. A small residual means a small error only when $\kappa$ is small.
+
+**B7.**
+(a) The multiplier is $1/0$: division by zero, and the method stops (or produces `Inf`/`NaN`).
+(b) Swap: $\begin{pmatrix}1 & 0.3 & | & 1.3\\ 0 & 1 & | & 1\end{pmatrix}$, already triangular. $x_2 = 1$, $x_1 = 1.3 - 0.3 = 1$.
+(c) $\det A = -1$, $A^{-1} = \begin{pmatrix}-0.3 & 1\\ 1 & 0\end{pmatrix}$. $\|A\|_\infty = 1.3$, $\|A^{-1}\|_\infty = 1.3$, $\kappa_\infty = 1.69$. A very easy problem: the failure in (a) was entirely the algorithm's fault (the order of the equations). Pivoting removes it.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+solve_nopivot <- function(A, b) {
+  n <- nrow(A)
+  for (k in 1:(n - 1)) for (i in (k + 1):n) {
+    m <- A[i, k] / A[k, k]
+    A[i, ] <- A[i, ] - m * A[k, ];  b[i] <- b[i] - m * b[k]
+  }
+  x <- numeric(n)
+  for (i in n:1) x[i] <- (b[i] - sum(A[i, -(1:i)] * x[-(1:i)])) / A[i, i]
+  x
+}
+rel <- function(u, v) sqrt(sum((u - v)^2)) / sqrt(sum(v^2))
+for (k in c(2, 5, 8, 11, 14, 17, 20)) {
+  d <- 10^-k
+  A <- matrix(c(d, 1, 1, 1), 2, byrow = TRUE)
+  x <- c(1 / (1 - d), (1 - 2 * d) / (1 - d))       # exact solution
+  err <- rel(solve_nopivot(A, c(1, 2)), x)
+  cat(sprintf("delta = 1e-%02d  error = %.1e  eps/delta = %.1e\n",
+              k, err, .Machine$double.eps / d))
+}
+# delta = 1e-02  error = 3.3e-15  eps/delta = 2.2e-14
+# delta = 1e-05  error = 2.7e-12  eps/delta = 2.2e-11
+# delta = 1e-08  error = 3.5e-09  eps/delta = 2.2e-08
+# delta = 1e-11  error = 5.8e-08  eps/delta = 2.2e-05
+# delta = 1e-14  error = 5.7e-04  eps/delta = 2.2e-02
+# delta = 1e-17  error = 7.1e-01  eps/delta = 2.2e+01
+# delta = 1e-20  error = 7.1e-01  eps/delta = 2.2e+04
+```
+
+### Python
+
+```python
+import numpy as np
+
+def solve_nopivot(A, b):
+    A = A.astype(float).copy(); b = np.array(b, dtype=float)
+    n = A.shape[0]
+    for k in range(n - 1):
+        for i in range(k + 1, n):
+            m = A[i, k] / A[k, k]
+            A[i, :] -= m * A[k, :]; b[i] -= m * b[k]
+    x = np.zeros(n)
+    for i in range(n - 1, -1, -1):
+        x[i] = (b[i] - A[i, i + 1:] @ x[i + 1:]) / A[i, i]
+    return x
+
+def rel(u, v):
+    return np.linalg.norm(u - v) / np.linalg.norm(v)
+
+eps = np.finfo(float).eps
+for k in [2, 5, 8, 11, 14, 17, 20]:
+    d = 10.0 ** -k
+    A = np.array([[d, 1], [1, 1]])
+    x = np.array([1 / (1 - d), (1 - 2 * d) / (1 - d)])    # exact solution
+    err = rel(solve_nopivot(A, [1, 2]), x)
+    print(f"delta = 1e-{k:02d}  error = {err:.1e}  eps/delta = {eps / d:.1e}")
+# delta = 1e-02  error = 3.3e-15  eps/delta = 2.2e-14
+# delta = 1e-05  error = 2.7e-12  eps/delta = 2.2e-11
+# delta = 1e-08  error = 3.5e-09  eps/delta = 2.2e-08
+# delta = 1e-11  error = 5.8e-08  eps/delta = 2.2e-05
+# delta = 1e-14  error = 5.7e-04  eps/delta = 2.2e-02
+# delta = 1e-17  error = 7.1e-01  eps/delta = 2.2e+01
+# delta = 1e-20  error = 7.1e-01  eps/delta = 2.2e+04
+```
+
+### Rust
+
+```rust
+// rust/examples/pivoting_conditioning_c1.rs  —  cargo run --example pivoting_conditioning_c1
+// Gaussian elimination WITHOUT pivoting, hand-written, on A = [delta 1; 1 1].
+// Matrices are Vec<Vec<f64>> (a list of rows) to keep the indexing like R.
+
+fn solve_nopivot(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Vec<f64> {
+    let n = b.len();
+    for k in 0..n - 1 {
+        for i in k + 1..n {
+            let m = a[i][k] / a[k][k]; // multiplier
+            for j in 0..n {
+                a[i][j] -= m * a[k][j];
+            }
+            b[i] -= m * b[k];
+        }
+    }
+    let mut x = vec![0.0; n]; // back substitution
+    for i in (0..n).rev() {
+        let s: f64 = (i + 1..n).map(|j| a[i][j] * x[j]).sum();
+        x[i] = (b[i] - s) / a[i][i];
+    }
+    x
+}
+
+fn rel(u: &[f64], v: &[f64]) -> f64 {
+    let num: f64 = u.iter().zip(v).map(|(a, b)| (a - b).powi(2)).sum();
+    let den: f64 = v.iter().map(|a| a * a).sum();
+    (num / den).sqrt()
+}
+
+fn main() {
+    for k in [2, 5, 8, 11, 14, 17, 20] {
+        let d = 10f64.powi(-k);
+        let a = vec![vec![d, 1.0], vec![1.0, 1.0]];
+        let x = [1.0 / (1.0 - d), (1.0 - 2.0 * d) / (1.0 - d)]; // exact solution
+        let err = rel(&solve_nopivot(a, vec![1.0, 2.0]), &x);
+        println!("delta = 1e-{:02}  error = {:.1e}  eps/delta = {:.1e}",
+                 k, err, f64::EPSILON / d);
+    }
+}
+
+// Output:
+// delta = 1e-02  error = 3.3e-15  eps/delta = 2.2e-14
+// delta = 1e-05  error = 2.7e-12  eps/delta = 2.2e-11
+// delta = 1e-08  error = 3.5e-9  eps/delta = 2.2e-8
+// delta = 1e-11  error = 5.8e-8  eps/delta = 2.2e-5
+// delta = 1e-14  error = 5.7e-4  eps/delta = 2.2e-2
+// delta = 1e-17  error = 7.1e-1  eps/delta = 2.2e1
+// delta = 1e-20  error = 7.1e-1  eps/delta = 2.2e4
+```
+
+:::
+
+The error grows roughly like $\varepsilon/\delta$ (it stays at or below that line): one digit lost per factor 10 in the pivot. From $\delta \approx 10^{-16}$ on, the computed solution is $(0, 1)$ and the error is $1/\sqrt2 = 0.71$: nothing is left of $x_1$. The matrix itself is harmless ($\kappa \approx 2.6$ for every small $\delta$), so all of this is the algorithm's fault.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+solve_pivot <- function(A, b) {
+  n <- nrow(A)
+  for (k in 1:(n - 1)) {
+    p <- which.max(abs(A[k:n, k])) + k - 1
+    A[c(k, p), ] <- A[c(p, k), ];  b[c(k, p)] <- b[c(p, k)]
+    for (i in (k + 1):n) {
+      m <- A[i, k] / A[k, k]
+      A[i, ] <- A[i, ] - m * A[k, ];  b[i] <- b[i] - m * b[k]
+    }
+  }
+  x <- numeric(n)
+  for (i in n:1) x[i] <- (b[i] - sum(A[i, -(1:i)] * x[-(1:i)])) / A[i, i]
+  x
+}
+for (k in c(2, 8, 14, 20)) {
+  d <- 10^-k
+  A <- matrix(c(d, 1, 1, 1), 2, byrow = TRUE)
+  x <- c(1 / (1 - d), (1 - 2 * d) / (1 - d))
+  cat(sprintf("delta = 1e-%02d  error = %.1e\n", k, rel(solve_pivot(A, c(1, 2)), x)))
+}
+# delta = 1e-02  error = 1.6e-16
+# delta = 1e-08  error = 1.6e-16
+# delta = 1e-14  error = 0.0e+00
+# delta = 1e-20  error = 0.0e+00
+B <- matrix(c(2, 1, 1,
+              4, 3, 3,
+              8, 7, 9), 3, byrow = TRUE)
+solve_pivot(B, c(4, 10, 24))
+# [1] 1 1 1
+library(Matrix)
+f <- expand(lu(B))                 # B = P L U
+as.matrix(f$L)
+#      [,1]      [,2] [,3]
+# [1,] 1.00 0.0000000    0
+# [2,] 0.25 1.0000000    0
+# [3,] 0.50 0.6666667    1
+as.matrix(f$U)
+#      [,1]  [,2]       [,3]
+# [1,]    8  7.00  9.0000000
+# [2,]    0 -0.75 -1.2500000
+# [3,]    0  0.00 -0.6666667
+t(as.matrix(f$P) + 0) %*% B        # rows of B in pivot order
+#      [,1] [,2] [,3]
+# [1,]    8    7    9
+# [2,]    2    1    1
+# [3,]    4    3    3
+```
+
+### Python
+
+```python
+import scipy.linalg
+
+def solve_pivot(A, b):
+    A = A.astype(float).copy(); b = np.array(b, dtype=float)
+    n = A.shape[0]
+    for k in range(n - 1):
+        p = k + np.argmax(np.abs(A[k:, k]))      # largest entry in column k
+        A[[k, p], :] = A[[p, k], :]; b[[k, p]] = b[[p, k]]
+        for i in range(k + 1, n):
+            m = A[i, k] / A[k, k]
+            A[i, :] -= m * A[k, :]; b[i] -= m * b[k]
+    x = np.zeros(n)
+    for i in range(n - 1, -1, -1):
+        x[i] = (b[i] - A[i, i + 1:] @ x[i + 1:]) / A[i, i]
+    return x
+
+for k in [2, 8, 14, 20]:
+    d = 10.0 ** -k
+    A = np.array([[d, 1], [1, 1]])
+    x = np.array([1 / (1 - d), (1 - 2 * d) / (1 - d)])
+    print(f"delta = 1e-{k:02d}  error = {rel(solve_pivot(A, [1, 2]), x):.1e}")
+# delta = 1e-02  error = 1.6e-16
+# delta = 1e-08  error = 1.6e-16
+# delta = 1e-14  error = 0.0e+00
+# delta = 1e-20  error = 0.0e+00
+
+B = np.array([[2, 1, 1],
+              [4, 3, 3],
+              [8, 7, 9]])
+print(solve_pivot(B, [4, 10, 24]))
+# [1. 1. 1.]
+P, L, U = scipy.linalg.lu(B)          # B = P L U
+print(L)
+# [[1.         0.         0.        ]
+#  [0.25       1.         0.        ]
+#  [0.5        0.66666667 1.        ]]
+print(U)
+# [[ 8.          7.          9.        ]
+#  [ 0.         -0.75       -1.25      ]
+#  [ 0.          0.         -0.66666667]]
+print(P.T @ B)                        # rows of B in pivot order
+# [[8. 7. 9.]
+#  [2. 1. 1.]
+#  [4. 3. 3.]]
+```
+
+### Rust
+
+```rust
+// rust/examples/pivoting_conditioning_c2.rs  —  cargo run --example pivoting_conditioning_c2
+// Gaussian elimination WITH partial pivoting (hand-written), then nalgebra's LU.
+use nalgebra::{matrix, vector};
+
+fn solve_pivot(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Vec<f64> {
+    let n = b.len();
+    for k in 0..n - 1 {
+        // row index p >= k of the largest |a[p][k]|
+        let p = (k..n).max_by(|&i, &j| a[i][k].abs().total_cmp(&a[j][k].abs())).unwrap();
+        a.swap(k, p); // swap rows k and p
+        b.swap(k, p);
+        for i in k + 1..n {
+            let m = a[i][k] / a[k][k]; // now |m| <= 1
+            for j in 0..n {
+                a[i][j] -= m * a[k][j];
+            }
+            b[i] -= m * b[k];
+        }
+    }
+    let mut x = vec![0.0; n];
+    for i in (0..n).rev() {
+        let s: f64 = (i + 1..n).map(|j| a[i][j] * x[j]).sum();
+        x[i] = (b[i] - s) / a[i][i];
+    }
+    x
+}
+
+fn rel(u: &[f64], v: &[f64]) -> f64 {
+    let num: f64 = u.iter().zip(v).map(|(a, b)| (a - b).powi(2)).sum();
+    let den: f64 = v.iter().map(|a| a * a).sum();
+    (num / den).sqrt()
+}
+
+fn main() {
+    for k in [2, 8, 14, 20] {
+        let d = 10f64.powi(-k);
+        let a = vec![vec![d, 1.0], vec![1.0, 1.0]];
+        let x = [1.0 / (1.0 - d), (1.0 - 2.0 * d) / (1.0 - d)];
+        println!("delta = 1e-{:02}  error = {:.1e}", k, rel(&solve_pivot(a, vec![1.0, 2.0]), &x));
+    }
+
+    let b3 = vec![vec![2.0, 1.0, 1.0], vec![4.0, 3.0, 3.0], vec![8.0, 7.0, 9.0]];
+    println!("{:?}", solve_pivot(b3, vec![4.0, 10.0, 24.0]));
+
+    // nalgebra: PA = LU with partial pivoting
+    let bm = matrix![2.0, 1.0, 1.0;
+                     4.0, 3.0, 3.0;
+                     8.0, 7.0, 9.0];
+    let lu = bm.lu();
+    print!("L ={}U ={}", lu.l(), lu.u());
+    let mut pb = bm;
+    lu.p().permute_rows(&mut pb); // rows of B in pivot order
+    print!("PB ={}", pb);
+    println!("{}", lu.solve(&vector![4.0, 10.0, 24.0]).unwrap().transpose());
+}
+
+// Output:
+// delta = 1e-02  error = 1.6e-16
+// delta = 1e-08  error = 1.6e-16
+// delta = 1e-14  error = 0.0e0
+// delta = 1e-20  error = 0.0e0
+// [1.0, 1.0, 1.0]
+// L =
+//   ┌                                                          ┐
+//   │                  1                  0                  0 │
+//   │               0.25                  1                  0 │
+//   │                0.5 0.6666666666666666                  1 │
+//   └                                                          ┘
+//
+// U =
+//   ┌                                                             ┐
+//   │                   8                   7                   9 │
+//   │                   0               -0.75               -1.25 │
+//   │                   0                   0 -0.6666666666666667 │
+//   └                                                             ┘
+//
+// PB =
+//   ┌       ┐
+//   │ 8 7 9 │
+//   │ 2 1 1 │
+//   │ 4 3 3 │
+//   └       ┘
+//
+//
+//   ┌       ┐
+//   │ 1 1 1 │
+//   └       ┘
+```
+
+:::
+
+With pivoting the error stays at rounding level for every $\delta$. The library $L$ and $U$ are exactly those of B2, and the pivot order is rows 3, 1, 2. (R's `Matrix` stores the permutation as a `pMatrix`; `+ 0` turns it into numbers.)
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+v  <- c(3, -4, 12)
+dx <- c(0.2, -0.2); x <- c(1, 1)
+norms <- function(v) c(one = sum(abs(v)), two = sqrt(sum(v^2)), inf = max(abs(v)))
+norms(v)
+# one two inf
+#  19  13  12
+norms(dx) / norms(x)                       # relative error in three norms
+# one two inf
+# 0.2 0.2 0.2
+A <- matrix(c(1, 0.95, 0.95, 1), 2, byrow = TRUE)
+c(max(colSums(abs(A))), max(rowSums(abs(A))), max(svd(A)$d))
+# [1] 1.95 1.95 1.95
+c(norm(A, "1"), norm(A, "I"), norm(A, "2"))
+# [1] 1.95 1.95 1.95
+th <- seq(0, 2 * pi, length.out = 1001)    # 1001 unit vectors
+V  <- rbind(cos(th), sin(th))
+max(sqrt(colSums((A %*% V)^2)))            # largest stretch
+# [1] 1.95
+min(sqrt(colSums((A %*% V)^2)))            # smallest stretch
+# [1] 0.05
+```
+
+### Python
+
+```python
+def norms(v):
+    return np.array([np.linalg.norm(v, 1), np.linalg.norm(v), np.linalg.norm(v, np.inf)])
+
+v = np.array([3, -4, 12])
+dx = np.array([0.2, -0.2]); x = np.array([1, 1])
+print(norms(v))
+# [19. 13. 12.]
+print(norms(dx) / norms(x))               # relative error in three norms
+# [0.2 0.2 0.2]
+A = np.array([[1, 0.95], [0.95, 1]])
+print(np.abs(A).sum(axis=0).max(), np.abs(A).sum(axis=1).max(),
+      np.linalg.svd(A, compute_uv=False).max())
+# 1.95 1.95 1.9500000000000002
+print(np.linalg.norm(A, 1), np.linalg.norm(A, np.inf), np.linalg.norm(A, 2))
+# 1.95 1.95 1.9500000000000002
+th = np.linspace(0, 2 * np.pi, 1001)      # 1001 unit vectors
+V = np.vstack([np.cos(th), np.sin(th)])
+stretch = np.linalg.norm(A @ V, axis=0)
+print(stretch.max())                      # largest stretch
+# 1.95
+print(stretch.min())                      # smallest stretch
+# 0.05000000000000006
+```
+
+### Rust
+
+```rust
+// rust/examples/pivoting_conditioning_c3.rs  —  cargo run --example pivoting_conditioning_c3
+// Vector and matrix norms with nalgebra, and the 2-norm as the largest stretch.
+use nalgebra::{matrix, vector, Vector2};
+
+fn main() {
+    let v = vector![3.0, -4.0, 12.0];
+    println!("{} {} {}", v.lp_norm(1), v.norm(), v.amax());
+    let dx = vector![0.2, -0.2];
+    let x = vector![1.0, 1.0];
+    // relative error of x-hat = (1.2, 0.8) in the 1-, 2- and inf-norm
+    println!("{} {} {}", dx.lp_norm(1) / x.lp_norm(1), dx.norm() / x.norm(), dx.amax() / x.amax());
+
+    let a = matrix![1.0,  0.95;
+                    0.95, 1.0];
+    let abs_a = a.abs();
+    // row_sum() = column sums -> 1-norm; column_sum() = row sums -> inf-norm
+    println!("{} {} {}", abs_a.row_sum().max(), abs_a.column_sum().max(),
+             a.singular_values().max());
+
+    // stretch factors |A v| for 1001 unit vectors v on the circle
+    let stretch: Vec<f64> = (0..=1000)
+        .map(|i| {
+            let th = 2.0 * std::f64::consts::PI * i as f64 / 1000.0;
+            (a * Vector2::new(th.cos(), th.sin())).norm()
+        })
+        .collect();
+    println!("{}", stretch.iter().cloned().fold(f64::MIN, f64::max)); // largest
+    println!("{}", stretch.iter().cloned().fold(f64::MAX, f64::min)); // smallest
+}
+
+// Output:
+// 19 13 12
+// 0.2 0.2 0.2
+// 1.95 1.95 1.95
+// 1.95
+// 0.05000000000000006
+```
+
+:::
+
+The formulas match the library norms. The sampled stretch factors run from $0.05$ to $1.95$: $\sigma_{\min}$ and $\sigma_{\max}$, reached at $\theta = 3\pi/4$ (direction $(1, -1)$) and $\theta = \pi/4$ (direction $(1, 1)$), which are on the grid of 1001 angles.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+for (c in c(0.5, 0.9, 0.95, 0.99, 0.999)) {
+  A <- matrix(c(1, c, c, 1), 2, byrow = TRUE)
+  cat(sprintf("c = %5.3f  formula = %7.1f  exact = %7.1f  kappa() = %7.1f  1/rcond = %7.1f\n",
+              c, (1 + c) / (1 - c), kappa(A, exact = TRUE), kappa(A), 1 / rcond(A)))
+}
+# c = 0.500  formula =     3.0  exact =     3.0  kappa() =     3.5  1/rcond =     3.0
+# c = 0.900  formula =    19.0  exact =    19.0  kappa() =    19.9  1/rcond =    19.0
+# c = 0.950  formula =    39.0  exact =    39.0  kappa() =    39.9  1/rcond =    39.0
+# c = 0.990  formula =   199.0  exact =   199.0  kappa() =   200.0  1/rcond =   199.0
+# c = 0.999  formula =  1999.0  exact =  1999.0  kappa() =  2000.0  1/rcond =  1999.0
+```
+
+### Python
+
+```python
+for c in [0.5, 0.9, 0.95, 0.99, 0.999]:
+    A = np.array([[1, c], [c, 1]])
+    print(f"c = {c:5.3f}  formula = {(1 + c) / (1 - c):7.1f}  "
+          f"cond = {np.linalg.cond(A):7.1f}  cond 1-norm = {np.linalg.cond(A, 1):7.1f}")
+# c = 0.500  formula =     3.0  cond =     3.0  cond 1-norm =     3.0
+# c = 0.900  formula =    19.0  cond =    19.0  cond 1-norm =    19.0
+# c = 0.950  formula =    39.0  cond =    39.0  cond 1-norm =    39.0
+# c = 0.990  formula =   199.0  cond =   199.0  cond 1-norm =   199.0
+# c = 0.999  formula =  1999.0  cond =  1999.0  cond 1-norm =  1999.0
+```
+
+### Rust
+
+```rust
+// rust/examples/pivoting_conditioning_c4.rs  —  cargo run --example pivoting_conditioning_c4
+// Condition number of the two-dye matrix [1 c; c 1] from nalgebra's singular values.
+use nalgebra::matrix;
+
+fn main() {
+    for c in [0.5, 0.9, 0.95, 0.99, 0.999] {
+        let a = matrix![1.0, c;
+                        c,   1.0];
+        let s = a.singular_values();
+        println!("c = {:5.3}  formula = {:7.1}  cond = {:7.1}",
+                 c, (1.0 + c) / (1.0 - c), s.max() / s.min());
+    }
+}
+
+// Output:
+// c = 0.500  formula =     3.0  cond =     3.0
+// c = 0.900  formula =    19.0  cond =    19.0
+// c = 0.950  formula =    39.0  cond =    39.0
+// c = 0.990  formula =   199.0  cond =   199.0
+// c = 0.999  formula =  1999.0  cond =  1999.0
+```
+
+:::
+
+All exact values match $(1 + c)/(1 - c)$; for this symmetric matrix the 1-norm and 2-norm condition numbers are equal. R's default `kappa(A)` is an **estimate** (from a QR factorisation), here up to 17 % too high, which never matters for counting digits. `1/rcond(A)` is LAPACK's 1-norm estimate from the LU factors, cheap once the factors exist. As $c \to 1$ the two spectra become identical and $\kappa \to \infty$: the matrix becomes singular.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+panel <- function(n, spacing, width = 30) {
+  peak <- 500 + spacing * (0:(n - 1))
+  outer(peak, peak, function(d, p) exp(-(d - p)^2 / (2 * width^2)))
+}
+xt <- c(5, 1, 3, 2, 4, 1)
+for (s in c(60, 30, 20, 10, 5)) {
+  A <- panel(6, s)
+  k <- kappa(A, exact = TRUE)
+  err <- rel(solve(A, drop(A %*% xt)), xt)
+  cat(sprintf("spacing %2d nm  kappa = %.1e  error = %.1e  digits = %4.1f  16 - log10(kappa) = %4.1f\n",
+              s, k, err, -log10(err), 16 - log10(k)))
+}
+# spacing 60 nm  kappa = 1.6e+00  error = 8.0e-17  digits = 16.1  16 - log10(kappa) = 15.8
+# spacing 30 nm  kappa = 2.9e+01  error = 8.4e-16  digits = 15.1  16 - log10(kappa) = 14.5
+# spacing 20 nm  kappa = 7.1e+02  error = 3.2e-15  digits = 14.5  16 - log10(kappa) = 13.2
+# spacing 10 nm  kappa = 6.4e+05  error = 2.7e-11  digits = 10.6  16 - log10(kappa) = 10.2
+# spacing  5 nm  kappa = 7.2e+08  error = 6.2e-10  digits =  9.2  16 - log10(kappa) =  7.1
+```
+
+### Python
+
+```python
+def panel(n, spacing, width=30):
+    peak = 500 + spacing * np.arange(n)
+    return np.exp(-(peak[:, None] - peak[None, :]) ** 2 / (2 * width ** 2))
+
+xt = np.array([5, 1, 3, 2, 4, 1])
+for s in [60, 30, 20, 10, 5]:
+    A = panel(6, s)
+    k = np.linalg.cond(A)
+    err = rel(np.linalg.solve(A, A @ xt), xt)
+    print(f"spacing {s:2d} nm  kappa = {k:.1e}  error = {err:.1e}  "
+          f"digits = {-np.log10(err):4.1f}  16 - log10(kappa) = {16 - np.log10(k):4.1f}")
+# spacing 60 nm  kappa = 1.6e+00  error = 7.4e-17  digits = 16.1  16 - log10(kappa) = 15.8
+# spacing 30 nm  kappa = 2.9e+01  error = 8.4e-16  digits = 15.1  16 - log10(kappa) = 14.5
+# spacing 20 nm  kappa = 7.1e+02  error = 1.3e-14  digits = 13.9  16 - log10(kappa) = 13.2
+# spacing 10 nm  kappa = 6.4e+05  error = 1.6e-11  digits = 10.8  16 - log10(kappa) = 10.2
+# spacing  5 nm  kappa = 7.2e+08  error = 2.4e-08  digits =  7.6  16 - log10(kappa) =  7.1
+```
+
+### Rust
+
+```rust
+// rust/examples/pivoting_conditioning_c5.rs  —  cargo run --example pivoting_conditioning_c5
+// Digits lost when unmixing 6 dyes with Gaussian spectra (nalgebra LU and SVD).
+use nalgebra::{DMatrix, DVector};
+
+// detector i sits at the peak of dye i; entry (i, j) = emission of dye j at detector i
+fn panel(n: usize, spacing: f64, width: f64) -> DMatrix<f64> {
+    let peak = |i: usize| 500.0 + spacing * i as f64;
+    DMatrix::from_fn(n, n, |i, j| (-(peak(i) - peak(j)).powi(2) / (2.0 * width * width)).exp())
+}
+
+fn main() {
+    let xt = DVector::from_vec(vec![5.0, 1.0, 3.0, 2.0, 4.0, 1.0]);
+    for s in [60.0, 30.0, 20.0, 10.0, 5.0] {
+        let a = panel(6, s, 30.0);
+        let sv = a.singular_values();
+        let k = sv.max() / sv.min();
+        let xh = a.clone().lu().solve(&(&a * &xt)).unwrap();
+        let err = (&xh - &xt).norm() / xt.norm();
+        println!("spacing {:2} nm  kappa = {:.1e}  error = {:.1e}  digits = {:4.1}  16 - log10(kappa) = {:4.1}",
+                 s, k, err, -err.log10(), 16.0 - k.log10());
+    }
+}
+
+// Output:
+// spacing 60 nm  kappa = 1.6e0  error = 6.8e-17  digits = 16.2  16 - log10(kappa) = 15.8
+// spacing 30 nm  kappa = 2.9e1  error = 9.3e-16  digits = 15.0  16 - log10(kappa) = 14.5
+// spacing 20 nm  kappa = 7.1e2  error = 3.8e-14  digits = 13.4  16 - log10(kappa) = 13.2
+// spacing 10 nm  kappa = 6.4e5  error = 3.8e-11  digits = 10.4  16 - log10(kappa) = 10.2
+// spacing  5 nm  kappa = 7.2e8  error = 7.9e-10  digits =  9.1  16 - log10(kappa) =  7.1
+```
+
+:::
+
+$\kappa$ explodes as the peaks crowd together: from 1.6 to $7\times10^8$ when the spacing shrinks from 60 to 5 nm. The correct digits stay at or above $16 - \log_{10}\kappa$ (the rule is a worst case, so the actual loss is often a little smaller). The errors differ between R, Python and Rust (each rounds $A\mathbf x$ and the LU steps slightly differently), but all three respect the rule. With rounding errors only, even $\kappa = 7\times 10^8$ leaves 7 or more digits. Real detector readings have 2 to 3 digits, and there the same $\kappa$ leaves nothing (C7 and the lecture figure).
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+xt <- c(5, 1, 3, 2, 4, 1)
+A  <- panel(6, 6)
+b  <- drop(A %*% xt)
+xh <- solve(A, b)
+k  <- kappa(A, exact = TRUE)
+r  <- rel(A %*% xh, b)                   # relative residual
+e  <- rel(xh, xt)                        # relative error
+cat(sprintf("kappa = %.2e  residual = %.2e  error = %.2e  bound = %.2e\n", k, r, e, k * r))
+# kappa = 1.14e+08  residual = 1.43e-16  error = 5.18e-09  bound = 1.63e-08
+```
+
+### Python
+
+```python
+xt = np.array([5, 1, 3, 2, 4, 1])
+A = panel(6, 6)
+b = A @ xt
+xh = np.linalg.solve(A, b)
+k = np.linalg.cond(A)
+r = rel(A @ xh, b)                 # relative residual
+e = rel(xh, xt)                    # relative error
+print(f"kappa = {k:.2e}  residual = {r:.2e}  error = {e:.2e}  bound = {k * r:.2e}")
+# kappa = 1.14e+08  residual = 1.13e-16  error = 2.98e-10  bound = 1.29e-08
+```
+
+### Rust
+
+```rust
+// rust/examples/pivoting_conditioning_c6.rs  —  cargo run --example pivoting_conditioning_c6
+// Residual vs error for an ill-conditioned 6-dye panel (peaks 6 nm apart).
+use nalgebra::{DMatrix, DVector};
+
+fn panel(n: usize, spacing: f64, width: f64) -> DMatrix<f64> {
+    let peak = |i: usize| 500.0 + spacing * i as f64;
+    DMatrix::from_fn(n, n, |i, j| (-(peak(i) - peak(j)).powi(2) / (2.0 * width * width)).exp())
+}
+
+fn main() {
+    let xt = DVector::from_vec(vec![5.0, 1.0, 3.0, 2.0, 4.0, 1.0]);
+    let a = panel(6, 6.0, 30.0);
+    let b = &a * &xt;
+    let xh = a.clone().lu().solve(&b).unwrap();
+    let sv = a.singular_values();
+    let k = sv.max() / sv.min();
+    let r = (&b - &a * &xh).norm() / b.norm(); // relative residual
+    let e = (&xh - &xt).norm() / xt.norm();     // relative error
+    println!("kappa = {:.2e}  residual = {:.2e}  error = {:.2e}  bound = {:.2e}", k, r, e, k * r);
+}
+
+// Output:
+// kappa = 1.14e8  residual = 8.77e-17  error = 1.18e-9  bound = 1.00e-8
+```
+
+:::
+
+The residual is at rounding level ($\approx 10^{-16}$): `solve()` found the exact solution of a system within rounding distance of ours, so the **algorithm** did its job (backward stability). The error is $10^{6}$ to $10^{8}$ times larger, and stays below the bound $\kappa\times$ residual. The difference is the **problem**: $\kappa \approx 10^8$. So the residual is a check on the solver (and on bugs in your own code), not on the accuracy of $\hat{\mathbf x}$.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+set.seed(2)
+noise <- matrix(rnorm(2 * 1000, sd = 0.01), 2)    # 2 detectors x 1000 cells
+for (c in c(0.5, 0.95)) {
+  A <- matrix(c(1, c, c, 1), 2, byrow = TRUE)
+  B <- drop(A %*% c(1, 1)) + noise                # readings, every cell
+  X <- solve(A, B)                                # unmix all cells at once
+  pred <- 0.01 * sqrt(sum(solve(A)[1, ]^2))       # sd * norm of row 1 of A^-1
+  cat(sprintf("c = %.2f  kappa = %4.1f  sd(dye 1) = %.4f  predicted = %.4f\n",
+              c, kappa(A, exact = TRUE), sd(X[1, ]), pred))
+}
+# c = 0.50  kappa =  3.0  sd(dye 1) = 0.0150  predicted = 0.0149
+# c = 0.95  kappa = 39.0  sd(dye 1) = 0.1417  predicted = 0.1415
+```
+
+### Python
+
+```python
+rng = np.random.default_rng(2)
+noise = rng.normal(0, 0.01, size=(2, 1000))      # 2 detectors x 1000 cells
+for c in [0.5, 0.95]:
+    A = np.array([[1, c], [c, 1]])
+    B = (A @ [1, 1])[:, None] + noise            # readings, every cell
+    X = np.linalg.solve(A, B)                    # unmix all cells at once
+    pred = 0.01 * np.linalg.norm(np.linalg.inv(A)[0, :])
+    print(f"c = {c:.2f}  kappa = {np.linalg.cond(A):4.1f}  "
+          f"sd(dye 1) = {X[0].std(ddof=1):.4f}  predicted = {pred:.4f}")
+# c = 0.50  kappa =  3.0  sd(dye 1) = 0.0149  predicted = 0.0149
+# c = 0.95  kappa = 39.0  sd(dye 1) = 0.1400  predicted = 0.1415
+```
+
+### Rust
+
+```rust
+// rust/examples/pivoting_conditioning_c7.rs  —  cargo run --example pivoting_conditioning_c7
+// Detector noise in unmixed cells: 1000 cells, 1 % noise, overlap 0.5 vs 0.95.
+// Uses nalgebra, rand and rand_distr; the random numbers differ from R and Python.
+use nalgebra::{matrix, DMatrix, Vector2};
+use rand::{rngs::StdRng, SeedableRng};
+use rand_distr::{Distribution, Normal};
+
+fn main() {
+    let mut rng = StdRng::seed_from_u64(2);
+    let normal = Normal::new(0.0, 0.01).unwrap();
+    let noise = DMatrix::from_fn(2, 1000, |_, _| normal.sample(&mut rng)); // 2 detectors x 1000 cells
+    for c in [0.5, 0.95] {
+        let a = matrix![1.0, c;
+                        c,   1.0];
+        let clean = a * Vector2::new(1.0, 1.0);
+        let mut b = noise.clone();
+        for mut col in b.column_iter_mut() {
+            col += clean; // readings, every cell
+        }
+        let a_dyn = DMatrix::from_row_slice(2, 2, &[1.0, c, c, 1.0]); // same A, any size type
+        let x = a_dyn.clone().lu().solve(&b).unwrap(); // unmix all cells at once
+        let d1 = x.row(0);
+        let mean = d1.mean();
+        let sd = (d1.iter().map(|v: &f64| (v - mean).powi(2)).sum::<f64>() / 999.0).sqrt();
+        let inv = a.try_inverse().unwrap();
+        let pred = 0.01 * inv.row(0).norm();
+        let s = a.singular_values();
+        println!("c = {:.2}  kappa = {:4.1}  sd(dye 1) = {:.4}  predicted = {:.4}",
+                 c, s.max() / s.min(), sd, pred);
+    }
+}
+
+// Output:
+// c = 0.50  kappa =  3.0  sd(dye 1) = 0.0158  predicted = 0.0149
+// c = 0.95  kappa = 39.0  sd(dye 1) = 0.1479  predicted = 0.1415
+```
+
+:::
+
+The random numbers differ between languages, so the measured standard deviations differ by a few per cent; the predictions are the same. With overlap 0.5 the noise in the unmixed dye is $1.5\times$ the detector noise; with overlap 0.95 it is $14\times$: a 1 % detector noise becomes a 14 % spread in the unmixed abundance. The factor $\|\text{row 1 of } A^{-1}\|_2$ ($1.49$ and $14.1$) is below $\kappa$ ($3$ and $39$): $\kappa$ is the worst case over all directions of $\mathbf b$ and $\Delta\mathbf b$, while independent noise in both detectors falls only partly in the worst direction. The spread is along $(1, -1)$, dye 1 against dye 2 (lecture figure): this is what cytometrists call **spillover spreading**. No solver can remove it; only better-separated dyes (smaller $c$) or more detectors (Part 4) can.
+:::
+
+## Where this leads
+
+- ***Structure: symmetric, banded, sparse*** (next unit): the same LU machinery, made faster when $A$ is symmetric positive definite (Cholesky needs no pivoting) or banded or sparse.
+- ***Least squares: normal equations vs QR*** (Part 4): spectral cytometers have more detectors than dyes, so unmixing becomes least squares. Forming the normal equations $A^\top A$ **squares** the condition number; QR avoids that.
+- ***The SVD, rank deficiency and regularisation*** (Part 4): the singular values used here as numbers get their full meaning, and regularisation trades a little bias for much less noise when $\kappa$ is large.
+- Every Newton step in *Newton for systems of equations* (Part 2) solves a linear system with the Jacobian; a large $\kappa$ there means an inaccurate step. In *Identifiability and uncertainty of fitted parameters* (Part 9), a nearly singular matrix means parameters the data cannot pin down.

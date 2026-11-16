@@ -1,0 +1,1072 @@
+---
+title: "Exercise: least squares, normal equations vs QR"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- write a calibration (standard) curve as an **overdetermined** system $A\mathbf x \approx \mathbf b$ and say what the **residuals** are,
+- solve a small least-squares problem by hand with the **normal equations** $A^TA\mathbf x = A^T\mathbf b$, and check that $A^T\mathbf r = \mathbf 0$,
+- explain why the normal equations **square the condition number**, and show a case where that destroys the answer,
+- compute a **QR factorisation** of a small matrix by **Gram–Schmidt** and apply one **Householder** reflection by hand,
+- compare classical and modified Gram–Schmidt and Householder QR in code, and read off the **digits lost** against $\kappa$,
+- recognise a badly conditioned **polynomial (Vandermonde)** calibration and fix it by rescaling or `poly()`,
+- say what `lm`, `qr.solve`, `numpy.linalg.lstsq` and nalgebra's `QR` do, and how each reports **dependent columns**.
+
+The by-hand part needs pen, paper and a calculator for square roots. The code part checks your hand answers and then works at sizes where only code works.
+
+## Background
+
+A **standard curve** relates a known amount (copies of a qPCR standard, µg/mL of BSA) to a reading (Cq, absorbance). With $m$ standards and a model with $n$ parameters, $m > n$, we get an **overdetermined** system
+
+$$A\mathbf x \approx \mathbf b, \qquad A: m\times n \text{ (design matrix)}, \quad \mathbf b: \text{the readings}.$$
+
+**Facts used below:**
+
+1. **Residual and least squares.** $\mathbf r = \mathbf b - A\mathbf x$. Least squares minimises $\|\mathbf r\|^2 = \sum_i r_i^2$. At the minimum the residual is perpendicular to every column of $A$: $A^T\mathbf r = \mathbf 0$.
+2. **Normal equations.** $A^TA\,\mathbf x = A^T\mathbf b$, an $n\times n$ symmetric positive definite system. For a straight line $b \approx x_1 + x_2 t$:
+   $$A^TA = \begin{pmatrix} m & \sum t_i \\ \sum t_i & \sum t_i^2\end{pmatrix}, \qquad A^T\mathbf b = \begin{pmatrix}\sum b_i \\ \sum t_i b_i\end{pmatrix}.$$
+3. **Condition number.** $\kappa(A)$ = largest stretch / smallest stretch of $A$ over unit vectors (`kappa(A, exact = TRUE)`, `np.linalg.cond(A)`). A good method loses about $\log_{10}\kappa(A)$ digits. Since $\|A\mathbf v\|^2 = \mathbf v^TA^TA\mathbf v$, **$\kappa(A^TA) = \kappa(A)^2$**: the normal equations lose about twice as many.
+4. **QR.** $A = QR$ with $Q^TQ = I$ ($m\times n$, orthonormal columns) and $R$ upper triangular ($n\times n$). Least squares becomes $R\mathbf x = Q^T\mathbf b$ (back substitution), and $\kappa(R) = \kappa(A)$.
+5. **Gram–Schmidt.** For $j = 1, \dots, n$: $\mathbf v = \mathbf a_j$; for each earlier $i$: $r_{ij} = \mathbf q_i^T\mathbf a_j$ (classical) or $\mathbf q_i^T\mathbf v$ (modified), $\mathbf v \leftarrow \mathbf v - r_{ij}\mathbf q_i$; then $r_{jj} = \|\mathbf v\|$, $\mathbf q_j = \mathbf v / r_{jj}$.
+6. **Householder reflection.** $H = I - 2\mathbf v\mathbf v^T/(\mathbf v^T\mathbf v)$ with $\mathbf v = \mathbf a + \text{sign}(a_1)\|\mathbf a\|\mathbf e_1$ maps $\mathbf a$ to $-\text{sign}(a_1)\|\mathbf a\|\mathbf e_1$. Useful form: $H\mathbf a = \mathbf a - 2\dfrac{\mathbf v^T\mathbf a}{\mathbf v^T\mathbf v}\mathbf v$.
+7. **qPCR.** $\text{Cq} = x_1 + x_2\log_{10}N$; efficiency $E = 10^{-1/x_2} - 1$ (slope $-3.32$ gives 100 %).
+
+The two data sets used throughout and the basic calls in each language: qPCR standards ($10^1$ to $10^7$ copies, triplicates) and BCA protein standards (BSA 0–2000 µg/mL, duplicates, absorbance at 562 nm).
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+logN <- rep(1:7, each = 3)
+cq <- c(34.52, 34.69, 34.48, 31.62, 31.37, 31.14, 28.05, 28.10, 28.07,
+        24.54, 24.90, 24.68, 21.13, 20.81, 21.47, 17.89, 17.90, 18.09,
+        14.71, 14.67, 14.73)
+A <- cbind(1, logN)                          # design matrix, 21 x 2
+solve(crossprod(A), crossprod(A, cq))        # normal equations
+#           [,1]
+#      37.981429
+# logN -3.333929
+qr.solve(A, cq)                              # QR
+#                logN
+# 37.981429 -3.333929
+coef(lm(cq ~ logN))                          # what lm reports
+# (Intercept)        logN
+#   37.981429   -3.333929
+kappa(A, exact = TRUE)                       # 2-norm condition number
+# [1] 10.40388
+conc <- rep(c(0, 25, 125, 250, 500, 750, 1000, 1500, 2000), each = 2)  # BSA, ug/mL
+a562 <- c(0.087, 0.103, 0.150, 0.109, 0.226, 0.229, 0.358, 0.344, 0.601,
+          0.569, 0.780, 0.789, 0.951, 0.942, 1.300, 1.238, 1.545, 1.532)
+length(conc)
+# [1] 18
+```
+
+### Python
+
+```python
+import numpy as np
+
+logN = np.repeat(np.arange(1, 8), 3).astype(float)
+cq = np.array([34.52, 34.69, 34.48, 31.62, 31.37, 31.14, 28.05, 28.10, 28.07,
+               24.54, 24.90, 24.68, 21.13, 20.81, 21.47, 17.89, 17.90, 18.09,
+               14.71, 14.67, 14.73])
+A = np.column_stack([np.ones_like(logN), logN])   # design matrix, 21 x 2
+print(np.linalg.solve(A.T @ A, A.T @ cq))         # normal equations
+# [37.98142857 -3.33392857]
+Q, R = np.linalg.qr(A)                            # QR (reduced: Q is 21 x 2)
+print(np.linalg.solve(R, Q.T @ cq))
+# [37.98142857 -3.33392857]
+print(np.linalg.lstsq(A, cq, rcond=None)[0])      # what lstsq reports
+# [37.98142857 -3.33392857]
+print(np.linalg.cond(A))                          # 2-norm condition number
+# 10.40388203202207
+conc = np.repeat([0, 25, 125, 250, 500, 750, 1000, 1500, 2000], 2).astype(float)  # BSA, ug/mL
+a562 = np.array([0.087, 0.103, 0.150, 0.109, 0.226, 0.229, 0.358, 0.344, 0.601,
+                 0.569, 0.780, 0.789, 0.951, 0.942, 1.300, 1.238, 1.545, 1.532])
+print(len(conc))
+# 18
+```
+
+### Rust
+
+```rust
+// rust/examples/least_squares_qr_background.rs  —  cargo run --example least_squares_qr_background
+// Background: a straight-line fit by the normal equations and by QR (nalgebra).
+use nalgebra::{DMatrix, DVector};
+
+fn main() {
+    let log_n: Vec<f64> = (1..=7).flat_map(|k| [k as f64; 3]).collect();
+    let cq = DVector::from_vec(vec![
+        34.52, 34.69, 34.48, 31.62, 31.37, 31.14, 28.05, 28.10, 28.07,
+        24.54, 24.90, 24.68, 21.13, 20.81, 21.47, 17.89, 17.90, 18.09,
+        14.71, 14.67, 14.73]);
+    // design matrix, 21 x 2: a column of ones and log10 N
+    let a = DMatrix::from_fn(log_n.len(), 2, |i, j| if j == 0 { 1.0 } else { log_n[i] });
+
+    // normal equations (A^T A) x = A^T b, solved by Cholesky
+    let x_ne = (a.transpose() * &a).cholesky().unwrap().solve(&(a.transpose() * &cq));
+    println!("{:.6} {:.6}", x_ne[0], x_ne[1]);
+
+    // Householder QR: R x = Q^T b; Q is never formed
+    let qr = a.clone().qr();
+    let mut qtb = cq.clone();
+    qr.q_tr_mul(&mut qtb);                                    // qtb <- Q^T b
+    let x_qr = qr.r().solve_upper_triangular(&qtb.rows(0, 2).into_owned()).unwrap();
+    println!("{:.6} {:.6}", x_qr[0], x_qr[1]);
+
+    // 2-norm condition number = largest / smallest singular value
+    let sv = a.singular_values();
+    println!("{}", sv.max() / sv.min());
+
+    // BCA standards: BSA in ug/mL (duplicates) and absorbance at 562 nm
+    let conc: Vec<f64> = [0., 25., 125., 250., 500., 750., 1000., 1500., 2000.]
+        .iter().flat_map(|&c| [c; 2]).collect();
+    let a562 = DVector::from_vec(vec![0.087, 0.103, 0.150, 0.109, 0.226, 0.229, 0.358,
+        0.344, 0.601, 0.569, 0.780, 0.789, 0.951, 0.942, 1.300, 1.238, 1.545, 1.532]);
+    println!("{} {}", conc.len(), a562.len());
+}
+
+// Output:
+// 37.981429 -3.333929
+// 37.981429 -3.333929
+// 10.403882032022079
+// 18 18
+```
+
+:::
+
+In R, [`lm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html) and [`qr.solve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/qr.html) use Householder QR. In Python, [`np.linalg.qr`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.qr.html) is Householder QR and [`np.linalg.lstsq`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.lstsq.html) uses the SVD. In Rust, nalgebra's [`QR`](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.QR.html) is Householder QR: `q_tr_mul` applies $Q^T$ to a vector without forming $Q$, and `solve_upper_triangular` does the back substitution. nalgebra's `QR::solve` only accepts square matrices, so the least-squares solve is written out in two lines.
+
+## By hand
+
+**B1. A four-point standard curve.** A qPCR dilution series gives
+
+| $\log_{10} N$ | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| Cq | 34.6 | 31.2 | 28.0 | 24.6 |
+
+(a) Write down $A$ (4×2) and $\mathbf b$ for the model $\text{Cq} = x_1 + x_2\log_{10}N$.
+(b) Compute $A^TA$ and $A^T\mathbf b$.
+(c) Solve the 2×2 normal equations for $x_1$ and $x_2$.
+(d) Compute the four residuals and their sum of squares. Check that $A^T\mathbf r = \mathbf 0$ (two numbers).
+(e) What is the amplification efficiency?
+
+**B2. Squaring the condition number.**
+(a) Let $A = \begin{pmatrix} 1 & 0 \\ 0 & \delta \\ 0 & 0\end{pmatrix}$ with $\delta = 10^{-3}$. What are the largest and smallest stretches $\|A\mathbf v\|$ over unit vectors $\mathbf v$? What is $\kappa(A)$? Compute $A^TA$ and $\kappa(A^TA)$.
+(b) Now take $A = \begin{pmatrix} 1 & 1 \\ \delta & 0 \\ 0 & \delta\end{pmatrix}$ (Läuchli's example: two predictors that are nearly the same). Compute $A^TA$.
+(c) With $\delta = 10^{-8}$: what is $1 + \delta^2$ in double precision ($\varepsilon/2 \approx 1.1\times10^{-16}$)? What happens to the computed $A^TA$? Does $A$ itself have rank 2?
+(d) For $\delta = 10^{-8}$, $\kappa(A) \approx 1.4\times10^{8}$. How many correct digits can a good method deliver? And the normal equations?
+
+**B3. Gram–Schmidt by hand.** Three standards at $\log_{10}N = 1, 3, 5$ give Cq $= 35.0, 28.4, 21.6$.
+(a) Run Gram–Schmidt on the columns $\mathbf a_1 = (1, 1, 1)$ and $\mathbf a_2 = (1, 3, 5)$: find $r_{11}, \mathbf q_1, r_{12}, \mathbf v, r_{22}, \mathbf q_2$. Write down $R$.
+(b) Check that $\mathbf q_1^T\mathbf q_2 = 0$ and that $\mathbf a_2 = r_{12}\mathbf q_1 + r_{22}\mathbf q_2$.
+(c) Compute $Q^T\mathbf b$ and solve $R\mathbf x = Q^T\mathbf b$ by back substitution.
+(d) What is $\mathbf v$ in words, in terms of $\mathbf a_2$? Use that to write the slope $x_2$ as a formula in the centred $\log_{10}N$.
+
+**B4. One Householder reflection.**
+(a) For $\mathbf a = (2, 1, 2)$, compute $\|\mathbf a\|$, $\mathbf v = \mathbf a + \|\mathbf a\|\mathbf e_1$, $\mathbf v^T\mathbf v$, $\mathbf v^T\mathbf a$ and $H\mathbf a$.
+(b) Why is $\|H\mathbf a\| = \|\mathbf a\|$ a good sign? What would $\|H\mathbf a\|$ be if $H$ were not orthogonal?
+(c) Take $\mathbf a = (1, 10^{-5}, 0)$, a column that is almost along $\mathbf e_1$. Compute $\|\mathbf a\|$ to 12 significant digits ($\sqrt{1 + x} \approx 1 + x/2$). Compare the first component of $\mathbf v$ for the two sign choices, $a_1 + \|\mathbf a\|$ and $a_1 - \|\mathbf a\|$. Which one suffers from cancellation, and roughly how many digits does it lose in double precision?
+
+**B5. A Vandermonde matrix in the wrong units.** A quadratic BCA calibration $a = c_0 + c_1 x + c_2 x^2$ with standards at $x = 0, 1000, 2000$ µg/mL.
+(a) Write down the 3×3 matrix $A$ with $x$ in µg/mL, and again with $x$ in mg/mL.
+(b) The stretch of a column $\|A\mathbf e_j\|$ lies between the smallest and the largest stretch of $A$. Use the column lengths to give a **lower bound** for $\kappa(A)$ in µg/mL. What does that imply for $\kappa(A^TA)$?
+(c) Do the same in mg/mL. Is the bound useful there?
+(d) If the mg/mL fit gives $(c_0, c_1, c_2)$, what are the coefficients in µg/mL? Do the fitted curves differ?
+
+**B6. A column that adds nothing.** Someone enters the concentration twice, in µg/mL and in mg/mL. With standards at $0, 1000, 2000$ µg/mL, the columns are $\mathbf a_1 = (1, 1, 1)$, $\mathbf a_2 = (0, 1000, 2000)$, $\mathbf a_3 = (0, 1, 2)$.
+(a) Run Gram–Schmidt: find $\mathbf q_1, \mathbf q_2$ and show that for column 3 you get $\mathbf v = \mathbf 0$. What is $r_{33}$, and what goes wrong in the next step?
+(b) In floating point, $r_{33}$ comes out as something like $10^{-16}$ rather than exactly 0. Why does software need a **tolerance** here? What does `lm` report for the third coefficient?
+
+## In code
+
+**C1. The qPCR standard curve.** Use the 21 qPCR standards from the Background.
+(a) Solve the normal equations with [`crossprod`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/crossprod.html) and [`solve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html) (Python: `A.T @ A` and [`np.linalg.solve`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html)). Compare with `lm` (Python: `np.linalg.lstsq`).
+(b) Compute the residuals, check $A^T\mathbf r \approx \mathbf 0$, and the residual sum of squares.
+(c) Compute the efficiency and the copy number of two unknowns with Cq 24.0 and 30.5. Is either outside the range of the standards?
+
+**C2. $\kappa(A^TA) = \kappa(A)^2$.**
+(a) For the qPCR design matrix, compute $\kappa(A)$, $\kappa(A^TA)$ and $\kappa(A)^2$ with [`kappa(..., exact = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kappa.html) (Python: [`np.linalg.cond`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html)).
+(b) For the BCA standards, build the Vandermonde matrix with columns $1, x, \dots, x^d$ for $d = 1, \dots, 4$ (R: `outer(conc, 0:d, "^")`; Python: [`np.vander(conc, d + 1, increasing=True)`](https://numpy.org/doc/stable/reference/generated/numpy.vander.html)). Print $\kappa(A)$ and $\kappa(A)^2$ in µg/mL, and $\kappa(A)$ with $x$ in mg/mL. From which degree is $\kappa(A^TA)$ above $1/\varepsilon \approx 4.5\times10^{15}$? Compare with B5.
+
+**C3. Läuchli's example in code.** Check B2: for $\delta = 10^{-6}$ and $10^{-8}$, solve with the normal equations and with QR, $\mathbf b = (2, \delta, \delta)$ (exact solution $(1, 1)$). Print 15 decimals. In R use `qr.solve(A, b, tol = 1e-12)`; what happens with the default `tol`?
+
+**C4. Gram–Schmidt, classical and modified.**
+(a) Write `gs(A, modified)` returning $Q$ and $R$ (fact 5). Check B3: $R$ and the solution of $R\mathbf x = Q^T\mathbf b$ (R: [`backsolve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/backsolve.html); Python: [`scipy.linalg.solve_triangular`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_triangular.html)).
+(b) For Vandermonde matrices on 50 equally spaced points in $[0, 1]$, degrees $d = 2, 4, \dots, 12$, print $\kappa(A)$ and the loss of orthogonality $\|Q^TQ - I\|_2$ for classical GS, modified GS and the library's Householder QR (R: `qr.Q(qr(A))`; Python: `np.linalg.qr(A)[0]`). How does each grow with $\kappa$?
+
+**C5. Digits lost: normal equations vs QR.** Same Vandermonde matrices, degrees $d = 1, \dots, 12$. Make data with known coefficients, $\mathbf x_\text{true} = (1, \dots, 1)$ and $\mathbf b = A\mathbf x_\text{true}$. Solve by the normal equations and by QR, and print $\kappa(A)$ and the relative error $\|\mathbf x - \mathbf x_\text{true}\| / \|\mathbf x_\text{true}\|$ of each. Compare with $\kappa^2\varepsilon$ and $\kappa\varepsilon$. (If `solve` stops with an error, record `NA`.)
+
+**C6. The BCA calibration.**
+(a) Fit a cubic in µg/mL by the normal equations and by QR. What does each language do?
+(b) Repeat in mg/mL.
+(c) Fit degrees 1, 2 and 3 (mg/mL, by QR). For each print the residual sum of squares and the **signs** of the residuals in order of concentration. Which degree would you use?
+(d) An unknown sample reads 0.70. Read off its concentration from the quadratic (solve $c_2 s^2 + c_1 s + c_0 = 0.70$ with the quadratic formula, taking the root inside the standard range).
+
+**C7. Dependent columns.** Fit $a_{562}$ on an intercept, `conc` (µg/mL) and `mgml = conc / 1000`, as in B6. What do `lm`, [`qr()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/qr.html)`$rank` and `solve` on the normal equations report? Python: `np.linalg.lstsq` (look at the returned rank and coefficients) and [`np.linalg.matrix_rank`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_rank.html). Rust: the diagonal of $R$ and nalgebra's `rank`.
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — normal equations by hand (B1)"}
+$\sum t_i = 10$, $\sum t_i^2 = 30$. For a 2×2 system $\begin{pmatrix} p & q\\ q & s\end{pmatrix}\mathbf x = \begin{pmatrix} u\\ w\end{pmatrix}$: $x_1 = (su - qw)/D$, $x_2 = (pw - qu)/D$ with $D = ps - q^2$. $A^T\mathbf r = \mathbf 0$ means $\sum r_i = 0$ and $\sum t_i r_i = 0$. For the efficiency, $10^{0.3012} \approx 2.001$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — stretches and conditioning (B2, B5)"}
+For a matrix whose columns are perpendicular, the stretches are the column lengths. In general, $\|A\mathbf e_j\| = $ length of column $j$, so $\kappa(A) \ge \max_j\|\mathbf a_j\| / \min_j\|\mathbf a_j\|$. A number $1 + y$ with $|y| < \varepsilon/2$ is stored as exactly 1.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — Gram–Schmidt (B3, B6, C4)"}
+$\mathbf q_1$ is $\mathbf a_1$ divided by its length. $r_{12} = \mathbf q_1^T\mathbf a_2$; subtracting $r_{12}\mathbf q_1$ when $\mathbf q_1$ is the normalised column of ones subtracts the **mean**. In code, loop over columns $j$ and earlier columns $i < j$; the only difference between classical and modified is whether the inner product uses the original column or the current $\mathbf v$. The 2-norm of a matrix: R `norm(M, "2")`; Python `np.linalg.norm(M, 2)`; Rust the largest singular value.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — Householder (B4)"}
+Use the form $H\mathbf a = \mathbf a - 2\frac{\mathbf v^T\mathbf a}{\mathbf v^T\mathbf v}\mathbf v$; there is no need to build $H$. For (c): $\|\mathbf a\| = \sqrt{1 + 10^{-10}} \approx 1 + 5\times10^{-11}$, stored with an absolute error up to about $10^{-16}$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — QR in each language (C1, C3–C6)"}
+R: `qr.solve(A, b)`, or `f <- qr(A); backsolve(qr.R(f), crossprod(qr.Q(f), b))`; [`lm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html) for formulas. Python: `Q, R = np.linalg.qr(A)` (reduced: $Q$ is $m\times n$), then `solve_triangular(R, Q.T @ b)`; or [`np.linalg.lstsq(A, b, rcond=None)`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.lstsq.html) (SVD). Rust: `let qr = a.clone().qr(); qr.q_tr_mul(&mut b)` overwrites `b` with $Q^T\mathbf b$; then `qr.r().solve_upper_triangular(&b.rows(0, n).into_owned())`. Condition numbers in Rust: `a.singular_values()`, largest over smallest.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — polynomial calibration (C2, C6)"}
+R: `outer(x, 0:d, "^")` gives columns $x^0, \dots, x^d$; [`poly(x, d)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/poly.html) gives orthogonal columns. Python: `np.vander(x, d + 1, increasing=True)`. Residual signs: `paste(ifelse(r > 0, "+", "-"), collapse = "")` in R, `"".join("+" if v > 0 else "-" for v in r)` in Python. In (d), $c_2 < 0$; check that your root lies between 0 and 2 mg/mL.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — rank (C7)"}
+R: [`qr()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/qr.html) returns `$rank`, decided with `tol = 1e-7`; `diag(qr.R(f))` shows the diagonal. Python: `x, res, rank, sv = np.linalg.lstsq(X, b, rcond=None)`. Rust: `qr.r().diagonal()`, and `X.rank(eps)` (from the SVD) counts singular values above `eps`.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $A = \begin{pmatrix} 1 & 1\\ 1 & 2\\ 1 & 3\\ 1 & 4\end{pmatrix}$, $\mathbf b = (34.6, 31.2, 28.0, 24.6)$.
+(b) $A^TA = \begin{pmatrix} 4 & 10\\ 10 & 30\end{pmatrix}$; $A^T\mathbf b = (\sum b_i, \sum t_ib_i) = (118.4,\; 34.6 + 62.4 + 84.0 + 98.4) = (118.4, 279.4)$.
+(c) $D = 4\cdot 30 - 10^2 = 20$. $x_1 = (30\cdot118.4 - 10\cdot279.4)/20 = (3552 - 2794)/20 = 37.9$. $x_2 = (4\cdot279.4 - 10\cdot118.4)/20 = (1117.6 - 1184)/20 = -3.32$.
+(d) Fitted values $37.9 - 3.32\,t$: $34.58, 31.26, 27.94, 24.62$. Residuals $\mathbf r = (0.02, -0.06, 0.06, -0.02)$, $\sum r_i^2 = 0.0004 + 0.0036 + 0.0036 + 0.0004 = 0.008$. Check: $\sum r_i = 0$ and $\sum t_ir_i = 0.02 - 0.12 + 0.18 - 0.08 = 0$.
+(e) $E = 10^{1/3.32} - 1 = 10^{0.3012} - 1 = 2.001 - 1 \approx 100\,\%$.
+
+**B2.**
+(a) $\|A\mathbf v\|^2 = v_1^2 + \delta^2v_2^2$, largest 1 (at $\mathbf v = \mathbf e_1$), smallest $\delta$ (at $\mathbf e_2$). $\kappa(A) = 1/\delta = 10^3$. $A^TA = \begin{pmatrix}1 & 0\\ 0 & \delta^2\end{pmatrix}$, $\kappa(A^TA) = 1/\delta^2 = 10^6$: the square.
+(b) $A^TA = \begin{pmatrix} 1 + \delta^2 & 1\\ 1 & 1 + \delta^2\end{pmatrix}$.
+(c) $\delta^2 = 10^{-16} < \varepsilon/2$, so $1 + \delta^2$ is stored as exactly $1$. The computed $A^TA = \begin{pmatrix}1 & 1\\1 & 1\end{pmatrix}$ is **singular**. But $A$ has rank 2: rows 2 and 3, $(\delta, 0)$ and $(0, \delta)$, are independent. All the information that separates the two predictors was in $\delta^2$, and it was rounded away when $A^TA$ was formed.
+(d) A good method loses about $\log_{10}(1.4\times10^8) \approx 8$ digits, so about 8 of 16 remain. The normal equations would lose about 16, i.e. all of them; here they do not even get an answer.
+
+**B3.**
+(a) $r_{11} = \sqrt3$, $\mathbf q_1 = (1,1,1)/\sqrt3$. $r_{12} = \mathbf q_1^T\mathbf a_2 = 9/\sqrt3 = 3\sqrt3 \approx 5.196$. $\mathbf v = \mathbf a_2 - 3\sqrt3\,\mathbf q_1 = (1,3,5) - (3,3,3) = (-2, 0, 2)$. $r_{22} = \sqrt8 = 2\sqrt2 \approx 2.828$, $\mathbf q_2 = (-1, 0, 1)/\sqrt2$.
+$$R = \begin{pmatrix}\sqrt3 & 3\sqrt3\\ 0 & 2\sqrt2\end{pmatrix} \approx \begin{pmatrix} 1.732 & 5.196\\ 0 & 2.828\end{pmatrix}$$
+(b) $\mathbf q_1^T\mathbf q_2 = (-1 + 0 + 1)/\sqrt6 = 0$. $3\sqrt3\,\mathbf q_1 + 2\sqrt2\,\mathbf q_2 = (3,3,3) + (-2, 0, 2) = (1, 3, 5)$.
+(c) $Q^T\mathbf b = \big((35 + 28.4 + 21.6)/\sqrt3,\; (21.6 - 35)/\sqrt2\big) = (85/\sqrt3,\; -13.4/\sqrt2)$. Back substitution: $x_2 = (-13.4/\sqrt2)/(2\sqrt2) = -13.4/4 = -3.35$. $x_1 = (85/\sqrt3 - 3\sqrt3\cdot(-3.35))/\sqrt3 = 85/3 + 3\cdot3.35 = 28.333 + 10.05 = 38.383$.
+(d) $\mathbf v = \mathbf a_2 - \bar a_2$: the predictor **centred** at its mean (3). The slope is $x_2 = \mathbf q_2^T\mathbf b / r_{22} = \dfrac{\sum_i (t_i - \bar t)\,b_i}{\sum_i (t_i - \bar t)^2}$, the familiar regression formula.
+
+**B4.**
+(a) $\|\mathbf a\| = \sqrt{4 + 1 + 4} = 3$. $\mathbf v = (2 + 3, 1, 2) = (5, 1, 2)$, $\mathbf v^T\mathbf v = 30$, $\mathbf v^T\mathbf a = 10 + 1 + 4 = 15$. $H\mathbf a = \mathbf a - 2\cdot\tfrac{15}{30}\mathbf v = \mathbf a - \mathbf v = (-3, 0, 0)$.
+(b) An orthogonal $H$ keeps lengths, so the result has length 3 and all of it is in the first component: two zeros were created **without** changing the size of anything. A non-orthogonal transformation (like an elimination step) can change lengths, and with them the size of the rounding errors already present.
+(c) $\|\mathbf a\| = \sqrt{1 + 10^{-10}} = 1.00000000005$. With the sign in fact 6, $a_1 + \|\mathbf a\| = 2.00000000005$: no cancellation. With the other sign, $a_1 - \|\mathbf a\| = -5\times10^{-11}$: the difference of two numbers that agree in 10 digits. The stored $\|\mathbf a\|$ has an absolute error up to about $10^{-16}$, which relative to $5\times10^{-11}$ is about $2\times10^{-6}$: some 10 of the 16 digits of $v_1$ are lost (catastrophic cancellation, as in *Error, conditioning and stability*).
+
+**B5.**
+(a) µg/mL: $A = \begin{pmatrix}1 & 0 & 0\\ 1 & 1000 & 10^6\\ 1 & 2000 & 4\times10^6\end{pmatrix}$. mg/mL: $A = \begin{pmatrix}1 & 0 & 0\\ 1 & 1 & 1\\ 1 & 2 & 4\end{pmatrix}$.
+(b) Column lengths in µg/mL: $\sqrt3 = 1.73$, $\sqrt{5\times10^6} = 2236$, $\sqrt{17\times10^{12}} = 4.12\times10^6$. So $\kappa(A) \ge 4.12\times10^6/1.73 = 2.4\times10^6$, and $\kappa(A^TA) = \kappa(A)^2 \ge 5.7\times10^{12}$: the normal equations lose at least 13 of 16 digits.
+(c) mg/mL: $1.73$, $2.24$, $4.12$, bound $\kappa \ge 2.4$. True but useless: the columns have similar length, so the bound says nothing; the actual $\kappa$ here comes from the columns pointing in similar directions.
+(d) $c_0 + c_1 s + c_2 s^2$ with $s = x/1000$ equals $c_0 + (c_1/1000)\,x + (c_2/10^6)\,x^2$. The curves are **identical**; only the numbers that describe them change.
+
+**B6.**
+(a) $\mathbf q_1 = (1,1,1)/\sqrt3$. Column 2: $r_{12} = 3000/\sqrt3$, $\mathbf v = (0, 1000, 2000) - (1000, 1000, 1000) = (-1000, 0, 1000)$, $r_{22} = 1000\sqrt2$, $\mathbf q_2 = (-1, 0, 1)/\sqrt2$. Column 3: $r_{13} = 3/\sqrt3 = \sqrt3$, after removing it $\mathbf v = (-1, 0, 1)$; $r_{23} = \mathbf q_2^T\mathbf a_3 = 2/\sqrt2 = \sqrt2$, $\mathbf v = (-1, 0, 1) - \sqrt2\cdot(-1,0,1)/\sqrt2 = \mathbf 0$. So $r_{33} = 0$, and $\mathbf q_3 = \mathbf v / r_{33}$ is $0/0$: the algorithm breaks. Back substitution would also divide by $r_{33} = 0$.
+(b) Rounding leaves a tiny nonzero $\mathbf v$, so $r_{33} \approx 10^{-16}$ (relative to $r_{11}$) instead of 0. Dividing by it gives garbage of size $10^{16}$, not an error. Software therefore compares each $|r_{jj}|$ with a **tolerance** relative to the size of the column and declares the column dependent when it falls below. `lm` (tolerance $10^{-7}$) drops the column and reports `NA` for its coefficient (C7).
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+logN <- rep(1:7, each = 3)
+cq <- c(34.52, 34.69, 34.48, 31.62, 31.37, 31.14, 28.05, 28.10, 28.07,
+        24.54, 24.90, 24.68, 21.13, 20.81, 21.47, 17.89, 17.90, 18.09,
+        14.71, 14.67, 14.73)
+A <- cbind(1, logN)
+x <- solve(crossprod(A), crossprod(A, cq))[, 1]
+x
+#                logN
+# 37.981429 -3.333929
+r <- cq - A %*% x
+crossprod(A, r)[, 1]                         # A^T r, should be ~ 0
+#                        logN
+# -6.572520e-14  1.225686e-13
+sum(r^2)
+# [1] 0.6266179
+10^(-1 / x[2]) - 1                           # efficiency
+#      logN
+# 0.9950163
+logN_unk <- (c(24.0, 30.5) - x[1]) / x[2]
+logN_unk
+# [1] 4.193680 2.244028
+10^logN_unk
+# [1] 15619.9522   175.3993
+```
+
+### Python
+
+```python
+import numpy as np
+
+logN = np.repeat(np.arange(1, 8), 3).astype(float)
+cq = np.array([34.52, 34.69, 34.48, 31.62, 31.37, 31.14, 28.05, 28.10, 28.07,
+               24.54, 24.90, 24.68, 21.13, 20.81, 21.47, 17.89, 17.90, 18.09,
+               14.71, 14.67, 14.73])
+A = np.column_stack([np.ones_like(logN), logN])
+x = np.linalg.solve(A.T @ A, A.T @ cq)
+print(x)
+# [37.98142857 -3.33392857]
+r = cq - A @ x
+print(A.T @ r)                        # A^T r, should be ~ 0
+# [ 6.21724894e-14 -2.18491891e-13]
+print(np.sum(r**2))
+# 0.6266178571428562
+print(10**(-1 / x[1]) - 1)            # efficiency
+# 0.9950162529459647
+logN_unk = (np.array([24.0, 30.5]) - x[0]) / x[1]
+print(logN_unk)
+# [4.1936797  2.24402785]
+print(10**logN_unk)
+# [15619.95218321   175.39929853]
+```
+
+### Rust
+
+```rust
+// rust/examples/least_squares_qr_c1.rs  —  cargo run --example least_squares_qr_c1
+// C1: qPCR standard curve by the normal equations; efficiency and unknowns.
+use nalgebra::{DMatrix, DVector};
+
+// scientific notation as R and Python print it: 2.2e+01 rather than Rust's 2.2e1
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn main() {
+    let log_n: Vec<f64> = (1..=7).flat_map(|k| [k as f64; 3]).collect();
+    let cq = DVector::from_vec(vec![
+        34.52, 34.69, 34.48, 31.62, 31.37, 31.14, 28.05, 28.10, 28.07,
+        24.54, 24.90, 24.68, 21.13, 20.81, 21.47, 17.89, 17.90, 18.09,
+        14.71, 14.67, 14.73]);
+    let a = DMatrix::from_fn(log_n.len(), 2, |i, j| if j == 0 { 1.0 } else { log_n[i] });
+    let x = (a.transpose() * &a).lu().solve(&(a.transpose() * &cq)).unwrap();
+    println!("{:.6} {:.6}", x[0], x[1]);
+    let r = &cq - &a * &x;
+    let atr = a.transpose() * &r;                      // A^T r, should be ~ 0
+    println!("{} {}", sci(atr[0], 6), sci(atr[1], 6));
+    println!("{:.7}", r.norm_squared());
+    println!("{:.7}", 10f64.powf(-1.0 / x[1]) - 1.0);  // efficiency
+    for cq_unk in [24.0, 30.5] {
+        let l = (cq_unk - x[0]) / x[1];
+        println!("{:.6} {:.4}", l, 10f64.powf(l));
+    }
+}
+
+// Output:
+// 37.981429 -3.333929
+// 6.217249e-14 1.865175e-13
+// 0.6266179
+// 0.9950163
+// 4.193680 15619.9522
+// 2.244028 175.3993
+```
+
+:::
+
+The fit is $\text{Cq} = 37.98 - 3.334\log_{10}N$, efficiency 99.5 %. $A^T\mathbf r$ is zero up to rounding (the size of rounding errors in sums of numbers around $10^3$). The unknown with Cq 24.0 has about 15 600 copies; Cq 30.5 gives about 175 copies, $10^{2.24}$. Both lie inside the standards ($10^1$ to $10^7$); reading off a Cq outside the range (an extrapolation) is not supported by the data. The three languages differ only in the rounding-level digits of $A^T\mathbf r$.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+logN <- rep(1:7, each = 3)
+A <- cbind(1, logN)
+c(kappa(A, exact = TRUE), kappa(crossprod(A), exact = TRUE), kappa(A, exact = TRUE)^2)
+# [1]  10.40388 108.24076 108.24076
+conc <- rep(c(0, 25, 125, 250, 500, 750, 1000, 1500, 2000), each = 2)
+for (d in 1:4) {
+  V <- outer(conc, 0:d, "^")                 # columns 1, x, ..., x^d
+  Vs <- outer(conc / 1000, 0:d, "^")         # same, x in mg/mL
+  cat(d, format(c(kappa(V, exact = TRUE), kappa(V, exact = TRUE)^2,
+                  kappa(Vs, exact = TRUE)), digits = 3), "\n")
+}
+# 1 1.37e+03 1.87e+06 2.47e+00
+# 2 2.77e+06 7.65e+12 1.16e+01
+# 3 5.78e+09 3.34e+19 7.21e+01
+# 4 1.23e+13 1.52e+26 5.06e+02
+```
+
+### Python
+
+```python
+import numpy as np
+
+logN = np.repeat(np.arange(1, 8), 3).astype(float)
+A = np.column_stack([np.ones_like(logN), logN])
+print(np.linalg.cond(A), np.linalg.cond(A.T @ A), np.linalg.cond(A)**2)
+# 10.40388203202207 108.24076133623193 108.24076133623167
+conc = np.repeat([0, 25, 125, 250, 500, 750, 1000, 1500, 2000], 2).astype(float)
+for d in range(1, 5):
+    V = np.vander(conc, d + 1, increasing=True)          # columns 1, x, ..., x^d
+    Vs = np.vander(conc / 1000, d + 1, increasing=True)  # same, x in mg/mL
+    k = np.linalg.cond(V)
+    print(d, f"{k:.3g} {k**2:.3g} {np.linalg.cond(Vs):.3g}")
+# 1 1.37e+03 1.87e+06 2.47
+# 2 2.77e+06 7.65e+12 11.6
+# 3 5.78e+09 3.34e+19 72.1
+# 4 1.23e+13 1.52e+26 506
+```
+
+### Rust
+
+```rust
+// rust/examples/least_squares_qr_c2.rs  —  cargo run --example least_squares_qr_c2
+// C2: kappa(A^T A) = kappa(A)^2, and the Vandermonde matrix of the BCA standards.
+use nalgebra::DMatrix;
+
+// scientific notation as R and Python print it: 2.2e+01 rather than Rust's 2.2e1
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn kappa(a: &DMatrix<f64>) -> f64 {
+    let sv = a.clone().singular_values();
+    sv.max() / sv.min()
+}
+
+// columns 1, x, x^2, ..., x^d
+fn vander(x: &[f64], d: usize) -> DMatrix<f64> {
+    DMatrix::from_fn(x.len(), d + 1, |i, j| x[i].powi(j as i32))
+}
+
+fn main() {
+    let log_n: Vec<f64> = (1..=7).flat_map(|k| [k as f64; 3]).collect();
+    let a = vander(&log_n, 1);
+    println!("{} {} {}", kappa(&a), kappa(&(a.transpose() * &a)), kappa(&a).powi(2));
+    let conc: Vec<f64> = [0., 25., 125., 250., 500., 750., 1000., 1500., 2000.]
+        .iter().flat_map(|&c| [c; 2]).collect();
+    let conc_mg: Vec<f64> = conc.iter().map(|c| c / 1000.0).collect();
+    for d in 1..=4 {
+        let k = kappa(&vander(&conc, d));
+        println!("{} {} {} {:.3}", d, sci(k, 2), sci(k * k, 2), kappa(&vander(&conc_mg, d)));
+    }
+}
+
+// Output:
+// 10.403882032022079 108.2407613362323 108.24076133623186
+// 1 1.37e+03 1.87e+06 2.475
+// 2 2.77e+06 7.65e+12 11.586
+// 3 5.78e+09 3.34e+19 72.082
+// 4 1.23e+13 1.52e+26 506.105
+```
+
+:::
+
+$\kappa(A^TA)$ equals $\kappa(A)^2$ to rounding. In µg/mL, $\kappa(A)^2$ passes $1/\varepsilon \approx 4.5\times10^{15}$ at degree 3 ($3.3\times10^{19}$): the normal equations for a cubic cannot be trusted. For the quadratic, B5's three-point lower bound ($2.4\times10^6$) is already of the same size as $\kappa = 2.8\times10^6$ for all 18 standards. In mg/mL the same cubic has $\kappa = 72$. (For $\kappa$ above about $10^{16}$, computing $\kappa(A^TA)$ directly is itself inaccurate, which is why the table squares $\kappa(A)$.)
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+for (d in c(1e-6, 1e-8)) {
+  A <- rbind(c(1, 1), c(d, 0), c(0, d))
+  b <- c(2, d, d)                            # exact solution x = (1, 1)
+  ne <- tryCatch(sprintf("%.15f", solve(crossprod(A), crossprod(A, b))),
+                 error = function(e) conditionMessage(e))
+  print(ne)
+  print(sprintf("%.15f", qr.solve(A, b, tol = 1e-12)))
+}
+# [1] "0.999999999999500" "1.000000000000500"
+# [1] "1.000000000000000" "1.000000000000000"
+# [1] "Lapack routine dgesv: system is exactly singular: U[2,2] = 0"
+# [1] "1.000000000000000" "1.000000000000000"
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import solve_triangular
+
+for d in [1e-6, 1e-8]:
+    A = np.array([[1, 1], [d, 0], [0, d]])
+    b = np.array([2, d, d])                     # exact solution x = (1, 1)
+    try:
+        print([f"{v:.15f}" for v in np.linalg.solve(A.T @ A, A.T @ b)])
+    except np.linalg.LinAlgError as e:
+        print(e)
+    Q, R = np.linalg.qr(A)
+    print([f"{v:.15f}" for v in solve_triangular(R, Q.T @ b)])
+# ['0.999999999999500', '1.000000000000500']
+# ['1.000000000000000', '1.000000000000000']
+# Singular matrix
+# ['1.000000000000000', '1.000000000000000']
+```
+
+### Rust
+
+```rust
+// rust/examples/least_squares_qr_c3.rs  —  cargo run --example least_squares_qr_c3
+// C3: Lauchli's example. The normal equations lose delta^2; QR does not.
+use nalgebra::{DMatrix, DVector};
+
+fn main() {
+    for d in [1e-6, 1e-8] {
+        let a = DMatrix::from_row_slice(3, 2, &[1.0, 1.0, d, 0.0, 0.0, d]);
+        let b = DVector::from_vec(vec![2.0, d, d]);          // exact solution x = (1, 1)
+        match (a.transpose() * &a).lu().solve(&(a.transpose() * &b)) {
+            Some(x) => println!("{:.15} {:.15}", x[0], x[1]),
+            None => println!("normal equations: singular"),
+        }
+        let qr = a.clone().qr();
+        let mut qtb = b.clone();
+        qr.q_tr_mul(&mut qtb);
+        let x = qr.r().solve_upper_triangular(&qtb.rows(0, 2).into_owned()).unwrap();
+        println!("{:.15} {:.15}", x[0], x[1]);
+    }
+}
+
+// Output:
+// 1.000000000000000 1.000000000000000
+// 1.000000000000000 1.000000000000000
+// normal equations: singular
+// 1.000000000000000 1.000000000000000
+```
+
+:::
+
+With $\delta = 10^{-6}$ the normal equations lose about 12 digits in R and Python (errors of $5\times10^{-13}$; nalgebra's LU happens to land on 1 exactly). With $\delta = 10^{-8}$ the computed $A^TA$ is exactly singular, as B2 predicted; QR returns $(1, 1)$. With the default `tol = 1e-7`, `qr.solve` stops with "singular matrix 'a' in solve": the second column's remaining length relative to its original length is about $10^{-8}$, below the tolerance, so R treats the columns as dependent. That is a deliberate choice, not an accuracy problem: data that distinguish two predictors only in the eighth digit rarely mean anything.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+gs <- function(A, modified = FALSE) {
+  n <- ncol(A); Q <- A; R <- matrix(0, n, n)
+  for (j in 1:n) {
+    v <- A[, j]
+    for (i in seq_len(j - 1)) {
+      R[i, j] <- sum(Q[, i] * (if (modified) v else A[, j]))
+      v <- v - R[i, j] * Q[, i]
+    }
+    R[j, j] <- sqrt(sum(v^2)); Q[, j] <- v / R[j, j]
+  }
+  list(Q = Q, R = R)
+}
+A3 <- cbind(1, c(1, 3, 5))                   # B3
+f <- gs(A3); f$R
+#          [,1]     [,2]
+# [1,] 1.732051 5.196152
+# [2,] 0.000000 2.828427
+backsolve(f$R, crossprod(f$Q, c(35, 28.4, 21.6)))[, 1]
+# [1] 38.38333 -3.35000
+orth <- function(Q) norm(crossprod(Q) - diag(ncol(Q)), "2")
+t <- seq(0, 1, length.out = 50)
+for (d in c(2, 4, 6, 8, 10, 12)) {
+  A <- outer(t, 0:d, "^")
+  cat(sprintf("%2d %8.1e %8.1e %8.1e %8.1e\n", d, kappa(A, exact = TRUE),
+      orth(gs(A)$Q), orth(gs(A, TRUE)$Q), orth(qr.Q(qr(A)))))
+}
+#  2  2.2e+01  4.8e-16  7.2e-16  4.7e-16
+#  4  6.4e+02  4.8e-14  9.3e-15  5.6e-16
+#  6  2.0e+04  2.0e-10  1.4e-13  6.5e-16
+#  8  6.3e+05  4.0e-06  9.0e-12  6.5e-16
+# 10  2.0e+07  2.1e-01  3.2e-10  6.6e-16
+# 12  6.8e+08  2.0e+00  8.2e-09  6.6e-16
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import solve_triangular
+
+def gs(A, modified=False):
+    m, n = A.shape
+    Q = A.astype(float).copy(); R = np.zeros((n, n))
+    for j in range(n):
+        v = A[:, j].astype(float)
+        for i in range(j):
+            R[i, j] = Q[:, i] @ (v if modified else A[:, j])
+            v = v - R[i, j] * Q[:, i]
+        R[j, j] = np.sqrt(v @ v); Q[:, j] = v / R[j, j]
+    return Q, R
+
+A3 = np.column_stack([np.ones(3), [1.0, 3.0, 5.0]])    # B3
+Q, R = gs(A3); print(R)
+
+# [[1.73205081 5.19615242]
+#  [0.         2.82842712]]
+print(solve_triangular(R, Q.T @ np.array([35, 28.4, 21.6])))
+# [38.38333333 -3.35      ]
+orth = lambda Q: np.linalg.norm(Q.T @ Q - np.eye(Q.shape[1]), 2)
+t = np.linspace(0, 1, 50)
+for d in [2, 4, 6, 8, 10, 12]:
+    A = np.vander(t, d + 1, increasing=True)
+    print(f"{d:2d} {np.linalg.cond(A):8.1e} {orth(gs(A)[0]):8.1e} "
+          f"{orth(gs(A, True)[0]):8.1e} {orth(np.linalg.qr(A)[0]):8.1e}")
+#  2  2.2e+01  1.4e-15  7.5e-16  5.1e-16
+#  4  6.4e+02  7.2e-13  1.8e-14  5.1e-16
+#  6  2.0e+04  3.6e-09  3.6e-13  5.9e-16
+#  8  6.3e+05  6.9e-05  1.1e-11  6.5e-16
+# 10  2.0e+07  9.7e-01  1.4e-10  7.1e-16
+# 12  6.8e+08  3.0e+00  6.0e-09  5.3e-16
+```
+
+### Rust
+
+```rust
+// rust/examples/least_squares_qr_c4.rs  —  cargo run --example least_squares_qr_c4
+// C4: classical and modified Gram-Schmidt, and loss of orthogonality.
+use nalgebra::{DMatrix, DVector};
+
+// scientific notation as R and Python print it: 2.2e+01 rather than Rust's 2.2e1
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn gs(a: &DMatrix<f64>, modified: bool) -> (DMatrix<f64>, DMatrix<f64>) {
+    let n = a.ncols();
+    let mut q = a.clone();
+    let mut r = DMatrix::zeros(n, n);
+    for j in 0..n {
+        let mut v: DVector<f64> = a.column(j).into_owned();
+        for i in 0..j {
+            r[(i, j)] = if modified { q.column(i).dot(&v) } else { q.column(i).dot(&a.column(j)) };
+            v -= r[(i, j)] * q.column(i);
+        }
+        r[(j, j)] = v.norm();
+        q.set_column(j, &(v / r[(j, j)]));
+    }
+    (q, r)
+}
+
+fn orth(q: &DMatrix<f64>) -> f64 {
+    // 2-norm of Q^T Q - I = its largest singular value
+    let e = q.transpose() * q - DMatrix::identity(q.ncols(), q.ncols());
+    e.singular_values().max()
+}
+
+fn kappa(a: &DMatrix<f64>) -> f64 {
+    let sv = a.clone().singular_values();
+    sv.max() / sv.min()
+}
+
+fn main() {
+    // B3: columns 1 and (1, 3, 5)
+    let a3 = DMatrix::from_row_slice(3, 2, &[1.0, 1.0, 1.0, 3.0, 1.0, 5.0]);
+    let (q, r) = gs(&a3, false);
+    println!("{:.6} {:.6}\n{:.6} {:.6}", r[(0, 0)], r[(0, 1)], r[(1, 0)], r[(1, 1)]);
+    let qtb = q.transpose() * DVector::from_vec(vec![35.0, 28.4, 21.6]);
+    let x = r.solve_upper_triangular(&qtb).unwrap();
+    println!("{:.5} {:.5}", x[0], x[1]);
+
+    let t: Vec<f64> = (0..50).map(|i| i as f64 / 49.0).collect();
+    for d in [2, 4, 6, 8, 10, 12] {
+        let a = DMatrix::from_fn(50, d + 1, |i, j| t[i].powi(j as i32));
+        let q_h = a.clone().qr().q();                          // Householder
+        println!("{:2} {:>8} {:>8} {:>8} {:>8}", d, sci(kappa(&a), 1),
+                 sci(orth(&gs(&a, false).0), 1), sci(orth(&gs(&a, true).0), 1), sci(orth(&q_h), 1));
+    }
+}
+
+// Output:
+// 1.732051 5.196152
+// 0.000000 2.828427
+// 38.38333 -3.35000
+//  2  2.2e+01  2.0e-15  1.2e-15  1.1e-15
+//  4  6.4e+02  1.1e-12  2.0e-14  1.4e-15
+//  6  2.0e+04  5.5e-09  3.2e-13  1.6e-15
+//  8  6.3e+05  1.1e-04  1.4e-11  1.7e-15
+// 10  2.0e+07  9.9e-01  4.2e-10  1.7e-15
+// 12  6.8e+08  3.0e+00  1.0e-08  1.7e-15
+```
+
+:::
+
+$R$ and $\mathbf x = (38.383, -3.35)$ match B3. The loss of orthogonality grows like $\kappa^2\varepsilon$ for classical GS (at degree 10 the "orthonormal" columns are useless), like $\kappa\varepsilon$ for modified GS, and stays at $\varepsilon$ for Householder. The exact small numbers differ between languages (different summation order); the growth rates are the same.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t <- seq(0, 1, length.out = 50)
+relerr <- function(x, xt) sqrt(sum((x - xt)^2)) / sqrt(sum(xt^2))
+for (d in 1:12) {
+  A <- outer(t, 0:d, "^")
+  xt <- rep(1, d + 1); b <- A %*% xt         # data with known coefficients
+  ne <- tryCatch(solve(crossprod(A), crossprod(A, b)), error = function(e) NA)
+  cat(sprintf("%2d %8.1e %8.1e %8.1e\n", d, kappa(A, exact = TRUE),
+              relerr(ne, xt), relerr(qr.solve(A, b), xt)))
+}
+#  1  4.3e+00  1.2e-15  1.8e-16
+#  2  2.2e+01  1.9e-14  2.9e-16
+#  3  1.2e+02  2.9e-13  2.5e-15
+#  4  6.4e+02  3.9e-12  2.6e-14
+#  5  3.5e+03  6.1e-10  6.5e-14
+#  6  2.0e+04  1.6e-09  7.0e-13
+#  7  1.1e+05  1.5e-08  3.6e-12
+#  8  6.3e+05  3.0e-06  3.1e-12
+#  9  3.6e+06  5.2e-05  4.6e-11
+# 10  2.0e+07  6.8e-03  2.1e-10
+# 11  1.2e+08       NA  4.0e-09
+# 12  6.8e+08       NA  1.0e-08
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import solve_triangular
+
+t = np.linspace(0, 1, 50)
+relerr = lambda x, xt: np.linalg.norm(x - xt) / np.linalg.norm(xt)
+for d in range(1, 13):
+    A = np.vander(t, d + 1, increasing=True)
+    xt = np.ones(d + 1); b = A @ xt            # data with known coefficients
+    ne = np.linalg.solve(A.T @ A, A.T @ b)
+    Q, R = np.linalg.qr(A)
+    qr = solve_triangular(R, Q.T @ b)
+    print(f"{d:2d} {np.linalg.cond(A):8.1e} {relerr(ne, xt):8.1e} {relerr(qr, xt):8.1e}")
+#  1  4.3e+00  0.0e+00  1.6e-16
+#  2  2.2e+01  1.9e-14  2.1e-15
+#  3  1.2e+02  8.4e-13  1.8e-15
+#  4  6.4e+02  1.0e-11  1.2e-14
+#  5  3.5e+03  2.9e-10  2.1e-13
+#  6  2.0e+04  2.7e-09  6.6e-13
+#  7  1.1e+05  2.5e-07  5.4e-12
+#  8  6.3e+05  3.7e-06  2.4e-11
+#  9  3.6e+06  2.4e-04  9.4e-11
+# 10  2.0e+07  1.0e-03  2.6e-10
+# 11  1.2e+08  1.1e-01  8.1e-09
+# 12  6.8e+08  1.1e+01  1.3e-08
+```
+
+### Rust
+
+```rust
+// rust/examples/least_squares_qr_c5.rs  —  cargo run --example least_squares_qr_c5
+// C5: error against kappa, normal equations vs Householder QR.
+use nalgebra::{DMatrix, DVector};
+
+// scientific notation as R and Python print it: 2.2e+01 rather than Rust's 2.2e1
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn main() {
+    let t: Vec<f64> = (0..50).map(|i| i as f64 / 49.0).collect();
+    for d in 1..=12usize {
+        let a = DMatrix::from_fn(50, d + 1, |i, j| t[i].powi(j as i32));
+        let xt = DVector::from_element(d + 1, 1.0);
+        let b = &a * &xt;                                      // data with known coefficients
+        let relerr = |x: &DVector<f64>| (x - &xt).norm() / xt.norm();
+        let ne = (a.transpose() * &a).lu().solve(&(a.transpose() * &b)).unwrap();
+        let qr = a.clone().qr();
+        let mut qtb = b.clone();
+        qr.q_tr_mul(&mut qtb);
+        let xq = qr.r().solve_upper_triangular(&qtb.rows(0, d + 1).into_owned()).unwrap();
+        let sv = a.singular_values();
+        println!("{:2} {:>8} {:>8} {:>8}", d, sci(sv.max() / sv.min(), 1),
+                 sci(relerr(&ne), 1), sci(relerr(&xq), 1));
+    }
+}
+
+// Output:
+//  1  4.3e+00  5.7e-16  2.2e-16
+//  2  2.2e+01  3.7e-14  6.7e-16
+//  3  1.2e+02  8.3e-14  3.9e-15
+//  4  6.4e+02  2.3e-12  8.7e-15
+//  5  3.5e+03  2.8e-12  5.6e-14
+//  6  2.0e+04  1.2e-08  7.1e-13
+//  7  1.1e+05  3.3e-08  6.8e-12
+//  8  6.3e+05  2.6e-06  2.5e-11
+//  9  3.6e+06  5.3e-05  4.6e-11
+// 10  2.0e+07  5.8e-03  3.6e-10
+// 11  1.2e+08  6.1e-02  1.8e-09
+// 12  6.8e+08  8.8e-01  1.9e-08
+```
+
+:::
+
+The normal-equation errors grow about twice as fast (in digits) as the QR errors: at $\kappa = 2\times10^7$, $\kappa^2\varepsilon \approx 0.09$ and $\kappa\varepsilon \approx 4.5\times10^{-9}$, and the measured errors are $10^{-3}$–$10^{-2}$ and a few $10^{-10}$. These are worst-case rates, so the measurements sit somewhat below them. R refuses the normal equations from degree 11 (`solve` checks the reciprocal condition number); numpy and nalgebra do not check and return answers with no correct digit at degree 12. Plot the columns against $\kappa$ on log–log axes to see the slopes 2 and 1 (the lecture's figure).
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+conc <- rep(c(0, 25, 125, 250, 500, 750, 1000, 1500, 2000), each = 2)
+a562 <- c(0.087, 0.103, 0.150, 0.109, 0.226, 0.229, 0.358, 0.344, 0.601,
+          0.569, 0.780, 0.789, 0.951, 0.942, 1.300, 1.238, 1.545, 1.532)
+V <- outer(conc, 0:3, "^")                   # cubic, ug/mL
+try(solve(crossprod(V), crossprod(V, a562)))
+# Error in solve.default(crossprod(V), crossprod(V, a562)) :
+#   system is computationally singular: reciprocal condition number = 2.98348e-20
+qr.solve(V, a562)
+# [1]  9.750013e-02  1.095169e-03 -2.847165e-07  4.881629e-11
+Vs <- outer(conc / 1000, 0:3, "^")           # cubic, mg/mL
+solve(crossprod(Vs), crossprod(Vs, a562))[, 1]
+# [1]  0.09750013  1.09516917 -0.28471654  0.04881629
+qr.solve(Vs, a562)
+# [1]  0.09750013  1.09516917 -0.28471654  0.04881629
+for (d in 1:3) {                             # which degree? look at residuals
+  r <- qr.resid(qr(outer(conc / 1000, 0:d, "^")), a562)
+  cat(d, sprintf("%.4f", sum(r^2)), paste(ifelse(r > 0, "+", "-"), collapse = ""), "\n")
+}
+# 1 0.0573 ------+++++++++---
+# 2 0.0055 --+--++-+-++--+-++
+# 3 0.0041 -++---+-+-++--+-+-
+c2 <- qr.solve(outer(conc / 1000, 0:2, "^"), a562)   # quadratic, mg/mL
+y <- 0.70                                    # unknown sample
+s <- (-c2[2] + sqrt(c2[2]^2 - 4 * c2[3] * (c2[1] - y))) / (2 * c2[3])
+s * 1000                                     # ug/mL
+# [1] 657.2714
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.linalg import solve_triangular
+
+conc = np.repeat([0, 25, 125, 250, 500, 750, 1000, 1500, 2000], 2).astype(float)
+a562 = np.array([0.087, 0.103, 0.150, 0.109, 0.226, 0.229, 0.358, 0.344, 0.601,
+                 0.569, 0.780, 0.789, 0.951, 0.942, 1.300, 1.238, 1.545, 1.532])
+
+def qr_solve(A, b):
+    Q, R = np.linalg.qr(A)
+    return solve_triangular(R, Q.T @ b)
+
+V = np.vander(conc, 4, increasing=True)              # cubic, ug/mL
+print(np.linalg.solve(V.T @ V, V.T @ a562))          # numpy does not check: no error
+# [ 9.75001330e-02  1.09516917e-03 -2.84716541e-07  4.88162946e-11]
+print(qr_solve(V, a562))
+# [ 9.75001330e-02  1.09516917e-03 -2.84716541e-07  4.88162946e-11]
+Vs = np.vander(conc / 1000, 4, increasing=True)      # cubic, mg/mL
+print(np.linalg.solve(Vs.T @ Vs, Vs.T @ a562))
+# [ 0.09750013  1.09516917 -0.28471654  0.04881629]
+print(qr_solve(Vs, a562))
+# [ 0.09750013  1.09516917 -0.28471654  0.04881629]
+for d in range(1, 4):                                # which degree? residuals
+    A = np.vander(conc / 1000, d + 1, increasing=True)
+    r = a562 - A @ qr_solve(A, a562)
+    print(d, f"{np.sum(r**2):.4f}", "".join("+" if ri > 0 else "-" for ri in r))
+# 1 0.0573 ------+++++++++---
+# 2 0.0055 --+--++-+-++--+-++
+# 3 0.0041 -++---+-+-++--+-+-
+c2 = qr_solve(np.vander(conc / 1000, 3, increasing=True), a562)   # quadratic
+y = 0.70                                             # unknown sample
+s = (-c2[1] + np.sqrt(c2[1]**2 - 4 * c2[2] * (c2[0] - y))) / (2 * c2[2])
+print(s * 1000)                                      # ug/mL
+# 657.2714265801892
+```
+
+### Rust
+
+```rust
+// rust/examples/least_squares_qr_c6.rs  —  cargo run --example least_squares_qr_c6
+// C6: BCA protein assay. Polynomial calibration in ug/mL and mg/mL; choose the degree.
+use nalgebra::{DMatrix, DVector};
+
+// scientific notation as R and Python print it: 2.2e+01 rather than Rust's 2.2e1
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn vander(x: &[f64], d: usize) -> DMatrix<f64> {
+    DMatrix::from_fn(x.len(), d + 1, |i, j| x[i].powi(j as i32))
+}
+
+fn qr_solve(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, a.ncols()).into_owned()).unwrap()
+}
+
+fn ne_solve(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    (a.transpose() * a).lu().solve(&(a.transpose() * b)).unwrap()
+}
+
+fn main() {
+    let conc: Vec<f64> = [0., 25., 125., 250., 500., 750., 1000., 1500., 2000.]
+        .iter().flat_map(|&c| [c; 2]).collect();
+    let a562 = DVector::from_vec(vec![0.087, 0.103, 0.150, 0.109, 0.226, 0.229, 0.358,
+        0.344, 0.601, 0.569, 0.780, 0.789, 0.951, 0.942, 1.300, 1.238, 1.545, 1.532]);
+    let mg: Vec<f64> = conc.iter().map(|c| c / 1000.0).collect();
+
+    let v = vander(&conc, 3);                                  // cubic, ug/mL
+    let show = |x: DVector<f64>| x.iter().map(|&c| sci(c, 6)).collect::<Vec<_>>().join(" ");
+    println!("{}", show(ne_solve(&v, &a562)));                 // nalgebra does not check: no error
+    println!("{}", show(qr_solve(&v, &a562)));
+    let vs = vander(&mg, 3);                                   // cubic, mg/mL
+    let show8 = |x: DVector<f64>| x.iter().map(|c| format!("{:.8}", c)).collect::<Vec<_>>().join(" ");
+    println!("{}", show8(ne_solve(&vs, &a562)));
+    println!("{}", show8(qr_solve(&vs, &a562)));
+
+    for d in 1..=3 {                                           // which degree? residuals
+        let a = vander(&mg, d);
+        let r = &a562 - &a * qr_solve(&a, &a562);
+        let signs: String = r.iter().map(|&ri| if ri > 0.0 { '+' } else { '-' }).collect();
+        println!("{} {:.4} {}", d, r.norm_squared(), signs);
+    }
+    let c = qr_solve(&vander(&mg, 2), &a562);                  // quadratic, mg/mL
+    let y = 0.70;                                              // unknown sample
+    let s = (-c[1] + (c[1] * c[1] - 4.0 * c[2] * (c[0] - y)).sqrt()) / (2.0 * c[2]);
+    println!("{}", s * 1000.0);                                // ug/mL
+}
+
+// Output:
+// 9.750013e-02 1.095169e-03 -2.847165e-07 4.881629e-11
+// 9.750013e-02 1.095169e-03 -2.847165e-07 4.881629e-11
+// 0.09750013 1.09516917 -0.28471654 0.04881629
+// 0.09750013 1.09516917 -0.28471654 0.04881629
+// 1 0.0573 ------+++++++++---
+// 2 0.0055 --+--++-+-++--+-++
+// 3 0.0041 -++---+-+-++--+-+-
+// 657.2714265801895
+```
+
+:::
+
+(a) R stops: $1/\kappa(A^TA)$ is estimated at $3\times10^{-20}$. numpy and nalgebra solve without a check. Here their answers happen to be close to the QR answer, because most of the huge $\kappa$ comes from the **units** (column sizes), and Gaussian elimination tolerates badly scaled columns. You cannot rely on that: C5 shows the case where the ill-conditioning is genuine. (A related trap: `np.linalg.lstsq` on the raw quintic in µg/mL treats its smallest singular values as zero and returns coefficients that are wrong by up to 2000 %.)
+(b) In mg/mL every method agrees; the coefficients are the µg/mL ones times $1000^k$.
+(c) The straight line leaves long runs of equal sign (`------+++++++++---`): the curve bends. The quadratic cuts the residual sum of squares tenfold and the signs alternate irregularly. The cubic gains little (0.0055 to 0.0041) for an extra parameter. Use the quadratic.
+(d) About 657 µg/mL.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+conc <- rep(c(0, 25, 125, 250, 500, 750, 1000, 1500, 2000), each = 2)
+a562 <- c(0.087, 0.103, 0.150, 0.109, 0.226, 0.229, 0.358, 0.344, 0.601,
+          0.569, 0.780, 0.789, 0.951, 0.942, 1.300, 1.238, 1.545, 1.532)
+mgml <- conc / 1000
+X <- cbind(1, conc, mgml)
+coef(lm(a562 ~ conc + mgml))
+#  (Intercept)         conc         mgml
+# 0.1592784830 0.0007305681           NA
+qr(X)$rank
+# [1] 2
+diag(qr.R(qr(X)))
+# [1] -4.242641e+00  2.806688e+03 -1.141957e-15
+try(solve(crossprod(X), crossprod(X, a562)))
+# Error in solve.default(crossprod(X), crossprod(X, a562)) :
+#   Lapack routine dgesv: system is exactly singular: U[3,3] = 0
+```
+
+### Python
+
+```python
+import numpy as np
+
+conc = np.repeat([0, 25, 125, 250, 500, 750, 1000, 1500, 2000], 2).astype(float)
+a562 = np.array([0.087, 0.103, 0.150, 0.109, 0.226, 0.229, 0.358, 0.344, 0.601,
+                 0.569, 0.780, 0.789, 0.951, 0.942, 1.300, 1.238, 1.545, 1.532])
+X = np.column_stack([np.ones_like(conc), conc, conc / 1000])
+x, res, rank, sv = np.linalg.lstsq(X, a562, rcond=None)
+print(x)
+# [1.59278483e-01 7.30567343e-04 7.30567343e-07]
+print(rank)
+# 2
+print(np.diag(np.linalg.qr(X)[1]))
+# [-4.24264069e+00  2.80668844e+03 -6.22020970e-16]
+print(np.linalg.matrix_rank(X))
+# 2
+```
+
+### Rust
+
+```rust
+// rust/examples/least_squares_qr_c7.rs  —  cargo run --example least_squares_qr_c7
+// C7: the same concentration twice (ug/mL and mg/mL): a zero on the diagonal of R.
+use nalgebra::DMatrix;
+
+// scientific notation as R and Python print it: 2.2e+01 rather than Rust's 2.2e1
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+fn main() {
+    let conc: Vec<f64> = [0., 25., 125., 250., 500., 750., 1000., 1500., 2000.]
+        .iter().flat_map(|&c| [c; 2]).collect();
+    let x = DMatrix::from_fn(conc.len(), 3, |i, j| match j {
+        0 => 1.0,
+        1 => conc[i],
+        _ => conc[i] / 1000.0,
+    });
+    let r = x.clone().qr().r();
+    let diag: Vec<String> = r.diagonal().iter().map(|&d| sci(d, 6)).collect();
+    println!("{}", diag.join(" "));
+    // numerical rank: diagonal entries above a relative tolerance (as R's tol = 1e-7)
+    let rmax = r.diagonal().amax();
+    let rank = r.diagonal().iter().filter(|d| d.abs() > 1e-7 * rmax).count();
+    println!("{}", rank);
+    println!("{}", x.rank(1e-7 * x.singular_values().max()));    // via the SVD
+}
+
+// Output:
+// 4.242641e+00 2.806688e+03 2.484473e-16
+// 2
+// 2
+```
+
+:::
+
+All three see a third diagonal entry of $R$ of size $10^{-15}$ against $2.8\times10^3$: B6's $r_{33} = 0$ plus rounding. `lm` declares `mgml` aliased and reports `NA`; `qr()$rank` is 2. `solve` on the normal equations stops (exactly singular). numpy's `lstsq` also finds rank 2 but returns the **minimum-norm** solution: it shares the slope between the two columns ($7.3\times10^{-4}$ per µg/mL plus $7.3\times10^{-7}$ per mg/mL, which together give the same fitted line). Neither answer is wrong; both tell you that the two columns cannot be separated. The SVD view of this is the next unit.
+:::
+
+## Where this leads
+
+- ***The SVD, rank deficiency and regularisation* (Part 4):** the stretch factors in this exercise are the **singular values**; the SVD handles rank-deficient and nearly dependent columns (C7, Läuchli with smaller $\delta$), which is what `np.linalg.lstsq` does inside.
+- ***Polynomial interpolation* and *Splines* (Part 6):** why a high-degree polynomial through calibration points is a bad idea even when the linear algebra is done well, and what to use instead.
+- ***Nonlinear least squares and ODE fitting* (Part 9):** the 4-parameter logistic calibration curve is nonlinear in its parameters; Gauss–Newton and Levenberg–Marquardt solve a linear least-squares problem like the ones here at every iteration.
+- ***Identifiability and uncertainty of fitted parameters* (Part 9):** standard errors of the coefficients come from $R$ (as `summary(lm)` does), and nearly dependent columns show up as huge standard errors.

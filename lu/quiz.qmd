@@ -1,0 +1,185 @@
+---
+title: "Quiz: Gaussian elimination as LU"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of LU factorisation. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** After Gaussian elimination without pivoting on a square matrix $A$, what do $L$ and $U$ contain, and how are they related to $A$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What happens to the multipliers $\ell_{ik} = a_{ik}/a_{kk}$ that you compute at each step?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$U$ is the upper triangular matrix left at the end of elimination. $L$ is unit lower triangular (1s on the diagonal) with the multiplier $\ell_{ik}$ in position $(i, k)$, below the diagonal, where it created its zero. Then $A = LU$.
+:::
+
+---
+
+**Q2.** $L = \begin{pmatrix} 1 & 0 \\ 3 & 1 \end{pmatrix}$ and $U = \begin{pmatrix} 2 & 1 \\ 0 & 4 \end{pmatrix}$. What is $A$? What multiplier did elimination use?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Row 2 of $A$ is $3 \times$ (row 1 of $U$) $+ 1 \times$ (row 2 of $U$).
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$A = LU = \begin{pmatrix} 2 & 1 \\ 6 & 7 \end{pmatrix}$. The multiplier was $\ell_{21} = 6/2 = 3$: subtracting 3 times row 1 from $(6, 7)$ gives $(0, 4)$, the second row of $U$.
+:::
+
+---
+
+**Q3.** Solve $L\mathbf y = \mathbf b$ for $L = \begin{pmatrix} 1 & 0 & 0 \\ 2 & 1 & 0 \\ -1 & 3 & 1 \end{pmatrix}$ and $\mathbf b = (1, 4, 8)^T$. Is this forward or back substitution?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Start at the row with only one unknown.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Forward substitution, top to bottom: $y_1 = 1$; $y_2 = 4 - 2 \cdot 1 = 2$; $y_3 = 8 + 1 \cdot 1 - 3 \cdot 2 = 3$. So $\mathbf y = (1, 2, 3)^T$.
+:::
+
+---
+
+**Q4.** Factorising a dense $2000 \times 2000$ matrix takes 0.2 s on your laptop. Roughly how long for $4000 \times 4000$? And roughly how many solves with the factors cost as much as one factorisation, for $n = 2000$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Factorising is about $\tfrac23 n^3$ operations, one forward + back substitution about $2n^2$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Doubling $n$ multiplies $n^3$ by 8: about 1.6 s (measured times are often somewhat less at these sizes, because optimised libraries get faster per operation as $n$ grows). The ratio $\tfrac23 n^3 / 2n^2 = n/3 \approx 670$ by operation count; in practice substitution runs at a lower rate, so the measured ratio is more like 100.
+:::
+
+---
+
+**Q5.** A model solves a $3000 \times 3000$ system with the same matrix for each of 500 samples, which arrive one at a time. Estimate the operation count and the time (at $10^9$ operations per second) if you call `solve(A, b)` for each sample, and if you factorise once.
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\tfrac23 \cdot 3000^3 = 1.8\times10^{10}$ and $2 \cdot 3000^2 = 1.8\times10^7$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+`solve(A, b)` each time factorises 500 times: $500 \times 1.8\times10^{10} = 9\times10^{12}$ operations, about 2.5 hours. Factor once: $1.8\times10^{10} + 500 \times 1.8\times10^{7} = 2.7\times10^{10}$, about 27 seconds. In R: `F <- Matrix::lu(A)` once, then `solve(F, b)` per sample (Python: `lu_factor` once, `lu_solve` per sample).
+:::
+
+---
+
+**Q6.** You factorise a matrix by hand and with `Matrix::lu()` in R (or `scipy.linalg.lu`). The library's $L$ and $U$ are different from yours, but both solve the system correctly. Why?
+
+::: {.callout-tip collapse="true" title="Hint"}
+`expand2()` (or `scipy.linalg.lu`) returns three matrices, not two.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The library **reorders the rows** before eliminating (partial pivoting: it picks the entry of largest absolute value in the column as the pivot). It returns a permutation matrix $P$ with $A = PLU$. Different row order, different factors, same solution. Why it does this is the topic of *Pivoting, norms and conditioning*.
+:::
+
+---
+
+**Q7.** A colleague's script computes `x <- solve(A) %*% b`. Give two reasons to change it, and write the fix.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Think about the operation count of an inverse, and about the residual $\mathbf b - A\mathbf x$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) **Cost:** forming $A^{-1}$ costs about $2n^3$ operations, three times one factorisation, and gains nothing for many right-hand sides (multiplying by $A^{-1}$ costs $2n^2$, the same as substitution). (2) **Accuracy:** multiplying by a computed inverse gives a residual that grows with the condition number of $A$, while `solve(A, b)` gives a residual at rounding level. Fix:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+A <- rbind(c(1, 1, 1), c(-26, -10, -18), c(2, 6, 14))
+b <- c(1, -19.6, 5.6)
+solve(A, b)                      # not solve(A) %*% b
+# [1] 0.5 0.3 0.2
+```
+
+### Python
+
+```python
+import numpy as np
+A = np.array([[1, 1, 1], [-26, -10, -18], [2, 6, 14]], float)
+b = np.array([1, -19.6, 5.6])
+print(np.linalg.solve(A, b))     # not np.linalg.inv(A) @ b
+# [0.5 0.3 0.2]
+```
+
+### Rust
+
+```rust
+// rust/examples/lu_q7.rs  —  cargo run --example lu_q7
+use nalgebra::{dmatrix, dvector};
+
+fn main() {
+    let a = dmatrix![1.0, 1.0, 1.0; -26.0, -10.0, -18.0; 2.0, 6.0, 14.0];
+    let b = dvector![1.0, -19.6, 5.6];
+    let x = a.lu().solve(&b).expect("singular");   // not a.try_inverse().unwrap() * b
+    println!("{:?}", x.as_slice());
+}
+
+// Output:
+// [0.5000000000000001, 0.29999999999999977, 0.20000000000000007]
+```
+
+:::
+
+For many right-hand sides, put them as columns of a matrix `B` and call `solve(A, B)`, or keep the factorisation.
+:::
+
+---
+
+**Q8.** True or false: if elimination without pivoting meets a zero pivot, the matrix is singular. Give an example.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Try $\begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+False. $\begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$ has a zero first pivot but determinant $-1$; swapping the two rows gives the identity. In the lecture's mixing model, two sources with the same $\delta^{13}$C give a zero pivot at step 2, although $\delta^{15}$N separates them. The matrix is singular only if **no** row swap gives a nonzero pivot (the whole column below is zero).
+:::
+
+---
+
+**Q9.** Elimination without pivoting on $\begin{pmatrix} 10^{-20} & 1 \\ 1 & 1 \end{pmatrix}\mathbf x = \begin{pmatrix} 1 \\ 2 \end{pmatrix}$ returns $\mathbf x = (0, 1)$, with no `NaN` and no warning. The true answer is close to $(1, 1)$. What went wrong, and which check would have caught it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is the multiplier, and what is $1 - 10^{20}$ in double precision?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The multiplier is $\ell_{21} = 10^{20}$, and $u_{22} = 1 - 10^{20}$ rounds to $-10^{20}$: the information in $a_{22} = 1$ is lost. The residual check catches it: $\mathbf b - A\mathbf x = (0, 1)$, far above rounding level. Checking `is.finite` does not, because every number is finite. Partial pivoting (swapping the rows first) avoids the problem.
+:::
+
+---
+
+**Q10.** An isotope mixing model returns the diet fractions $(0.55, -0.20, 0.65)$ for one consumer. The residual is $10^{-16}$. Is this a numerical failure? What does it mean?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Where does the consumer lie relative to the polygon spanned by the sources?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Not a numerical failure: the residual shows the linear system was solved to rounding accuracy. A negative fraction means the consumer's signature lies **outside** the polygon (here triangle) of source signatures, so no mixture of these sources can produce it. Possible causes: a missing source, wrong source values or trophic enrichment factors, or measurement noise for a consumer near the edge. It is a model check, and you should run it on every consumer.
+:::
+
+---
+
+**Q11.** A pivoted LU of a $3 \times 3$ matrix has $U$ with diagonal $(2, -3, 0.5)$ and a permutation with one row swap. What is $\det A$? Why is this how software computes determinants?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\det(PLU) = \det P \cdot \det L \cdot \det U$. What is $\det$ of a unit lower triangular matrix, and of a single row swap?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\det L = 1$, $\det U = 2 \cdot (-3) \cdot 0.5 = -3$, and one row swap gives $\det P = -1$. So $\det A = 3$. The LU costs $\tfrac23 n^3$ operations, while cofactor expansion costs about $n!$ ($20! \approx 2.4\times10^{18}$), so the LU route is the only practical one.
+:::

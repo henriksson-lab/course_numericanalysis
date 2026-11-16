@@ -1,0 +1,1445 @@
+---
+title: "Exercise: the SVD, rank deficiency and regularisation"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- compute the **SVD** of a 2×2 matrix by hand and explain it as rotate – stretch – rotate,
+- read the **condition number** and the **numerical rank** off the singular values, and name the badly determined combination of parameters from the smallest **right singular vector**,
+- write the least-squares solution as $\sum_i (u_i^Tb/\sigma_i)\,v_i$ and predict how much noise each term picks up,
+- compute the **pseudoinverse** (minimum-norm) solution of a rank-deficient problem,
+- regularise with the **truncated SVD** and **ridge**, and choose $k$ or $\lambda$ from the residual and the **L-curve**,
+- solve a **non-negative least-squares** problem, check its optimality conditions, and recognise when its answer is not determined by the data.
+
+The running example is the deconvolution of a bulk RNA-seq sample into cell-type proportions, with a simulated signature in which CD4 and CD8 T cells differ by 2 % on two genes. The by-hand part uses pen, paper and a calculator.
+
+## Background
+
+A bulk sample is modelled as a mixture of pure cell types: $b \approx S p$, where $S$ (genes × cell types) is the **signature matrix** and $p$ the vector of **proportions**. With more genes than cell types this is an overdetermined least-squares problem, $\min_p \|Sp - b\|$.
+
+**Facts used below:**
+
+1. **SVD.** Every $m\times n$ matrix ($m \ge n$) is $A = U\Sigma V^T = \sum_i \sigma_i u_iv_i^T$, with orthonormal columns $u_i$ (data space) and $v_i$ (parameter space) and singular values $\sigma_1 \ge \dots \ge \sigma_n \ge 0$. Key relation: $Av_i = \sigma_i u_i$.
+2. **By hand:** the $\sigma_i^2$ are the eigenvalues of $A^TA$ and the $v_i$ its eigenvectors; then $u_i = Av_i/\sigma_i$. (In floating point, do **not** compute it this way: forming $A^TA$ squares the condition number.)
+3. $\|A\|_2 = \sigma_1$ and the condition number is $\kappa(A) = \sigma_1/\sigma_n$.
+4. **Numerical rank:** the number of $\sigma_i$ above a tolerance; for rounding errors $\max(m,n)\,\varepsilon\,\sigma_1$, for measured data the noise level.
+5. **Least squares through the SVD:** $x = \sum_i \dfrac{u_i^Tb}{\sigma_i}\,v_i$. Noise $\delta b$ adds $\dfrac{u_i^T\delta b}{\sigma_i}\,v_i$: divided by $\sigma_i$.
+6. **Pseudoinverse:** $A^+ = V\Sigma^+U^T$ with $1/\sigma_i$ replaced by 0 for (numerically) zero $\sigma_i$. $A^+b$ is the least-squares solution of **minimum norm**.
+7. **Truncated SVD:** keep the first $k$ terms of fact 5. **Ridge (Tikhonov):** $\min_x \|Ax-b\|^2 + \lambda^2\|x\|^2$, solved by fact 5 with each term multiplied by the **filter factor** $f_i = \sigma_i^2/(\sigma_i^2+\lambda^2)$, or as least squares on the stacked system $\begin{pmatrix}A\\ \lambda I\end{pmatrix}x \approx \begin{pmatrix}b\\0\end{pmatrix}$.
+8. **NNLS:** $\min_x\|Ax-b\|$ subject to $x \ge 0$. With $w = A^T(b - Ax)$, the solution satisfies $w_j = 0$ where $x_j > 0$ and $w_j \le 0$ where $x_j = 0$ (no held variable would reduce the residual by increasing).
+
+The basic tools in each language:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+A <- matrix(c(3, 4, 0, 5), nrow = 2)     # filled by column: rows (3, 0) and (4, 5)
+s <- svd(A)                              # list with d, u, v
+s$d                                      # singular values, largest first
+# [1] 6.708204 2.236068
+s$d[1] / s$d[2]                          # condition number = kappa(A, exact = TRUE)
+# [1] 3
+max(abs(A - s$u %*% diag(s$d) %*% t(s$v)))   # A = U Sigma V^T
+# [1] 1.33808e-15
+```
+
+### Python
+
+```python
+import numpy as np
+
+A = np.array([[3.0, 0.0],
+              [4.0, 5.0]])
+U, d, Vt = np.linalg.svd(A, full_matrices=False)   # note: returns V^T, not V
+print(d)                                 # singular values, largest first
+# [6.70820393 2.23606798]
+print(d[0] / d[1])                       # condition number = np.linalg.cond(A)
+# 3.000000000000001
+print(np.max(np.abs(A - U @ np.diag(d) @ Vt)))     # A = U Sigma V^T
+# 1.3380796711988474e-15
+```
+
+### Rust
+
+```rust
+// rust/examples/svd_background.rs  —  cargo run --example svd_background
+// The SVD of a 2x2 matrix with nalgebra (R: svd; numpy: np.linalg.svd).
+use nalgebra::{DMatrix, DVector};
+
+fn main() {
+    let a = DMatrix::from_row_slice(2, 2, &[3.0, 0.0,
+                                            4.0, 5.0]);
+    let svd = a.clone().svd(true, true);     // sorted, largest first
+    let d: DVector<f64> = svd.singular_values.clone();
+    let u = svd.u.unwrap();
+    let vt = svd.v_t.unwrap();               // like numpy, nalgebra returns V^T
+    println!("{} {}", d[0], d[1]);           // singular values
+    println!("{}", d[0] / d[1]);             // condition number
+    let rebuilt = &u * DMatrix::from_diagonal(&d) * &vt;
+    println!("{:e}", (a - rebuilt).abs().max()); // A = U Sigma V^T
+}
+
+// Output:
+// 6.708203932499368 2.236067977499789
+// 3.0000000000000004
+// 1.7763568394002505e-15
+```
+
+:::
+
+R's [`svd`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/svd.html) returns $V$; numpy's [`np.linalg.svd`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html) and nalgebra's [`SVD`](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.SVD.html) return $V^T$. The **signs** of singular vectors are arbitrary and differ between programs; where we print singular vectors we fix a sign first. Rust prints numbers in its own format; the values agree with R and Python to the digits shown unless the text says otherwise.
+
+## By hand
+
+**B1. The SVD of a 2×2 matrix.** Let $A = \begin{pmatrix} 3 & 0 \\ 4 & 5\end{pmatrix}$.
+(a) Compute $A^TA$ and its eigenvalues. What are $\sigma_1$ and $\sigma_2$?
+(b) Find the eigenvectors $v_1, v_2$ of $A^TA$ (unit length, first entry positive), then $u_i = Av_i/\sigma_i$. Check that $u_1 \perp u_2$.
+(c) Check that $\sigma_1u_1v_1^T + \sigma_2u_2v_2^T = A$.
+(d) What are $\|A\|_2$ and $\kappa(A)$? Check that $\sigma_1\sigma_2 = |\det A|$.
+(e) The unit circle is mapped by $A$ onto an ellipse. Give the directions and lengths of its half-axes. Which unit vector $x$ is stretched most?
+
+**B2. Two identical cell types.** Two cell types have the same signature on three genes: $A = \begin{pmatrix} 1 & 1 \\ 2 & 2 \\ 2 & 2 \end{pmatrix}$.
+(a) What is the rank of $A$? Compute $A^TA$, its eigenvalues, and $\sigma_1, \sigma_2$.
+(b) Find $v_1$, $v_2$ and $u_1$. Which combination of the two proportions is $v_2$, and what does $A$ do to it?
+(c) The bulk sample is $b = (3, 6, 6)$. Describe **all** least-squares solutions $x$.
+(d) Compute the pseudoinverse $A^+ = \sigma_1^{-1}v_1u_1^T$ and the minimum-norm solution $A^+b$. Is it the solution of (c) with the smallest $\|x\|$?
+(e) With a noisy sample $b = (3, 6, 7)$, what is $A^+b$?
+
+**B3. Two nearly identical cell types.** Now the second cell type is 2 % higher on gene 2: $A = \begin{pmatrix} 1 & 1 \\ 1 & 1.02 \end{pmatrix}$.
+(a) $A$ is symmetric with positive eigenvalues, so its singular values are its eigenvalues. Compute them (to 3 significant digits) and $\kappa(A)$.
+(b) Solve $Ax = (2, 2.02)$.
+(c) Now the measurement of gene 2 is off by $0.01$: solve $Ax = (2, 2.03)$. Compare the relative change in $b$ with the relative change in $x$. Is the amplification below $\kappa$?
+(d) Find the eigenvector belonging to the small eigenvalue. In which direction did $x$ move in (c)? Interpret it biologically.
+
+**B4. Filtering the small singular value.** Continue with B3 ($\sigma_1 \approx 2.01$, $\sigma_2 \approx 0.00995$, $v_1 \approx u_1 \approx \tfrac{1}{\sqrt2}(1, 1)$, $v_2 \approx \tfrac{1}{\sqrt2}(1,-1)$).
+(a) Truncated SVD with $k = 1$ for $b = (2, 2.03)$: compute $x_1 = \dfrac{u_1^Tb}{\sigma_1}v_1$.
+(b) Compute the ridge filter factors $f_1, f_2$ for $\lambda = 0.1$ and for $\lambda = 1$.
+(c) In B3(c), the change $\delta b = (0, 0.01)$ moved $x$ by about $(-0.5, 0.5)$, almost exactly along $v_2$. Roughly how far does it move the ridge solution with $\lambda = 0.1$?
+(d) If the two cell types really were present in different amounts, say $x = (1.2, 0.8)$, what would TSVD with $k = 1$ report? What is the price of regularisation?
+
+**B5. NNLS by hand.** Three genes, two cell types: $A = \begin{pmatrix} 1 & 1 \\ 1 & 1 \\ 1 & 1.1 \end{pmatrix}$, $b = (1, 1, 0.9)$.
+(a) Solve the unconstrained least-squares problem with the normal equations ($A^TA$ is 2×2; this is fine by hand). Is the answer a valid set of proportions?
+(b) Hold $x_2 = 0$ and solve the one-variable least-squares problem for $x_1$.
+(c) Check the optimality condition (fact 8): compute $w = A^T(b - Ax)$ at your answer from (b). Does increasing $x_2$ from 0 help?
+(d) Compare the two answers with the "true" $x_1 + x_2$, if the truth were a 50/50 mix of the two cell types.
+
+**B6. Where the noise goes in the deconvolution.** In the simulated signature, the CD4T and CD8T columns are equal except on gene 1 ($142.074$ and $139.232$) and gene 2 ($145.465$ and $148.374$). The smallest singular value is $\sigma_5 = 2.875$ with $v_5 \approx \tfrac{1}{\sqrt2}(1, -1, 0, 0, 0)$.
+(a) Compute $Sv_5 = (S_{\cdot,\mathrm{CD4}} - S_{\cdot,\mathrm{CD8}})/\sqrt2$. On which genes is it non-zero? Check that its length is $\sigma_5$, and write down $u_5 = Sv_5/\sigma_5$.
+(b) The bulk values of genes 1 and 2 are about 65 and 67, measured with 5 % independent noise. What is the typical size (standard deviation) of $u_5^T\delta b$?
+(c) How large an error does that cause in $x$ along $v_5$? And in CD4 and in CD8 separately? In CD4 + CD8?
+(d) With CD8 made **identical** to CD4, R reports $\sigma = (642.9, 340.6, 278.8, 269.1, 6.6\times10^{-14})$ for the $40\times5$ matrix. Compute the tolerance $\max(m,n)\,\varepsilon\,\sigma_1$ and the numerical rank. Why is $\sigma_5$ not exactly 0?
+
+## In code
+
+The signature matrix and bulk sample used in C2–C7 (same as on the slides). The "noise" is a fixed pattern so that all three languages give the same numbers; C7 uses random noise. The R and Python solutions for C2–C7 continue from this block (run it first); each Rust solution is a complete program that repeats `signature()`.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+g <- 1:40                                  # 40 genes
+S <- matrix(10, nrow = 40, ncol = 5,
+            dimnames = list(NULL, c("CD4T", "CD8T", "B", "NK", "Mono")))
+S[1:16, 1:2] <- 100                        # T-cell genes, high in both T types
+S[cbind(17:40, rep(3:5, each = 8))] <- 100 # 8 marker genes each for B, NK, Mono
+S <- S * (1 + 0.5 * sin(outer(g, 1:5)))    # gene-to-gene variation
+S[, "CD8T"] <- S[, "CD4T"]                 # CD8 = CD4 ...
+S[1, "CD8T"] <- 0.98 * S[1, "CD4T"]        # ... except 2% lower on gene 1
+S[2, "CD8T"] <- 1.02 * S[2, "CD4T"]        #     and 2% higher on gene 2
+p_true <- c(0.30, 0.15, 0.15, 0.10, 0.30)
+b0 <- drop(S %*% p_true)                   # noise-free bulk profile
+b  <- b0 * (1 + 0.05 * sin(37 * g))        # with a fixed 5% "noise" pattern
+round(S[1:3, ], 3)
+#         CD4T    CD8T      B     NK   Mono
+# [1,] 142.074 139.232 10.706  6.216  5.205
+# [2,] 145.465 148.374  8.603 14.947  7.280
+# [3,] 107.056 107.056 12.061  7.317 13.251
+round(b[1:3], 3)
+# [1] 65.131 67.374 52.327
+```
+
+### Python
+
+```python
+import numpy as np
+
+g = np.arange(1, 41)                       # 40 genes
+types = ["CD4T", "CD8T", "B", "NK", "Mono"]
+S = np.full((40, 5), 10.0)
+S[0:16, 0:2] = 100                         # T-cell genes, high in both T types
+S[np.arange(16, 40), np.repeat([2, 3, 4], 8)] = 100   # markers for B, NK, Mono
+S = S * (1 + 0.5 * np.sin(np.outer(g, np.arange(1, 6))))  # gene-to-gene variation
+S[:, 1] = S[:, 0]                          # CD8 = CD4 ...
+S[0, 1] = 0.98 * S[0, 0]                   # ... except 2% lower on gene 1
+S[1, 1] = 1.02 * S[1, 0]                   #     and 2% higher on gene 2
+p_true = np.array([0.30, 0.15, 0.15, 0.10, 0.30])
+b0 = S @ p_true                            # noise-free bulk profile
+b = b0 * (1 + 0.05 * np.sin(37 * g))       # with a fixed 5% "noise" pattern
+print(np.round(S[0:3, :], 3))
+# [[142.074 139.232  10.706   6.216   5.205]
+#  [145.465 148.374   8.603  14.947   7.28 ]
+#  [107.056 107.056  12.061   7.317  13.251]]
+print(np.round(b[0:3], 3))
+# [65.131 67.374 52.327]
+```
+
+### Rust
+
+```rust
+// rust/examples/svd_setup.rs  —  cargo run --example svd_setup
+// The simulated deconvolution problem (nalgebra). Every later svd_c* file repeats signature().
+use nalgebra::{DMatrix, DVector};
+
+// The simulated signature matrix S (40 genes x 5 cell types), the true
+// proportions, and the noise-free and noisy bulk profiles b0 and b.
+fn signature() -> (DMatrix<f64>, DVector<f64>, DVector<f64>, DVector<f64>) {
+    let mut s = DMatrix::from_element(40, 5, 10.0);
+    for i in 0..16 { s[(i, 0)] = 100.0; s[(i, 1)] = 100.0; }  // T-cell genes
+    for i in 16..40 { s[(i, 2 + (i - 16) / 8)] = 100.0; }     // B, NK, Mono markers
+    for i in 0..40 {
+        for j in 0..5 {                                        // gene-to-gene variation
+            s[(i, j)] *= 1.0 + 0.5 * (((i + 1) * (j + 1)) as f64).sin();
+        }
+    }
+    for i in 0..40 { s[(i, 1)] = s[(i, 0)]; }                  // CD8 = CD4 ...
+    s[(0, 1)] = 0.98 * s[(0, 0)];                              // ... except gene 1
+    s[(1, 1)] = 1.02 * s[(1, 0)];                              //     and gene 2
+    let p_true = DVector::from_vec(vec![0.30, 0.15, 0.15, 0.10, 0.30]);
+    let b0 = &s * &p_true;
+    let b = DVector::from_fn(40, |i, _| b0[i] * (1.0 + 0.05 * (37.0 * (i + 1) as f64).sin()));
+    (s, p_true, b0, b)
+}
+
+fn main() {
+    let (s, _p_true, _b0, b) = signature();
+    for i in 0..3 {
+        let row: Vec<String> = (0..5).map(|j| format!("{:8.3}", s[(i, j)])).collect();
+        println!("{}", row.join(" "));
+    }
+    println!("{:.3} {:.3} {:.3}", b[0], b[1], b[2]);
+}
+
+// Output:
+//  142.074  139.232   10.706    6.216    5.205
+//  145.465  148.374    8.603   14.947    7.280
+//  107.056  107.056   12.061    7.317   13.251
+// 65.131 67.374 52.327
+```
+
+:::
+
+**C1. The SVD of a small matrix.**
+(a) Compute the SVD of $A$ from B1 with [`svd`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/svd.html) (Python: [`np.linalg.svd(A, full_matrices=False)`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html)). Flip signs so that the first entry of each $v_i$ is positive and compare with your hand results. Check $U^TU = I$.
+(b) Compare $\sigma_i^2$ with the eigenvalues of $A^TA$ ([`eigen`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html), [`crossprod`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/crossprod.html); Python: [`np.linalg.eigvalsh`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvalsh.html)).
+(c) Repeat (b) for $B = \begin{pmatrix}1 & 1\\ 1 & 1+10^{-9} \\ 1 & 1 - 10^{-9}\end{pmatrix}$. Which route gets the small singular value right?
+
+**C2. Least squares fails; the SVD explains why.**
+(a) Solve the least-squares problem $Sp \approx b$ with [`qr.solve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/qr.html) (Python: [`np.linalg.lstsq`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.lstsq.html)). Compare the residual $\|b - Sx\|$ with that of the true proportions.
+(b) Compute the singular values of $S$ and $\kappa$ (R also has [`kappa(S, exact = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kappa.html); Python [`np.linalg.cond`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html)).
+(c) Print $v_5$ (sign: CD4 entry positive). How much does $Sp$ change if $p$ moves by $0.1\,v_5$? And if 0.1 more B cells are added?
+
+**C3. Exact rank deficiency.** Make CD8 identical to CD4 (`S0`).
+(a) Compute the singular values and the numerical rank with the tolerance from fact 4 (Python: also [`np.linalg.matrix_rank`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_rank.html)).
+(b) R only: fit with [`lm(b ~ S0 - 1)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html). What does the `NA` mean?
+(c) Write `pinv(A)` from the SVD (fact 6) and compute the minimum-norm solution. Compare it with the solution you get by dropping the CD8 column. Do they fit equally well? Which has the smaller norm? (Library: [`MASS::ginv`](https://stat.ethz.ch/R-manual/R-devel/library/MASS/html/ginv.html); Python [`np.linalg.pinv`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.pinv.html), and `lstsq` returns the minimum-norm solution directly.)
+
+**C4. Least squares through the SVD; truncated SVD.**
+(a) Make the table $\sigma_i$, $|u_i^Tb|$, $|u_i^Tb|/\sigma_i$, and the same ratio for the noise-free `b0`. Which component does the noise dominate?
+(b) Compute $x = \sum_i (u_i^Tb/\sigma_i)v_i$ and check it against C2.
+(c) Write `tsvd(A, b, k)`. For $k = 1, \dots, 5$ print the solution, the error $\|x_k - p_\text{true}\|$ and the residual $\|b - Sx_k\|$. Which $k$ would you choose **without** knowing $p_\text{true}$?
+
+**C5. Ridge and the L-curve.**
+(a) Write `ridge(A, b, lambda)` with filter factors. Check it against the stacked least-squares system for $\lambda = 10$.
+(b) For $\lambda = 10^{-1}, 10^{-0.5}, \dots, 10^{3}$, print the solution, the residual norm, the solution norm and the sum of the proportions.
+(c) Plot the L-curve ($\|x_\lambda\|$ against $\|b - Sx_\lambda\|$, log–log) on a fine grid of $\lambda$. Where is the corner? What goes wrong for large $\lambda$?
+
+**C6. Non-negative least squares.**
+(a) Check your answer to B5 with [`nnls::nnls`](https://cran.r-project.org/package=nnls) (Python: [`scipy.optimize.nnls`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.nnls.html); Rust: hand-written, below).
+(b) Solve the deconvolution with NNLS. Then check the optimality conditions of fact 8: compute $w = S^T(b - Sx)$.
+(c) Compare with C2 and C4: which cell types agree, which do not, and why?
+
+**C7. The check: refit with new noise.** Generate 500 bulk samples from the **same** proportions, each with fresh noise: `b0 * (1 + 0.05 * rnorm(40))` (Python: `rng.standard_normal(40)`). For each, estimate $p$ with least squares, TSVD ($k = 4$), ridge ($\lambda = 10$) and NNLS. Report the mean and standard deviation of the CD4, CD8 and CD4 + CD8 estimates, and how often NNLS sets CD8 or CD4 to exactly 0. Compare the standard deviation of the least-squares CD4 estimate with your prediction in B6(c).
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — SVD by hand (B1, B2)"}
+The eigenvalues of a symmetric 2×2 matrix $\begin{pmatrix}a & c\\ c & d\end{pmatrix}$ solve $\lambda^2 - (a+d)\lambda + (ad - c^2) = 0$. For an eigenvector, solve $(A^TA - \lambda I)v = 0$: one equation is enough, then scale to length 1. For $u_i$, multiply $A$ by $v_i$ and divide by $\sigma_i$; if $\sigma_i = 0$, there is no $u_i$ to compute (and you do not need it for $A^+$).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — conditioning (B3, B4)"}
+The inverse of $\begin{pmatrix}a & b\\ c & d\end{pmatrix}$ is $\frac{1}{ad - bc}\begin{pmatrix}d & -b\\ -c & a\end{pmatrix}$. Relative change = $\|\delta b\|/\|b\|$ and $\|\delta x\|/\|x\|$ in the 2-norm. Ridge acts on each SVD component separately: a change along $v_2$ is multiplied by $f_2$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — NNLS by hand (B5)"}
+Normal equations: $A^TAx = A^Tb$. With $x_2$ held at 0, the problem is $\min_{x_1}\|a_1x_1 - b\|$, solved by $x_1 = a_1^Tb/a_1^Ta_1$. $w_2 = a_2^T(b - Ax)$ is minus half the derivative of $\|Ax - b\|^2$ with respect to $x_2$: if $w_2 \le 0$, increasing $x_2$ does not reduce the residual.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — noise along one direction (B6)"}
+For independent noise $\delta b_1, \delta b_2$ with standard deviations $s_1, s_2$, the combination $c_1\delta b_1 + c_2\delta b_2$ has standard deviation $\sqrt{c_1^2s_1^2 + c_2^2s_2^2}$. A change $t\,v_5$ in $x$ changes CD4 by $t/\sqrt2$ and CD8 by $-t/\sqrt2$, and leaves CD4 + CD8 unchanged.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — SVD in code (C1–C4)"}
+R: `s <- svd(A)` gives `s$d`, `s$u`, `s$v`; `crossprod(U, b)` is $U^Tb$. Python: `U, d, Vt = np.linalg.svd(A, full_matrices=False)`; the $v_i$ are the **rows** of `Vt`. Rust (nalgebra): `let svd = a.clone().svd(true, true);` gives `svd.singular_values`, `svd.u.unwrap()`, `svd.v_t.unwrap()` (rows are $v_i$), sorted largest first. To fix a sign, multiply a column of $V$ and the matching column of $U$ by $-1$. Machine epsilon: `.Machine$double.eps`, `np.finfo(float).eps`, `f64::EPSILON`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — ridge and the L-curve (C5)"}
+Filter factors `f <- d^2 / (d^2 + lambda^2)`, then $x = V\,(f \cdot U^Tb/d)$. Stacked system in R: `qr.solve(rbind(S, lambda * diag(5)), c(b, rep(0, 5)))`; Python: `np.linalg.lstsq(np.vstack([S, lam * np.eye(5)]), np.concatenate([b, np.zeros(5)]))`. For the plot, use `sapply` (R) or a list comprehension (Python) over `10^seq(-1, 3, by = 0.05)`, and `plot(..., log = "xy")` / `plt.loglog`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — NNLS (C6)"}
+R: `library(nnls); fit <- nnls(A, b); fit$x` ([nnls](https://cran.r-project.org/package=nnls), install with `install.packages("nnls")`). Python: `x, rnorm = scipy.optimize.nnls(A, b)` ([docs](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.nnls.html)). Rust: there is no NNLS in the allowed crates; the solution has a hand-written Lawson–Hanson active-set method (the algorithm on the slides), built on the QR least-squares solve from the previous unit.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 8 — replicates (C7)"}
+R: `replicate(500, { ... })` collects the results of a block into an array; `apply(est, c(1, 2), sd)` takes the standard deviation over the last dimension. Python: fill an array `est[r, :, :]` in a loop and use `est.std(axis=0, ddof=1)`. Rust: [`rand_distr::StandardNormal`](https://docs.rs/rand_distr/latest/rand_distr/struct.StandardNormal.html) with a seeded `StdRng`. The three languages use different random numbers, so the last digit differs.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution — by hand"}
+
+**B1.**
+(a) $A^TA = \begin{pmatrix} 3 & 4 \\ 0 & 5\end{pmatrix}\begin{pmatrix} 3 & 0 \\ 4 & 5\end{pmatrix} = \begin{pmatrix} 25 & 20 \\ 20 & 25\end{pmatrix}$. $\lambda^2 - 50\lambda + 225 = 0$, so $\lambda = 45$ and $5$. $\sigma_1 = \sqrt{45} = 6.708$, $\sigma_2 = \sqrt5 = 2.236$.
+(b) $\lambda = 45$: $-20v_{1} + 20v_{2} = 0$, so $v_1 = \tfrac{1}{\sqrt2}(1, 1)$. $\lambda = 5$: $20v_1 + 20v_2 = 0$, so $v_2 = \tfrac{1}{\sqrt2}(1, -1)$. Then $Av_1 = \tfrac{1}{\sqrt2}(3, 9)$, and dividing by $\sqrt{45}$: $u_1 = (3, 9)/\sqrt{90} = \tfrac{1}{\sqrt{10}}(1, 3) = (0.316, 0.949)$. $Av_2 = \tfrac{1}{\sqrt2}(3, -1)$, divided by $\sqrt5$: $u_2 = \tfrac{1}{\sqrt{10}}(3, -1) = (0.949, -0.316)$. $u_1^Tu_2 = (3 - 3)/10 = 0$.
+(c) $\sigma_1u_1v_1^T = \tfrac{\sqrt{45}}{\sqrt{20}}\begin{pmatrix}1 & 1\\ 3 & 3\end{pmatrix} = \begin{pmatrix}1.5 & 1.5\\ 4.5 & 4.5\end{pmatrix}$ and $\sigma_2u_2v_2^T = \tfrac{\sqrt5}{\sqrt{20}}\begin{pmatrix}3 & -3\\ -1 & 1\end{pmatrix} = \begin{pmatrix}1.5 & -1.5\\ -0.5 & 0.5\end{pmatrix}$. The sum is $\begin{pmatrix}3 & 0\\ 4 & 5\end{pmatrix}$.
+(d) $\|A\|_2 = 6.708$, $\kappa = \sqrt{45/5} = 3$. $\sigma_1\sigma_2 = \sqrt{225} = 15 = |3\cdot5 - 0\cdot4|$.
+(e) Half-axes $\sigma_1u_1 = (2.12, 6.36)$ (length 6.71) and $\sigma_2u_2 = (2.12, -0.71)$ (length 2.24). The unit vector stretched most is $v_1 = \tfrac{1}{\sqrt2}(1,1)$ (or $-v_1$); it lands on the long half-axis. This is the right-hand panel of the rotate–stretch–rotate figure.
+
+**B2.**
+(a) Rank 1: the columns are equal. $A^TA = \begin{pmatrix}9 & 9\\ 9 & 9\end{pmatrix}$, eigenvalues 18 and 0, so $\sigma_1 = \sqrt{18} = 3\sqrt2 = 4.243$, $\sigma_2 = 0$.
+(b) $v_1 = \tfrac{1}{\sqrt2}(1, 1)$, $v_2 = \tfrac{1}{\sqrt2}(1, -1)$. $u_1 = Av_1/\sigma_1 = \tfrac{1}{\sqrt2}(2, 4, 4)/(3\sqrt2) = \tfrac13(1, 2, 2)$. $v_2$ is "more of type 1, less of type 2"; $Av_2 = 0$, so $A$ cannot see it at all.
+(c) $b = 3\cdot(1, 2, 2)$ is exactly in the range of $A$: every $x$ with $x_1 + x_2 = 3$ fits with residual 0. These solutions form a line, $x = (1.5, 1.5) + t\,v_2$.
+(d) $A^+ = \frac{1}{3\sqrt2}\cdot\tfrac{1}{\sqrt2}\begin{pmatrix}1\\1\end{pmatrix}\tfrac13(1, 2, 2) = \tfrac{1}{18}\begin{pmatrix}1 & 2 & 2\\ 1 & 2 & 2\end{pmatrix}$. $A^+b = \tfrac{1}{18}(3 + 12 + 12)(1, 1) = (1.5, 1.5)$. On the line $x_1 + x_2 = 3$, $\|x\|^2 = x_1^2 + (3-x_1)^2$ is smallest at $x_1 = 1.5$: yes, the minimum-norm solution, an equal split.
+(e) $A^+b = \tfrac{1}{18}(3 + 12 + 14)(1, 1) = (1.611, 1.611)$. The noise changes the total, never the split: the split is set by the convention, not by the data.
+
+**B3.**
+(a) $\lambda^2 - 2.02\lambda + 0.02 = 0$: $\lambda = \tfrac12(2.02 \pm \sqrt{4.0804 - 0.08}) = \tfrac12(2.02 \pm 2.0001)$, so $\sigma_1 = 2.01$ and $\sigma_2 = 0.00995$. $\kappa = 2.01/0.00995 = 202$.
+(b) $A^{-1} = \frac{1}{0.02}\begin{pmatrix}1.02 & -1\\ -1 & 1\end{pmatrix}$. $x = 50\,(2.04 - 2.02,\; -2 + 2.02) = (1, 1)$.
+(c) $x = 50\,(2.04 - 2.03,\; -2 + 2.03) = (0.5, 1.5)$. Relative change in $b$: $0.01/\|(2, 2.02)\| = 0.01/2.843 = 0.35\%$. In $x$: $\|(-0.5, 0.5)\|/\|(1,1)\| = 0.707/1.414 = 50\%$. Amplification $50/0.35 = 141 < \kappa = 202$.
+(d) $(A - 0.00995I)v = 0$: $0.99005\,v_1 + v_2 = 0$, so $v \propto (1, -0.990)$, nearly $\tfrac{1}{\sqrt2}(1, -1)$. The change in (c), $(-0.5, 0.5)$, is along this direction: a 0.5 % error in one gene moved half a unit from cell type 1 to cell type 2 and left the total unchanged.
+
+**B4.**
+(a) $u_1^Tb \approx (2 + 2.03)/\sqrt2 = 2.850$; divided by $\sigma_1$: $1.418$; times $v_1$: $x_1 \approx (1.002, 1.002)$. (The exact $u_1, v_1$ are slightly tilted; C-code gives $(0.997, 1.007)$.) The noise is gone: the answer is close to $(1, 1)$, as for the clean $b$.
+(b) $\lambda = 0.1$: $f_1 = 4.0401/(4.0401 + 0.01) = 0.9975$, $f_2 = 0.000099/(0.000099 + 0.01) = 0.0098$. $\lambda = 1$: $f_1 = 4.0401/5.0401 = 0.80$, $f_2 = 0.000099/1.000099 \approx 0.0001$.
+(c) Ridge multiplies the $v_2$-component by $f_2 \approx 0.0098$, so the move shrinks from $(-0.5, 0.5)$ to about $(-0.005, 0.005)$.
+(d) $x = (1.2, 0.8)$ gives $b = (2, 2.016)$; $u_1^Tb/\sigma_1 \approx 4.016/(\sqrt2 \cdot 2.01)$, times $v_1$: about $(1.0, 1.0)$. TSVD reports an equal split whatever the truth: the real difference is along $v_2$ and is thrown away together with the noise. That is the **bias** of regularisation. With $\lambda = 1$ ridge also shrinks the $v_1$ component by $f_1 = 0.8$, so even the total is too small: too much regularisation.
+
+**B5.**
+(a) $A^TA = \begin{pmatrix}3 & 3.1\\ 3.1 & 3.21\end{pmatrix}$, $A^Tb = (2.9, 2.99)$, $\det = 9.63 - 9.61 = 0.02$. $x = \frac{1}{0.02}(3.21\cdot2.9 - 3.1\cdot2.99,\; -3.1\cdot2.9 + 3\cdot2.99) = 50\,(0.04, -0.02) = (2, -1)$. It fits exactly ($Ax = (1, 1, 0.9)$), but $x_2 < 0$ is not a proportion.
+(b) $x_1 = a_1^Tb/a_1^Ta_1 = 2.9/3 = 0.9667$, $x = (0.9667, 0)$.
+(c) $b - Ax = (0.0333, 0.0333, -0.0667)$; $w_2 = a_2^T(b - Ax) = 0.0333 + 0.0333 - 1.1\cdot0.0667 = -0.0067 < 0$. Increasing $x_2$ would increase the residual, so $(0.9667, 0)$ is the NNLS solution. ($w_1 = 0$, as it must be for a free variable.)
+(d) A 50/50 mix with total 0.9667 would be $(0.483, 0.483)$. Least squares said $(2, -1)$ (total 1), NNLS says $(0.967, 0)$ (total 0.967). Both get the total about right; neither gets the split. Gene 3 is the only gene that distinguishes the two types, and its value alone decides the answer.
+
+**B6.**
+(a) Gene 1: $(142.074 - 139.232)/\sqrt2 = 2.010$. Gene 2: $(145.465 - 148.374)/\sqrt2 = -2.057$. All other genes: 0. Length $\sqrt{2.010^2 + 2.057^2} = 2.876 \approx \sigma_5$. So $u_5 \approx (0.699, -0.715, 0, \dots, 0)$: the data direction of the CD4 − CD8 difference is "gene 1 minus gene 2".
+(b) Noise standard deviations $0.05\cdot65 = 3.25$ and $0.05\cdot67 = 3.35$. $u_5^T\delta b = 0.699\,\delta b_1 - 0.715\,\delta b_2$ has standard deviation $\sqrt{0.699^2\cdot3.25^2 + 0.715^2\cdot3.35^2} = \sqrt{5.16 + 5.74} = 3.3$.
+(c) Error along $v_5$: $3.3/2.875 = 1.15$. CD4 and CD8 each move by $1.15/\sqrt2 = 0.81$ (in opposite directions); CD4 + CD8 does not move. So least-squares CD4 and CD8 estimates have a standard deviation of about 0.8, for proportions of 0.30 and 0.15. C7 confirms this (0.86 in R).
+(d) $40 \times 2.22\times10^{-16} \times 642.9 = 5.7\times10^{-12}$; four singular values are above it, so the numerical rank is 4. $\sigma_5$ is not 0 because $S$ was built with rounding errors (the `sin` values and products) and the SVD itself rounds; $6.6\times10^{-14}$ is about $\varepsilon\,\sigma_1$ times a small factor, i.e. zero to working precision.
+:::
+
+::: {.callout-note collapse="true" title="Solution — in code"}
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+A <- matrix(c(3, 4, 0, 5), nrow = 2)
+s <- svd(A)
+sg <- sign(s$v[1, ])                     # sign convention: first entry of each v_i > 0
+U <- s$u %*% diag(sg);  V <- s$v %*% diag(sg)
+s$d
+# [1] 6.708204 2.236068
+U
+#           [,1]       [,2]
+# [1,] 0.3162278  0.9486833
+# [2,] 0.9486833 -0.3162278
+V
+#           [,1]       [,2]
+# [1,] 0.7071068  0.7071068
+# [2,] 0.7071068 -0.7071068
+max(abs(crossprod(U) - diag(2)))         # U^T U = I
+# [1] 5.551115e-16
+s$d^2                                    # compare with eigenvalues of A^T A
+# [1] 45  5
+eigen(crossprod(A))$values
+# [1] 45  5
+B <- rbind(c(1, 1), c(1, 1 + 1e-9), c(1, 1 - 1e-9))
+svd(B)$d
+# [1] 2.449489743 0.000000001
+sqrt(eigen(crossprod(B))$values)
+# [1] 2.449490e+00 2.107342e-08
+```
+
+### Python
+
+```python
+import numpy as np
+A = np.array([[3.0, 0.0], [4.0, 5.0]])
+U, d, Vt = np.linalg.svd(A, full_matrices=False)
+V = Vt.T
+sg = np.sign(V[0, :])                    # sign convention: first entry of each v_i > 0
+U = U * sg;  V = V * sg
+print(d)
+# [6.70820393 2.23606798]
+print(U)
+# [[ 0.31622777  0.9486833 ]
+#  [ 0.9486833  -0.31622777]]
+print(V)
+# [[ 0.70710678  0.70710678]
+#  [ 0.70710678 -0.70710678]]
+print(np.max(np.abs(U.T @ U - np.eye(2))))  # U^T U = I
+# 5.551115123125783e-16
+print(d**2)                              # compare with eigenvalues of A^T A
+# [45.  5.]
+print(np.linalg.eigvalsh(A.T @ A)[::-1])
+# [45.  5.]
+B = np.array([[1, 1], [1, 1 + 1e-9], [1, 1 - 1e-9]])
+print(np.linalg.svd(B, compute_uv=False))
+# [2.44948974e+00 1.00000003e-09]
+print(np.sqrt(np.abs(np.linalg.eigvalsh(B.T @ B)[::-1])))
+# [2.44948974e+00 2.10734243e-08]
+```
+
+### Rust
+
+```rust
+// rust/examples/svd_c1.rs  —  cargo run --example svd_c1
+// C1: the SVD of A = [[3, 0], [4, 5]], checked; and why not eigenvalues of A^T A.
+use nalgebra::DMatrix;
+
+fn show(m: &DMatrix<f64>) {                  // print a matrix row by row
+    for i in 0..m.nrows() {
+        let row: Vec<String> = m.row(i).iter().map(|x| format!("{:11.8}", x)).collect();
+        println!("{}", row.join(" "));
+    }
+}
+
+fn main() {
+    let a = DMatrix::from_row_slice(2, 2, &[3.0, 0.0, 4.0, 5.0]);
+    let svd = a.clone().svd(true, true);
+    let d = svd.singular_values.clone();
+    let mut u = svd.u.unwrap();
+    let mut v = svd.v_t.unwrap().transpose();
+    for j in 0..2 {                          // sign convention: first entry of each v_j > 0
+        if v[(0, j)] < 0.0 {
+            v.column_mut(j).neg_mut();
+            u.column_mut(j).neg_mut();
+        }
+    }
+    println!("{:?}", d.as_slice());
+    show(&u);
+    show(&v);
+    println!("max |U^T U - I| = {:e}", (u.transpose() * &u - DMatrix::<f64>::identity(2, 2)).abs().max());
+    println!("sigma^2 = {:?}", d.map(|x| x * x).as_slice());
+    let ev = (a.transpose() * &a).symmetric_eigen().eigenvalues;
+    println!("eigen(A^T A) = {:?}", ev.as_slice());   // not sorted
+
+    let b = DMatrix::from_row_slice(3, 2, &[1.0, 1.0, 1.0, 1.0 + 1e-9, 1.0, 1.0 - 1e-9]);
+    println!("{:?}", b.clone().singular_values().as_slice());
+    let ev = (b.transpose() * &b).symmetric_eigen().eigenvalues;
+    println!("{:?}", ev.map(|x: f64| x.abs().sqrt()).as_slice());
+}
+
+// Output:
+// [6.708203932499368, 2.236067977499789]
+//  0.31622777  0.94868330
+//  0.94868330 -0.31622777
+//  0.70710678  0.70710678
+//  0.70710678 -0.70710678
+// max |U^T U - I| = 6.661338147750939e-16
+// sigma^2 = [44.99999999999998, 4.9999999999999964]
+// eigen(A^T A) = [45.0, 4.999999999999999]
+// [2.4494897427831783, 1.0000000282292214e-9]
+// [2.449489742783178, 0.0]
+```
+
+:::
+
+The SVD matches B1 exactly (up to rounding). For $A$ the eigenvalue route is harmless, but for $B$ the true small singular value is $1.0\times10^{-9}$ (what `svd` returns), while the square root of the eigenvalue of $B^TB$ gives $2.1\times10^{-8}$ in R and Python and $0$ in Rust: all wrong. The small eigenvalue $10^{-18}$ of $B^TB$ is below the rounding error of its entries (about $3\times2.2\times10^{-16}$), so it is lost when $B^TB$ is formed (we take `abs` because it can even come out negative).
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+x <- qr.solve(S, b)
+round(x, 3)
+#   CD4T   CD8T      B     NK   Mono 
+#  0.543 -0.092  0.149  0.099  0.299 
+sqrt(sum((b - S %*% x)^2))
+# [1] 9.621707
+sqrt(sum((b - S %*% p_true)^2))
+# [1] 9.707244
+sv <- svd(S)
+sv$d
+# [1] 642.934939 340.639955 278.842837 269.081951   2.874591
+sv$d[1] / sv$d[5]
+# [1] 223.6613
+v5 <- sv$v[, 5] * sign(sv$v[1, 5])       # sign: CD4 entry positive
+round(v5, 4)
+# [1]  0.7071 -0.7071 -0.0001  0.0002  0.0000
+sqrt(sum((S %*% (0.1 * v5))^2))          # how much does a step 0.1 along v5 change S p?
+# [1] 0.2874591
+sqrt(sum((S %*% c(0, 0, 0.1, 0, 0))^2))  # ... and 0.1 more B cells?
+# [1] 30.29818
+```
+
+### Python
+
+```python
+x = np.linalg.lstsq(S, b, rcond=None)[0]
+print(np.round(x, 3))
+# [ 0.543 -0.092  0.149  0.099  0.299]
+print(np.linalg.norm(b - S @ x))
+# 9.62170663907336
+print(np.linalg.norm(b - S @ p_true))
+# 9.707244051106807
+U, d, Vt = np.linalg.svd(S, full_matrices=False)
+print(d)
+# [642.93493902 340.63995492 278.8428374  269.08195093   2.87459118]
+print(d[0] / d[4])
+# 223.6613479032232
+v5 = Vt[4, :] * np.sign(Vt[4, 0])          # sign: CD4 entry positive
+np.set_printoptions(suppress=True)
+print(np.round(v5, 4))
+# [ 0.7071 -0.7071 -0.0001  0.0002  0.    ]
+print(np.linalg.norm(S @ (0.1 * v5)))      # how much does a step 0.1 along v5 change S p?
+# 0.28745911845998345
+print(np.linalg.norm(S @ np.array([0, 0, 0.1, 0, 0])))   # ... and 0.1 more B cells?
+# 30.29818217792665
+```
+
+### Rust
+
+```rust
+// rust/examples/svd_c2.rs  —  cargo run --example svd_c2
+// C2: least squares fails on the near rank-deficient signature; the SVD shows why.
+use nalgebra::{DMatrix, DVector};
+
+// The simulated signature matrix S (40 genes x 5 cell types), the true
+// proportions, and the noise-free and noisy bulk profiles b0 and b.
+fn signature() -> (DMatrix<f64>, DVector<f64>, DVector<f64>, DVector<f64>) {
+    let mut s = DMatrix::from_element(40, 5, 10.0);
+    for i in 0..16 { s[(i, 0)] = 100.0; s[(i, 1)] = 100.0; }  // T-cell genes
+    for i in 16..40 { s[(i, 2 + (i - 16) / 8)] = 100.0; }     // B, NK, Mono markers
+    for i in 0..40 {
+        for j in 0..5 {                                        // gene-to-gene variation
+            s[(i, j)] *= 1.0 + 0.5 * (((i + 1) * (j + 1)) as f64).sin();
+        }
+    }
+    for i in 0..40 { s[(i, 1)] = s[(i, 0)]; }                  // CD8 = CD4 ...
+    s[(0, 1)] = 0.98 * s[(0, 0)];                              // ... except gene 1
+    s[(1, 1)] = 1.02 * s[(1, 0)];                              //     and gene 2
+    let p_true = DVector::from_vec(vec![0.30, 0.15, 0.15, 0.10, 0.30]);
+    let b0 = &s * &p_true;
+    let b = DVector::from_fn(40, |i, _| b0[i] * (1.0 + 0.05 * (37.0 * (i + 1) as f64).sin()));
+    (s, p_true, b0, b)
+}
+
+// least squares by Householder QR (as in the previous unit): R x = Q^T b
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+fn fmt(v: &DVector<f64>, d: usize) -> String {
+    v.iter().map(|x| format!("{:.*}", d, x)).collect::<Vec<_>>().join(" ")
+}
+
+fn main() {
+    let (s, p_true, _b0, b) = signature();
+    let x = lstsq_qr(&s, &b);
+    println!("{}", fmt(&x, 3));
+    println!("{}", (&b - &s * &x).norm());
+    println!("{}", (&b - &s * &p_true).norm());
+    let svd = s.clone().svd(true, true);
+    let d = &svd.singular_values;
+    println!("{}", fmt(d, 6));
+    println!("{}", d[0] / d[4]);
+    let vt = svd.v_t.as_ref().unwrap();
+    let mut v5: DVector<f64> = vt.row(4).transpose();
+    if v5[0] < 0.0 { v5 = -v5; }                 // sign: CD4 entry positive
+    println!("{}", fmt(&v5, 4));
+    println!("{}", (&s * (0.1 * &v5)).norm());   // a step of 0.1 along v5
+    let e_b = DVector::from_vec(vec![0.0, 0.0, 0.1, 0.0, 0.0]);
+    println!("{}", (&s * e_b).norm());           // 0.1 more B cells
+}
+
+// Output:
+// 0.543 -0.092 0.149 0.099 0.299
+// 9.621706639073365
+// 9.707244051106807
+// 642.934939 340.639955 278.842837 269.081951 2.874591
+// 223.6613479032226
+// 0.7071 -0.7071 -0.0001 0.0002 0.0000
+// 0.2874591184599823
+// 30.298182177926652
+```
+
+:::
+
+The least-squares fit beats the true proportions on residual (9.62 against 9.71) while being far from them: the data cannot tell these answers apart. $\kappa = 224$, with one singular value (2.87) about 100 times smaller than the others. $v_5$ is CD4 minus CD8 (to 4 digits). Moving 0.1 along $v_5$ changes the predicted bulk profile by only 0.29, far below the noise (residual norm about 10); adding 0.1 B cells changes it by 30.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+S0 <- S;  S0[, "CD8T"] <- S0[, "CD4T"]     # CD8 identical to CD4
+d0 <- svd(S0)$d
+d0
+# [1] 6.428963e+02 3.406431e+02 2.788430e+02 2.690823e+02 6.565447e-14
+tol <- max(dim(S0)) * .Machine$double.eps * d0[1]
+sum(d0 > tol)                              # numerical rank
+# [1] 4
+coef(lm(b ~ S0 - 1))                       # lm drops a column
+#     S0CD4T     S0CD8T        S0B       S0NK     S0Mono 
+# 0.45135405         NA 0.14888175 0.09887964 0.29860311 
+pinv <- function(A, rtol = max(dim(A)) * .Machine$double.eps) {
+  s <- svd(A)
+  keep <- s$d > rtol * s$d[1]              # drop (numerically) zero sigmas
+  s$v[, keep] %*% (t(s$u[, keep]) / s$d[keep])
+}
+x0 <- drop(pinv(S0) %*% b)                 # minimum-norm solution
+xd <- append(qr.solve(S0[, -2], b), 0, after = 1)   # drop CD8, as lm does
+round(rbind(pinv = x0, drop = unname(xd)), 4)
+#        [,1]   [,2]   [,3]   [,4]   [,5]
+# pinv 0.2257 0.2257 0.1489 0.0989 0.2986
+# drop 0.4514 0.0000 0.1489 0.0989 0.2986
+c(sqrt(sum((b - S0 %*% x0)^2)), sqrt(sum((b - S0 %*% xd)^2)))  # same fit
+# [1] 9.628932 9.628932
+c(sqrt(sum(x0^2)), sqrt(sum(xd^2)))                            # different norms
+# [1] 0.4721938 0.5699362
+```
+
+### Python
+
+```python
+S0 = S.copy();  S0[:, 1] = S0[:, 0]         # CD8 identical to CD4
+d0 = np.linalg.svd(S0, compute_uv=False)
+print(d0)
+# [642.896283   340.64309753 278.84298902 269.08232153   0.        ]
+tol = max(S0.shape) * np.finfo(float).eps * d0[0]
+print(np.sum(d0 > tol), np.linalg.matrix_rank(S0))   # numerical rank, twice
+# 4 4
+
+def pinv(A, rtol=None):
+    if rtol is None:
+        rtol = max(A.shape) * np.finfo(float).eps
+    U, d, Vt = np.linalg.svd(A, full_matrices=False)
+    keep = d > rtol * d[0]                 # drop (numerically) zero sigmas
+    return Vt[keep, :].T @ (U[:, keep].T / d[keep][:, None])
+
+x0 = pinv(S0) @ b                          # minimum-norm solution
+xd = np.insert(np.linalg.lstsq(S0[:, [0, 2, 3, 4]], b, rcond=None)[0], 1, 0.0)  # drop CD8
+print(np.round(np.vstack([x0, xd]), 4))
+# [[0.2257 0.2257 0.1489 0.0989 0.2986]
+#  [0.4514 0.     0.1489 0.0989 0.2986]]
+print(np.linalg.norm(b - S0 @ x0), np.linalg.norm(b - S0 @ xd))   # same fit
+# 9.628932112851777 9.628932112851777
+print(np.linalg.norm(x0), np.linalg.norm(xd))                     # different norms
+# 0.472193833847665 0.5699361848802064
+print(np.round(np.linalg.lstsq(S0, b, rcond=None)[0], 4))         # lstsq: minimum norm
+# [0.2257 0.2257 0.1489 0.0989 0.2986]
+print(np.round(np.linalg.pinv(S0) @ b, 4))
+# [0.2257 0.2257 0.1489 0.0989 0.2986]
+```
+
+### Rust
+
+```rust
+// rust/examples/svd_c3.rs  —  cargo run --example svd_c3
+// C3: exact rank deficiency (CD8 identical to CD4): numerical rank, pseudoinverse.
+use nalgebra::{DMatrix, DVector};
+
+// The simulated signature matrix S (40 genes x 5 cell types), the true
+// proportions, and the noise-free and noisy bulk profiles b0 and b.
+fn signature() -> (DMatrix<f64>, DVector<f64>, DVector<f64>, DVector<f64>) {
+    let mut s = DMatrix::from_element(40, 5, 10.0);
+    for i in 0..16 { s[(i, 0)] = 100.0; s[(i, 1)] = 100.0; }  // T-cell genes
+    for i in 16..40 { s[(i, 2 + (i - 16) / 8)] = 100.0; }     // B, NK, Mono markers
+    for i in 0..40 {
+        for j in 0..5 {                                        // gene-to-gene variation
+            s[(i, j)] *= 1.0 + 0.5 * (((i + 1) * (j + 1)) as f64).sin();
+        }
+    }
+    for i in 0..40 { s[(i, 1)] = s[(i, 0)]; }                  // CD8 = CD4 ...
+    s[(0, 1)] = 0.98 * s[(0, 0)];                              // ... except gene 1
+    s[(1, 1)] = 1.02 * s[(1, 0)];                              //     and gene 2
+    let p_true = DVector::from_vec(vec![0.30, 0.15, 0.15, 0.10, 0.30]);
+    let b0 = &s * &p_true;
+    let b = DVector::from_fn(40, |i, _| b0[i] * (1.0 + 0.05 * (37.0 * (i + 1) as f64).sin()));
+    (s, p_true, b0, b)
+}
+
+// least squares by Householder QR (as in the previous unit): R x = Q^T b
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+fn fmt(v: &DVector<f64>, d: usize) -> String {
+    v.iter().map(|x| format!("{:.*}", d, x)).collect::<Vec<_>>().join(" ")
+}
+
+// pseudoinverse by the SVD: drop sigma_i <= rtol * sigma_1
+fn pinv(a: &DMatrix<f64>, rtol: f64) -> DMatrix<f64> {
+    let svd = a.clone().svd(true, true);
+    let d = &svd.singular_values;
+    let tol = rtol * d[0];
+    let dplus = DMatrix::from_diagonal(&d.map(|s| if s > tol { 1.0 / s } else { 0.0 }));
+    svd.v_t.as_ref().unwrap().transpose() * dplus * svd.u.as_ref().unwrap().transpose()
+}
+
+fn main() {
+    let (s, _p_true, _b0, b) = signature();
+    let mut s0 = s.clone();
+    s0.set_column(1, &s.column(0));                 // CD8 identical to CD4
+    let d0 = s0.clone().singular_values();
+    println!("{:?}", d0.as_slice());
+    let rtol = 40.0 * f64::EPSILON;
+    println!("{}", d0.iter().filter(|&&x| x > rtol * d0[0]).count());   // numerical rank
+
+    let x0 = pinv(&s0, rtol) * &b;                  // minimum-norm solution
+    let s0_drop = s0.clone().remove_column(1);      // drop CD8, as R's lm does
+    let xd4 = lstsq_qr(&s0_drop, &b);
+    let xd = DVector::from_vec(vec![xd4[0], 0.0, xd4[1], xd4[2], xd4[3]]);
+    println!("{}", fmt(&x0, 4));
+    println!("{}", fmt(&xd, 4));
+    println!("{} {}", (&b - &s0 * &x0).norm(), (&b - &s0 * &xd).norm());  // same fit
+    println!("{} {}", x0.norm(), xd.norm());                              // different norms
+    // nalgebra's own: pseudo_inverse takes an ABSOLUTE tolerance
+    let x_na = s0.clone().pseudo_inverse(rtol * d0[0]).unwrap() * &b;
+    println!("{}", fmt(&x_na, 4));
+}
+
+// Output:
+// [642.8962830020399, 340.64309752611166, 278.8429890203337, 269.08232153153637, 0.0]
+// 4
+// 0.2257 0.2257 0.1489 0.0989 0.2986
+// 0.4514 0.0000 0.1489 0.0989 0.2986
+// 9.628932112851782 9.628932112851771
+// 0.4721938338476648 0.5699361848802064
+// 0.2257 0.2257 0.1489 0.0989 0.2986
+```
+
+:::
+
+The fifth singular value is $6.6\times10^{-14}$ in R and numpy (both call LAPACK) and exactly 0 in nalgebra: rounding-level, below the tolerance, so the numerical rank is 4. `lm` reports `NA` for CD8: it found that column to be a linear combination of the others (here equal to CD4) and dropped it, so its CD4 coefficient (0.451) is really CD4 + CD8. Dropping CD8 and the minimum-norm solution fit equally well (both residuals 9.6289) and agree on B, NK and Mono. The minimum-norm solution has the smaller norm (0.472 against 0.570) and splits the T cells equally, 0.2257 each, as in B2. numpy's `lstsq` returns this minimum-norm solution without a warning.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+sv <- svd(S)
+beta <- drop(crossprod(sv$u, b))           # u_i^T b
+round(cbind(sigma = sv$d, beta = abs(beta), ratio = abs(beta) / sv$d,
+            ratio0 = abs(drop(crossprod(sv$u, b0))) / sv$d), 4)
+#         sigma     beta  ratio ratio0
+# [1,] 642.9349 246.1776 0.3829 0.3825
+# [2,] 340.6400  83.7363 0.2458 0.2481
+# [3,] 278.8428  34.7387 0.1246 0.1246
+# [4,] 269.0820   5.3275 0.0198 0.0197
+# [5,]   2.8746   1.2905 0.4489 0.1061
+x_svd <- drop(sv$v %*% (beta / sv$d))      # all 5 terms = least squares
+max(abs(x_svd - qr.solve(S, b)))
+# [1] 5.750955e-14
+tsvd <- function(A, b, k) {
+  s <- svd(A)
+  drop(s$v[, 1:k, drop = FALSE] %*% (crossprod(s$u[, 1:k, drop = FALSE], b) / s$d[1:k]))
+}
+for (k in 1:5) {
+  xk <- tsvd(S, b, k)
+  cat(k, sprintf("%6.3f", xk), "  err", sprintf("%.3f", sqrt(sum((xk - p_true)^2))),
+      "  res", sprintf("%.2f", sqrt(sum((b - S %*% xk)^2))), "\n")
+}
+# 1  0.264  0.264  0.048  0.049  0.052   err 0.298   res 91.33 
+# 2  0.225  0.225  0.183  0.175  0.204   err 0.165   res 36.46 
+# 3  0.226  0.226  0.135  0.112  0.300   err 0.108   res 11.07 
+# 4  0.226  0.226  0.149  0.099  0.299   err 0.106   res 9.71 
+# 5  0.543 -0.092  0.149  0.099  0.299   err 0.343   res 9.62 
+```
+
+### Python
+
+```python
+U, d, Vt = np.linalg.svd(S, full_matrices=False)
+beta = U.T @ b                             # u_i^T b
+np.set_printoptions(suppress=True)         # no scientific notation
+print(np.round(np.column_stack([d, np.abs(beta), np.abs(beta) / d,
+                                np.abs(U.T @ b0) / d]), 4))
+# [[642.9349 246.1776   0.3829   0.3825]
+#  [340.64    83.7363   0.2458   0.2481]
+#  [278.8428  34.7387   0.1246   0.1246]
+#  [269.082    5.3275   0.0198   0.0197]
+#  [  2.8746   1.2905   0.4489   0.1061]]
+x_svd = Vt.T @ (beta / d)                  # all 5 terms = least squares
+print(np.max(np.abs(x_svd - np.linalg.lstsq(S, b, rcond=None)[0])))
+# 1.6764367671839864e-14
+
+def tsvd(A, b, k):
+    U, d, Vt = np.linalg.svd(A, full_matrices=False)
+    return Vt[:k, :].T @ ((U[:, :k].T @ b) / d[:k])
+
+for k in range(1, 6):
+    xk = tsvd(S, b, k)
+    print(k, " ".join(f"{v:6.3f}" for v in xk),
+          f"  err {np.linalg.norm(xk - p_true):.3f}  res {np.linalg.norm(b - S @ xk):.2f}")
+# 1  0.264  0.264  0.048  0.049  0.052   err 0.298  res 91.33
+# 2  0.225  0.225  0.183  0.175  0.204   err 0.165  res 36.46
+# 3  0.226  0.226  0.135  0.112  0.300   err 0.108  res 11.07
+# 4  0.226  0.226  0.149  0.099  0.299   err 0.106  res 9.71
+# 5  0.543 -0.092  0.149  0.099  0.299   err 0.343  res 9.62
+```
+
+### Rust
+
+```rust
+// rust/examples/svd_c4.rs  —  cargo run --example svd_c4
+// C4: least squares through the SVD, the Picard table, and the truncated SVD.
+use nalgebra::{DMatrix, DVector};
+
+// The simulated signature matrix S (40 genes x 5 cell types), the true
+// proportions, and the noise-free and noisy bulk profiles b0 and b.
+fn signature() -> (DMatrix<f64>, DVector<f64>, DVector<f64>, DVector<f64>) {
+    let mut s = DMatrix::from_element(40, 5, 10.0);
+    for i in 0..16 { s[(i, 0)] = 100.0; s[(i, 1)] = 100.0; }  // T-cell genes
+    for i in 16..40 { s[(i, 2 + (i - 16) / 8)] = 100.0; }     // B, NK, Mono markers
+    for i in 0..40 {
+        for j in 0..5 {                                        // gene-to-gene variation
+            s[(i, j)] *= 1.0 + 0.5 * (((i + 1) * (j + 1)) as f64).sin();
+        }
+    }
+    for i in 0..40 { s[(i, 1)] = s[(i, 0)]; }                  // CD8 = CD4 ...
+    s[(0, 1)] = 0.98 * s[(0, 0)];                              // ... except gene 1
+    s[(1, 1)] = 1.02 * s[(1, 0)];                              //     and gene 2
+    let p_true = DVector::from_vec(vec![0.30, 0.15, 0.15, 0.10, 0.30]);
+    let b0 = &s * &p_true;
+    let b = DVector::from_fn(40, |i, _| b0[i] * (1.0 + 0.05 * (37.0 * (i + 1) as f64).sin()));
+    (s, p_true, b0, b)
+}
+
+// least squares by Householder QR (as in the previous unit): R x = Q^T b
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+// truncated SVD: keep the k largest singular values
+fn tsvd(a: &DMatrix<f64>, b: &DVector<f64>, k: usize) -> DVector<f64> {
+    let svd = a.clone().svd(true, true);
+    let u = svd.u.unwrap();
+    let vt = svd.v_t.unwrap();
+    let mut x = DVector::zeros(a.ncols());
+    for i in 0..k {
+        let coef = u.column(i).dot(b) / svd.singular_values[i];   // u_i^T b / sigma_i
+        x += coef * vt.row(i).transpose();                       // times v_i
+    }
+    x
+}
+
+fn main() {
+    let (s, p_true, b0, b) = signature();
+    let svd = s.clone().svd(true, true);
+    let u = svd.u.as_ref().unwrap();
+    let d = &svd.singular_values;
+    for i in 0..5 {
+        let beta = u.column(i).dot(&b).abs();
+        let beta0 = u.column(i).dot(&b0).abs();
+        println!("{:9.4} {:9.4} {:7.4} {:7.4}", d[i], beta, beta / d[i], beta0 / d[i]);
+    }
+    let x_svd = tsvd(&s, &b, 5);                  // all 5 terms = least squares
+    println!("{:e}", (&x_svd - lstsq_qr(&s, &b)).abs().max());
+    for k in 1..=5 {
+        let xk = tsvd(&s, &b, k);
+        let row: Vec<String> = xk.iter().map(|x| format!("{:6.3}", x)).collect();
+        println!("{} {}   err {:.3}  res {:.2}", k, row.join(" "),
+                 (&xk - &p_true).norm(), (&b - &s * &xk).norm());
+    }
+}
+
+// Output:
+//  642.9349  246.1776  0.3829  0.3825
+//  340.6400   83.7363  0.2458  0.2481
+//  278.8428   34.7387  0.1246  0.1246
+//  269.0820    5.3275  0.0198  0.0197
+//    2.8746    1.2905  0.4489  0.1061
+// 2.0761170560490427e-14
+// 1  0.264  0.264  0.048  0.049  0.052   err 0.298  res 91.33
+// 2  0.225  0.225  0.183  0.175  0.204   err 0.165  res 36.46
+// 3  0.226  0.226  0.135  0.112  0.300   err 0.108  res 11.07
+// 4  0.226  0.226  0.149  0.099  0.299   err 0.106  res 9.71
+// 5  0.543 -0.092  0.149  0.099  0.299   err 0.343  res 9.62
+```
+
+:::
+
+For $i = 1, \dots, 4$ the noisy and noise-free ratios agree to 2 digits: the signal dominates. For $i = 5$ the ratio is 0.449 instead of 0.106: the noise dominates (B6). The SVD formula reproduces the QR solution to $10^{-14}$. Without the truth, choose $k$ from the residual: it falls from 91 to 36 to 11 to 9.71 at $k = 4$ and then barely moves (9.62). The last component lowers the residual by 0.09 but moves the solution by 0.34, so it is fitting noise; $k = 4$.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+ridge <- function(A, b, lambda) {
+  s <- svd(A)
+  f <- s$d^2 / (s$d^2 + lambda^2)          # filter factors
+  drop(s$v %*% (f * crossprod(s$u, b) / s$d))
+}
+x1 <- ridge(S, b, 10)
+x2 <- qr.solve(rbind(S, 10 * diag(5)), c(b, rep(0, 5)))   # stacked system
+round(x1, 4)
+# [1] 0.2498 0.2014 0.1488 0.0988 0.2983
+max(abs(x1 - x2))
+# [1] 1.165734e-15
+lambda <- 10^seq(-1, 3, by = 0.5)
+for (l in lambda) {
+  x <- ridge(S, b, l)
+  cat(sprintf("%8.2f", l), sprintf("%6.3f", x), " res", sprintf("%6.2f", sqrt(sum((b - S %*% x)^2))),
+      " norm", sprintf("%.3f", sqrt(sum(x^2))), " sum", sprintf("%.3f", sum(x)), "\n")
+}
+#     0.10  0.543 -0.091  0.149  0.099  0.299  res   9.62  norm 0.651  sum 0.998 
+#     0.32  0.539 -0.088  0.149  0.099  0.299  res   9.62  norm 0.648  sum 0.998 
+#     1.00  0.509 -0.057  0.149  0.099  0.299  res   9.62  norm 0.619  sum 0.998 
+#     3.16  0.369  0.082  0.149  0.099  0.299  res   9.65  norm 0.514  sum 0.998 
+#    10.00  0.250  0.201  0.149  0.099  0.298  res   9.70  norm 0.473  sum 0.997 
+#    31.62  0.228  0.223  0.148  0.099  0.296  res   9.76  norm 0.470  sum 0.993 
+#   100.00  0.223  0.222  0.141  0.096  0.275  res  13.72  norm 0.451  sum 0.957 
+#   316.23  0.192  0.192  0.096  0.074  0.165  res  65.48  norm 0.340  sum 0.719 
+#  1000.00  0.073  0.073  0.026  0.022  0.038  res 192.68  norm 0.115  sum 0.232 
+lam <- 10^seq(-1, 3, by = 0.05)
+res <- sapply(lam, function(l) sqrt(sum((b - S %*% ridge(S, b, l))^2)))
+nrm <- sapply(lam, function(l) sqrt(sum(ridge(S, b, l)^2)))
+plot(res, nrm, log = "xy", type = "l", xlab = "||Sx - b||", ylab = "||x||")
+```
+
+### Python
+
+```python
+import matplotlib.pyplot as plt
+
+def ridge(A, b, lam):
+    U, d, Vt = np.linalg.svd(A, full_matrices=False)
+    f = d**2 / (d**2 + lam**2)             # filter factors
+    return Vt.T @ (f * (U.T @ b) / d)
+
+x1 = ridge(S, b, 10)
+x2 = np.linalg.lstsq(np.vstack([S, 10 * np.eye(5)]),
+                     np.concatenate([b, np.zeros(5)]), rcond=None)[0]  # stacked
+print(np.round(x1, 4))
+# [0.2498 0.2014 0.1488 0.0988 0.2983]
+print(np.max(np.abs(x1 - x2)))
+# 9.71445146547012e-16
+for lam in 10 ** np.arange(-1, 3.01, 0.5):
+    x = ridge(S, b, lam)
+    print(f"{lam:8.2f}", " ".join(f"{v:6.3f}" for v in x),
+          f" res {np.linalg.norm(b - S @ x):6.2f}  norm {np.linalg.norm(x):.3f}  sum {x.sum():.3f}")
+#     0.10  0.543 -0.091  0.149  0.099  0.299  res   9.62  norm 0.651  sum 0.998
+#     0.32  0.539 -0.088  0.149  0.099  0.299  res   9.62  norm 0.648  sum 0.998
+#     1.00  0.509 -0.057  0.149  0.099  0.299  res   9.62  norm 0.619  sum 0.998
+#     3.16  0.369  0.082  0.149  0.099  0.299  res   9.65  norm 0.514  sum 0.998
+#    10.00  0.250  0.201  0.149  0.099  0.298  res   9.70  norm 0.473  sum 0.997
+#    31.62  0.228  0.223  0.148  0.099  0.296  res   9.76  norm 0.470  sum 0.993
+#   100.00  0.223  0.222  0.141  0.096  0.275  res  13.72  norm 0.451  sum 0.957
+#   316.23  0.192  0.192  0.096  0.074  0.165  res  65.48  norm 0.340  sum 0.719
+#  1000.00  0.073  0.073  0.026  0.022  0.038  res 192.68  norm 0.115  sum 0.232
+lam = 10 ** np.arange(-1, 3.001, 0.05)
+res = [np.linalg.norm(b - S @ ridge(S, b, l)) for l in lam]
+nrm = [np.linalg.norm(ridge(S, b, l)) for l in lam]
+plt.loglog(res, nrm); plt.xlabel("||Sx - b||"); plt.ylabel("||x||")
+plt.show()
+```
+
+### Rust
+
+```rust
+// rust/examples/svd_c5.rs  —  cargo run --example svd_c5
+// C5: ridge regularisation two ways, and the numbers behind the L-curve.
+use nalgebra::{DMatrix, DVector};
+
+// The simulated signature matrix S (40 genes x 5 cell types), the true
+// proportions, and the noise-free and noisy bulk profiles b0 and b.
+fn signature() -> (DMatrix<f64>, DVector<f64>, DVector<f64>, DVector<f64>) {
+    let mut s = DMatrix::from_element(40, 5, 10.0);
+    for i in 0..16 { s[(i, 0)] = 100.0; s[(i, 1)] = 100.0; }  // T-cell genes
+    for i in 16..40 { s[(i, 2 + (i - 16) / 8)] = 100.0; }     // B, NK, Mono markers
+    for i in 0..40 {
+        for j in 0..5 {                                        // gene-to-gene variation
+            s[(i, j)] *= 1.0 + 0.5 * (((i + 1) * (j + 1)) as f64).sin();
+        }
+    }
+    for i in 0..40 { s[(i, 1)] = s[(i, 0)]; }                  // CD8 = CD4 ...
+    s[(0, 1)] = 0.98 * s[(0, 0)];                              // ... except gene 1
+    s[(1, 1)] = 1.02 * s[(1, 0)];                              //     and gene 2
+    let p_true = DVector::from_vec(vec![0.30, 0.15, 0.15, 0.10, 0.30]);
+    let b0 = &s * &p_true;
+    let b = DVector::from_fn(40, |i, _| b0[i] * (1.0 + 0.05 * (37.0 * (i + 1) as f64).sin()));
+    (s, p_true, b0, b)
+}
+
+// least squares by Householder QR (as in the previous unit): R x = Q^T b
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+fn fmt(v: &DVector<f64>, d: usize) -> String {
+    v.iter().map(|x| format!("{:.*}", d, x)).collect::<Vec<_>>().join(" ")
+}
+
+// ridge (Tikhonov) through the SVD: filter factors f_i = sigma_i^2 / (sigma_i^2 + lambda^2)
+fn ridge(a: &DMatrix<f64>, b: &DVector<f64>, lambda: f64) -> DVector<f64> {
+    let svd = a.clone().svd(true, true);
+    let u = svd.u.unwrap();
+    let vt = svd.v_t.unwrap();
+    let mut x = DVector::zeros(a.ncols());
+    for (i, &s) in svd.singular_values.iter().enumerate() {
+        let f = s * s / (s * s + lambda * lambda);
+        x += f * u.column(i).dot(b) / s * vt.row(i).transpose();
+    }
+    x
+}
+
+fn main() {
+    let (s, _p_true, _b0, b) = signature();
+    let x1 = ridge(&s, &b, 10.0);
+    // stacked least squares: [S; lambda I] x ~ [b; 0]
+    let mut a_aug = DMatrix::zeros(45, 5);
+    a_aug.view_mut((0, 0), (40, 5)).copy_from(&s);
+    a_aug.view_mut((40, 0), (5, 5)).copy_from(&(10.0 * DMatrix::<f64>::identity(5, 5)));
+    let mut b_aug = DVector::zeros(45);
+    b_aug.rows_mut(0, 40).copy_from(&b);
+    let x2 = lstsq_qr(&a_aug, &b_aug);
+    println!("{}", fmt(&x1, 4));
+    println!("{:e}", (&x1 - &x2).abs().max());
+    for k in 0..9 {
+        let lambda = 10f64.powf(-1.0 + 0.5 * k as f64);
+        let x = ridge(&s, &b, lambda);
+        let row: Vec<String> = x.iter().map(|v| format!("{:6.3}", v)).collect();
+        println!("{:8.2} {}  res {:6.2}  norm {:.3}  sum {:.3}", lambda, row.join(" "),
+                 (&b - &s * &x).norm(), x.norm(), x.sum());
+    }
+}
+
+// Output:
+// 0.2498 0.2014 0.1488 0.0988 0.2983
+// 1.6375789613221059e-15
+//     0.10  0.543 -0.091  0.149  0.099  0.299  res   9.62  norm 0.651  sum 0.998
+//     0.32  0.539 -0.088  0.149  0.099  0.299  res   9.62  norm 0.648  sum 0.998
+//     1.00  0.509 -0.057  0.149  0.099  0.299  res   9.62  norm 0.619  sum 0.998
+//     3.16  0.369  0.082  0.149  0.099  0.299  res   9.65  norm 0.514  sum 0.998
+//    10.00  0.250  0.201  0.149  0.099  0.298  res   9.70  norm 0.473  sum 0.997
+//    31.62  0.228  0.223  0.148  0.099  0.296  res   9.76  norm 0.470  sum 0.993
+//   100.00  0.223  0.222  0.141  0.096  0.275  res  13.72  norm 0.451  sum 0.957
+//   316.23  0.192  0.192  0.096  0.074  0.165  res  65.48  norm 0.340  sum 0.719
+//  1000.00  0.073  0.073  0.026  0.022  0.038  res 192.68  norm 0.115  sum 0.232
+```
+
+:::
+
+The two routes agree to $10^{-15}$. For $\lambda \le 1$ ridge is plain least squares (CD8 negative). Between $\lambda \approx 3$ and $30$ the CD4/CD8 split is damped, the residual hardly grows (9.65–9.76), and the other three cell types are untouched: this is the corner of the L-curve, near $\lambda = 10$ (the plot is on the "Choosing $\lambda$" slide). For $\lambda \ge 100$ the filter starts to damp $\sigma_1, \dots, \sigma_4$ too: the residual grows fast and all proportions are pulled towards 0 (sum 0.957 at $\lambda = 100$, 0.232 at $\lambda = 1000$). Rust prints the table; plot it with any tool you like.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(nnls)
+A <- cbind(c(1, 1, 1), c(1, 1, 1.1))     # B5
+nnls(A, c(1, 1, 0.9))$x
+# [1] 0.9666667 0.0000000
+fit <- nnls(S, b)
+x <- fit$x
+round(x, 4)
+# [1] 0.4514 0.0000 0.1489 0.0989 0.2986
+w <- drop(crossprod(S, b - S %*% x))       # w = S^T (b - S x)
+round(w, 6)
+#      CD4T      CD8T         B        NK      Mono 
+#  0.000000 -1.516241  0.000000  0.000000  0.000000 
+max(abs(w[x > 0]))                         # ~ 0 for the free variables
+# [1] 3.817036e-11
+all(w[x == 0] <= 1e-8)                     # <= 0 for the variables held at 0
+# [1] TRUE
+```
+
+### Python
+
+```python
+from scipy.optimize import nnls
+A = np.array([[1.0, 1.0], [1.0, 1.0], [1.0, 1.1]])   # B5
+print(nnls(A, np.array([1.0, 1.0, 0.9]))[0])
+# [0.96666667 0.        ]
+x, rnorm = nnls(S, b)
+print(np.round(x, 4))
+# [0.4514 0.     0.1489 0.0989 0.2986]
+w = S.T @ (b - S @ x)                      # w = S^T (b - S x)
+print(np.round(w, 6))
+# [-0.       -1.516241  0.        0.       -0.      ]
+print(np.max(np.abs(w[x > 0])))            # ~ 0 for the free variables
+# 1.0828671292983927e-11
+print(np.all(w[x == 0] <= 1e-8))           # <= 0 for the variables held at 0
+# True
+```
+
+### Rust
+
+```rust
+// rust/examples/svd_c6.rs  —  cargo run --example svd_c6
+// C6: non-negative least squares, hand-written (Lawson-Hanson), and the optimality check.
+use nalgebra::{DMatrix, DVector};
+
+// The simulated signature matrix S (40 genes x 5 cell types), the true
+// proportions, and the noise-free and noisy bulk profiles b0 and b.
+fn signature() -> (DMatrix<f64>, DVector<f64>, DVector<f64>, DVector<f64>) {
+    let mut s = DMatrix::from_element(40, 5, 10.0);
+    for i in 0..16 { s[(i, 0)] = 100.0; s[(i, 1)] = 100.0; }  // T-cell genes
+    for i in 16..40 { s[(i, 2 + (i - 16) / 8)] = 100.0; }     // B, NK, Mono markers
+    for i in 0..40 {
+        for j in 0..5 {                                        // gene-to-gene variation
+            s[(i, j)] *= 1.0 + 0.5 * (((i + 1) * (j + 1)) as f64).sin();
+        }
+    }
+    for i in 0..40 { s[(i, 1)] = s[(i, 0)]; }                  // CD8 = CD4 ...
+    s[(0, 1)] = 0.98 * s[(0, 0)];                              // ... except gene 1
+    s[(1, 1)] = 1.02 * s[(1, 0)];                              //     and gene 2
+    let p_true = DVector::from_vec(vec![0.30, 0.15, 0.15, 0.10, 0.30]);
+    let b0 = &s * &p_true;
+    let b = DVector::from_fn(40, |i, _| b0[i] * (1.0 + 0.05 * (37.0 * (i + 1) as f64).sin()));
+    (s, p_true, b0, b)
+}
+
+// least squares by Householder QR (as in the previous unit): R x = Q^T b
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+fn fmt(v: &DVector<f64>, d: usize) -> String {
+    v.iter().map(|x| format!("{:.*}", d, x)).collect::<Vec<_>>().join(" ")
+}
+
+// Non-negative least squares by the Lawson-Hanson active-set method (hand-written;
+// R: nnls::nnls, Python: scipy.optimize.nnls). "free" = allowed to be positive.
+fn nnls(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let mut x = DVector::zeros(n);
+    let mut free = vec![false; n];
+    let tol = 1e-10 * (a.transpose() * b).abs().max();
+    for _outer in 0..3 * n {
+        let w = a.transpose() * (b - a * &x);           // -1/2 gradient of ||Ax - b||^2
+        // the held variable whose increase reduces the residual fastest
+        let j = (0..n).filter(|&j| !free[j] && w[j] > tol)
+                      .max_by(|&i, &k| w[i].partial_cmp(&w[k]).unwrap());
+        let Some(j) = j else { break };                 // none: optimal (KKT holds)
+        free[j] = true;
+        loop {
+            // least squares on the free variables only
+            let idx: Vec<usize> = (0..n).filter(|&i| free[i]).collect();
+            let zf = lstsq_qr(&a.select_columns(&idx), b);
+            let mut z = DVector::zeros(n);
+            for (k, &i) in idx.iter().enumerate() { z[i] = zf[k]; }
+            if idx.iter().all(|&i| z[i] > 0.0) { x = z; break; }
+            // step from x towards z until the first free variable hits 0
+            let alpha = idx.iter().filter(|&&i| z[i] <= 0.0)
+                           .map(|&i| x[i] / (x[i] - z[i]))
+                           .fold(f64::INFINITY, f64::min);
+            x += alpha * (&z - &x);
+            for &i in &idx {
+                if x[i] <= 1e-14 { x[i] = 0.0; free[i] = false; }   // hold it at 0
+            }
+        }
+    }
+    x
+}
+
+fn main() {
+    // B5: rows (1, 1), (1, 1), (1, 1.1)
+    let a = DMatrix::from_row_slice(3, 2, &[1.0, 1.0, 1.0, 1.0, 1.0, 1.1]);
+    let b5 = DVector::from_vec(vec![1.0, 1.0, 0.9]);
+    println!("{}", fmt(&nnls(&a, &b5), 7));
+
+    let (s, _p_true, _b0, b) = signature();
+    let x = nnls(&s, &b);
+    println!("{}", fmt(&x, 4));
+    let w = s.transpose() * (&b - &s * &x);          // w = S^T (b - S x)
+    println!("{}", fmt(&w, 6));
+    let free_max = (0..5).filter(|&j| x[j] > 0.0).map(|j| w[j].abs()).fold(0.0, f64::max);
+    println!("{:e}", free_max);                      // ~ 0 for the free variables
+    println!("{}", (0..5).filter(|&j| x[j] == 0.0).all(|j| w[j] <= 1e-8));
+}
+
+// Output:
+// 0.9666667 0.0000000
+// 0.4514 0.0000 0.1489 0.0989 0.2986
+// -0.000000 -1.516241 -0.000000 -0.000000 -0.000000
+// 3.1810110101559985e-11
+// true
+```
+
+:::
+
+B5 is confirmed: $(0.9667, 0)$. On the signature, NNLS gives CD4 = 0.451, CD8 = 0, and the same B, NK and Mono as every other method. The optimality check passes: $w_j \approx 0$ (to $10^{-11}$) for the four positive proportions, and $w_\text{CD8} = -1.52 < 0$, so raising CD8 from 0 would worsen the fit. So NNLS has solved its problem correctly, and the answer is still not trustworthy: CD4 + CD8 = 0.451 is right, but the split is decided by the noise along $v_5$, exactly as in least squares (CD4 − CD8 is now clipped at the bound instead of going negative). This is the same answer `lm` gave on the exactly duplicated signature in C3.
+
+Always check a library's answer against the optimality conditions when it matters. For example, with scipy 1.15 `scipy.optimize.nnls` returns a wrong answer for the **square** system $\begin{pmatrix}1 & 1\\1 & 1.02\end{pmatrix}x \approx (2, 1.99)$: it reports $x = (1.988, 0.007)$ with residual 0, but the correct answer is $(1.995, 0)$ with residual 0.0071. The check $w = A^Tr$ catches this at once.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(nnls)
+ridge <- function(A, b, lambda) {
+  s <- svd(A); f <- s$d^2 / (s$d^2 + lambda^2)
+  drop(s$v %*% (f * crossprod(s$u, b) / s$d))
+}
+tsvd <- function(A, b, k) {
+  s <- svd(A)
+  drop(s$v[, 1:k] %*% (crossprod(s$u[, 1:k], b) / s$d[1:k]))
+}
+set.seed(1)
+est <- replicate(500, {
+  br <- b0 * (1 + 0.05 * rnorm(40))        # fresh 5% noise
+  X <- cbind(ls = qr.solve(S, br), tsvd = tsvd(S, br, 4),
+             ridge = ridge(S, br, 10), nnls = nnls(S, br)$x)
+  rbind(CD4 = X[1, ], CD8 = X[2, ], sum = X[1, ] + X[2, ])
+})                                          # array 3 x 4 x 500
+round(apply(est, c(1, 2), mean), 3)
+#        ls  tsvd ridge  nnls
+# CD4 0.241 0.225 0.226 0.226
+# CD8 0.209 0.225 0.224 0.225
+# sum 0.450 0.450 0.450 0.450
+round(apply(est, c(1, 2), sd), 3)
+#        ls  tsvd ridge  nnls
+# CD4 0.856 0.004 0.065 0.206
+# CD8 0.857 0.004 0.066 0.207
+# sum 0.007 0.007 0.007 0.007
+mean(est["CD8", "nnls", ] == 0)            # NNLS sets CD8 to exactly 0
+# [1] 0.378
+mean(est["CD4", "nnls", ] == 0)
+# [1] 0.374
+```
+
+### Python
+
+```python
+from scipy.optimize import nnls
+
+def ridge(A, b, lam):
+    U, d, Vt = np.linalg.svd(A, full_matrices=False)
+    f = d**2 / (d**2 + lam**2)
+    return Vt.T @ (f * (U.T @ b) / d)
+
+def tsvd(A, b, k):
+    U, d, Vt = np.linalg.svd(A, full_matrices=False)
+    return Vt[:k, :].T @ ((U[:, :k].T @ b) / d[:k])
+
+rng = np.random.default_rng(1)
+est = np.empty((500, 3, 4))                # replicate x (CD4, CD8, sum) x method
+for r in range(500):
+    br = b0 * (1 + 0.05 * rng.standard_normal(40))     # fresh 5% noise
+    X = np.column_stack([np.linalg.lstsq(S, br, rcond=None)[0], tsvd(S, br, 4),
+                         ridge(S, br, 10), nnls(S, br)[0]])
+    est[r] = np.vstack([X[0], X[1], X[0] + X[1]])
+print("      ls  tsvd ridge  nnls")
+#       ls  tsvd ridge  nnls
+for name, m, s in zip(["CD4", "CD8", "sum"], est.mean(axis=0), est.std(axis=0, ddof=1)):
+    print(name, " ".join(f"{v:5.3f}" for v in m), " | sd", " ".join(f"{v:5.3f}" for v in s))
+# CD4 0.267 0.225 0.228 0.239  | sd 0.823 0.003 0.063 0.209
+# CD8 0.182 0.225 0.221 0.210  | sd 0.823 0.003 0.063 0.209
+# sum 0.449 0.449 0.449 0.449  | sd 0.007 0.007 0.007 0.007
+print(np.mean(est[:, 1, 3] == 0), np.mean(est[:, 0, 3] == 0))
+# 0.426 0.38
+```
+
+### Rust
+
+```rust
+// rust/examples/svd_c7.rs  —  cargo run --example svd_c7
+// C7: refit 500 bulk samples with fresh 5% noise: which estimates are stable?
+// The random numbers differ from R and Python, so the last digits differ too.
+use nalgebra::{DMatrix, DVector};
+use rand::{rngs::StdRng, SeedableRng};
+use rand_distr::{Distribution, StandardNormal};
+
+// The simulated signature matrix S (40 genes x 5 cell types), the true
+// proportions, and the noise-free and noisy bulk profiles b0 and b.
+fn signature() -> (DMatrix<f64>, DVector<f64>, DVector<f64>, DVector<f64>) {
+    let mut s = DMatrix::from_element(40, 5, 10.0);
+    for i in 0..16 { s[(i, 0)] = 100.0; s[(i, 1)] = 100.0; }  // T-cell genes
+    for i in 16..40 { s[(i, 2 + (i - 16) / 8)] = 100.0; }     // B, NK, Mono markers
+    for i in 0..40 {
+        for j in 0..5 {                                        // gene-to-gene variation
+            s[(i, j)] *= 1.0 + 0.5 * (((i + 1) * (j + 1)) as f64).sin();
+        }
+    }
+    for i in 0..40 { s[(i, 1)] = s[(i, 0)]; }                  // CD8 = CD4 ...
+    s[(0, 1)] = 0.98 * s[(0, 0)];                              // ... except gene 1
+    s[(1, 1)] = 1.02 * s[(1, 0)];                              //     and gene 2
+    let p_true = DVector::from_vec(vec![0.30, 0.15, 0.15, 0.10, 0.30]);
+    let b0 = &s * &p_true;
+    let b = DVector::from_fn(40, |i, _| b0[i] * (1.0 + 0.05 * (37.0 * (i + 1) as f64).sin()));
+    (s, p_true, b0, b)
+}
+
+// least squares by Householder QR (as in the previous unit): R x = Q^T b
+fn lstsq_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let qr = a.clone().qr();
+    let mut qtb = b.clone();
+    qr.q_tr_mul(&mut qtb);
+    qr.r().solve_upper_triangular(&qtb.rows(0, n).into_owned()).unwrap()
+}
+
+// ridge (Tikhonov) through the SVD: filter factors f_i = sigma_i^2 / (sigma_i^2 + lambda^2)
+fn ridge(a: &DMatrix<f64>, b: &DVector<f64>, lambda: f64) -> DVector<f64> {
+    let svd = a.clone().svd(true, true);
+    let u = svd.u.unwrap();
+    let vt = svd.v_t.unwrap();
+    let mut x = DVector::zeros(a.ncols());
+    for (i, &s) in svd.singular_values.iter().enumerate() {
+        let f = s * s / (s * s + lambda * lambda);
+        x += f * u.column(i).dot(b) / s * vt.row(i).transpose();
+    }
+    x
+}
+
+// truncated SVD with the k largest singular values
+fn tsvd(a: &DMatrix<f64>, b: &DVector<f64>, k: usize) -> DVector<f64> {
+    let svd = a.clone().svd(true, true);
+    let (u, vt) = (svd.u.unwrap(), svd.v_t.unwrap());
+    let mut x = DVector::zeros(a.ncols());
+    for i in 0..k {
+        x += u.column(i).dot(b) / svd.singular_values[i] * vt.row(i).transpose();
+    }
+    x
+}
+
+// Non-negative least squares by the Lawson-Hanson active-set method (hand-written;
+// R: nnls::nnls, Python: scipy.optimize.nnls). "free" = allowed to be positive.
+fn nnls(a: &DMatrix<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let n = a.ncols();
+    let mut x = DVector::zeros(n);
+    let mut free = vec![false; n];
+    let tol = 1e-10 * (a.transpose() * b).abs().max();
+    for _outer in 0..3 * n {
+        let w = a.transpose() * (b - a * &x);           // -1/2 gradient of ||Ax - b||^2
+        // the held variable whose increase reduces the residual fastest
+        let j = (0..n).filter(|&j| !free[j] && w[j] > tol)
+                      .max_by(|&i, &k| w[i].partial_cmp(&w[k]).unwrap());
+        let Some(j) = j else { break };                 // none: optimal (KKT holds)
+        free[j] = true;
+        loop {
+            // least squares on the free variables only
+            let idx: Vec<usize> = (0..n).filter(|&i| free[i]).collect();
+            let zf = lstsq_qr(&a.select_columns(&idx), b);
+            let mut z = DVector::zeros(n);
+            for (k, &i) in idx.iter().enumerate() { z[i] = zf[k]; }
+            if idx.iter().all(|&i| z[i] > 0.0) { x = z; break; }
+            // step from x towards z until the first free variable hits 0
+            let alpha = idx.iter().filter(|&&i| z[i] <= 0.0)
+                           .map(|&i| x[i] / (x[i] - z[i]))
+                           .fold(f64::INFINITY, f64::min);
+            x += alpha * (&z - &x);
+            for &i in &idx {
+                if x[i] <= 1e-14 { x[i] = 0.0; free[i] = false; }   // hold it at 0
+            }
+        }
+    }
+    x
+}
+
+fn mean_sd(v: &[f64]) -> (f64, f64) {
+    let n = v.len() as f64;
+    let m = v.iter().sum::<f64>() / n;
+    (m, (v.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (n - 1.0)).sqrt())
+}
+
+fn main() {
+    let (s, _p_true, b0, _b) = signature();
+    let mut rng = StdRng::seed_from_u64(1);
+    // est[method][quantity] = 500 values; quantity 0 = CD4, 1 = CD8, 2 = CD4 + CD8
+    let mut est = vec![vec![Vec::new(); 3]; 4];
+    for _ in 0..500 {
+        let br = DVector::from_fn(40, |i, _| {
+            let z: f64 = StandardNormal.sample(&mut rng);
+            b0[i] * (1.0 + 0.05 * z)                     // fresh 5% noise
+        });
+        let xs = [lstsq_qr(&s, &br), tsvd(&s, &br, 4), ridge(&s, &br, 10.0), nnls(&s, &br)];
+        for (m, x) in xs.iter().enumerate() {
+            est[m][0].push(x[0]);
+            est[m][1].push(x[1]);
+            est[m][2].push(x[0] + x[1]);
+        }
+    }
+    println!("      ls  tsvd ridge  nnls");
+    for (q, name) in ["CD4", "CD8", "sum"].iter().enumerate() {
+        let ms: Vec<(f64, f64)> = (0..4).map(|m| mean_sd(&est[m][q])).collect();
+        let means: Vec<String> = ms.iter().map(|p| format!("{:5.3}", p.0)).collect();
+        let sds: Vec<String> = ms.iter().map(|p| format!("{:5.3}", p.1)).collect();
+        println!("{} {}  | sd {}", name, means.join(" "), sds.join(" "));
+    }
+    let zero = |q: usize| est[3][q].iter().filter(|&&x| x == 0.0).count() as f64 / 500.0;
+    println!("{} {}", zero(1), zero(0));
+}
+
+// Output:
+//       ls  tsvd ridge  nnls
+// CD4 0.330 0.225 0.233 0.246  | sd 0.799 0.003 0.061 0.210
+// CD8 0.121 0.225 0.217 0.204  | sd 0.799 0.003 0.061 0.209
+// sum 0.450 0.450 0.450 0.450  | sd 0.007 0.007 0.007 0.007
+// 0.456 0.354
+```
+
+:::
+
+The CD4 + CD8 total has a standard deviation of 0.007 with every method: it is well determined. The split is not. Least squares: standard deviation about 0.8 for proportions of 0.30 and 0.15, as B6(c) predicted. NNLS: 0.21, and in roughly 35–45 % of the replicates it sets CD8 to exactly 0, in about as many CD4: a zero from NNLS does not mean the cell type is absent. Ridge: 0.06, closer, but centred near 0.225 each. TSVD: almost no spread, but always the equal split, biased. No method recovers 0.30/0.15, because the data do not contain that information. The fix is biological: a signature with more genes that separate CD4 from CD8, which raises $\sigma_5$.
+:::
+
+## Where this leads
+
+- **Part 5, *Power iteration and friends* and *How `eigen()` works, and big problems*:** singular values are square roots of eigenvalues of $A^TA$; the algorithms that compute both, and Lanczos-type methods (`irlba`) that compute only the top few singular triplets of a large sparse cells × genes matrix, as needed for PCA of single-cell data.
+- **Part 9, *Identifiability and uncertainty of fitted parameters*:** the same diagnosis for nonlinear models. The Jacobian of the model takes the place of $S$, and its small singular values name the parameter combinations the data cannot determine.
+- **Part 9, *Constraints and linear programming*:** the optimality conditions you checked for NNLS are a special case of the KKT conditions for constrained optimisation.
+- We used ridge with a penalty towards 0 and a single $\lambda$ chosen by eye from the L-curve. Statistical treatments (cross-validation, Bayesian priors, penalties towards a prior guess) choose $\lambda$ more carefully; the numerical core is the filter-factor formula of this exercise.

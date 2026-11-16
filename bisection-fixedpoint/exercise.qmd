@@ -1,0 +1,1097 @@
+---
+title: "Exercise: bisection and fixed-point iteration"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- find a **bracket** for a root from a table or a grid of function values, and say when there is none,
+- run **bisection** by hand and in code, and predict the number of steps from the bracket width and the tolerance,
+- choose a **stopping rule** (absolute and relative tolerance, maximum number of iterations) that works in floating point,
+- run a **fixed-point iteration** $x_{k+1} = g(x_k)$, draw its **cobweb** plot, and predict from $g'(x^*)$ whether it converges, how fast, and whether it oscillates,
+- estimate the rate and the remaining error of an iteration from its **steps**, without knowing the answer,
+- find the **steady states** of a discrete-time population model (Beverton–Holt, Ricker), stable and unstable, and recognise cycles and chaos.
+
+The by-hand part needs pen, paper and a calculator for `exp`. The code part checks the hand answers and then does what only code can: many iterations, many parameter values, and the floating-point floor.
+
+## Background
+
+A **root** of $f$ is a number $x^*$ with $f(x^*) = 0$. A **fixed point** of $g$ is a number $x^*$ with $g(x^*) = x^*$; it is a root of $f(x) = g(x) - x$.
+
+**Facts used below:**
+
+1. **Bracket.** If $f$ is continuous on $[a, b]$ and $f(a)$, $f(b)$ have opposite signs, $[a, b]$ contains a root. No sign change does **not** mean no root (two roots, a double root); a sign change across a **pole** is not a root.
+2. **Bisection.** Evaluate $f$ at the midpoint $m = (a+b)/2$ and keep the half with the sign change. After $k$ steps the bracket has width $(b - a)/2^k$, so reaching width tol takes $\lceil \log_2((b-a)/\text{tol}) \rceil$ steps. Linear convergence with rate $\tfrac12$.
+3. **Stopping.** Stop when the bracket (or the step) is below $\text{tol}\cdot\max(1, |x|)$, and always after a maximum number of iterations. Near $x$, neighbouring doubles are about $\varepsilon|x|$ apart ($\varepsilon = 2.2\times10^{-16}$), so no bracket gets narrower than that.
+4. **Fixed-point iteration.** With $e_k = x_k - x^*$, Taylor gives $e_{k+1} \approx g'(x^*)\,e_k$. If $|g'(x^*)| < 1$ the iteration converges linearly with rate $|g'(x^*)|$ (attracting, or stable, fixed point); if $|g'(x^*)| > 1$ it moves away (repelling, unstable). $g' > 0$: monotone; $g' < 0$: alternating.
+5. **Checking an iteration.** With steps $d_k = x_{k+1} - x_k$, the ratio $d_{k+1}/d_k \to g'(x^*) = L$, and the remaining error is about $|d_k|\,L/(1 - L)$.
+6. **Population models.** Beverton–Holt $N_{t+1} = \dfrac{R N_t}{1 + (R-1)N_t/K}$ has $g'(K) = 1/R$. Ricker $N_{t+1} = N_t\,e^{r(1 - N_t/K)}$ has $g'(K) = 1 - r$: stable for $0 < r < 2$, cycles and chaos beyond.
+7. **The harvested stock** of the lecture: $g(N) = N e^{r(1-N/K)} - H$ with $r = 0.5$, $K = 100$, $H = 10$ (thousands of fish). Its steady states are $20.482$ (unstable, $g' = 1.336$) and $74.952$ (stable, $g' = 0.709$).
+
+The model in each language:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+r <- 0.5; K <- 100; H <- 10                 # growth rate, capacity, catch (thousand fish)
+g <- function(N) N * exp(r * (1 - N / K)) - H   # harvested Ricker: stock next year
+f <- function(N) g(N) - N                   # steady states are the roots of f
+N <- 30
+for (t in 1:5) N <- g(N)                    # five years of the model = five fixed-point steps
+N
+# [1] 47.26562
+f(c(0, 50, 100))
+# [1] -10.000000   4.201271 -10.000000
+```
+
+### Python
+
+```python
+import numpy as np
+
+r, K, H = 0.5, 100.0, 10.0                  # growth rate, capacity, catch (thousand fish)
+def g(N):
+    return N * np.exp(r * (1 - N / K)) - H  # harvested Ricker: stock next year
+def f(N):
+    return g(N) - N                         # steady states are the roots of f
+N = 30.0
+for t in range(5):
+    N = g(N)                                # five years of the model = five fixed-point steps
+print(N)
+# 47.26561750921943
+print(f(np.array([0, 50, 100])))
+# [-10.           4.20127083 -10.        ]
+```
+
+### Rust
+
+```rust
+// rust/examples/bisection_fixedpoint_background.rs  —  cargo run --example bisection_fixedpoint_background
+// Background: the harvested Ricker stock of the lecture.
+const R: f64 = 0.5; // growth rate
+const K: f64 = 100.0; // carrying capacity (thousand fish)
+const H: f64 = 10.0; // annual catch (thousand fish)
+
+fn g(n: f64) -> f64 {
+    n * (R * (1.0 - n / K)).exp() - H // harvested Ricker: stock next year
+}
+fn f(n: f64) -> f64 {
+    g(n) - n // steady states are the roots of f
+}
+
+fn main() {
+    let mut n = 30.0;
+    for _ in 0..5 {
+        n = g(n); // five years of the model = five fixed-point steps
+    }
+    println!("{n}");
+    println!("{:?}", [0.0, 50.0, 100.0].map(f));
+}
+
+// Output:
+// 47.26561750921943
+// [-10.0, 4.201270834387074, -10.0]
+```
+
+:::
+
+The library routines are [`uniroot`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html) in R and [`scipy.optimize.brentq`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html) in Python; in Rust, the `argmin` crate has [`BrentRoot`](https://docs.rs/argmin/latest/argmin/solver/brent/struct.BrentRoot.html). All three use Brent's method (explained in *Newton and secant methods*). In this exercise you write bisection and fixed-point iteration yourself first and use the library only in C7.
+
+## By hand
+
+**B1. Bisection on $x^2 = 3$.** Let $f(x) = x^2 - 3$ on $[1, 2]$.
+(a) Check that $[1, 2]$ is a bracket.
+(b) Do four bisection steps. Write a table with $a$, $b$, $m$, $f(m)$ and the new bracket.
+(c) After four steps, what is your estimate of $\sqrt3$, and what error bound can you guarantee? Compare with $\sqrt 3 = 1.7320508$.
+(d) How many steps guarantee a bracket narrower than $10^{-6}$? Than $10^{-12}$?
+
+**B2. Brackets from a table.** For the harvested stock, $f(N) = N\left(e^{0.5(1-N/100)} - 1\right) - H$:
+
+| $N$ | 0 | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| $f(N)$, $H = 10$ | −10.00 | −4.32 | −0.16 | 2.57 | 3.99 | 4.20 | 3.28 | 1.33 | −1.59 | −5.39 | −10.00 |
+| $f(N)$, $H = 15$ | −15.00 | −9.32 | −5.16 | −2.43 | −1.01 | −0.80 | −1.72 | −3.67 | −6.59 | −10.39 | −15.00 |
+
+(a) For $H = 10$, give the narrowest brackets the table allows. Which way does the stock change (grow or shrink) between the two roots?
+(b) How many bisection steps from each bracket give a width below $10^{-6}$?
+(c) For $H = 15$ there is no sign change. Does that prove that $f$ has no root? What would you do to be sure? What does it mean for the fish?
+(d) Why is $[0, 100]$ useless as a starting bracket for $H = 10$, although it contains both roots?
+
+**B3. Tolerances in floating point.**
+(a) A cell population model has a steady state near $3\times10^8$ cells. You run bisection on $[0, 10^9]$ with the absolute rule "stop when $b - a < 10^{-8}$". The gap between doubles near $x$ is $2^{\lfloor\log_2 x\rfloor - 52}$, and $2^{28} \approx 2.7\times10^8$. Will the loop ever stop? How many steps does the relative rule $b - a < 10^{-10}\,|m|$ take instead?
+(b) A binding equation has its root at a free ligand concentration of $2\times10^{-9}$ M. You bisect on $[0, 10^{-6}]$ M with the rule $b - a < 10^{-8}\cdot\max(1, |m|)$. How many steps are taken, and how many correct digits does the answer have? Suggest two fixes.
+
+**B4. Beverton–Holt by hand.** $N_{t+1} = \dfrac{R N_t}{1 + (R-1)N_t/K}$ with $R = 3$, $K = 100$, $N_0 = 50$.
+(a) Compute $N_1, \dots, N_4$.
+(b) Compute the errors $e_t = K - N_t$ and the ratios $e_{t+1}/e_t$. What do they approach?
+(c) Show that $g'(N) = \dfrac{R}{(1 + (R-1)N/K)^2}$, and that $g'(K) = 1/R$. Compare with (b).
+(d) Let $u_t = 1/N_t$. Show that $u_{t+1} = \dfrac{u_t}{R} + \dfrac{R-1}{RK}$, so the error $u_t - 1/K$ is divided by **exactly** $R$ each year. Check with your numbers.
+
+**B5. Cobwebs of straight lines.** Each map has the fixed point $x^* = 2$:
+(a) $g(x) = 1 + 0.5x$, (b) $g(x) = 3 - 0.5x$, (c) $g(x) = -1 + 1.5x$, (d) $g(x) = 5 - 1.5x$.
+For each, compute $x_1, x_2, x_3$ from $x_0 = 3$, sketch the cobweb plot, and say whether the iteration converges, and whether monotonically or alternating. Why is $e_{k+1} = g'(x^*)\,e_k$ exact here?
+
+**B6. Ricker stability.** $g(N) = N e^{r(1 - N/K)}$.
+(a) Use the product rule to show $g'(N) = e^{r(1-N/K)}\,(1 - rN/K)$, and $g'(K) = 1 - r$.
+(b) Classify the steady state $N^* = K$ for $r = 0.5$, $1$, $1.5$, $1.9$ and $2.5$: attracting or repelling, monotone or alternating. Which $r$ gives the fastest return to $K$?
+(c) With $K = 100$, $r = 1.5$ and $N_0 = 50$, compute $N_1$ and $N_2$ ($e^{0.75} = 2.117$, $e^{-0.0878} = 0.916$). Does the sign of the error behave as (b) predicts?
+(d) A disturbance moves the stock 10 below $K$. Roughly how many years until it is within 0.01 of $K$, for $r = 0.5$ and for $r = 1.9$?
+
+**B7. Four ways to write one equation.** The equation $x^2 - 2x - 3 = 0$ has the roots $3$ and $-1$. It can be rearranged as $x = g(x)$ with
+(a) $g_a(x) = \sqrt{2x + 3}$, (b) $g_b(x) = (x^2 - 3)/2$, (c) $g_c(x) = 3/(x - 2)$, (d) $g_d(x) = 2 + 3/x$.
+Check that 3 is a fixed point of each. Compute $g'(3)$ and $g'(-1)$ for each and predict which iterations converge to which root, and at what rate. Which form would you pick for the root 3, and which for $-1$?
+
+**B8. Read an iteration.** A fixed-point iteration gives $x_0 = 10.000$, $x_1 = 10.800$, $x_2 = 11.440$, $x_3 = 11.952$.
+(a) Compute the steps $d_k = x_{k+1} - x_k$ and their ratios. Estimate $L = g'(x^*)$.
+(b) Estimate the remaining error of $x_3$ and the fixed point $x^*$.
+(c) The stopping rule is $|d_k| < 10^{-6}$. About how many more steps will be taken, and what is the true error at that point?
+
+## In code
+
+Write and run each task in R, Python or Rust. Use the model from the Background.
+
+**C1. Bisection.** (a) Write `bisect(f, a, b, tol, maxit)` that checks the bracket, stops when $b - a < \text{tol}\cdot\max(1, |m|)$, and returns the root, the number of iterations and the final bracket. (b) Test it on $x^2 - 3$ on $[1, 2]$ with tol $= 10^{-6}, 10^{-10}, 10^{-14}$; compare the step counts with your prediction (B1) and the errors with `sqrt(3)`. (c) Run it with tol $= 10^{-17}$. What happens, and what is the final bracket width? (d) Run it on $1/(x - 1)$ on $[0, 3]$ and evaluate the function at the "root".
+
+**C2. Both steady states of the harvested stock.** (a) Evaluate $f$ on the grid $0, 5, \dots, 100$, find the intervals with a sign change, and bisect each to tol $= 10^{-12}$. (b) Evaluate $g'(N)$ at both roots and classify them. (c) For the catches $H = 10, 12, 14, 14.2, 14.3, 15$, find all steady states on a grid with spacing 0.1. What happens as $H$ grows? Compare with B2(c).
+
+**C3. Fixed-point iteration.** (a) Write `fixed_point(g, x0, tol, maxit)` that stops when $|x_{k+1} - x_k| < \text{tol}$ and returns all iterates. (b) Run it on the population map $g$ from $N_0 = 30$ and from $N_0 = 21$, and on the rearrangements $g_2(N) = K\left(1 - \log(1 + H/N)/r\right)$ and $g_3(N) = H/(e^{r(1 - N/K)} - 1)$ from 30. For each, print the number of steps, the root, the rate $L$ estimated from the last two steps, and the estimated remaining error $|d|\,L/(1-L)$. (c) Compare the estimated error of the population map with the true error, using the bisection root as reference. (d) What happens from $N_0 = 20$?
+
+**C4. Error against iteration.** For 60 iterations, record the error of bisection on $[50, 100]$ (use the bound $(b-a)/2$), of the population map $g$ and of $g_2$ (both from 30), all against the upper root. Plot them on a log-$y$ axis. Fit the slope of $\log_{10}(\text{error})$ against $k$, using only errors between $10^{-12}$ and $10^{-2}$, and compare with $\log_{10}$ of $\tfrac12$, $|g'(N^*)|$ and $|g_2'(N^*)|$, where $g_2'(N) = KH/(rN(N+H))$.
+
+**C5. Ricker regimes.** For $r = 0.5, 1.5, 1.9, 2.3, 2.6, 3.0$ (no harvest, $K = 100$, $N_0 = 20$), iterate 1000 years, then record the next 64 values. How many distinct values (rounded to 6 decimals) are there? Relate to $g'(K) = 1 - r$. Draw a cobweb plot for $r = 1.5$ (R or Python).
+
+**C6. Chaos and rounding.** $N e^{r(1 - N/K)}$ and $N e^{r} e^{-rN/K}$ are equal in exact arithmetic. Iterate both from $N_0 = 20$ for 100 years with $r = 1.5$ and with $r = 3$, and print their difference after 1, 20, 40, 60, 80 and 100 years. What do you conclude about long chaotic simulations? Does your C5 output for $r = 3$ agree with someone else's in another language?
+
+**C7. The library routine.** Find both steady states with [`uniroot`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html) (Python: [`brentq`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html); Rust: `argmin`'s `BrentRoot`), first with the default tolerance and then with a tight one. Compare the errors and the numbers of iterations with your bisection (C1, B2). Then try $H = 15$ on $[0, 100]$.
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — bisection by hand (B1, B2)"}
+Keep the half whose endpoints have $f$ of opposite signs: if $f(m)$ has the sign of $f(a)$, the new bracket is $[m, b]$, otherwise $[a, m]$. The estimate is the midpoint of the last bracket, with error at most half its width. Steps: the smallest $k$ with $(b - a)/2^k < \text{tol}$; $2^{10} \approx 10^3$, so $10^{-6}$ needs about 20 halvings of an interval of length 1.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — tolerances (B3)"}
+A bracket $[a, b]$ with $a$ and $b$ neighbouring doubles cannot be halved: the midpoint rounds to $a$ or $b$. So an absolute tolerance smaller than the gap near the root is never reached. For (b), compare the final bracket width with the size of the root itself.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — derivatives at the fixed point (B4, B6, B7)"}
+Quotient rule: $\left(\dfrac{u}{v}\right)' = \dfrac{u'v - uv'}{v^2}$. Product rule for Ricker: $\left(N\,e^{h(N)}\right)' = e^{h(N)} + N\,h'(N)\,e^{h(N)}$ with $h(N) = r(1 - N/K)$, $h' = -r/K$. At a fixed point, $|g'| < 1$ means convergence with rate $|g'|$; the number of steps to shrink an error by a factor $F$ is about $\log F / \log(1/|g'|)$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — cobwebs (B5, C5)"}
+From $(x_k, x_k)$ on the diagonal, go vertically to $(x_k, g(x_k))$ and then horizontally to $(x_{k+1}, x_{k+1})$ on the diagonal. For a straight line $g(x) = c + s x$ with fixed point $x^*$, $g(x) - x^* = s\,(x - x^*)$ exactly. In R use [`segments`](https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/segments.html) and `abline(0, 1)`; in Python, `plt.plot([x, x, y], [x, y, y])` draws one vertical and one horizontal piece.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — rate and error from the steps (B8, C3)"}
+$d_{k+1}/d_k \approx L$. The remaining steps form a geometric series: $x^* - x_{k+1} \approx d_k (L + L^2 + \dots) = d_k\,L/(1-L)$. In R, [`diff(x)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/diff.html) gives all steps; in Python, [`np.diff(x)`](https://numpy.org/doc/stable/reference/generated/numpy.diff.html). SciPy also has [`scipy.optimize.fixed_point`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.fixed_point.html), but by default it accelerates the iteration (Steffensen's method), so it does not show the plain linear convergence of this exercise.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — finding sign changes on a grid (C2)"}
+Compare the signs of neighbouring values: in R, `which(sign(v[-1]) != sign(v[-length(v)]))` (see [`sign`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/sign.html)); in Python, `np.where(np.sign(v[1:]) != np.sign(v[:-1]))[0]` (see [`np.sign`](https://numpy.org/doc/stable/reference/generated/numpy.sign.html)). Each index $i$ gives the bracket from grid point $i$ to $i+1$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — fitting the slope (C4)"}
+Fit a straight line to $\log_{10} e_k$ against $k$: [`lm(log10(e) ~ k)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html) in R, [`np.polyfit(k, np.log10(e), 1)`](https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html) in Python. Leave out the start (not yet in the linear regime) and the floor at $10^{-14}$ (rounding).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 8 — library root finders (C7)"}
+R: `uniroot(f, c(a, b), tol = 1e-12)` returns a list with `$root`, `$iter` and `$estim.prec`; the default `tol` is `.Machine$double.eps^0.25`. Python: `brentq(f, a, b, xtol=1e-14, full_output=True)` returns the root and an object with `.iterations` and `.function_calls`. Rust: `Executor::new(problem, BrentRoot::new(a, b, tol)).run()` from [`argmin`](https://docs.rs/argmin/latest/argmin/solver/brent/struct.BrentRoot.html); the function must be a struct implementing `CostFunction`.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $f(1) = -2 < 0$, $f(2) = 1 > 0$: a sign change, so a bracket.
+(b)
+
+| $k$ | $a$ | $b$ | $m$ | $f(m)$ | new bracket |
+|---|---|---|---|---|---|
+| 1 | 1 | 2 | 1.5 | $-0.75$ | $[1.5, 2]$ |
+| 2 | 1.5 | 2 | 1.75 | $+0.0625$ | $[1.5, 1.75]$ |
+| 3 | 1.5 | 1.75 | 1.625 | $-0.359$ | $[1.625, 1.75]$ |
+| 4 | 1.625 | 1.75 | 1.6875 | $-0.152$ | $[1.6875, 1.75]$ |
+
+(c) Estimate: the midpoint $1.71875$, with error at most half the width, $0.03125$. The true error is $|1.71875 - 1.7320508| = 0.0133$, within the bound.
+(d) $2^{-k} < 10^{-6}$ needs $k > 6\log_2 10 = 19.93$, so **20** steps; $10^{-12}$ needs $k > 39.86$, so **40** steps. Each decimal digit costs $\log_2 10 \approx 3.3$ steps.
+
+**B2.**
+(a) Sign changes between 20 and 30 ($-0.16$ to $2.57$) and between 70 and 80 ($1.33$ to $-1.59$): brackets $[20, 30]$ and $[70, 80]$. Between the roots $f > 0$: the stock grows. Below 20.5 and above 75 it shrinks.
+(b) $\lceil \log_2(10/10^{-6}) \rceil = \lceil 23.25 \rceil = 24$ steps for each.
+(c) No. The table only shows values every 10 units; a pair of roots closer together than that, or a double root where $f$ only touches 0, would be missed. Plot $f$ on a fine grid, or find the maximum of $f$: here the maximum of $f$ for $H = 15$ is about $-0.74$ (at $N \approx 47$), so there is no root. For the fish: no steady state at all, the stock shrinks every year and collapses whatever its size. The largest sustainable catch is the maximum of the surplus $N(e^{r(1-N/K)} - 1)$, about 14.26.
+(d) $f(0) = f(100) = -10$: same sign, so bisection cannot start. An even number of roots inside gives no sign change.
+
+**B3.**
+(a) Near $3\times10^8$ the gap between doubles is $2^{28-52} = 2^{-24} \approx 6\times10^{-8}$. The bracket can never be narrower than one gap, so $b - a < 10^{-8}$ is never true: without a maximum number of iterations the loop runs forever. With the relative rule, the target width is $10^{-10}\times3\times10^8 = 0.03$ cells, and $\lceil\log_2(10^9/0.03)\rceil = 35$ steps.
+(b) The rule is effectively absolute ($\max(1, |m|) = 1$): $\lceil\log_2(10^{-6}/10^{-8})\rceil = 7$ steps, leaving a bracket of width $7.8\times10^{-9}$ M, about **four times the root itself**. No digit is correct. Fixes: use a purely relative tolerance, $b - a < \text{tol}\cdot|m|$; or work in units where the root is of order 1 (nM instead of M). The $\max(1, |x|)$ rule assumes the problem is scaled so that $x$ is not tiny.
+
+**B4.**
+(a) $N_1 = 150/(1 + 1) = 75$; $N_2 = 225/(1 + 1.5) = 90$; $N_3 = 270/2.8 = 96.43$; $N_4 = 289.29/2.9286 = 98.78$.
+(b) Errors $50, 25, 10, 3.57, 1.22$; ratios $0.5, 0.4, 0.357, 0.341$, approaching $\tfrac13$.
+(c) With $c = (R-1)/K$: $g' = \dfrac{R(1 + cN) - RN\,c}{(1 + cN)^2} = \dfrac{R}{(1 + cN)^2}$. At $N = K$, $1 + cK = R$, so $g'(K) = R/R^2 = 1/R = \tfrac13$: the limit of the ratios.
+(d) $u_{t+1} = \dfrac{1 + cN_t}{R N_t} = \dfrac{1}{R}\dfrac1{N_t} + \dfrac{c}{R} = \dfrac{u_t}{R} + \dfrac{R-1}{RK}$. The fixed point is $u^* = 1/K$, and $u_{t+1} - u^* = (u_t - u^*)/R$ exactly. Check: $1/50 - 1/100 = 0.01$, $1/75 - 1/100 = 0.00333$, $1/90 - 1/100 = 0.00111$: divided by 3 each year. (In the variable $u = 1/N$ the map is a straight line; that is why the Beverton–Holt model has an exact solution.)
+
+**B5.**
+(a) $2.5, 2.25, 2.125$: converges, monotone (errors $1, 0.5, 0.25, 0.125$; staircase).
+(b) $1.5, 2.25, 1.875$: converges, alternating (errors $1, -0.5, 0.25, -0.125$; spiral).
+(c) $3.5, 4.25, 5.375$: diverges monotonically (errors $\times 1.5$).
+(d) $0.5, 4.25, -1.375$: diverges, alternating (errors $\times(-1.5)$).
+For a straight line $g(x) - g(x^*) = s\,(x - x^*)$ with no Taylor remainder, so $e_{k+1} = s\,e_k$ exactly.
+
+**B6.**
+(a) $g'(N) = e^{r(1-N/K)} + N\cdot(-r/K)\,e^{r(1-N/K)} = e^{r(1-N/K)}(1 - rN/K)$. At $N = K$: $e^0(1 - r) = 1 - r$.
+(b) $r = 0.5$: $g' = 0.5$, attracting, monotone. $r = 1$: $g' = 0$, attracting, faster than linear (the fastest). $r = 1.5$: $-0.5$, attracting, alternating. $r = 1.9$: $-0.9$, attracting but slowly, alternating. $r = 2.5$: $-1.5$, repelling (the population cycles instead).
+(c) $N_1 = 50\cdot e^{0.75} = 105.85$; $N_2 = 105.85\cdot e^{1.5(1 - 1.0585)} = 105.85\cdot e^{-0.0878} = 105.85 \cdot 0.916 = 96.96$. Errors $N - K$: $-50$, $+5.85$, $-3.04$: the sign alternates, and the last ratio $-3.04/5.85 = -0.52$ is close to $g'(K) = -0.5$. (The first ratio, $-0.12$, is far from $-0.5$: 50 is not "near" $K$.)
+(d) The error must shrink by a factor $10/0.01 = 1000$. $r = 0.5$: $\log 1000/\log 2 \approx 10$ years. $r = 1.9$: $\log 1000/\log(1/0.9) \approx 66$ years, with the stock alternating above and below $K$ all the time.
+
+**B7.**
+All four: $g_a(3) = \sqrt 9 = 3$, $g_b(3) = 6/2 = 3$, $g_c(3) = 3/1 = 3$, $g_d(3) = 2 + 1 = 3$.
+
+| | $g'(x)$ | $g'(3)$ | $g'(-1)$ |
+|---|---|---|---|
+| $g_a = \sqrt{2x+3}$ | $1/\sqrt{2x+3}$ | $1/3$: converges | ($g_a \ge 0$, so $-1$ is not a fixed point: $g_a(-1) = 1$) |
+| $g_b = (x^2-3)/2$ | $x$ | $3$: repels | $-1$: borderline, no convergence |
+| $g_c = 3/(x-2)$ | $-3/(x-2)^2$ | $-3$: repels | $-1/3$: converges, alternating |
+| $g_d = 2 + 3/x$ | $-3/x^2$ | $-1/3$: converges, alternating | $-3$: repels |
+
+For 3, use $g_a$ (monotone) or $g_d$; for $-1$, use $g_c$. Like $g_2$ and $g_3$ in the lecture: each rearrangement finds the root where it has $|g'| < 1$.
+
+**B8.**
+(a) Steps $0.800, 0.640, 0.512$; ratios $0.8$ and $0.8$, so $L \approx 0.8$.
+(b) Remaining error of $x_3$: $0.512 \times 0.8/0.2 = 2.048$, so $x^* \approx 11.952 + 2.048 = 14.0$.
+(c) Steps shrink by 0.8: $0.512\cdot 0.8^j < 10^{-6}$ needs $j > \log(1.95\times10^{-6})/\log 0.8 = 59.0$, about 59–60 more steps. At that point the error is still $10^{-6}\cdot 0.8/0.2 = 4\times10^{-6}$, four times the tolerance. When $L$ is close to 1, a small step does not mean a small error.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+bisect <- function(f, a, b, tol = 1e-8, maxit = 100) {
+  fa <- f(a); fb <- f(b)
+  if (sign(fa) == sign(fb)) stop("f(a) and f(b) must have opposite signs")
+  for (k in 1:maxit) {
+    m <- (a + b) / 2; fm <- f(m)
+    if (sign(fm) == sign(fa)) { a <- m; fa <- fm } else b <- m
+    if (b - a < tol * max(1, abs(m))) return(list(root = (a + b) / 2, iter = k, a = a, b = b))
+  }
+  warning("maxit reached"); list(root = (a + b) / 2, iter = maxit, a = a, b = b)
+}
+sq <- function(x) x^2 - 3
+for (tol in c(1e-6, 1e-10, 1e-14)) {
+  out <- bisect(sq, 1, 2, tol = tol)
+  cat(sprintf("tol %.0e: %d steps (predicted %d), error %.2e\n", tol, out$iter,
+              ceiling(log2(1 / (tol * sqrt(3)))), out$root - sqrt(3)))
+}
+# tol 1e-06: 20 steps (predicted 20), error -3.89e-07
+# tol 1e-10: 33 steps (predicted 33), error 5.38e-11
+# tol 1e-14: 46 steps (predicted 46), error -2.22e-15
+out <- bisect(sq, 1, 2, tol = 1e-17)          # Warning: maxit reached
+out$iter
+# [1] 100
+out$b - out$a
+# [1] 2.220446e-16
+pole <- function(x) 1 / (x - 1)
+out <- bisect(pole, 0, 3)
+c(out$root, pole(out$root))
+# [1]           1 -1073741824
+```
+
+### Python
+
+```python
+import warnings
+
+def bisect(f, a, b, tol=1e-8, maxit=100):
+    fa, fb = f(a), f(b)
+    if np.sign(fa) == np.sign(fb):
+        raise ValueError("f(a) and f(b) must have opposite signs")
+    for k in range(1, maxit + 1):
+        m = (a + b) / 2; fm = f(m)
+        if np.sign(fm) == np.sign(fa):
+            a, fa = m, fm
+        else:
+            b = m
+        if b - a < tol * max(1, abs(m)):
+            return dict(root=(a + b) / 2, iter=k, a=a, b=b)
+    warnings.warn("maxit reached")
+    return dict(root=(a + b) / 2, iter=maxit, a=a, b=b)
+
+def sq(x):
+    return x**2 - 3
+for tol in [1e-6, 1e-10, 1e-14]:
+    out = bisect(sq, 1.0, 2.0, tol=tol)
+    pred = int(np.ceil(np.log2(1 / (tol * np.sqrt(3)))))
+    print(f"tol {tol:.0e}: {out['iter']} steps (predicted {pred}), error {out['root'] - np.sqrt(3):.2e}")
+# tol 1e-06: 20 steps (predicted 20), error -3.89e-07
+# tol 1e-10: 33 steps (predicted 33), error 5.38e-11
+# tol 1e-14: 46 steps (predicted 46), error -2.22e-15
+out = bisect(sq, 1.0, 2.0, tol=1e-17)       # UserWarning: maxit reached
+print(out["iter"], out["b"] - out["a"])
+# 100 2.220446049250313e-16
+def pole(x):
+    return 1 / (x - 1)
+out = bisect(pole, 0.0, 3.0)
+print(out["root"], pole(out["root"]))
+# 0.9999999990686774 -1073741824.0
+```
+
+### Rust
+
+```rust
+// rust/examples/bisection_fixedpoint_c1.rs  —  cargo run --example bisection_fixedpoint_c1
+// C1: bisection, its step count, the floating-point floor, and a pole.
+struct Bracket {
+    root: f64,
+    iter: usize,
+    a: f64,
+    b: f64,
+}
+
+// Result<..., String>: either Ok(bracket) or Err(message), like stop() in R
+fn bisect(f: impl Fn(f64) -> f64, mut a: f64, mut b: f64, tol: f64, maxit: usize)
+    -> Result<Bracket, String> {
+    let mut fa = f(a);
+    if fa.signum() == f(b).signum() {
+        return Err("f(a) and f(b) must have opposite signs".to_string());
+    }
+    for k in 1..=maxit {
+        let m = (a + b) / 2.0;
+        let fm = f(m);
+        if fm.signum() == fa.signum() { a = m; fa = fm; } else { b = m; }
+        if b - a < tol * m.abs().max(1.0) {
+            return Ok(Bracket { root: (a + b) / 2.0, iter: k, a, b });
+        }
+    }
+    eprintln!("warning: maxit reached");
+    Ok(Bracket { root: (a + b) / 2.0, iter: maxit, a, b })
+}
+
+fn main() {
+    let sq = |x: f64| x * x - 3.0;
+    for tol in [1e-6, 1e-10, 1e-14] {
+        let out = bisect(sq, 1.0, 2.0, tol, 100).unwrap();
+        let pred = (1.0 / (tol * 3f64.sqrt())).log2().ceil();
+        println!("tol {tol:.0e}: {} steps (predicted {pred}), error {:.2e}",
+                 out.iter, out.root - 3f64.sqrt());
+    }
+    let out = bisect(sq, 1.0, 2.0, 1e-17, 100).unwrap(); // warning: maxit reached
+    println!("{} {:e}", out.iter, out.b - out.a);
+    let pole = |x: f64| 1.0 / (x - 1.0);
+    let out = bisect(pole, 0.0, 3.0, 1e-8, 100).unwrap();
+    println!("{} {}", out.root, pole(out.root));
+}
+
+// Output:
+// tol 1e-6: 20 steps (predicted 20), error -3.89e-7
+// tol 1e-10: 33 steps (predicted 33), error 5.38e-11
+// tol 1e-14: 46 steps (predicted 46), error -2.22e-15
+// 100 2.220446049250313e-16
+// 0.9999999990686774 -1073741824
+```
+
+:::
+
+The step counts match $\lceil\log_2(1/(\text{tol}\cdot\sqrt3))\rceil$ (the stopping rule is relative to $|m| \approx 1.73$, which saves one step for the two smaller tolerances compared with B1(d)). With tol $= 10^{-17}$ the loop runs into `maxit`: the final bracket is $2.2\times10^{-16}$ wide, one gap between doubles in $[1, 2)$, and cannot shrink further. On $1/(x-1)$ bisection closes in on the pole at 1, where the function value is $-10^9$: the residual check reveals it at once.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+grid <- seq(0, 100, by = 5)
+fg <- f(grid)
+i <- which(sign(fg[-1]) != sign(fg[-length(fg)]))   # sign change between grid[i] and grid[i+1]
+cbind(a = grid[i], b = grid[i + 1])
+#       a  b
+# [1,] 20 25
+# [2,] 70 75
+roots <- sapply(i, function(j) bisect(f, grid[j], grid[j + 1], tol = 1e-12)$root)
+print(roots, digits = 12)
+# [1] 20.4819903614 74.9524424995
+dg <- function(N) exp(r * (1 - N / K)) * (1 - r * N / K)
+dg(roots)
+# [1] 1.3358238 0.7086557
+fine <- seq(0.1, 100, by = 0.1)
+for (Hh in c(10, 12, 14, 14.2, 14.3, 15)) {
+  fh <- function(N) N * exp(r * (1 - N / K)) - Hh - N
+  v <- fh(fine); j <- which(sign(v[-1]) != sign(v[-length(v)]))
+  rts <- sapply(j, function(jj) bisect(fh, fine[jj], fine[jj + 1], tol = 1e-12)$root)
+  cat(sprintf("H = %5.2f: %d steady states %s\n", Hh, length(rts),
+              paste(sprintf("%.3f", rts), collapse = " ")))
+}
+# H = 10.00: 2 steady states 20.482 74.952
+# H = 12.00: 2 steady states 27.437 67.089
+# H = 14.00: 2 steady states 40.071 53.548
+# H = 14.20: 2 steady states 43.494 50.034
+# H = 14.30: 0 steady states
+# H = 15.00: 0 steady states
+```
+
+### Python
+
+```python
+grid = np.arange(0, 101, 5.0)
+fg = f(grid)
+i = np.where(np.sign(fg[1:]) != np.sign(fg[:-1]))[0]   # sign change between grid[i] and grid[i+1]
+print(np.column_stack([grid[i], grid[i + 1]]))
+# [[20. 25.]
+#  [70. 75.]]
+roots = np.array([bisect(f, grid[j], grid[j + 1], tol=1e-12)["root"] for j in i])
+print(roots)
+# [20.48199036 74.9524425 ]
+def dg(N):
+    return np.exp(r * (1 - N / K)) * (1 - r * N / K)
+print(dg(roots))
+# [1.33582385 0.70865572]
+fine = np.round(np.arange(0.1, 100.05, 0.1), 1)
+for Hh in [10, 12, 14, 14.2, 14.3, 15]:
+    fh = lambda N: N * np.exp(r * (1 - N / K)) - Hh - N
+    v = fh(fine); j = np.where(np.sign(v[1:]) != np.sign(v[:-1]))[0]
+    rts = [bisect(fh, fine[jj], fine[jj + 1], tol=1e-12)["root"] for jj in j]
+    print(f"H = {Hh:5.2f}: {len(rts)} steady states " + " ".join(f"{x:.3f}" for x in rts))
+# H = 10.00: 2 steady states 20.482 74.952
+# H = 12.00: 2 steady states 27.437 67.089
+# H = 14.00: 2 steady states 40.071 53.548
+# H = 14.20: 2 steady states 43.494 50.034
+# H = 14.30: 0 steady states
+# H = 15.00: 0 steady states
+```
+
+### Rust
+
+```rust
+// rust/examples/bisection_fixedpoint_c2.rs  —  cargo run --example bisection_fixedpoint_c2
+// C2: brackets from a grid, both steady states, their stability, and the largest catch.
+const R: f64 = 0.5;
+const K: f64 = 100.0;
+
+// harvested Ricker: f(N) = g(N) - N for a catch h
+fn f(n: f64, h: f64) -> f64 {
+    n * (R * (1.0 - n / K)).exp() - h - n
+}
+fn dg(n: f64) -> f64 {
+    (R * (1.0 - n / K)).exp() * (1.0 - R * n / K) // g'(N)
+}
+
+// bisection as in C1, returning only the root (the bracket is checked by the caller)
+fn bisect(f: impl Fn(f64) -> f64, mut a: f64, mut b: f64, tol: f64) -> f64 {
+    let mut fa = f(a);
+    for _ in 0..200 {
+        let m = (a + b) / 2.0;
+        let fm = f(m);
+        if fm.signum() == fa.signum() { a = m; fa = fm; } else { b = m; }
+        if b - a < tol * m.abs().max(1.0) { break; }
+    }
+    (a + b) / 2.0
+}
+
+// all roots of f on a grid: bisect every interval with a sign change
+fn roots_on_grid(f: impl Fn(f64) -> f64, grid: &[f64]) -> Vec<f64> {
+    let mut out = Vec::new();
+    for w in grid.windows(2) {           // windows(2): consecutive pairs (grid[i], grid[i+1])
+        if f(w[0]).signum() != f(w[1]).signum() {
+            out.push(bisect(&f, w[0], w[1], 1e-12));
+        }
+    }
+    out
+}
+
+fn main() {
+    let grid: Vec<f64> = (0..=20).map(|i| 5.0 * i as f64).collect();
+    for w in grid.windows(2) {
+        if f(w[0], 10.0).signum() != f(w[1], 10.0).signum() {
+            println!("bracket [{}, {}]", w[0], w[1]);
+        }
+    }
+    let roots = roots_on_grid(|n| f(n, 10.0), &grid);
+    println!("{:?}", roots);
+    println!("{:?}", roots.iter().map(|&n| dg(n)).collect::<Vec<f64>>());
+
+    let fine: Vec<f64> = (1..=1000).map(|i| 0.1 * i as f64).collect();
+    for h in [10.0, 12.0, 14.0, 14.2, 14.3, 15.0] {
+        let rts = roots_on_grid(|n| f(n, h), &fine);
+        let txt: Vec<String> = rts.iter().map(|x| format!("{x:.3}")).collect();
+        println!("H = {h:5.2}: {} steady states {}", rts.len(), txt.join(" "));
+    }
+}
+
+// Output:
+// bracket [20, 25]
+// bracket [70, 75]
+// [20.48199036139522, 74.95244249945245]
+// [1.3358238488907728, 0.7086557211487495]
+// H = 10.00: 2 steady states 20.482 74.952
+// H = 12.00: 2 steady states 27.437 67.089
+// H = 14.00: 2 steady states 40.071 53.548
+// H = 14.20: 2 steady states 43.494 50.034
+// H = 14.30: 0 steady states
+// H = 15.00: 0 steady states
+```
+
+:::
+
+The lower steady state is repelling ($g' = 1.34$), the upper one attracting ($g' = 0.71$). As the catch grows, the collapse threshold rises and the stable stock falls; the two meet near $H = 14.26$ and vanish. Close to that catch, a small disturbance or a small increase of the quota is enough to push the stock below the threshold. Note that between $H = 14.2$ and $14.3$ the grid cannot tell "two roots very close together" from "none": that needs the maximum of $f$ (an optimisation problem, *Optimisation in one dimension*).
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+fixed_point <- function(g, x0, tol = 1e-10, maxit = 1000) {
+  x <- numeric(maxit + 1); x[1] <- x0
+  for (k in 1:maxit) {
+    x[k + 1] <- g(x[k])
+    if (!is.finite(x[k + 1])) break
+    if (abs(x[k + 1] - x[k]) < tol) return(list(root = x[k + 1], iter = k, x = x[1:(k + 1)]))
+  }
+  warning("no convergence"); list(root = NA, iter = k, x = x[1:(k + 1)])
+}
+g2 <- function(N) K * (1 - log(1 + H / N) / r)
+g3 <- function(N) H / (exp(r * (1 - N / K)) - 1)
+hi <- bisect(f, 50, 100, tol = 1e-15)$root
+lo <- bisect(f, 0, 50, tol = 1e-15)$root
+for (run in list(list("g ", g, 30), list("g ", g, 21), list("g2", g2, 30), list("g3", g3, 30))) {
+  out <- fixed_point(run[[2]], run[[3]])
+  d <- diff(out$x); n <- length(d)
+  L <- d[n] / d[n - 1]
+  cat(sprintf("%s from %2g: %3d steps, root %.10f, L = %.4f, est. error %.1e\n",
+              run[[1]], run[[3]], out$iter, out$root, L, abs(d[n]) * L / (1 - L)))
+}
+# g  from 30:  82 steps, root 74.9524424992, L = 0.7086, est. error 2.0e-10
+# g  from 21:  93 steps, root 74.9524424993, L = 0.7086, est. error 1.7e-10
+# g2 from 30:  26 steps, root 74.9524424994, L = 0.3139, est. error 2.1e-11
+# g3 from 30:  23 steps, root 20.4819903614, L = 0.3122, est. error 2.7e-11
+c(hi = hi, lo = lo)
+#       hi       lo
+# 74.95244 20.48199
+out <- fixed_point(g, 30); out$root - hi
+# [1] -1.984404e-10
+out <- fixed_point(g, 20)                      # Warning: no convergence
+round(tail(out$x, 4), 3)
+# [1] -4.999930e+02 -1.005226e+04 -1.115881e+26          -Inf
+```
+
+### Python
+
+```python
+def fixed_point(g, x0, tol=1e-10, maxit=1000):
+    x = [x0]
+    for k in range(1, maxit + 1):
+        x.append(g(x[-1]))
+        if not np.isfinite(x[-1]):
+            break
+        if abs(x[-1] - x[-2]) < tol:
+            return dict(root=x[-1], iter=k, x=np.array(x))
+    warnings.warn("no convergence")
+    return dict(root=np.nan, iter=k, x=np.array(x))
+
+def g2(N):
+    return K * (1 - np.log(1 + H / N) / r)
+def g3(N):
+    return H / (np.exp(r * (1 - N / K)) - 1)
+hi = bisect(f, 50.0, 100.0, tol=1e-15)["root"]
+lo = bisect(f, 0.0, 50.0, tol=1e-15)["root"]
+for name, gf, x0 in [("g ", g, 30.0), ("g ", g, 21.0), ("g2", g2, 30.0), ("g3", g3, 30.0)]:
+    out = fixed_point(gf, x0)
+    d = np.diff(out["x"])
+    L = d[-1] / d[-2]
+    print(f"{name} from {x0:2g}: {out['iter']:3d} steps, root {out['root']:.10f}, "
+          f"L = {L:.4f}, est. error {abs(d[-1]) * L / (1 - L):.1e}")
+# g  from 30:  82 steps, root 74.9524424992, L = 0.7086, est. error 2.0e-10
+# g  from 21:  93 steps, root 74.9524424993, L = 0.7086, est. error 1.7e-10
+# g2 from 30:  26 steps, root 74.9524424994, L = 0.3139, est. error 2.1e-11
+# g3 from 30:  23 steps, root 20.4819903614, L = 0.3122, est. error 2.7e-11
+print(hi, lo)
+# 74.95244249944395 20.481990361399696
+print(fixed_point(g, 30.0)["root"] - hi)
+# -1.9844037524308078e-10
+with np.errstate(over="ignore"):
+    out = fixed_point(g, 20.0)              # UserWarning: no convergence
+print(np.round(out["x"][-4:], 3))
+# [-4.99993000e+02 -1.00522610e+04 -1.11588076e+26            -inf]
+```
+
+### Rust
+
+```rust
+// rust/examples/bisection_fixedpoint_c3.rs  —  cargo run --example bisection_fixedpoint_c3
+// C3: fixed-point iteration with three different g, rate and error estimates.
+const R: f64 = 0.5;
+const K: f64 = 100.0;
+const H: f64 = 10.0;
+
+fn g(n: f64) -> f64 { n * (R * (1.0 - n / K)).exp() - H }
+fn g2(n: f64) -> f64 { K * (1.0 - (1.0 + H / n).ln() / R) }
+fn g3(n: f64) -> f64 { H / ((R * (1.0 - n / K)).exp() - 1.0) }
+fn f(n: f64) -> f64 { g(n) - n }
+
+fn bisect(f: impl Fn(f64) -> f64, mut a: f64, mut b: f64, tol: f64) -> f64 {
+    let mut fa = f(a);
+    for _ in 0..200 {
+        let m = (a + b) / 2.0;
+        let fm = f(m);
+        if fm.signum() == fa.signum() { a = m; fa = fm; } else { b = m; }
+        if b - a < tol * m.abs().max(1.0) { break; }
+    }
+    (a + b) / 2.0
+}
+
+// returns (converged?, all iterates x0, x1, ...)
+fn fixed_point(g: fn(f64) -> f64, x0: f64, tol: f64, maxit: usize) -> (bool, Vec<f64>) {
+    let mut x = vec![x0];
+    for _ in 0..maxit {
+        let next = g(*x.last().unwrap());
+        x.push(next);
+        if !next.is_finite() { break; }
+        let n = x.len();
+        if (x[n - 1] - x[n - 2]).abs() < tol { return (true, x); }
+    }
+    eprintln!("warning: no convergence");
+    (false, x)
+}
+
+fn main() {
+    let hi = bisect(f, 50.0, 100.0, 1e-15);
+    let lo = bisect(f, 0.0, 50.0, 1e-15);
+    let runs: [(&str, fn(f64) -> f64, f64); 4] =
+        [("g ", g, 30.0), ("g ", g, 21.0), ("g2", g2, 30.0), ("g3", g3, 30.0)];
+    for (name, gf, x0) in runs {
+        let (_, x) = fixed_point(gf, x0, 1e-10, 1000);
+        let d: Vec<f64> = x.windows(2).map(|w| w[1] - w[0]).collect(); // steps
+        let n = d.len();
+        let l = d[n - 1] / d[n - 2];
+        println!("{name} from {x0:2}: {:3} steps, root {:.10}, L = {l:.4}, est. error {:.1e}",
+                 n, x[n], d[n - 1].abs() * l / (1.0 - l));
+    }
+    println!("{hi} {lo}");
+    let (_, x) = fixed_point(g, 30.0, 1e-10, 1000);
+    println!("{:e}", x.last().unwrap() - hi);
+    let (_, x) = fixed_point(g, 20.0, 1e-10, 1000);       // warning: no convergence
+    println!("{:?}", &x[x.len() - 4..]);
+}
+
+// Output:
+// g  from 30:  82 steps, root 74.9524424992, L = 0.7086, est. error 2.0e-10
+// g  from 21:  93 steps, root 74.9524424993, L = 0.7086, est. error 1.7e-10
+// g2 from 30:  26 steps, root 74.9524424994, L = 0.3139, est. error 2.1e-11
+// g3 from 30:  23 steps, root 20.4819903614, L = 0.3122, est. error 2.7e-11
+// 74.95244249944403 20.481990361399696
+// -1.98525640371372e-10
+// [-499.9927772566138, -10052.26071900527, -1.1158807601826809e26, -inf]
+```
+
+:::
+
+The estimated rates match $g'(N^*)$ at the root each iteration converges to: $0.709$ for the population map, $0.314$ for $g_2$ (upper root) and $0.312$ for $g_3$ (lower root). The estimated remaining error of the population map, $2.0\times10^{-10}$, matches the true error $-1.98\times10^{-10}$, and is twice the tolerance $10^{-10}$ that the stopping rule was given. From $N_0 = 20$, just below the unstable steady state, the stock shrinks, becomes negative (extinct; the model has no meaning there) and the formula then blows up to $-\infty$. A real program should stop at $N \le 0$.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+n <- 60
+a <- 50; b <- 100; e_bis <- numeric(n)
+for (k in 1:n) {
+  if (sign(f((a + b) / 2)) == sign(f(a))) a <- (a + b) / 2 else b <- (a + b) / 2
+  e_bis[k] <- (b - a) / 2                       # error bound of the midpoint
+}
+e_g <- e_g2 <- numeric(n); x <- y <- 30
+for (k in 1:n) { x <- g(x); y <- g2(y); e_g[k] <- abs(x - hi); e_g2[k] <- abs(y - hi) }
+slope <- function(e) {                          # fit only the straight part
+  k <- which(e < 1e-2 & e > 1e-12)
+  unname(coef(lm(log10(e[k]) ~ k))[2])
+}
+round(c(bisection = slope(e_bis), g = slope(e_g), g2 = slope(e_g2)), 4)
+# bisection         g        g2
+#   -0.3010   -0.1496   -0.5032
+dg2 <- K * H / (r * hi * (hi + H))              # g2'(N*)
+round(log10(c(0.5, abs(dg(hi)), dg2)), 4)
+# [1] -0.3010 -0.1496 -0.5029
+plot(1:n, e_bis, log = "y", type = "l", ylim = c(1e-15, 100), xlab = "iteration", ylab = "error")
+lines(1:n, e_g, col = "blue"); lines(1:n, e_g2, col = "darkgreen")
+```
+
+### Python
+
+```python
+import matplotlib.pyplot as plt
+n = 60
+a, b = 50.0, 100.0; e_bis = np.zeros(n)
+for k in range(n):
+    m = (a + b) / 2
+    if np.sign(f(m)) == np.sign(f(a)):
+        a = m
+    else:
+        b = m
+    e_bis[k] = (b - a) / 2                      # error bound of the midpoint
+e_g = np.zeros(n); e_g2 = np.zeros(n); x = y = 30.0
+for k in range(n):
+    x = g(x); y = g2(y); e_g[k] = abs(x - hi); e_g2[k] = abs(y - hi)
+def slope(e):                                   # fit only the straight part
+    k = np.where((e < 1e-2) & (e > 1e-12))[0] + 1
+    return np.polyfit(k, np.log10(e[k - 1]), 1)[0]
+print(np.round([slope(e_bis), slope(e_g), slope(e_g2)], 4))
+# [-0.301  -0.1496 -0.5032]
+dg2 = K * H / (r * hi * (hi + H))               # g2'(N*)
+print(np.round(np.log10([0.5, abs(dg(hi)), dg2]), 4))
+# [-0.301  -0.1496 -0.5029]
+ks = np.arange(1, n + 1)
+plt.semilogy(ks, e_bis, ks, e_g, ks, e_g2); plt.ylim(1e-15, 100)
+plt.xlabel("iteration"); plt.ylabel("error"); plt.legend(["bisection", "g", "g2"]); plt.show()
+```
+
+### Rust
+
+```rust
+// rust/examples/bisection_fixedpoint_c4.rs  —  cargo run --example bisection_fixedpoint_c4
+// C4: error against iteration; slopes of log10(error) give the rates.
+const R: f64 = 0.5;
+const K: f64 = 100.0;
+const H: f64 = 10.0;
+
+fn g(n: f64) -> f64 { n * (R * (1.0 - n / K)).exp() - H }
+fn g2(n: f64) -> f64 { K * (1.0 - (1.0 + H / n).ln() / R) }
+fn f(n: f64) -> f64 { g(n) - n }
+fn dg(n: f64) -> f64 { (R * (1.0 - n / K)).exp() * (1.0 - R * n / K) }
+
+// least-squares slope of log10(e_k) against k, using only the straight part
+fn slope(e: &[f64]) -> f64 {
+    let pts: Vec<(f64, f64)> = e.iter().enumerate()
+        .filter(|&(_, &v)| v < 1e-2 && v > 1e-12)
+        .map(|(i, &v)| ((i + 1) as f64, v.log10()))
+        .collect();
+    let n = pts.len() as f64;
+    let mx = pts.iter().map(|p| p.0).sum::<f64>() / n;
+    let my = pts.iter().map(|p| p.1).sum::<f64>() / n;
+    let sxy: f64 = pts.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum();
+    let sxx: f64 = pts.iter().map(|p| (p.0 - mx).powi(2)).sum();
+    sxy / sxx
+}
+
+fn main() {
+    // reference root by bisection to full precision
+    let (mut a, mut b) = (50.0, 100.0);
+    for _ in 0..100 {
+        let m: f64 = (a + b) / 2.0;
+        if f(m).signum() == f(a).signum() { a = m } else { b = m }
+    }
+    let hi = (a + b) / 2.0;
+
+    let n = 60;
+    let (mut a, mut b) = (50.0, 100.0);
+    let mut e_bis = vec![0.0; n];
+    let (mut e_g, mut e_g2) = (vec![0.0; n], vec![0.0; n]);
+    let (mut x, mut y) = (30.0, 30.0);
+    for k in 0..n {
+        let m = (a + b) / 2.0;
+        if f(m).signum() == f(a).signum() { a = m } else { b = m }
+        e_bis[k] = (b - a) / 2.0; // error bound of the midpoint
+        x = g(x);
+        y = g2(y);
+        e_g[k] = (x - hi).abs();
+        e_g2[k] = (y - hi).abs();
+    }
+    println!("{:.4} {:.4} {:.4}", slope(&e_bis), slope(&e_g), slope(&e_g2));
+    let dg2 = K * H / (R * hi * (hi + H)); // g2'(N*)
+    println!("{:.4} {:.4} {:.4}", 0.5f64.log10(), dg(hi).abs().log10(), dg2.log10());
+    // No plotting here: write e_bis, e_g, e_g2 to a file and plot in R or Python.
+}
+
+// Output:
+// -0.3010 -0.1496 -0.5028
+// -0.3010 -0.1496 -0.5029
+```
+
+:::
+
+The fitted slopes agree with $\log_{10}$ of the rates to three or four decimals: bisection gains $0.30$ digits per step, the population map $0.15$, and $g_2$ $0.50$. The plot is the "Error against iteration" figure of the lecture. Fitting the whole curve instead of the straight part would mix in the start (where the rate of $g$ is still above 0.71) and the rounding floor near $10^{-14}$, and give the wrong slope.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+ricker <- function(N, r) N * exp(r * (1 - N / K))
+for (rr in c(0.5, 1.5, 1.9, 2.3, 2.6, 3.0)) {
+  N <- 20
+  for (t in 1:1000) N <- ricker(N, rr)          # throw away the transient
+  last <- numeric(64)
+  for (t in 1:64) { N <- ricker(N, rr); last[t] <- N }
+  cat(sprintf("r = %.1f: g'(K) = %4.1f, %2d distinct values, e.g. %s\n", rr, 1 - rr,
+              length(unique(round(last, 6))), paste(round(last[1:4], 2), collapse = " ")))
+}
+# r = 0.5: g'(K) =  0.5,  1 distinct values, e.g. 100 100 100 100
+# r = 1.5: g'(K) = -0.5,  1 distinct values, e.g. 100 100 100 100
+# r = 1.9: g'(K) = -0.9,  1 distinct values, e.g. 100 100 100 100
+# r = 2.3: g'(K) = -1.3,  2 distinct values, e.g. 159.22 40.78 159.22 40.78
+# r = 2.6: g'(K) = -1.6,  4 distinct values, e.g. 152.32 39.08 190.48 18.12
+# r = 3.0: g'(K) = -2.0, 64 distinct values, e.g. 91.85 117.28 69.83 172.63
+cobweb <- function(gfun, x0, n, xlim) {
+  x <- seq(xlim[1], xlim[2], length.out = 400)
+  plot(x, gfun(x), type = "l", xlim = xlim, ylim = xlim, xlab = "N_t", ylab = "N_t+1")
+  abline(0, 1, col = "grey")
+  for (k in 1:n) { y <- gfun(x0); segments(x0, x0, x0, y, col = "red"); segments(x0, y, y, y, col = "red"); x0 <- y }
+}
+cobweb(function(N) ricker(N, 1.5), 20, 30, c(0, 200))
+```
+
+### Python
+
+```python
+def ricker(N, r):
+    return N * np.exp(r * (1 - N / K))
+for rr in [0.5, 1.5, 1.9, 2.3, 2.6, 3.0]:
+    N = 20.0
+    for t in range(1000):
+        N = ricker(N, rr)                       # throw away the transient
+    last = np.zeros(64)
+    for t in range(64):
+        N = ricker(N, rr); last[t] = N
+    print(f"r = {rr:.1f}: g'(K) = {1 - rr:4.1f}, {len(np.unique(np.round(last, 6))):2d} distinct values, "
+          f"e.g. {' '.join(f'{v:g}' for v in np.round(last[:4], 2))}")
+# r = 0.5: g'(K) =  0.5,  1 distinct values, e.g. 100 100 100 100
+# r = 1.5: g'(K) = -0.5,  1 distinct values, e.g. 100 100 100 100
+# r = 1.9: g'(K) = -0.9,  1 distinct values, e.g. 100 100 100 100
+# r = 2.3: g'(K) = -1.3,  2 distinct values, e.g. 159.22 40.78 159.22 40.78
+# r = 2.6: g'(K) = -1.6,  4 distinct values, e.g. 152.32 39.08 190.48 18.12
+# r = 3.0: g'(K) = -2.0, 64 distinct values, e.g. 115.45 72.63 165.09 23.42
+def cobweb(gfun, x0, n, xlim):
+    x = np.linspace(xlim[0], xlim[1], 400)
+    plt.plot(x, gfun(x), "b", x, x, "grey")
+    for k in range(n):
+        y = gfun(x0)
+        plt.plot([x0, x0, y], [x0, y, y], "r")
+        x0 = y
+    plt.xlim(xlim); plt.ylim(xlim); plt.xlabel("N_t"); plt.ylabel("N_t+1"); plt.show()
+cobweb(lambda N: ricker(N, 1.5), 20.0, 30, (0, 200))
+```
+
+### Rust
+
+```rust
+// rust/examples/bisection_fixedpoint_c5.rs  —  cargo run --example bisection_fixedpoint_c5
+// C5: long-run behaviour of the Ricker model for six growth rates.
+const K: f64 = 100.0;
+
+fn ricker(n: f64, r: f64) -> f64 { n * (r * (1.0 - n / K)).exp() }
+
+fn main() {
+    for r in [0.5, 1.5, 1.9, 2.3, 2.6, 3.0] {
+        let mut n = 20.0;
+        for _ in 0..1000 { n = ricker(n, r); } // throw away the transient
+        let mut last = Vec::new();
+        for _ in 0..64 { n = ricker(n, r); last.push(n); }
+        // count distinct values after rounding to 6 decimals
+        let mut keys: Vec<i64> = last.iter().map(|v| (v * 1e6).round() as i64).collect();
+        keys.sort();
+        keys.dedup();
+        let first: Vec<String> = last[..4].iter().map(|v| format!("{}", (v * 100.0).round() / 100.0)).collect();
+        println!("r = {r:.1}: g'(K) = {:4.1}, {:2} distinct values, e.g. {}",
+                 1.0 - r, keys.len(), first.join(" "));
+    }
+    // No plotting here: print the cobweb corners (x_k, x_k), (x_k, x_k+1) and plot in R or Python.
+}
+
+// Output:
+// r = 0.5: g'(K) =  0.5,  1 distinct values, e.g. 100 100 100 100
+// r = 1.5: g'(K) = -0.5,  1 distinct values, e.g. 100 100 100 100
+// r = 1.9: g'(K) = -0.9,  1 distinct values, e.g. 100 100 100 100
+// r = 2.3: g'(K) = -1.3,  2 distinct values, e.g. 159.22 40.78 159.22 40.78
+// r = 2.6: g'(K) = -1.6,  4 distinct values, e.g. 152.32 39.08 190.48 18.12
+// r = 3.0: g'(K) = -2.0, 64 distinct values, e.g. 91.85 117.28 69.83 172.63
+```
+
+:::
+
+For $|1 - r| < 1$ every run ends at $K = 100$ (one value). At $r = 2.3$ the population alternates between two values (a 2-cycle), at $r = 2.6$ between four, and at $r = 3$ every one of the 64 values is different: chaos. The derivative test tells us exactly when $K$ stops being attracting ($r = 2$); what happens after that has to be found by iterating. Note that the four $r = 3$ values differ between R and Python (and agree between R and Rust here): see C6.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+ricker_a <- function(N, r) N * exp(r * (1 - N / K))
+ricker_b <- function(N, r) N * exp(r) * exp(-r * N / K)    # the same in exact arithmetic
+for (rr in c(1.5, 3)) {
+  a <- b <- 20; d <- numeric(100)
+  for (t in 1:100) { a <- ricker_a(a, rr); b <- ricker_b(b, rr); d[t] <- abs(a - b) }
+  cat("r =", rr, ":", signif(d[c(1, 20, 40, 60, 80, 100)], 2), "\n")
+}
+# r = 1.5 : 2.8e-14 1.4e-14 1.4e-14 1.4e-14 1.4e-14 1.4e-14
+# r = 3 : 5.7e-14 8.6e-10 9.6e-07 0.0093 96 110
+```
+
+### Python
+
+```python
+def ricker_a(N, r):
+    return N * np.exp(r * (1 - N / K))
+def ricker_b(N, r):
+    return N * np.exp(r) * np.exp(-r * N / K)   # the same in exact arithmetic
+for rr in [1.5, 3.0]:
+    a = b = 20.0; d = np.zeros(100)
+    for t in range(100):
+        a = ricker_a(a, rr); b = ricker_b(b, rr); d[t] = abs(a - b)
+    print(f"r = {rr:g} :", " ".join(f"{v:.2g}" for v in d[[0, 19, 39, 59, 79, 99]]))
+# r = 1.5 : 2.8e-14 1.4e-14 0 0 0 0
+# r = 3 : 5.7e-14 9.1e-10 1e-06 0.0098 1.1e+02 15
+```
+
+### Rust
+
+```rust
+// rust/examples/bisection_fixedpoint_c6.rs  —  cargo run --example bisection_fixedpoint_c6
+// C6: two formulas, equal in exact arithmetic, give different chaotic trajectories.
+const K: f64 = 100.0;
+
+fn ricker_a(n: f64, r: f64) -> f64 { n * (r * (1.0 - n / K)).exp() }
+fn ricker_b(n: f64, r: f64) -> f64 { n * r.exp() * (-r * n / K).exp() } // the same in exact arithmetic
+
+fn main() {
+    for r in [1.5, 3.0] {
+        let (mut a, mut b) = (20.0, 20.0);
+        let mut d = vec![0.0; 100];
+        for t in 0..100 {
+            a = ricker_a(a, r);
+            b = ricker_b(b, r);
+            d[t] = (a - b).abs();
+        }
+        let shown: Vec<String> = [0, 19, 39, 59, 79, 99].iter().map(|&t| format!("{:.1e}", d[t])).collect();
+        println!("r = {r} : {}", shown.join(" "));
+    }
+}
+
+// Output:
+// r = 1.5 : 2.8e-14 1.4e-14 1.4e-14 1.4e-14 1.4e-14 1.4e-14
+// r = 3 : 5.7e-14 8.6e-10 9.6e-7 9.3e-3 9.6e1 1.1e2
+```
+
+:::
+
+For $r = 1.5$ the two formulas stay within one or two rounding gaps of each other forever: the attracting steady state pulls both back to $K$. For $r = 3$ a first difference of $6\times10^{-14}$ (rounding) grows by a factor of about 1000 every 20 years, and after about 80 years the two trajectories are unrelated. The same happens between languages, whose `exp` functions can differ in the last bit: that is why the $r = 3$ values in C5 differ between R and Python. A long chaotic simulation is not reproducible digit by digit; its statistics (range, mean, how often the stock falls below a level) are. The steady state itself is still computed accurately by a root finder.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+for (br in list(c(0, 50), c(50, 100))) {
+  out1 <- uniroot(f, br)
+  out2 <- uniroot(f, br, tol = 1e-12)
+  cat(sprintf("[%g, %g]: default %.10f (%d iter, error %.1e); tol 1e-12: %.10f (%d iter)\n",
+              br[1], br[2], out1$root, out1$iter, out1$root - bisect(f, br[1], br[2], tol = 1e-15)$root,
+              out2$root, out2$iter))
+}
+# [0, 50]: default 20.4819906043 (7 iter, error 2.4e-07); tol 1e-12: 20.4819903614 (9 iter)
+# [50, 100]: default 74.9524412607 (7 iter, error -1.2e-06); tol 1e-12: 74.9524424994 (9 iter)
+H <- 15
+res <- try(uniroot(f, c(0, 100)), silent = TRUE)
+cat(res)
+# Error in uniroot(f, c(0, 100)) :
+#   f() values at end points not of opposite sign
+H <- 10
+```
+
+### Python
+
+```python
+from scipy.optimize import brentq
+for br in [(0.0, 50.0), (50.0, 100.0)]:
+    x1, res1 = brentq(f, *br, full_output=True)
+    x2, res2 = brentq(f, *br, xtol=1e-14, full_output=True)
+    ref = bisect(f, *br, tol=1e-15)["root"]
+    print(f"[{br[0]:g}, {br[1]:g}]: default {x1:.10f} ({res1.iterations} iter, error {x1 - ref:.1e}); "
+          f"xtol 1e-14: {x2:.10f} ({res2.iterations} iter)")
+# [0, 50]: default 20.4819903614 (9 iter, error -1.2e-13); xtol 1e-14: 20.4819903614 (10 iter)
+# [50, 100]: default 74.9524424994 (9 iter, error 2.8e-14); xtol 1e-14: 74.9524424994 (9 iter)
+H = 15.0
+try:
+    brentq(f, 0.0, 100.0)
+except ValueError as err:
+    print(err)
+# f(a) and f(b) must have different signs
+H = 10.0
+```
+
+### Rust
+
+```rust
+// rust/examples/bisection_fixedpoint_c7.rs  —  cargo run --example bisection_fixedpoint_c7
+// C7: Brent's method from the argmin crate (Rust's counterpart of uniroot / brentq).
+use argmin::core::{CostFunction, Error, Executor, State};
+use argmin::solver::brent::BrentRoot;
+
+const R: f64 = 0.5;
+const K: f64 = 100.0;
+
+// argmin wants the function as a struct implementing CostFunction
+struct Steady { h: f64 }
+impl CostFunction for Steady {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, n: &f64) -> Result<f64, Error> {
+        Ok(n * (R * (1.0 - n / K)).exp() - self.h - n) // f(N) = g(N) - N
+    }
+}
+
+fn brent(h: f64, a: f64, b: f64, tol: f64) -> Result<(f64, u64), Error> {
+    let res = Executor::new(Steady { h }, BrentRoot::new(a, b, tol))
+        .configure(|state| state.max_iters(100))
+        .run()?;                               // `?`: pass an error on to the caller
+    let st = res.state();
+    Ok((*st.get_best_param().unwrap(), st.get_iter()))
+}
+
+fn main() {
+    for (a, b) in [(0.0, 50.0), (50.0, 100.0)] {
+        let (x1, it1) = brent(10.0, a, b, 1e-4).unwrap();
+        let (x2, it2) = brent(10.0, a, b, 1e-14).unwrap();
+        println!("[{a}, {b}]: tol 1e-4: {x1:.10} ({it1} iter); tol 1e-14: {x2:.10} ({it2} iter)");
+    }
+    match brent(15.0, 0.0, 100.0, 1e-14) {
+        Ok(_) => println!("found a root"),
+        Err(e) => println!("{e}"),
+    }
+}
+
+// Output:
+// [0, 50]: tol 1e-4: 20.4819906043 (8 iter); tol 1e-14: 20.4819903614 (10 iter)
+// [50, 100]: tol 1e-4: 74.9524417375 (8 iter); tol 1e-14: 74.9524424994 (9 iter)
+// BrentRoot error: f(min) and f(max) must have different signs.
+```
+
+:::
+
+Brent's method needs 9 or 10 iterations where bisection needs about 46 for the same accuracy (from a bracket of width 50 down to $10^{-12}$). `uniroot`'s default tolerance ($\varepsilon^{1/4} \approx 1.2\times10^{-4}$) gives errors of $10^{-7}$ to $10^{-6}$; `brentq`'s defaults (`xtol = 2e-12`, `rtol` $\approx 9\times10^{-16}$) are already tight. In Rust, `BrentRoot::new(a, b, tol)` takes the tolerance explicitly; $10^{-4}$ gives 8 iterations and an error of $8\times10^{-7}$ for the upper root. All three refuse to start without a sign change, like your `bisect`.
+:::
+
+## Where this leads
+
+- ***Newton and secant methods*** (Part 2): using the size of $f$ and its derivative gives **quadratic** convergence; Newton is the fixed-point iteration $g(x) = x - f(x)/f'(x)$, with $g'(x^*) = 0$. Brent's method, inside `uniroot` and `brentq`, combines those fast steps with the bisection safeguard of this exercise.
+- ***Newton for systems of equations*** (Part 2): steady states of models with several variables (a two-gene toggle switch), where there is no bracket and no bisection.
+- ***Equilibria, stability and the phase plane*** (Part 8): the continuous-time counterpart of $|g'(N^*)| < 1$ is the sign of the eigenvalues of the Jacobian.
+- ***Optimisation in one dimension*** (Part 9): the maximum sustainable catch of C2 is the maximum of the surplus production, found with golden-section search, the optimisation cousin of bisection.

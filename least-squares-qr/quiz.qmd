@@ -1,0 +1,216 @@
+---
+title: "Quiz: least squares, normal equations vs QR"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of least squares, the normal equations and QR. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** A qPCR standard curve has 7 dilutions in triplicate and the model $\text{Cq} = x_1 + x_2\log_{10}N$. What are the dimensions of $A$, $\mathbf x$ and $\mathbf b$? Why is there (almost always) no $\mathbf x$ with $A\mathbf x = \mathbf b$ exactly?
+
+::: {.callout-tip collapse="true" title="Hint"}
+One row per measurement, one column per parameter.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$A$ is $21\times2$ (a column of ones and the column of $\log_{10}N$), $\mathbf x$ has 2 entries, $\mathbf b$ has 21. Twenty-one equations in two unknowns are overdetermined: even the three replicates of one dilution give three different Cq values for the same row of $A$, so no line passes through all points. Least squares picks the $\mathbf x$ with the smallest $\sum_i r_i^2$.
+:::
+
+---
+
+**Q2.** After fitting a straight line by least squares (with an intercept), what are $\sum_i r_i$ and $\sum_i t_i r_i$, where $t_i$ is the predictor? Why?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The residual is perpendicular to every column of $A$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Both are zero (up to rounding). At the least-squares solution $A^T\mathbf r = \mathbf 0$: the residual is the part of $\mathbf b$ perpendicular to the column space. The first row of $A^T$ is all ones (giving $\sum r_i = 0$), the second is the predictor (giving $\sum t_ir_i = 0$). This is a quick check of any fit: `crossprod(model.matrix(fit), resid(fit))`.
+:::
+
+---
+
+**Q3.** $\kappa(A) = 10^5$. Roughly how many correct significant digits can you expect from (a) QR and (b) the normal equations, starting from 16?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\kappa(A^TA) = \kappa(A)^2$; lose about $\log_{10}\kappa$ digits.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(a) QR works with $R$, which has $\kappa(R) = \kappa(A) = 10^5$: about $16 - 5 = 11$ digits. (b) The normal equations solve with $A^TA$, $\kappa = 10^{10}$: about $16 - 10 = 6$ digits. Both are worst-case rules of thumb, and both assume the data fit the model reasonably well.
+:::
+
+---
+
+**Q4.** Why does a better solver for $A^TA\mathbf x = A^T\mathbf b$ (pivoting, Cholesky, iterative refinement) not fix the problem with the normal equations?
+
+::: {.callout-tip collapse="true" title="Hint"}
+When is the information lost?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The damage happens when $A^TA$ is **formed** and rounded. Its entries are sums of products, and information in $A$ at the level of $\sqrt\varepsilon \approx 10^{-8}$ relative becomes $\varepsilon$-level in $A^TA$ and is rounded away (Läuchli: $1 + \delta^2$ becomes 1 for $\delta = 10^{-8}$). Any solver then works on a different matrix. QR never forms $A^TA$.
+:::
+
+---
+
+**Q5.** What two properties do $Q$ and $R$ in $A = QR$ have, and how do they turn the least-squares problem into one back substitution?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Put $A = QR$ into $A^TA\mathbf x = A^T\mathbf b$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$Q$ has orthonormal columns, $Q^TQ = I$; $R$ is upper triangular (and invertible when $A$ has full column rank). Then $A^TA = R^TQ^TQR = R^TR$ and $A^T\mathbf b = R^TQ^T\mathbf b$, so the normal equations become $R^TR\mathbf x = R^TQ^T\mathbf b$, i.e. $R\mathbf x = Q^T\mathbf b$: one back substitution. Because $Q$ keeps lengths, $\kappa(R) = \kappa(A)$.
+:::
+
+---
+
+**Q6.** In one sentence each: what is the difference between classical and modified Gram–Schmidt, and why do libraries use Householder reflections instead?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which vector goes into the inner product? How fast does $\|Q^TQ - I\|$ grow with $\kappa$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Classical GS projects the **original** column $\mathbf a_j$ onto each earlier $\mathbf q_i$; modified GS projects the **current**, partly cleaned vector, which also removes earlier rounding errors. Their loss of orthogonality grows like $\kappa^2\varepsilon$ and $\kappa\varepsilon$; Householder reflections are exactly orthogonal transformations, so the computed $Q$ is orthogonal to about $\varepsilon$ whatever $\kappa$ is.
+:::
+
+---
+
+**Q7.** In the Householder vector $\mathbf v = \mathbf a + \text{sign}(a_1)\|\mathbf a\|\mathbf e_1$, why is the sign chosen to match $a_1$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What happens to $a_1 - \|\mathbf a\|$ when $\mathbf a$ is almost along $\mathbf e_1$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+With the same sign, $a_1$ and $\|\mathbf a\|$ are **added** in magnitude, so there is no cancellation. With the opposite sign, $v_1 = a_1 - \|\mathbf a\|$ is the difference of two nearly equal numbers when $\mathbf a$ is almost along $\mathbf e_1$, and loses most of its digits (catastrophic cancellation). Both choices are a valid reflection in exact arithmetic.
+:::
+
+---
+
+**Q8.** A dose–response design has an intercept, the dose, and a "dose score" computed as `dose / 2 + 1`. What is the rank of $A$, and what does `lm` report?
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+dose <- c(0, 1, 2, 4, 8)
+A <- cbind(1, dose, dose / 2 + 1)
+qr(A)$rank
+coef(lm(c(0.1, 0.3, 0.5, 0.9, 1.7) ~ dose + I(dose / 2 + 1)))
+```
+
+### Python
+
+```python
+import numpy as np
+
+dose = np.array([0, 1, 2, 4, 8.0])
+A = np.column_stack([np.ones(5), dose, dose / 2 + 1])
+print(np.linalg.matrix_rank(A))
+```
+
+### Rust
+
+```rust
+// rust/examples/least_squares_qr_q8.rs  —  cargo run --example least_squares_qr_q8
+// Q8: an intercept, a dose column and a column made from both.
+use nalgebra::DMatrix;
+
+fn main() {
+    let dose = [0.0, 1.0, 2.0, 4.0, 8.0];
+    let a = DMatrix::from_fn(5, 3, |i, j| match j {
+        0 => 1.0,
+        1 => dose[i],
+        _ => dose[i] / 2.0 + 1.0,
+    });
+    let sv = a.singular_values();
+    println!("{}", a.rank(1e-7 * sv.max()));
+}
+```
+
+:::
+
+::: {.callout-tip collapse="true" title="Hint"}
+Is the third column a combination of the first two?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Rank 2: column 3 = $\tfrac12\cdot$column 2 + column 1. In Gram–Schmidt or Householder QR the third diagonal entry of $R$ is zero up to rounding. All three print `2`; `lm` drops the dependent column and reports `NA`:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+qr(A)$rank
+# [1] 2
+coef(lm(c(0.1, 0.3, 0.5, 0.9, 1.7) ~ dose + I(dose / 2 + 1)))
+#   (Intercept)          dose I(dose/2 + 1)
+#           0.1           0.2            NA
+```
+
+### Python
+
+```python
+print(np.linalg.matrix_rank(A))
+# 2
+```
+
+### Rust
+
+```rust
+// rust/examples/least_squares_qr_q8.rs  —  cargo run --example least_squares_qr_q8
+// Output:
+// 2
+```
+
+:::
+
+The score adds no information; remove it (or the dose) from the model.
+:::
+
+---
+
+**Q9.** A BCA calibration fits a cubic in concentration measured in µg/mL (0–2000). `solve(crossprod(X), crossprod(X, y))` stops with "system is computationally singular". Give two fixes, and say which one you would try first.
+
+::: {.callout-tip collapse="true" title="Hint"}
+How large is the $x^3$ column compared with the column of ones?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) **Rescale** (and centre) the concentration, e.g. to mg/mL: $\kappa$ of the cubic drops from $5.8\times10^9$ to 72, and the normal equations work again. Or use orthogonal polynomials, `lm(y ~ poly(conc, 3))`. (2) Use **QR**: `lm(y ~ conc + I(conc^2) + I(conc^3))` or `qr.solve(X, y)`, which work with $\kappa(X)$ instead of $\kappa(X)^2$. Try rescaling first: it is free and helps every method. And ask whether a cubic is needed at all; the residual plot decides.
+:::
+
+---
+
+**Q10.** What does R's `lm()` compute internally to get the coefficients, and how does that differ from `numpy.linalg.lstsq`?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Neither forms $X^TX$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+`lm` calls `lm.fit`, which computes a Householder QR of the design matrix (LINPACK `dqrdc2`, with limited column pivoting and tolerance $10^{-7}$) and solves $R\mathbf x = Q^T\mathbf y$; dependent columns get `NA`. `numpy.linalg.lstsq` uses the **SVD** (LAPACK `gelsd`), cuts off singular values below `rcond` times the largest, returns the rank, and for dependent columns gives the minimum-norm solution instead of `NA`.
+:::
+
+---
+
+**Q11.** A colleague computes a Gram–Schmidt $Q$ in their own code. What single check tells them whether to trust it, and what value should it give?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What should $Q^TQ$ be?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Compute $\|Q^TQ - I\|$ (R: `norm(crossprod(Q) - diag(ncol(Q)), "2")`; Python: `np.linalg.norm(Q.T @ Q - np.eye(n), 2)`). It should be around $10^{-15}$. Values like $10^{-8}$ or larger mean the columns have lost orthogonality (classical Gram–Schmidt on an ill-conditioned matrix), and $R\mathbf x = Q^T\mathbf b$ will not give the least-squares solution to full accuracy.
+:::

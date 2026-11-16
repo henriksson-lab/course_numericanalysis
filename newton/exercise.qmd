@@ -1,0 +1,1225 @@
+---
+title: "Exercise: Newton and secant methods"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- derive and carry out **Newton steps** and **secant steps** by hand,
+- write a short Newton and secant function with a sensible **stopping rule** and an iteration cap,
+- read the **order of convergence** off a sequence of errors (digits per step), and tell quadratic, superlinear and linear convergence apart,
+- find a **maximum-likelihood estimate** as the root of the score function, and get its standard error from the same computation,
+- recognise the **failure modes** (flat derivative, bad start, cycling, wrong derivative) and the check that detects each,
+- explain what a **safeguarded** method (Brent: `uniroot`, `brentq`) adds, and set its tolerance.
+
+The by-hand part uses pen, paper and a pocket calculator. The code part checks your hand answers and then works at sizes where only code works.
+
+## Background
+
+To solve $f(x) = 0$:
+
+1. **Newton.** Replace $f$ near $x_k$ by its tangent line and solve: $x_{k+1} = x_k - f(x_k)/f'(x_k)$. Near a simple root ($f'(x^*) \neq 0$) the error is squared each step, $e_{k+1} \approx \dfrac{f''(x^*)}{2f'(x^*)}\,e_k^2$: the number of correct digits **doubles** (order 2).
+2. **Secant.** Replace $f'(x_k)$ by the slope of the chord through the last two points:
+   $x_{k+1} = x_k - f(x_k)\,\dfrac{x_k - x_{k-1}}{f(x_k) - f(x_{k-1})}$. One function evaluation per step, no derivative, order $\tfrac{1+\sqrt5}{2} \approx 1.618$.
+3. **Order from errors.** If $e_{k+1} \approx C e_k^p$, then $p \approx \dfrac{\log(e_{k+1}/e_k)}{\log(e_k/e_{k-1})}$. Equivalently, the number of correct digits is multiplied by about $p$ each step. Linear convergence ($p = 1$, $e_{k+1} \approx c\,e_k$) adds a **fixed** number of digits per step.
+4. **Stopping.** Stop when $|x_{k+1} - x_k| \le \text{tol}\cdot|x_{k+1}|$, and always cap the number of steps. Afterwards check that $|f|$ is small and that the root is in the meaningful range.
+5. **Failure.** Newton and secant converge only from **close enough**. A small $f'$ gives a huge step; a bad start can run off or reach a root that makes no sense (negative dose); some starts cycle. A wrong derivative or a double root ($f'(x^*) = 0$) makes Newton **linear**.
+6. **Safeguarding.** Brent's method keeps a sign-change bracket $[a, b]$, takes fast steps (secant, inverse quadratic interpolation) when they stay inside, and bisects otherwise. R: [`uniroot`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html) (default `tol` $\approx 1.2\times10^{-4}$, absolute!). Python: [`scipy.optimize.brentq`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html). Rust: [`argmin`'s `BrentRoot`](https://docs.rs/argmin/latest/argmin/solver/brent/struct.BrentRoot.html).
+
+The two running examples of the lecture:
+
+- **Two-site dose–response.** $R(c) = 0.3\,\dfrac{c}{0.1 + c} + 0.7\,\dfrac{c^2}{25 + c^2}$ (dose $c$ in µM). The dose $c_{50}$ with $R = 0.5$ is the root of $f(c) = R(c) - 0.5$; $c_{50} = 3.261305265055212$.
+- **Zero-truncated Poisson.** UMI counts of a gene in the 100 cells where it was detected: 52 cells with 1 UMI, 30 with 2, 12 with 3, 5 with 4, 1 with 5. The score is $S(\lambda) = \sum_i x_i/\lambda - n/(1 - e^{-\lambda})$, with $n = 100$, $\sum_i x_i = 173$; the MLE is $\hat\lambda = 1.2184695258$.
+
+Newton by hand, and the library call, in each language (Python also has [`scipy.optimize.newton`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.newton.html), which does Newton when given `fprime` and secant otherwise):
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+R  <- function(c) 0.3 * c / (0.1 + c) + 0.7 * c^2 / (25 + c^2)
+f  <- function(c) R(c) - 0.5
+df <- function(c) 0.03 / (0.1 + c)^2 + 35 * c / (25 + c^2)^2
+
+newton <- function(f, df, x0, tol = 1e-12, maxit = 50) {
+  x <- x0
+  for (k in 1:maxit) {
+    step <- f(x) / df(x)
+    x <- x - step
+    if (abs(step) <= tol * abs(x)) return(list(root = x, iter = k))
+  }
+  warning("no convergence after ", maxit, " steps")
+  list(root = x, iter = maxit)
+}
+res <- newton(f, df, x0 = 1)
+print(res$root, digits = 16)
+res$iter
+print(uniroot(f, c(0.01, 100), tol = 1e-12)$root, digits = 16)
+
+# Output:
+# [1] 3.261305265055212
+# [1] 5
+# [1] 3.261305265055213
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.optimize import brentq
+
+def R(c):
+    return 0.3 * c / (0.1 + c) + 0.7 * c**2 / (25 + c**2)
+
+def f(c):
+    return R(c) - 0.5
+
+def df(c):
+    return 0.03 / (0.1 + c)**2 + 35 * c / (25 + c**2)**2
+
+def newton(f, df, x0, tol=1e-12, maxit=50):
+    x = x0
+    for k in range(1, maxit + 1):
+        step = f(x) / df(x)
+        x = x - step
+        if abs(step) <= tol * abs(x):
+            return x, k
+    print(f"warning: no convergence after {maxit} steps")
+    return x, maxit
+
+root, it = newton(f, df, 1.0)
+print(f"{root:.16g}")
+print(it)
+print(brentq(f, 0.01, 100, xtol=1e-12))
+
+# Output:
+# 3.261305265055212
+# 5
+# 3.261305265055212
+```
+
+### Rust
+
+```rust
+// rust/examples/newton_background.rs  —  cargo run --example newton_background
+// Background: the two-site dose-response curve, a hand-written Newton, and a
+// bracketing check with argmin's BrentRoot (Brent's method, as in uniroot/brentq).
+use argmin::core::{CostFunction, Error, Executor};
+use argmin::solver::brent::BrentRoot;
+
+fn r(c: f64) -> f64 {
+    0.3 * c / (0.1 + c) + 0.7 * c.powi(2) / (25.0 + c.powi(2))
+}
+fn f(c: f64) -> f64 {
+    r(c) - 0.5
+}
+fn df(c: f64) -> f64 {
+    0.03 / (0.1 + c).powi(2) + 35.0 * c / (25.0 + c.powi(2)).powi(2)
+}
+
+// returns (root, iterations); `impl Fn(f64) -> f64` accepts any function of one f64
+fn newton(f: impl Fn(f64) -> f64, df: impl Fn(f64) -> f64, x0: f64, tol: f64, maxit: usize) -> (f64, usize) {
+    let mut x = x0;
+    for k in 1..=maxit {
+        let step = f(x) / df(x);
+        x -= step;
+        if step.abs() <= tol * x.abs() {
+            return (x, k);
+        }
+    }
+    eprintln!("warning: no convergence after {maxit} steps");
+    (x, maxit)
+}
+
+// argmin wants the function as a struct with a `cost` method
+struct TwoSite;
+impl CostFunction for TwoSite {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, c: &f64) -> Result<f64, Error> {
+        Ok(f(*c))
+    }
+}
+
+fn main() {
+    let (root, it) = newton(f, df, 1.0, 1e-12, 50);
+    println!("{}", root);
+    println!("{}", it);
+    let solver = BrentRoot::new(0.01, 100.0, 1e-12);
+    let res = Executor::new(TwoSite, solver).configure(|s| s.max_iters(100)).run().unwrap();
+    println!("{}", res.state.best_param.unwrap());
+}
+
+// Output:
+// 3.261305265055212
+// 5
+// 3.2613052650552126
+```
+
+:::
+
+Rust has no `uniroot`; the Rust tabs use hand-written Newton and secant and, for Brent's method, the `BrentRoot` solver of the `argmin` crate. Rust prints numbers in its own format (`2.6e0` rather than `2.6e+00`, `NaN` rather than `nan`); the values are the same unless the text says otherwise.
+
+## By hand
+
+**B1. Newton on a Hill curve.** A Hill curve with $K = 2$ µM and Hill coefficient 2 gives the equation $f(c) = \dfrac{c^2}{4 + c^2} - \dfrac12 = 0$, with root $c^* = K = 2$.
+(a) Show that $f'(c) = \dfrac{8c}{(4 + c^2)^2}$.
+(b) Do two Newton steps from $c_0 = 1$. Give the errors $e_0, e_1, e_2$.
+(c) Compute $e_1/e_0^2$ and $e_2/e_1^2$. Compare with $|f''(2)/(2f'(2))| = 0.25$.
+(d) The same root solves $g(c) = c^2 - 4 = 0$. Show that Newton on $g$ is $c_{k+1} = \tfrac12(c_k + 4/c_k)$ and do three steps from $c_0 = 1$. (This is the square-root iteration of *Convergence and cost*.)
+(e) Now start Newton on $f$ at $c_0 = 5$. Compute $c_1$. What is wrong with it, and where do you expect the iteration to end up?
+
+**B2. Secant by hand.** Use $g(c) = c^2 - 4$.
+(a) Do two secant steps from $c_0 = 1$, $c_1 = 3$.
+(b) How many evaluations of $g$ did that take? How many evaluations ($g$ and $g'$ counted separately) do two Newton steps take?
+
+**B3. Newton for a reciprocal.** Take $f(x) = 1/x - a$ with $a > 0$ (root $x^* = 1/a$).
+(a) Show that Newton's step is $x_{k+1} = x_k(2 - a x_k)$ (no division!).
+(b) Write $x_k = 1/a + e_k$ and show that $e_{k+1} = -a\,e_k^2$ exactly.
+(c) With $a = 0.5$: do three steps from $x_0 = 1$, and two from $x_0 = 5$.
+(d) From (a), for which starting values does Newton converge? (Hint: what happens if $x_1 \le 0$?)
+
+**B4. Reading the order.** Each sequence lists errors $e_1, e_2, \ldots$ of an iteration.
+(i) $10^{-1},\ 5\times10^{-2},\ 2.5\times10^{-2},\ 1.25\times10^{-2}$
+(ii) $10^{-1},\ 10^{-2},\ 10^{-4},\ 10^{-8}$
+(iii) $10^{-1},\ 2.5\times10^{-2},\ 2.5\times10^{-3},\ 6\times10^{-5},\ 1.6\times10^{-7}$
+(a) For each, give the number of correct digits ($-\log_{10} e$) per step, and estimate the order $p$.
+(b) Starting from an error of $10^{-2}$, how many more steps does each method need to reach $10^{-16}$? (For (i), assume the ratio stays $\tfrac12$; for (ii) and (iii), assume the digit count keeps being multiplied by $p$.)
+
+**B5. The score of a zero-truncated Poisson.**
+(a) For a **plain** Poisson sample $x_1, \ldots, x_n$, the log-likelihood is $\ell(\lambda) = \sum_i x_i \log\lambda - n\lambda + \text{const}$. Find the score $S(\lambda) = \ell'(\lambda)$ and solve $S(\lambda) = 0$.
+(b) With **zero-truncation**, $P(X = x \mid X \ge 1) = \dfrac{e^{-\lambda}\lambda^x}{x!\,(1 - e^{-\lambda})}$. Write down $\ell(\lambda)$ and show that $S(\lambda) = \dfrac{\sum_i x_i}{\lambda} - \dfrac{n}{1 - e^{-\lambda}}$.
+(c) For large $\lambda$, $e^{-\lambda} \approx 0$. What does $S$ look like then? Use B3 to predict from which starting values Newton on the score fails, for our data ($\bar x = 1.73$).
+(d) One Newton step from $\lambda_0 = \bar x = 1.73$ for our data ($n = 100$, $\sum x_i = 173$). Use $e^{-1.73} = 0.17728$ and $S'(\lambda) = -\dfrac{\sum_i x_i}{\lambda^2} + \dfrac{n\,e^{-\lambda}}{(1 - e^{-\lambda})^2}$.
+
+**B6. Newton cycles on a Michaelis–Menten curve.** In log substrate $u = \ln(S/K_m)$ the Michaelis–Menten curve is $v/V_{\max} = \sigma(u) = 1/(1 + e^{-u})$, and $S = K_m$ (that is, $u = 0$) gives half the maximal rate.
+(a) Show that $\sigma'(u) = \sigma(u)\,(1 - \sigma(u))$.
+(b) Show that Newton on $\sigma(u) - \tfrac12 = 0$ is $u_{k+1} = u_k - \sinh u_k$, with $\sinh u = (e^u - e^{-u})/2$.
+(c) Do two steps from $u_0 = 1$ (that is $S_0 = e\,K_m$). Use $\sinh 1 = 1.1752$ and $\sinh(0.1752) = 0.1761$.
+(d) Newton cycles between $u^*$ and $-u^*$ if $u^* - \sinh u^* = -u^*$. Check that $u^* = 2.177$ (very nearly) satisfies this, using $e^{2.177} = 8.82$. Which substrate concentrations are these?
+
+**B7. A safeguarded step.** For the two-site curve, $f(3) = -0.0244$ and $f(10) = 0.3570$, so $[3, 10]$ is a bracket. The rule: take the Newton step if it lands **inside** the current bracket, otherwise take the midpoint; then keep the half-interval with the sign change.
+(a) Newton from $c = 10$ ($f'(10) = 0.02269$) proposes $c = -5.73$. What does the safeguarded method do, and what is the new bracket? ($f(6.5) = 0.2352$.)
+(b) From $c = 6.5$, Newton proposes $1.887$. What now? ($f(4.75) = 0.1259$.)
+(c) From $c = 4.75$ ($f'(4.75) = 0.07477$): compute the Newton proposal. Is it accepted?
+(d) Why can no bracketing method find the root of $(x - 1)^2$?
+
+## In code
+
+**C1. Check the derivative, then watch Newton.**
+(a) Compare `df(c)` with the forward difference $\bigl(f(c + h) - f(c)\bigr)/h$, $h = 10^{-6}$, at $c = 1, 3, 10$. What relative difference do you expect (see *Convergence and cost*)?
+(b) Run Newton from $c_0 = 1$ and from $c_0 = 5$, printing $k$, $c_k$ and $|c_k - c_{k-1}|$ (the step). How many steps does each take to stop with `tol = 1e-12`? Is the step a good estimate of the error of the **previous** iterate? (Compare with $c_{50}$ given above.)
+
+**C2. A maximum-likelihood rate.** For the zero-truncated Poisson data:
+(a) Write `S` and `dS` (use [`expm1`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Log.html) for $1 - e^{-\lambda}$), run Newton from $\bar x$, and compute the standard error $1/\sqrt{-S'(\hat\lambda)}$.
+(b) Run 50 Newton steps from each of $\lambda_0 = 0.2, 0.5, 1, 2, 2.5, 2.7, 2.8, 3, 4$. Which starts fail? Compare with your prediction in B5(c).
+(c) Solve the same equation with `uniroot` (Python: `brentq`) on the bracket $[0.01, 10]$.
+
+**C3. The secant method and the order of convergence.**
+(a) Write `secant(f, x0, x1)` (stop if $f(x_1) = f(x_0)$). Solve for $c_{50}$ from $(1, 2)$ and for $\hat\lambda$ from $(2, 2.5)$.
+(b) For the score, record the secant iterates from $(2, 2.5)$ and the Newton iterates from 2. Compute the errors (against $\hat\lambda$ from `uniroot(..., tol = 1e-15)` / `brentq(..., xtol=1e-15)`), drop errors below $10^{-14}$ (rounding level), and estimate the order $p$ from every three consecutive errors. What values do you get, and why are the first few estimates useless?
+
+**C4. A wrong derivative.** Suppose you forgot the weight 0.7 when differentiating the second term, so your derivative is `df_bad(c) = 0.03/(0.1 + c)^2 + 50*c/(25 + c^2)^2`.
+(a) Run 30 Newton steps from $c_0 = 1$ with `df_bad`. Does it converge? Print the errors and the ratios $e_{k+1}/e_k$.
+(b) What order is this? Explain the ratio: Newton with a wrong derivative $d(x)$ is fixed-point iteration with $g(x) = x - f(x)/d(x)$, so the ratio is $|g'(c_{50})| = |1 - f'(c_{50})/d(c_{50})|$. Compute it.
+(c) How would you notice this bug if you did not know the answer?
+
+**C5. A safeguarded Newton.** Write `newton_safe(f, df, a, b, x0)` that keeps a sign-change bracket $[a, b]$:
+at each step evaluate $f(x)$, replace the endpoint with the same sign, propose a Newton step, and take the midpoint instead if the proposal is not finite, lies outside $(a, b)$, or is more than half as long as the previous step. Count the bisection steps.
+(a) Solve for $c_{50}$ on $[0.01, 100]$ from $x_0 = 10$, where plain Newton went to $-3.05$.
+(b) Solve the Michaelis–Menten problem of B6 (`g(u) = 1/(1 + exp(-u)) - 0.5`) on $[-5, 5]$ from $u_0 = 2.3$ (plain Newton: `Inf`, then `NaN`) and from $u_0 = 2.1773189849653$ (plain Newton: cycles).
+
+**C6. Count function evaluations.** Wrap $f$ (and $f'$) so that each call increments a counter. Count the evaluations used to find $c_{50}$ by: `uniroot` with the default `tol` and with `tol = 1e-12` (Python: `brentq` with its default; Rust: `BrentRoot` with `tol` $10^{-4}$ and $10^{-12}$), your Newton from 1 (count $f$ and $f'$), and your secant from (1, 2). Print each error. Which is cheapest? Which is safest? (Python: also try `scipy.optimize.newton` with and without `fprime`, whose `full_output` reports `function_calls`.)
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — Newton by hand (B1, B3)"}
+Compute $f(x_k)$ and $f'(x_k)$ first, then the step $f/f'$, then subtract. Keep 5–6 significant digits. For B1(a) use the quotient rule: $\dfrac{d}{dc}\dfrac{c^2}{4 + c^2} = \dfrac{2c(4 + c^2) - c^2\cdot 2c}{(4 + c^2)^2}$. For B3(b), expand $(1/a + e)(2 - a(1/a + e)) = (1/a + e)(1 - ae)$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — digits and order (B4, C3)"}
+Correct digits $d_k = -\log_{10} e_k$. Order $p$: $d_{k+1} \approx p\,d_k$ (plus a constant). The three-point formula $p \approx \log(e_{k+1}/e_k)/\log(e_k/e_{k-1})$ only works once the iteration is **close** to the root; far from it the errors are not yet governed by the local behaviour. In R, `log(e[3:m] / e[2:(m-1)]) / log(e[2:(m-1)] / e[1:(m-2)])`; in Python, `np.log(e[2:] / e[1:-1]) / np.log(e[1:-1] / e[:-2])`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — the score (B5, C2)"}
+$\log P(X = x \mid X \ge 1) = -\lambda + x\log\lambda - \log x! - \log(1 - e^{-\lambda})$. Sum over the $n$ observations. The derivative of $\log(1 - e^{-\lambda})$ is $e^{-\lambda}/(1 - e^{-\lambda})$; then use $1 + \dfrac{e^{-\lambda}}{1 - e^{-\lambda}} = \dfrac{1}{1 - e^{-\lambda}}$. In code, $1 - e^{-\lambda}$ is `-expm1(-l)` (R), `-np.expm1(-l)` (Python), `-(-l).exp_m1()` (Rust). Build the data with [`rep(1:5, times = c(52, 30, 12, 5, 1))`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/rep.html) or [`np.repeat`](https://numpy.org/doc/stable/reference/generated/numpy.repeat.html).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — the sigmoid in log dose (B6)"}
+$\sigma(u) - \tfrac12 = \dfrac{1 - e^{-u}}{2(1 + e^{-u})}$ and $\sigma(1 - \sigma) = \dfrac{e^{-u}}{(1 + e^{-u})^2}$. Divide, and multiply top and bottom by $e^{u}$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — library root finders (C2, C6)"}
+R: [`uniroot(f, interval = c(a, b), tol = 1e-12)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/uniroot.html) returns a list with `root`, `f.root`, `iter` and `estim.prec`; `extendInt = "yes"` widens an interval without a sign change. Python: [`brentq(f, a, b, xtol=..., full_output=True)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html) returns `(root, info)` with `info.iterations` and `info.function_calls`; [`scipy.optimize.root_scalar`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.root_scalar.html) is a common front end to all of these. Rust: [`argmin::solver::brent::BrentRoot::new(a, b, tol)`](https://docs.rs/argmin/latest/argmin/solver/brent/struct.BrentRoot.html), run with an `Executor`; the function must implement `CostFunction`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — counting calls (C6)"}
+R: a counter outside the function, updated with `<<-`: `fc <- function(c) { count <<- count + 1; f(c) }`. Python: a `global count` inside the wrapper, or a list `count = [0]` that the wrapper changes. Rust: a [`Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html) captured by a closure, or an `AtomicU64` when a library takes ownership of the function.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) Quotient rule: $\dfrac{2c(4 + c^2) - 2c^3}{(4 + c^2)^2} = \dfrac{8c}{(4 + c^2)^2}$.
+(b) $c_0 = 1$: $f = \tfrac15 - \tfrac12 = -0.3$, $f' = 8/25 = 0.32$, $c_1 = 1 + 0.3/0.32 = 1.9375$.
+$c_1 = 1.9375$: $f = 3.75391/7.75391 - 0.5 = -0.015869$, $f' = 15.5/60.123 = 0.257805$, $c_2 = 1.9375 + 0.061554 = 1.999054$.
+Errors: $e_0 = 1$, $e_1 = 0.0625$, $e_2 = 0.000946$.
+(c) $e_1/e_0^2 = 0.0625$, $e_2/e_1^2 = 0.000946/0.003906 = 0.242$. The next one (in code) is $2.2\times10^{-7}/(9.46\times10^{-4})^2 = 0.250$. The ratio approaches $|f''/(2f')| = 0.25$ as the iterates approach the root: quadratic convergence.
+(d) $g' = 2c$, so $c - (c^2 - 4)/(2c) = \tfrac12(c + 4/c)$. From $c_0 = 1$: $2.5$, $2.05$, $2.000610$. Different $f$ for the same root give different Newton iterations; both converge quadratically here.
+(e) $f(5) = 25/29 - 0.5 = 0.36207$, $f'(5) = 40/841 = 0.047562$, $c_1 = 5 - 7.6125 = -2.6125$: a **negative dose**. The curve is flat at $c = 5$, so the step is huge. Since $f(-c) = f(c)$, $f$ also has a root at $c = -2$, and Newton converges to it: $-1.8809$, $-1.9967$, $-2.0000$. The answer has the right size and the wrong sign; a range check ($c > 0$) catches it.
+
+**B2.**
+(a) $g(1) = -3$, $g(3) = 5$: $c_2 = 3 - 5\cdot\dfrac{3 - 1}{5 - (-3)} = 3 - 1.25 = 1.75$. $g(1.75) = -0.9375$: $c_3 = 1.75 - (-0.9375)\cdot\dfrac{1.75 - 3}{-0.9375 - 5} = 1.75 + 0.19737 = 1.94737$. (Next: $2.00356$, $1.99995$.)
+(b) Two secant steps: 4 evaluations of $g$ (two for the starting values, one per step); after that, each step costs one more. Two Newton steps: 4 evaluations as well ($g$ and $g'$ at $c_0$ and $c_1$), and each further step costs two.
+
+**B3.**
+(a) $f' = -1/x^2$, so $x - \dfrac{1/x - a}{-1/x^2} = x + x - a x^2 = x(2 - a x)$. (Early computers divided this way: a division turned into multiplications.)
+(b) $(1/a + e)(1 - a e) = 1/a - e + e - a e^2 = 1/a - a e^2$. So $e_{k+1} = -a\,e_k^2$: exactly quadratic, with $C = a$.
+(c) $a = 0.5$, $x^* = 2$. From 1: $1\cdot 1.5 = 1.5$, $1.5\cdot 1.25 = 1.875$, $1.875\cdot 1.0625 = 1.9921875$. From 5: $5(2 - 2.5) = -2.5$, $-2.5(2 + 1.25) = -8.125$, and it runs off to $-\infty$.
+(d) If $x_k \le 0$ or $x_k \ge 2/a$, then $x_{k+1} \le 0$, and from there $x$ only gets more negative. From $0 < x_0 < 2/a$, $|a\,e_0| < 1$, and (b) shows the error shrinks. So Newton converges exactly for $0 < x_0 < 2/a$: **twice the root** is the limit.
+
+**B4.**
+(a)
+(i) Digits $1, 1.3, 1.6, 1.9$: $+0.3$ per step, $e_{k+1}/e_k = \tfrac12$. **Linear**, $p = 1$ (bisection-like).
+(ii) Digits $1, 2, 4, 8$: doubling. **Quadratic**, $p = 2$ (Newton-like, $C = 1$).
+(iii) Digits $1, 1.6, 2.6, 4.2, 6.8$: multiplied by about $1.6$ each step. $p \approx 1.6$ (secant-like). With the formula: $\log(0.1)/\log(0.25) = 1.66$, $\log(0.024)/\log(0.1) = 1.62$, $\log(0.00267)/\log(0.024) = 1.59$.
+(b) From 2 to 16 digits. (i) $14/0.301 = 46.5$, so **47** steps. (ii) $2 \to 4 \to 8 \to 16$: **3** steps. (iii) $2 \to 3.2 \to 5.1 \to 8.2 \to 13.1 \to 21$: **5** steps.
+
+**B5.**
+(a) $S(\lambda) = \sum_i x_i/\lambda - n$; $S = 0$ gives $\hat\lambda = \bar x$. No root finder needed.
+(b) $\ell(\lambda) = \sum_i x_i\log\lambda - n\lambda - n\log(1 - e^{-\lambda}) - \sum_i\log x_i!$. Differentiating: $S = \dfrac{\sum x_i}{\lambda} - n - \dfrac{n\,e^{-\lambda}}{1 - e^{-\lambda}} = \dfrac{\sum x_i}{\lambda} - \dfrac{n}{1 - e^{-\lambda}}$.
+(c) $S(\lambda) \approx \sum x_i/\lambda - n = n\,(1/\lambda - 1/\bar x)$: the reciprocal equation of B3 with $a = 1/\bar x$ (the factor $n$ cancels in $S/S'$). B3(d) predicts that Newton fails from $\lambda_0 \ge 2\bar x = 3.46$. The approximation is crude near the root, so the true limit is somewhat different; C2 finds it between 2.7 and 2.8.
+(d) $1 - e^{-1.73} = 0.82272$. $S = 173/1.73 - 100/0.82272 = 100 - 121.549 = -21.549$. $S' = -173/2.9929 + 100 \cdot 0.17728/0.67687 = -57.803 + 26.192 = -31.611$. $\lambda_1 = 1.73 - (-21.549)/(-31.611) = 1.73 - 0.6817 = 1.0483$. The step overshoots the MLE (1.218) from above to below, but from there Newton converges (C2).
+
+**B6.**
+(a) $\sigma' = \dfrac{e^{-u}}{(1 + e^{-u})^2} = \dfrac{1}{1 + e^{-u}}\cdot\dfrac{e^{-u}}{1 + e^{-u}} = \sigma(1 - \sigma)$.
+(b) $\dfrac{\sigma - 1/2}{\sigma'} = \dfrac{(1 - e^{-u})(1 + e^{-u})}{2e^{-u}} = \dfrac{1 - e^{-2u}}{2e^{-u}} = \dfrac{e^{u} - e^{-u}}{2} = \sinh u$.
+(c) $u_1 = 1 - 1.1752 = -0.1752$; $u_2 = -0.1752 + 0.1761 = 0.0009$. Converging to 0 ($S = K_m$).
+(d) The condition is $\sinh u^* = 2u^*$. $\sinh 2.177 = (8.82 - 1/8.82)/2 = (8.82 - 0.113)/2 = 4.353$, and $2 \cdot 2.177 = 4.354$. The cycle is between $S = 8.82\,K_m$ and $S = K_m/8.82 = 0.113\,K_m$.
+
+**B7.**
+(a) $-5.73$ is outside $[3, 10]$, so take the midpoint $6.5$. $f(6.5) > 0$, the same sign as $f(10)$, so the new bracket is $[3, 6.5]$.
+(b) $1.887$ is outside $[3, 6.5]$: midpoint $4.75$. $f(4.75) > 0$: bracket $[3, 4.75]$.
+(c) $4.75 - 0.12588/0.07477 = 4.75 - 1.6836 = 3.066$. Inside $[3, 4.75]$: accepted. From here Newton converges quadratically, and every step stays inside the bracket.
+(d) $(x - 1)^2 \ge 0$ everywhere: there is no sign change, so there is no bracket to start from. A root where $f$ touches zero without crossing (a double root) can only be found by methods that do not need a sign change, such as Newton (slowly, see the quiz) or by minimising $f$.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses f, df and newton() from the Background
+# (a) derivative check with a forward difference
+h <- 1e-6
+for (c in c(1, 3, 10)) {
+  fd <- (f(c + h) - f(c)) / h
+  cat(sprintf("%4.0f  %.10f  %.10f  %.1e\n", c, df(c), fd, abs(fd - df(c)) / df(c)))
+}
+# (b) Newton, printing every iterate and the step size
+for (x0 in c(1, 5)) {
+  cat(sprintf("start %g\n", x0))
+  x <- x0
+  for (k in 1:10) {
+    step <- f(x) / df(x)
+    x <- x - step
+    cat(sprintf("%2d  %.15f  %.1e\n", k, x, abs(step)))
+    if (abs(step) <= 1e-12 * abs(x)) break
+  }
+}
+
+# Output:
+#    1  0.0765685364  0.0765685357  8.9e-09
+#    3  0.0939521980  0.0939521961  2.0e-08
+#   10  0.0226940888  0.0226940862  1.2e-07
+# start 1
+#  1  3.616605460641865  2.6e+00
+#  2  3.254817195760261  3.6e-01
+#  3  3.261303701902960  6.5e-03
+#  4  3.261305265055122  1.6e-06
+#  5  3.261305265055212  9.1e-14
+# start 5
+#  1  2.974550170205869  2.0e+00
+#  2  3.259261783106446  2.8e-01
+#  3  3.261305109216503  2.0e-03
+#  4  3.261305265055211  1.6e-07
+#  5  3.261305265055213  1.2e-15
+```
+
+### Python
+
+```python
+# uses np, brentq, f, df and newton() from the Background
+# (a) derivative check with a forward difference
+h = 1e-6
+for c in [1.0, 3.0, 10.0]:
+    fd = (f(c + h) - f(c)) / h
+    print(f"{c:4.0f}  {df(c):.10f}  {fd:.10f}  {abs(fd - df(c)) / df(c):.1e}")
+# (b) Newton, printing every iterate and the step size
+for x0 in [1.0, 5.0]:
+    print(f"start {x0:g}")
+    x = x0
+    for k in range(1, 11):
+        step = f(x) / df(x)
+        x = x - step
+        print(f"{k:2d}  {x:.15f}  {abs(step):.1e}")
+        if abs(step) <= 1e-12 * abs(x):
+            break
+
+# Output:
+#    1  0.0765685364  0.0765685357  8.9e-09
+#    3  0.0939521980  0.0939521961  2.0e-08
+#   10  0.0226940888  0.0226940862  1.2e-07
+# start 1
+#  1  3.616605460641865  2.6e+00
+#  2  3.254817195760261  3.6e-01
+#  3  3.261303701902960  6.5e-03
+#  4  3.261305265055122  1.6e-06
+#  5  3.261305265055212  9.1e-14
+# start 5
+#  1  2.974550170205869  2.0e+00
+#  2  3.259261783106446  2.8e-01
+#  3  3.261305109216503  2.0e-03
+#  4  3.261305265055211  1.6e-07
+#  5  3.261305265055213  1.2e-15
+```
+
+### Rust
+
+```rust
+// rust/examples/newton_c1.rs  —  cargo run --example newton_c1
+// C1: check the derivative with a forward difference, then watch Newton's iterates.
+fn f(c: f64) -> f64 {
+    0.3 * c / (0.1 + c) + 0.7 * c.powi(2) / (25.0 + c.powi(2)) - 0.5
+}
+fn df(c: f64) -> f64 {
+    0.03 / (0.1 + c).powi(2) + 35.0 * c / (25.0 + c.powi(2)).powi(2)
+}
+
+fn main() {
+    // (a) derivative check with a forward difference
+    let h = 1e-6;
+    for c in [1.0, 3.0, 10.0] {
+        let fd = (f(c + h) - f(c)) / h;
+        println!("{:4.0}  {:.10}  {:.10}  {:.1e}", c, df(c), fd, (fd - df(c)).abs() / df(c));
+    }
+    // (b) Newton, printing every iterate and the step size
+    for x0 in [1.0, 5.0] {
+        println!("start {}", x0);
+        let mut x: f64 = x0;
+        for k in 1..=10 {
+            let step = f(x) / df(x);
+            x -= step;
+            println!("{:2}  {:.15}  {:.1e}", k, x, step.abs());
+            if step.abs() <= 1e-12 * x.abs() {
+                break;
+            }
+        }
+    }
+}
+
+// Output:
+//    1  0.0765685364  0.0765685357  8.9e-9
+//    3  0.0939521980  0.0939521961  2.0e-8
+//   10  0.0226940888  0.0226940862  1.2e-7
+// start 1
+//  1  3.616605460641865  2.6e0
+//  2  3.254817195760261  3.6e-1
+//  3  3.261303701902960  6.5e-3
+//  4  3.261305265055122  1.6e-6
+//  5  3.261305265055212  9.1e-14
+// start 5
+//  1  2.974550170205869  2.0e0
+//  2  3.259261783106446  2.8e-1
+//  3  3.261305109216503  2.0e-3
+//  4  3.261305265055211  1.6e-7
+//  5  3.261305265055213  1.2e-15
+```
+
+:::
+
+(a) The relative difference is $10^{-8}$ to $10^{-7}$, the size of the forward-difference truncation error $\tfrac{|f''|}{2}h$ relative to $f'$; at $c = 10$, where $f'$ is small, it is largest. A **wrong** derivative would differ in the first or second digit. (b) 5 steps from both starts. The step $|c_k - c_{k-1}|$ is a slightly pessimistic estimate of the error of $c_{k-1}$: from $c_0 = 1$ the steps are 2.6, 0.36, 0.0065, $1.6\times10^{-6}$, $9.1\times10^{-14}$, and the errors of $c_0, \ldots, c_4$ are 2.26, 0.355, 0.0065, $1.6\times10^{-6}$, $9.1\times10^{-14}$ (lecture). Near the root the agreement is very good, because the next error is so much smaller.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses f, df and newton() from the Background
+x <- rep(1:5, times = c(52, 30, 12, 5, 1))
+n <- length(x); sx <- sum(x)
+S  <- function(l) sx / l - n / (-expm1(-l))
+dS <- function(l) -sx / l^2 + n * exp(-l) / expm1(-l)^2
+# (a) Newton from the mean, and the standard error
+fit <- newton(S, dS, x0 = mean(x))
+cat(sprintf("lambda-hat = %.10f after %d steps, SE = %.4f\n",
+            fit$root, fit$iter, 1 / sqrt(-dS(fit$root))))
+# (b) many starting values
+for (l0 in c(0.2, 0.5, 1, 2, 2.5, 2.7, 2.8, 3, 4)) {
+  l <- l0
+  for (k in 1:50) l <- l - S(l) / dS(l)
+  cat(sprintf("start %.1f -> %.6f\n", l0, l))
+}
+# (c) bracketing
+r <- uniroot(S, c(0.01, 10), tol = 1e-12)
+cat(sprintf("uniroot: %.10f after %d iterations\n", r$root, r$iter))
+
+# Output:
+# lambda-hat = 1.2184695258 after 6 steps, SE = 0.1325
+# start 0.2 -> 1.218470
+# start 0.5 -> 1.218470
+# start 1.0 -> 1.218470
+# start 2.0 -> 1.218470
+# start 2.5 -> 1.218470
+# start 2.7 -> 1.218470
+# start 2.8 -> NaN
+# start 3.0 -> NaN
+# start 4.0 -> NaN
+# uniroot: 1.2184695258 after 10 iterations
+```
+
+### Python
+
+```python
+# uses np, brentq, f, df and newton() from the Background
+x = np.repeat([1, 2, 3, 4, 5], [52, 30, 12, 5, 1])
+n = len(x); sx = x.sum()
+
+def S(l):
+    return sx / l - n / (-np.expm1(-l))
+
+def dS(l):
+    return -sx / l**2 + n * np.exp(-l) / np.expm1(-l)**2
+
+# (a) Newton from the mean, and the standard error
+lhat, it = newton(S, dS, x.mean())
+print(f"lambda-hat = {lhat:.10f} after {it} steps, SE = {1 / np.sqrt(-dS(lhat)):.4f}")
+# (b) many starting values
+with np.errstate(all="ignore"):              # silence overflow warnings
+    for l0 in [0.2, 0.5, 1, 2, 2.5, 2.7, 2.8, 3, 4]:
+        l = float(l0)
+        for k in range(50):
+            l = l - S(l) / dS(l)
+        print(f"start {l0:.1f} -> {l:.6f}")
+# (c) bracketing
+r, info = brentq(S, 0.01, 10, xtol=1e-12, full_output=True)
+print(f"brentq: {r:.10f} after {info.iterations} iterations")
+
+# Output:
+# lambda-hat = 1.2184695258 after 6 steps, SE = 0.1325
+# start 0.2 -> 1.218470
+# start 0.5 -> 1.218470
+# start 1.0 -> 1.218470
+# start 2.0 -> 1.218470
+# start 2.5 -> 1.218470
+# start 2.7 -> 1.218470
+# start 2.8 -> nan
+# start 3.0 -> nan
+# start 4.0 -> nan
+# brentq: 1.2184695258 after 10 iterations
+```
+
+### Rust
+
+```rust
+// rust/examples/newton_c2.rs  —  cargo run --example newton_c2
+// C2: maximum-likelihood rate of a zero-truncated Poisson as the root of the score.
+use argmin::core::{CostFunction, Error, Executor};
+use argmin::solver::brent::BrentRoot;
+
+const N: f64 = 100.0; // cells
+const SX: f64 = 173.0; // total UMIs: 1*52 + 2*30 + 3*12 + 4*5 + 5*1
+
+fn score(l: f64) -> f64 {
+    SX / l - N / (-(-l).exp_m1()) // -expm1(-l) = 1 - exp(-l)
+}
+fn dscore(l: f64) -> f64 {
+    -SX / l.powi(2) + N * (-l).exp() / (-l).exp_m1().powi(2)
+}
+
+fn newton(f: impl Fn(f64) -> f64, df: impl Fn(f64) -> f64, x0: f64, tol: f64, maxit: usize) -> (f64, usize) {
+    let mut x = x0;
+    for k in 1..=maxit {
+        let step = f(x) / df(x);
+        x -= step;
+        if step.abs() <= tol * x.abs() {
+            return (x, k);
+        }
+    }
+    eprintln!("warning: no convergence after {maxit} steps");
+    (x, maxit)
+}
+
+struct Score;
+impl CostFunction for Score {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, l: &f64) -> Result<f64, Error> {
+        Ok(score(*l))
+    }
+}
+
+fn main() {
+    // (a) Newton from the mean, and the standard error
+    let (lhat, it) = newton(score, dscore, SX / N, 1e-12, 50);
+    println!("lambda-hat = {:.10} after {} steps, SE = {:.4}", lhat, it, 1.0 / (-dscore(lhat)).sqrt());
+    // (b) many starting values
+    for l0 in [0.2, 0.5, 1.0, 2.0, 2.5, 2.7, 2.8, 3.0, 4.0] {
+        let mut l: f64 = l0;
+        for _ in 0..50 {
+            l -= score(l) / dscore(l);
+        }
+        println!("start {:.1} -> {:.6}", l0, l);
+    }
+    // (c) bracketing with Brent's method (argmin's BrentRoot)
+    let res = Executor::new(Score, BrentRoot::new(0.01, 10.0, 1e-12))
+        .configure(|s| s.max_iters(100))
+        .run()
+        .unwrap();
+    println!("BrentRoot: {:.10} after {} iterations", res.state.best_param.unwrap(), res.state.iter);
+}
+
+// Output:
+// lambda-hat = 1.2184695258 after 6 steps, SE = 0.1325
+// start 0.2 -> 1.218470
+// start 0.5 -> 1.218470
+// start 1.0 -> 1.218470
+// start 2.0 -> 1.218470
+// start 2.5 -> 1.218470
+// start 2.7 -> 1.218470
+// start 2.8 -> NaN
+// start 3.0 -> NaN
+// start 4.0 -> NaN
+// BrentRoot: 1.2184695258 after 11 iterations
+```
+
+:::
+
+$\hat\lambda = 1.218$ with standard error $0.13$, so the naive mean $1.73$ is about four standard errors too high. Starts up to 2.7 converge; from 2.8 on Newton runs off to $-\infty$ and ends in `NaN`, a bit earlier than the rough prediction $2\bar x = 3.46$ of B5(c). Brent's method needs no start value at all and cannot fail this way. (`brentq` and `BrentRoot` count iterations slightly differently from `uniroot`.)
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses f, df and newton() from the Background
+x <- rep(1:5, times = c(52, 30, 12, 5, 1))
+n <- length(x); sx <- sum(x)
+S  <- function(l) sx / l - n / (-expm1(-l))
+dS <- function(l) -sx / l^2 + n * exp(-l) / expm1(-l)^2
+secant <- function(f, x0, x1, tol = 1e-12, maxit = 50) {
+  f0 <- f(x0); f1 <- f(x1)
+  for (k in 1:maxit) {
+    if (f1 == f0) break                       # flat chord: stop
+    step <- f1 * (x1 - x0) / (f1 - f0)
+    x0 <- x1; f0 <- f1
+    x1 <- x1 - step; f1 <- f(x1)
+    if (abs(step) <= tol * abs(x1)) return(list(root = x1, iter = k))
+  }
+  warning("no convergence after ", k, " steps")
+  list(root = x1, iter = k)
+}
+# (a) c50 and lambda-hat
+r <- secant(f, 1, 2);    cat(sprintf("c50        = %.12f after %d steps\n", r$root, r$iter))
+r <- secant(S, 2, 2.5);  cat(sprintf("lambda-hat = %.12f after %d steps\n", r$root, r$iter))
+# (b) errors and order estimates on the score
+lhat <- uniroot(S, c(0.01, 10), tol = 1e-15)$root
+xs <- c(2, 2.5)
+for (k in 1:9) {
+  m <- length(xs)
+  xs <- c(xs, xs[m] - S(xs[m]) * (xs[m] - xs[m - 1]) / (S(xs[m]) - S(xs[m - 1])))
+}
+xn <- 2
+for (k in 1:5) xn <- c(xn, xn[k] - S(xn[k]) / dS(xn[k]))
+order_est <- function(e) {
+  m <- length(e)
+  log(e[3:m] / e[2:(m - 1)]) / log(e[2:(m - 1)] / e[1:(m - 2)])
+}
+es <- abs(xs - lhat); es <- es[es > 1e-14]    # drop errors at rounding level
+en <- abs(xn - lhat); en <- en[en > 1e-14]
+print(signif(es, 3)); print(round(order_est(es), 2))
+print(signif(en, 3)); print(round(order_est(en), 2))
+
+# Output:
+# c50        = 3.261305265055 after 6 steps
+# lambda-hat = 1.218469525830 after 10 steps
+#  [1] 7.82e-01 1.28e+00 5.95e-01 5.48e-01 2.41e-01 8.81e-02 1.51e-02 9.57e-04
+#  [9] 1.03e-05 7.07e-09 5.22e-14
+# [1] -1.55  0.11  9.95  1.23  1.75  1.56  1.64  1.61  1.62
+# [1] 7.82e-01 3.78e-01 1.09e-01 8.70e-03 5.43e-05 2.12e-09
+# [1] 1.71 2.04 2.01 2.00
+```
+
+### Python
+
+```python
+# uses np, brentq, f, df and newton() from the Background
+x = np.repeat([1, 2, 3, 4, 5], [52, 30, 12, 5, 1])
+n = len(x); sx = x.sum()
+
+def S(l):
+    return sx / l - n / (-np.expm1(-l))
+
+def dS(l):
+    return -sx / l**2 + n * np.exp(-l) / np.expm1(-l)**2
+
+def secant(f, x0, x1, tol=1e-12, maxit=50):
+    f0, f1 = f(x0), f(x1)
+    for k in range(1, maxit + 1):
+        if f1 == f0:                          # flat chord: stop
+            break
+        step = f1 * (x1 - x0) / (f1 - f0)
+        x0, f0 = x1, f1
+        x1 = x1 - step
+        f1 = f(x1)
+        if abs(step) <= tol * abs(x1):
+            return x1, k
+    print(f"warning: no convergence after {k} steps")
+    return x1, k
+
+# (a) c50 and lambda-hat
+r, k = secant(f, 1.0, 2.0);  print(f"c50        = {r:.12f} after {k} steps")
+r, k = secant(S, 2.0, 2.5);  print(f"lambda-hat = {r:.12f} after {k} steps")
+# (b) errors and order estimates on the score
+lhat = brentq(S, 0.01, 10, xtol=1e-15)
+xs = [2.0, 2.5]
+for k in range(9):
+    xs.append(xs[-1] - S(xs[-1]) * (xs[-1] - xs[-2]) / (S(xs[-1]) - S(xs[-2])))
+xn = [2.0]
+for k in range(5):
+    xn.append(xn[-1] - S(xn[-1]) / dS(xn[-1]))
+
+def order_est(e):
+    return np.log(e[2:] / e[1:-1]) / np.log(e[1:-1] / e[:-2])
+
+es = np.abs(np.array(xs) - lhat); es = es[es > 1e-14]   # drop errors at rounding level
+en = np.abs(np.array(xn) - lhat); en = en[en > 1e-14]
+np.set_printoptions(precision=2)
+print(es); print(order_est(es))
+print(en); print(order_est(en))
+
+# Output:
+# c50        = 3.261305265055 after 6 steps
+# lambda-hat = 1.218469525830 after 10 steps
+# [7.82e-01 1.28e+00 5.95e-01 5.48e-01 2.41e-01 8.81e-02 1.51e-02 9.57e-04
+#  1.03e-05 7.07e-09 5.22e-14]
+# [-1.55  0.11  9.95  1.23  1.75  1.56  1.64  1.61  1.62]
+# [7.82e-01 3.78e-01 1.09e-01 8.70e-03 5.43e-05 2.12e-09]
+# [1.71 2.04 2.01 2.  ]
+```
+
+### Rust
+
+```rust
+// rust/examples/newton_c3.rs  —  cargo run --example newton_c3
+// C3: the secant method; estimate the order of convergence from the errors.
+const N: f64 = 100.0; // cells
+const SX: f64 = 173.0; // total UMIs
+
+fn f(c: f64) -> f64 {
+    0.3 * c / (0.1 + c) + 0.7 * c.powi(2) / (25.0 + c.powi(2)) - 0.5
+}
+fn score(l: f64) -> f64 {
+    SX / l - N / (-(-l).exp_m1())
+}
+fn dscore(l: f64) -> f64 {
+    -SX / l.powi(2) + N * (-l).exp() / (-l).exp_m1().powi(2)
+}
+
+fn secant(f: impl Fn(f64) -> f64, mut x0: f64, mut x1: f64, tol: f64, maxit: usize) -> (f64, usize) {
+    let (mut f0, mut f1) = (f(x0), f(x1));
+    let mut k = 0;
+    while k < maxit {
+        k += 1;
+        if f1 == f0 {
+            break; // flat chord: stop
+        }
+        let step = f1 * (x1 - x0) / (f1 - f0);
+        x0 = x1;
+        f0 = f1;
+        x1 -= step;
+        f1 = f(x1);
+        if step.abs() <= tol * x1.abs() {
+            return (x1, k);
+        }
+    }
+    eprintln!("warning: no convergence after {k} steps");
+    (x1, k)
+}
+
+fn order_est(e: &[f64]) -> Vec<f64> {
+    (2..e.len()).map(|i| (e[i] / e[i - 1]).ln() / (e[i - 1] / e[i - 2]).ln()).collect()
+}
+
+fn main() {
+    // (a) c50 and lambda-hat
+    let (r, k) = secant(f, 1.0, 2.0, 1e-12, 50);
+    println!("c50        = {:.12} after {} steps", r, k);
+    let (r, k) = secant(score, 2.0, 2.5, 1e-12, 50);
+    println!("lambda-hat = {:.12} after {} steps", r, k);
+    // (b) errors and order estimates on the score
+    let lhat = 1.2184695258301268; // reference: Brent (uniroot/brentq) with tol 1e-15
+    let mut xs = vec![2.0, 2.5];
+    for _ in 0..9 {
+        let m = xs.len();
+        let (a, b) = (xs[m - 2], xs[m - 1]);
+        xs.push(b - score(b) * (b - a) / (score(b) - score(a)));
+    }
+    let mut xn = vec![2.0];
+    for k in 0..5 {
+        xn.push(xn[k] - score(xn[k]) / dscore(xn[k]));
+    }
+    // errors, dropping those at rounding level
+    let es: Vec<f64> = xs.iter().map(|x| (x - lhat).abs()).filter(|e| *e > 1e-14).collect();
+    let en: Vec<f64> = xn.iter().map(|x| (x - lhat).abs()).filter(|e| *e > 1e-14).collect();
+    for e in [&es, &en] {
+        println!("{:?}", e.iter().map(|v| format!("{:.2e}", v)).collect::<Vec<_>>());
+        println!("{:?}", order_est(e).iter().map(|v| format!("{:.2}", v)).collect::<Vec<_>>());
+    }
+}
+
+// Output:
+// c50        = 3.261305265055 after 6 steps
+// lambda-hat = 1.218469525830 after 10 steps
+// ["7.82e-1", "1.28e0", "5.95e-1", "5.48e-1", "2.41e-1", "8.81e-2", "1.51e-2", "9.57e-4", "1.03e-5", "7.07e-9", "5.22e-14"]
+// ["-1.55", "0.11", "9.95", "1.23", "1.75", "1.56", "1.64", "1.61", "1.62"]
+// ["7.82e-1", "3.78e-1", "1.09e-1", "8.70e-3", "5.43e-5", "2.12e-9"]
+// ["1.71", "2.04", "2.01", "2.00"]
+```
+
+:::
+
+The secant method needs 6 steps for $c_{50}$ (Newton: 5) and 10 for $\hat\lambda$ from the far start $(2, 2.5)$. The order estimates for secant settle at 1.56, 1.64, 1.61, 1.62: the golden ratio 1.618. Newton's settle at 2.00. The first estimates are meaningless (negative, or 9.95) because far from the root the error does not follow $e_{k+1} \approx C e_k^p$ yet: the secant's second step even increases the error. Read the order only from the last few steps before rounding level.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses f, df and newton() from the Background
+c50 <- 3.261305265055212
+df_bad <- function(c) 0.03 / (0.1 + c)^2 + 50 * c / (25 + c^2)^2     # weight 0.7 forgotten
+x <- 1
+e <- numeric(0)
+for (k in 1:30) {
+  x <- x - f(x) / df_bad(x)
+  e <- c(e, abs(x - c50))
+}
+print(signif(e[c(1:6, 10, 20, 30)], 3))
+print(round(e[2:12] / e[1:11], 3))                     # ratio e_{k+1}/e_k
+1 - df(c50) / df_bad(c50)                              # predicted ratio
+
+# Output:
+# [1] 2.33e-01 6.92e-02 2.04e-02 6.02e-03 1.77e-03 5.20e-04 3.88e-06 1.87e-11
+# [9] 0.00e+00
+#  [1] 0.298 0.295 0.294 0.294 0.294 0.294 0.294 0.294 0.294 0.294 0.294
+# [1] 0.2939221
+```
+
+### Python
+
+```python
+# uses np, brentq, f, df and newton() from the Background
+c50 = 3.261305265055212
+
+def df_bad(c):                                    # weight 0.7 forgotten
+    return 0.03 / (0.1 + c)**2 + 50 * c / (25 + c**2)**2
+
+x = 1.0
+e = []
+for k in range(30):
+    x = x - f(x) / df_bad(x)
+    e.append(abs(x - c50))
+e = np.array(e)
+np.set_printoptions(precision=2)
+print(e[[0, 1, 2, 3, 4, 5, 9, 19, 29]])
+np.set_printoptions(precision=3)
+print(e[1:12] / e[0:11])                          # ratio e_{k+1}/e_k
+print(1 - df(c50) / df_bad(c50))                  # predicted ratio
+
+# Output:
+# [2.33e-01 6.92e-02 2.04e-02 6.02e-03 1.77e-03 5.20e-04 3.88e-06 1.87e-11
+#  0.00e+00]
+# [0.298 0.295 0.294 0.294 0.294 0.294 0.294 0.294 0.294 0.294 0.294]
+# 0.29392205598623533
+```
+
+### Rust
+
+```rust
+// rust/examples/newton_c4.rs  —  cargo run --example newton_c4
+// C4: Newton with a wrong derivative converges only linearly.
+fn f(c: f64) -> f64 {
+    0.3 * c / (0.1 + c) + 0.7 * c.powi(2) / (25.0 + c.powi(2)) - 0.5
+}
+fn df(c: f64) -> f64 {
+    0.03 / (0.1 + c).powi(2) + 35.0 * c / (25.0 + c.powi(2)).powi(2)
+}
+fn df_bad(c: f64) -> f64 {
+    0.03 / (0.1 + c).powi(2) + 50.0 * c / (25.0 + c.powi(2)).powi(2) // weight 0.7 forgotten
+}
+
+fn main() {
+    let c50 = 3.261305265055212;
+    let mut x: f64 = 1.0;
+    let mut e = Vec::new();
+    for _ in 0..30 {
+        x -= f(x) / df_bad(x);
+        e.push((x - c50).abs());
+    }
+    let shown: Vec<String> = [0, 1, 2, 3, 4, 5, 9, 19, 29].iter().map(|&i| format!("{:.2e}", e[i])).collect();
+    println!("{:?}", shown);
+    let ratios: Vec<String> = (0..11).map(|i| format!("{:.3}", e[i + 1] / e[i])).collect();
+    println!("{:?}", ratios); // ratio e_{k+1}/e_k
+    println!("{}", 1.0 - df(c50) / df_bad(c50)); // predicted ratio
+}
+
+// Output:
+// ["2.33e-1", "6.92e-2", "2.04e-2", "6.02e-3", "1.77e-3", "5.20e-4", "3.88e-6", "1.87e-11", "0.00e0"]
+// ["0.298", "0.295", "0.294", "0.294", "0.294", "0.294", "0.294", "0.294", "0.294", "0.294", "0.294"]
+// 0.29392205598623533
+```
+
+:::
+
+(a) It converges, but slowly: about 0.53 digits per step ($\log_{10}(1/0.294)$), 30 steps instead of 5. (b) The ratio is constant at 0.294: **linear** convergence, order 1, and $|1 - f'(c_{50})/d(c_{50})| = 0.294$ matches exactly. With the correct derivative the ratio is 0, which is why true Newton is faster than linear. (c) The digits-per-step pattern: a fixed number of new digits per step instead of doubling. Or check `df` against a finite difference (C1(a)), which here would differ in the first digit.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses f, df and newton() from the Background
+newton_safe <- function(f, df, a, b, x0 = (a + b) / 2, tol = 1e-12, maxit = 100) {
+  fa <- f(a)
+  if (fa * f(b) > 0) stop("f(a) and f(b) must have opposite signs")
+  x <- x0; old_step <- b - a; nbis <- 0
+  for (k in 1:maxit) {
+    fx <- f(x)
+    if (fx == 0) return(c(root = x, iter = k, bisections = nbis))
+    if (sign(fx) == sign(fa)) { a <- x; fa <- fx } else b <- x  # keep the sign change
+    xnew <- x - fx / df(x)                                       # Newton proposal
+    if (!is.finite(xnew) || xnew <= a || xnew >= b ||            # outside bracket, or
+        abs(xnew - x) > abs(old_step) / 2) {                     # too slow: bisect
+      xnew <- (a + b) / 2; nbis <- nbis + 1
+    }
+    old_step <- xnew - x
+    if (abs(old_step) <= tol * abs(xnew)) return(c(root = xnew, iter = k, bisections = nbis))
+    x <- xnew
+  }
+  warning("no convergence"); c(root = x, iter = maxit, bisections = nbis)
+}
+show <- function(r) cat(sprintf("root %.6g  iter %d  bisections %d\n", r[1], r[2], r[3]))
+show(newton_safe(f, df, 0.01, 100, x0 = 10))
+g  <- function(u) 1 / (1 + exp(-u)) - 0.5        # Michaelis-Menten, log substrate
+dg <- function(u) exp(-u) / (1 + exp(-u))^2
+show(newton_safe(g, dg, -5, 5, x0 = 2.3))
+show(newton_safe(g, dg, -5, 5, x0 = 2.1773189849653))
+
+# Output:
+# root 3.26131  iter 6  bisections 1
+# root -2.83194e-16  iter 6  bisections 1
+# root 0  iter 4  bisections 1
+```
+
+### Python
+
+```python
+# uses np, brentq, f, df and newton() from the Background
+def newton_safe(f, df, a, b, x0=None, tol=1e-12, maxit=100):
+    fa = f(a)
+    if fa * f(b) > 0:
+        raise ValueError("f(a) and f(b) must have opposite signs")
+    x = (a + b) / 2 if x0 is None else x0
+    old_step = b - a; nbis = 0
+    for k in range(1, maxit + 1):
+        fx = f(x)
+        if fx == 0:
+            return x, k, nbis
+        if np.sign(fx) == np.sign(fa):           # keep the sign change
+            a, fa = x, fx
+        else:
+            b = x
+        xnew = x - fx / df(x)                    # Newton proposal
+        if (not np.isfinite(xnew) or xnew <= a or xnew >= b
+                or abs(xnew - x) > abs(old_step) / 2):   # outside or too slow: bisect
+            xnew = (a + b) / 2; nbis += 1
+        old_step = xnew - x
+        if abs(old_step) <= tol * abs(xnew):
+            return xnew, k, nbis
+        x = xnew
+    print("warning: no convergence")
+    return x, maxit, nbis
+
+def show(r):
+    print(f"root {r[0]:.6g}  iter {r[1]}  bisections {r[2]}")
+
+show(newton_safe(f, df, 0.01, 100, x0=10.0))
+
+def g(u):                                        # Michaelis-Menten, log substrate
+    return 1 / (1 + np.exp(-u)) - 0.5
+
+def dg(u):
+    return np.exp(-u) / (1 + np.exp(-u))**2
+
+show(newton_safe(g, dg, -5.0, 5.0, x0=2.3))
+show(newton_safe(g, dg, -5.0, 5.0, x0=2.1773189849653))
+
+# Output:
+# root 3.26131  iter 6  bisections 1
+# root -2.83194e-16  iter 6  bisections 1
+# root 0  iter 4  bisections 1
+```
+
+### Rust
+
+```rust
+// rust/examples/newton_c5.rs  —  cargo run --example newton_c5
+// C5: a safeguarded Newton that never leaves its sign-change bracket.
+fn f(c: f64) -> f64 {
+    0.3 * c / (0.1 + c) + 0.7 * c.powi(2) / (25.0 + c.powi(2)) - 0.5
+}
+fn df(c: f64) -> f64 {
+    0.03 / (0.1 + c).powi(2) + 35.0 * c / (25.0 + c.powi(2)).powi(2)
+}
+fn g(u: f64) -> f64 {
+    1.0 / (1.0 + (-u).exp()) - 0.5 // Michaelis-Menten, log substrate
+}
+fn dg(u: f64) -> f64 {
+    (-u).exp() / (1.0 + (-u).exp()).powi(2)
+}
+
+// returns (root, iterations, bisection steps)
+fn newton_safe(f: impl Fn(f64) -> f64, df: impl Fn(f64) -> f64,
+               mut a: f64, mut b: f64, x0: f64, tol: f64, maxit: usize) -> (f64, usize, usize) {
+    let mut fa = f(a);
+    assert!(fa * f(b) <= 0.0, "f(a) and f(b) must have opposite signs");
+    let (mut x, mut old_step, mut nbis) = (x0, b - a, 0);
+    for k in 1..=maxit {
+        let fx = f(x);
+        if fx == 0.0 {
+            return (x, k, nbis);
+        }
+        if fx.signum() == fa.signum() { a = x; fa = fx; } else { b = x; } // keep the sign change
+        let mut xnew = x - fx / df(x); // Newton proposal
+        if !xnew.is_finite() || xnew <= a || xnew >= b || (xnew - x).abs() > old_step.abs() / 2.0 {
+            xnew = (a + b) / 2.0; // outside or too slow: bisect
+            nbis += 1;
+        }
+        old_step = xnew - x;
+        if old_step.abs() <= tol * xnew.abs() {
+            return (xnew, k, nbis);
+        }
+        x = xnew;
+    }
+    eprintln!("warning: no convergence");
+    (x, maxit, nbis)
+}
+
+fn show(r: (f64, usize, usize)) {
+    println!("root {:.6e}  iter {}  bisections {}", r.0, r.1, r.2);
+}
+
+fn main() {
+    show(newton_safe(f, df, 0.01, 100.0, 10.0, 1e-12, 100));
+    show(newton_safe(g, dg, -5.0, 5.0, 2.3, 1e-12, 100));
+    show(newton_safe(g, dg, -5.0, 5.0, 2.1773189849653, 1e-12, 100));
+}
+
+// Output:
+// root 3.261305e0  iter 6  bisections 1
+// root -2.831936e-16  iter 6  bisections 1
+// root 0.000000e0  iter 4  bisections 1
+```
+
+:::
+
+(a) One bisection step (the first Newton proposal, $-5.73$, leaves the bracket), then Newton steps: $c_{50}$ in 6 iterations instead of a negative dose. (b) From $u_0 = 2.3$: one bisection, then Newton converges to $u = 0$ ($S = K_m$), with $-2.8\times10^{-16}$ an error at rounding level. From the cycle start: the first Newton step (to $-2.177$) is inside the bracket and accepted, and the bracket shrinks to $[-2.177, 2.177]$. The second proposal would jump back to $+2.177$, the end of the bracket, with a step no shorter than the last one, so it is replaced by the midpoint, which is (almost) the root $u = 0$. This is the idea of Brent's method, with Newton in place of secant and inverse quadratic interpolation (the `rtsafe` routine of *Numerical Recipes* is this method).
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# uses f, df and newton() from the Background; secant() from C3
+c50 <- 3.261305265055212
+count <- 0
+fc  <- function(c) { count <<- count + length(c); f(c) }   # f that counts its calls
+dfc <- function(c) { count <<- count + length(c); df(c) }
+report <- function(name, root) {
+  force(root)                              # run the solver before reading count
+  cat(sprintf("%-22s evals %3d   error %.1e\n", name, count, abs(root - c50)))
+  count <<- 0
+}
+report("uniroot, default tol", uniroot(fc, c(0.01, 100))$root)
+report("uniroot, tol = 1e-12", uniroot(fc, c(0.01, 100), tol = 1e-12)$root)
+report("Newton from 1", newton(fc, dfc, 1)$root)
+report("secant from 1, 2", secant(fc, 1, 2)$root)
+
+# Output:
+# uniroot, default tol   evals  12   error 1.4e-07
+# uniroot, tol = 1e-12   evals  13   error 4.4e-16
+# Newton from 1          evals  10   error 0.0e+00
+# secant from 1, 2       evals   8   error 4.4e-16
+```
+
+### Python
+
+```python
+# uses np, brentq, f, df and newton() from the Background; secant() from C3
+from scipy.optimize import newton as sp_newton
+
+c50 = 3.261305265055212
+count = 0
+
+def fc(c):                                       # f that counts its calls
+    global count; count += 1; return f(c)
+
+def dfc(c):
+    global count; count += 1; return df(c)
+
+def report(name, root, evals=None):
+    global count
+    print(f"{name:<22} evals {count if evals is None else evals:3d}   error {abs(root - c50):.1e}")
+    count = 0
+
+r, info = brentq(fc, 0.01, 100, full_output=True)
+report("brentq, default tol", r)
+report("Newton from 1", newton(fc, dfc, 1.0)[0])
+report("secant from 1, 2", secant(fc, 1.0, 2.0)[0])
+r, info = sp_newton(f, 1.0, fprime=df, full_output=True)
+report("scipy newton (Newton)", r, info.function_calls)
+r, info = sp_newton(f, 1.0, full_output=True)           # no fprime: secant
+report("scipy newton (secant)", r, info.function_calls)
+
+# Output:
+# brentq, default tol    evals  12   error 0.0e+00
+# Newton from 1          evals  10   error 0.0e+00
+# secant from 1, 2       evals   8   error 4.4e-16
+# scipy newton (Newton)  evals  10   error 0.0e+00
+# scipy newton (secant)  evals   7   error 0.0e+00
+```
+
+### Rust
+
+```rust
+// rust/examples/newton_c6.rs  —  cargo run --example newton_c6
+// C6: count function evaluations: Brent (argmin's BrentRoot), Newton, secant.
+use argmin::core::{CostFunction, Error, Executor};
+use argmin::solver::brent::BrentRoot;
+use std::cell::Cell;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+// global evaluation counter for the argmin run (argmin owns the function object)
+static BRENT_EVALS: AtomicU64 = AtomicU64::new(0);
+
+fn f(c: f64) -> f64 {
+    0.3 * c / (0.1 + c) + 0.7 * c.powi(2) / (25.0 + c.powi(2)) - 0.5
+}
+fn df(c: f64) -> f64 {
+    0.03 / (0.1 + c).powi(2) + 35.0 * c / (25.0 + c.powi(2)).powi(2)
+}
+
+fn newton(f: impl Fn(f64) -> f64, df: impl Fn(f64) -> f64, x0: f64, tol: f64, maxit: usize) -> f64 {
+    let mut x = x0;
+    for _ in 0..maxit {
+        let step = f(x) / df(x);
+        x -= step;
+        if step.abs() <= tol * x.abs() {
+            break;
+        }
+    }
+    x
+}
+
+fn secant(f: impl Fn(f64) -> f64, mut x0: f64, mut x1: f64, tol: f64, maxit: usize) -> f64 {
+    let (mut f0, mut f1) = (f(x0), f(x1));
+    for _ in 0..maxit {
+        if f1 == f0 {
+            break;
+        }
+        let step = f1 * (x1 - x0) / (f1 - f0);
+        x0 = x1;
+        f0 = f1;
+        x1 -= step;
+        f1 = f(x1);
+        if step.abs() <= tol * x1.abs() {
+            break;
+        }
+    }
+    x1
+}
+
+struct TwoSite;
+impl CostFunction for TwoSite {
+    type Param = f64;
+    type Output = f64;
+    fn cost(&self, c: &f64) -> Result<f64, Error> {
+        BRENT_EVALS.fetch_add(1, Ordering::Relaxed);
+        Ok(f(*c))
+    }
+}
+
+fn main() {
+    let c50 = 3.261305265055212;
+    let report = |name: &str, evals: u64, root: f64| {
+        println!("{:<22} evals {:3}   error {:.1e}", name, evals, (root - c50).abs());
+    };
+    for tol in [1e-4, 1e-12] {
+        let res = Executor::new(TwoSite, BrentRoot::new(0.01, 100.0, tol))
+            .configure(|s| s.max_iters(100))
+            .run()
+            .unwrap();
+        let evals = BRENT_EVALS.swap(0, Ordering::Relaxed);
+        report(&format!("BrentRoot, tol = {:.0e}", tol), evals, res.state.best_param.unwrap());
+    }
+    // a Cell is a counter that closures may change without `mut`
+    let count = Cell::new(0u64);
+    let fc = |c: f64| { count.set(count.get() + 1); f(c) };
+    let dfc = |c: f64| { count.set(count.get() + 1); df(c) };
+    let r = newton(fc, dfc, 1.0, 1e-12, 50);
+    report("Newton from 1", count.replace(0), r);
+    let r = secant(fc, 1.0, 2.0, 1e-12, 50);
+    report("secant from 1, 2", count.replace(0), r);
+}
+
+// Output:
+// BrentRoot, tol = 1e-4  evals  11   error 1.4e-7
+// BrentRoot, tol = 1e-12 evals  12   error 4.4e-16
+// Newton from 1          evals  10   error 0.0e0
+// secant from 1, 2       evals   8   error 4.4e-16
+```
+
+:::
+
+All reach $c_{50}$ with 7–13 evaluations from a bracket 10 000 times wider than the answer; bisection would need about 58. With the default `tol`, `uniroot` stops at an error of $1.4\times10^{-7}$ (`brentq`'s default `xtol` is $2\times10^{-12}$, much tighter). The secant method is cheapest (8 evaluations, 7 in `scipy.optimize.newton`, which picks its own second point), then Newton (10: five steps of $f$ and $f'$). Brent's method costs a few evaluations more but is the only one that **cannot** fail: it never leaves the bracket. That is why the libraries use it by default, and why our hand-written methods need a good start.
+
+:::
+
+## Where this leads
+
+- ***Newton for systems of equations* (next unit):** with several unknowns, $f'$ becomes the **Jacobian** matrix, and the division $f/f'$ becomes a linear solve. The secant idea generalises too (Broyden's method). The failure modes and the safeguards (damping, line search) carry over.
+- ***Numerical differentiation* (Part 7):** when $f'$ is not available in closed form, a finite-difference derivative can replace it; how to choose the step $h$ is the topic there.
+- ***Gradient descent, Newton and quasi-Newton* (Part 9):** maximising a log-likelihood is solving score $= 0$. Newton on the score is Newton's method for optimisation, and the safeguards become line searches and trust regions. The standard error from $-S'(\hat\lambda)$ returns in *Identifiability and uncertainty of fitted parameters*.
+- ***Optimisation in one dimension* (Part 9):** Brent's other method (`optimize`, `minimize_scalar`) minimises a function of one variable with the same "fast step on a leash" idea.

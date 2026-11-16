@@ -1,0 +1,174 @@
+---
+title: "Quiz: the SVD, rank deficiency and regularisation"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of the SVD, rank deficiency and regularisation. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** In one or two sentences each: what do $V^T$, $\Sigma$ and $U$ in $A = U\Sigma V^T$ do to a vector $x$? What does $A$ do to the unit circle?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Apply the three factors to $x$ one at a time, right to left.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$V^T$ rotates (possibly with a reflection) so that the directions $v_1, v_2, \dots$ line up with the coordinate axes. $\Sigma$ stretches axis $i$ by $\sigma_i$. $U$ rotates the axes onto the directions $u_1, u_2, \dots$ in data space. The unit circle becomes an ellipse with half-axes $\sigma_1u_1$ and $\sigma_2u_2$; $v_1$ is the unit vector stretched most, $Av_1 = \sigma_1u_1$.
+:::
+
+---
+
+**Q2.** A $100\times 3$ matrix has singular values $50$, $5$ and $0.005$. What is its condition number? What is its numerical rank (a) for rounding errors only, (b) if the right-hand side has noise of relative size $10^{-3}$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\kappa = \sigma_1/\sigma_n$. For (a), the tolerance is $\max(m,n)\,\varepsilon\,\sigma_1$. For (b), compare $\sigma_i/\sigma_1$ with the noise level.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\kappa = 50/0.005 = 10^4$. (a) The tolerance is $100 \times 2.2\times10^{-16}\times 50 \approx 10^{-12}$: all three are above it, rank 3. (b) $\sigma_3/\sigma_1 = 10^{-4}$ is below the noise level $10^{-3}$: noise along $u_3$ is amplified by $1/\sigma_3$ and swamps the signal, so for practical purposes the rank is 2, and the combination $v_3$ of the parameters is not determined by the data.
+:::
+
+---
+
+**Q3.** On paper, $\sigma_i = \sqrt{\lambda_i(A^TA)}$. Why do `svd()`, `np.linalg.svd` and nalgebra not compute singular values that way?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is the condition number of $A^TA$, compared with that of $A$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\kappa(A^TA) = \kappa(A)^2$. Forming $A^TA$ squares the small singular values: a $\sigma_n = 10^{-9}$ becomes an eigenvalue $10^{-18}$, below the rounding error of the entries of $A^TA$, and is lost. The same reason makes the normal equations worse than QR. SVD routines work on $A$ itself with orthogonal transformations.
+:::
+
+---
+
+**Q4.** You regress expression on a set of covariates with `lm`, and one coefficient comes back as `NA`. What does that mean, and is the coefficient next to it trustworthy?
+
+::: {.callout-tip collapse="true" title="Hint"}
+`lm` uses a pivoted QR and checks the rank.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The design matrix is (numerically) rank-deficient: that covariate is a linear combination of others (for example two columns that are identical, or dummy variables that add up to the intercept). `lm` drops it. The remaining coefficients are one of infinitely many solutions; the coefficient of a column that is collinear with the dropped one now measures their **combined** effect (in the lecture, "CD4" = CD4 + CD8). Look at `svd(X)$d` and the right singular vector of the zero singular value to see which columns are involved.
+:::
+
+---
+
+**Q5.** What do these lines print, approximately, and why is the second number not exactly 0?
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+svd(cbind(1:3, 1:3))$d
+```
+
+### Python
+
+```python
+import numpy as np
+A = np.column_stack([[1, 2, 3], [1, 2, 3]]).astype(float)
+print(np.linalg.svd(A, compute_uv=False))
+```
+
+### Rust
+
+```rust
+// rust/examples/svd_q5.rs  —  cargo run --example svd_q5
+// Q5: singular values of a matrix with two identical columns.
+use nalgebra::DMatrix;
+
+fn main() {
+    let a = DMatrix::from_row_slice(3, 2, &[1.0, 1.0, 2.0, 2.0, 3.0, 3.0]);
+    println!("{:?}", a.singular_values().as_slice());
+}
+```
+
+:::
+
+::: {.callout-tip collapse="true" title="Hint"}
+Both columns are $c = (1, 2, 3)$. What is $\|c\|$, and what is $A\,(1, 1)/\sqrt2$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\sigma_1 = \|c\|\sqrt2 = \sqrt{28} = 5.2915$ and $\sigma_2 = 0$ in exact arithmetic (rank 1). R prints `5.291503e+00 5.787113e-16`, Python `[5.29150262e+00 5.78711299e-16]`, Rust `[5.2915026221291805, 0.0]`. The SVD is computed with rounding errors of size about $\varepsilon\,\sigma_1 \approx 10^{-15}$, so an exact zero comes out as a number of that size (or, by luck, 0). That is why the rank is decided with a tolerance, never with `== 0`.
+:::
+
+---
+
+**Q6.** In a least-squares problem, $\sigma_4 = 0.01$, and the noise contributes about $0.1$ to $u_4^Tb$. How large an error does that cause in the solution, and in which direction?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$x = \sum_i (u_i^Tb/\sigma_i)\,v_i$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$0.1/0.01 = 10$, along $v_4$. Whatever $v_4$ is (in the lecture, "more CD4, less CD8"), the solution moves by 10 units in that direction, even though the noise in $b$ is only 0.1. The other components, with larger $\sigma_i$, are hardly affected.
+:::
+
+---
+
+**Q7.** Two cell types have exactly the same signature. The pseudoinverse solution gives them the same proportion. Does this mean the data show they are equally abundant?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which property singles out the pseudoinverse solution among all least-squares solutions?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. Every split with the same total fits the data equally well. The pseudoinverse picks the solution with the smallest $\|x\|$, which for two identical columns is the equal split. It is a convention, not information. Report the total, and say that the split is not determined.
+:::
+
+---
+
+**Q8.** Compute the ridge filter factors $f_i = \sigma_i^2/(\sigma_i^2+\lambda^2)$ for $\sigma = 100$, $1$ and $0.01$ with $\lambda = 1$. What does ridge do to each component?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$f \approx 1$ when $\sigma \gg \lambda$ and $f \approx (\sigma/\lambda)^2$ when $\sigma \ll \lambda$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$f = 10^4/(10^4 + 1) = 0.9999$, $f = 1/2 = 0.5$ and $f = 10^{-4}/(1 + 10^{-4}) \approx 10^{-4}$. The first component is kept, the second halved, the third almost removed. The truncated SVD would use 1, 1 or 0 instead (a sharp cut) depending on where $k$ is set; ridge is a smooth step at $\sigma = \lambda$.
+:::
+
+---
+
+**Q9.** You increase $\lambda$ in a ridge deconvolution from 10 to 1000. What happens to the residual, to $\|x\|$ and to the sum of the estimated proportions? How do you pick $\lambda$ without knowing the truth?
+
+::: {.callout-tip collapse="true" title="Hint"}
+For large $\lambda$, which singular values are above $\lambda$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Once $\lambda$ is comparable to the large singular values, ridge damps the well-determined components too: the residual grows fast, $\|x\|$ shrinks, and all proportions are pulled towards 0 (in the lecture example the sum drops from 0.997 to 0.23). Choose $\lambda$ at the corner of the **L-curve** (log solution norm against log residual norm), or as the largest $\lambda$ whose residual is still about the noise level (discrepancy principle), or by cross-validation.
+:::
+
+---
+
+**Q10.** NNLS gives a CD8 T-cell proportion of exactly 0. A colleague concludes the sample has no CD8 T cells. What would you check?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does the smallest singular vector of the signature look like? What happens if you refit with slightly different data?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Check whether CD8 is confounded with another cell type: look at the smallest singular values of the signature and their right singular vectors (in the lecture, $v_5 \approx (1, -1, 0, 0, 0)/\sqrt2$, CD4 minus CD8). Then refit with perturbed data (new noise of the measured size, or a bootstrap over genes). If CD8 jumps between 0 and a large value while CD4 + CD8 stays fixed, the zero is set by noise: NNLS only clipped the split at the bound. It is not evidence of absence.
+:::
+
+---
+
+**Q11.** How is PCA related to the SVD, and why does `prcomp` use `svd` rather than `eigen(cov(X))`?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Write the centred data matrix as $X = U\Sigma V^T$ and compute $X^TX$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+For the column-centred data $X = U\Sigma V^T$, the principal axes are the $v_i$, the scores are $U\Sigma$, and the variances are $\sigma_i^2/(n-1)$, because the covariance matrix is $X^TX/(n-1) = V\,\Sigma^2/(n-1)\,V^T$. Computing the eigenvalues of the covariance matrix instead squares the condition number, as in Q3, so small variances lose accuracy. Keeping the top $k$ components is the truncated SVD of the data.
+:::

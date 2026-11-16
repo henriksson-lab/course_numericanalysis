@@ -1,0 +1,215 @@
+---
+title: "Quiz: Newton and secant methods"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of Newton's method, the secant method and safeguarded root finding. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** In one sentence: what approximation of $f$ does Newton's method solve at each step, and where does it come from?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Keep the first two terms of a Taylor polynomial.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The tangent line $f(x_k) + f'(x_k)(x - x_k)$, the first-order Taylor polynomial of $f$ at $x_k$. Setting it to zero gives $x_{k+1} = x_k - f(x_k)/f'(x_k)$.
+:::
+
+---
+
+**Q2.** Newton's method has error $10^{-3}$ at some step, and $e_{k+1} \approx 0.5\,e_k^2$. What are the errors after one and two more steps? How many steps would bisection need for the same gain?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Square, then multiply by 0.5. Bisection halves the error per step: $\log_{10} 2 \approx 0.3$ digits.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$0.5 \cdot 10^{-6} = 5\times10^{-7}$, then $0.5\cdot(5\times10^{-7})^2 = 1.25\times10^{-13}$. From 3 to about 13 digits in two steps. Bisection gains 0.3 digits per step, so it needs about $10/0.3 \approx 33$ steps for the same 10 digits.
+:::
+
+---
+
+**Q3.** The secant method has a lower order (1.618) than Newton (2). Why can it still be faster in practice?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Count function evaluations, not steps.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A Newton step evaluates $f$ **and** $f'$; a secant step evaluates only $f$ (the previous value is reused). If $f'$ costs about as much as $f$, then per evaluation Newton has order $\sqrt2 \approx 1.41$ and secant $1.618$. And the secant method needs no derivative at all, which matters when $f$ comes out of a simulation or an ODE solver.
+:::
+
+---
+
+**Q4.** Your hand-written Newton gives the errors $3\times10^{-2}$, $9\times10^{-3}$, $2.7\times10^{-3}$, $8\times10^{-4}$, $2.4\times10^{-4}$. What order is this, and name two likely causes.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look at the ratio of consecutive errors.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The ratio is constant (0.3), so this is **linear** convergence, not quadratic. Likely causes: a **wrong derivative** (Newton with the wrong $f'$ is a fixed-point iteration with $g'(x^*) \ne 0$; check `df` against a finite difference), or a **multiple root** where $f'(x^*) = 0$ (Q5).
+:::
+
+---
+
+**Q5.** Run Newton on $f(x) = (x - 1)^2$ from $x_0 = 2$. What happens to the error, and why? Can `uniroot` find this root?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Simplify $x - f(x)/f'(x)$ by hand first. Does $f$ change sign?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+f  <- function(x) (x - 1)^2
+df <- function(x) 2 * (x - 1)
+x <- 2
+for (k in 1:6) {
+  x <- x - f(x) / df(x)
+  cat(k, sprintf("%.6f", x), sprintf("%.6f", x - 1), "\n")
+}
+
+# Output:
+# 1 1.500000 0.500000
+# 2 1.250000 0.250000
+# 3 1.125000 0.125000
+# 4 1.062500 0.062500
+# 5 1.031250 0.031250
+# 6 1.015625 0.015625
+```
+
+### Python
+
+```python
+def f(x):
+    return (x - 1)**2
+
+def df(x):
+    return 2 * (x - 1)
+
+x = 2.0
+for k in range(1, 7):
+    x = x - f(x) / df(x)
+    print(k, f"{x:.6f}", f"{x - 1:.6f}")
+
+# Output:
+# 1 1.500000 0.500000
+# 2 1.250000 0.250000
+# 3 1.125000 0.125000
+# 4 1.062500 0.062500
+# 5 1.031250 0.031250
+# 6 1.015625 0.015625
+```
+
+### Rust
+
+```rust
+// rust/examples/newton_q5.rs  —  cargo run --example newton_q5
+// Q5: Newton on a double root, f(x) = (x - 1)^2, converges only linearly.
+fn main() {
+    let f = |x: f64| (x - 1.0).powi(2);
+    let df = |x: f64| 2.0 * (x - 1.0);
+    let mut x: f64 = 2.0;
+    for k in 1..=6 {
+        x -= f(x) / df(x);
+        println!("{} {:.6} {:.6}", k, x, x - 1.0);
+    }
+}
+
+// Output:
+// 1 1.500000 0.500000
+// 2 1.250000 0.250000
+// 3 1.125000 0.125000
+// 4 1.062500 0.062500
+// 5 1.031250 0.031250
+// 6 1.015625 0.015625
+```
+
+:::
+
+$x - (x-1)^2/(2(x-1)) = x - (x-1)/2$, so the error **halves** every step: linear convergence, exactly like bisection. At a double root $f'(x^*) = 0$, and the quadratic-convergence argument (which divides by $f'(x^*)$) breaks down. `uniroot` and `brentq` cannot be used: $f \ge 0$ everywhere, so there is no sign change to bracket. (In biology, double roots appear where two steady states merge, at a saddle-node bifurcation.)
+:::
+
+---
+
+**Q6.** Newton for the two-site EC50, started at $c_0 = 10$ µM, converges in 6 steps to $c = -3.05$ with $f(c) = 0$ exactly. Is this a correct answer? Which check would have caught it, and what would you do instead?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does the formula know about doses?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+It is a correct root of the formula, but not of the biological problem: doses are positive. The curve is flat at $c = 10$, so the first step is huge and lands at $-5.73$, next to a second (meaningless) root. Checks: is the answer in the meaningful range ($c > 0$)? A plot of $f$ over the plausible doses shows one root, at 3.26. Fix: use a bracketing method on a positive interval (`uniroot(f, c(0.01, 100))`), or start closer.
+:::
+
+---
+
+**Q7.** `uniroot(f, c(0.01, 100))` returns a root with `estim.prec` $= 6.1\times10^{-5}$. What does that tell you, and what should you change?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look up the default of the `tol` argument.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The root is only known to about $6\times10^{-5}$ (absolute), because the default `tol` is `.Machine$double.eps^0.25` $\approx 1.2\times10^{-4}$. That is fine for reporting an EC50 to 3 digits, but not if the root is used further (a difference, a derivative, an outer optimisation). Pass `tol = 1e-12` (or smaller); it costs only one or two extra evaluations. `scipy.optimize.brentq` has the tighter default `xtol = 2e-12`.
+:::
+
+---
+
+**Q8.** Why can Brent's method (`uniroot`, `brentq`) not diverge or cycle, even though it uses secant-like steps?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does it keep from bisection?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+It keeps a bracket $[a, b]$ with $f(a)f(b) < 0$ at every step. A fast step is only accepted if it lands inside the bracket and shrinks it fast enough; otherwise a bisection step is taken. The bracket therefore always contains a root and keeps shrinking, so the method converges at least about as fast as bisection, and superlinearly once the fast steps take over.
+:::
+
+---
+
+**Q9.** Why is a maximum-likelihood estimate a root-finding problem? What extra quantity does Newton on the score give you for free?
+
+::: {.callout-tip collapse="true" title="Hint"}
+At a maximum, what is the derivative of the log-likelihood?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+At the maximum of the log-likelihood $\ell(\lambda)$ the derivative, the **score** $S(\lambda) = \ell'(\lambda)$, is zero, so $\hat\lambda$ is a root of $S$. Newton needs $S'(\lambda) = \ell''(\lambda)$; minus it at $\hat\lambda$ is the **observed information**, and $1/\sqrt{-S'(\hat\lambda)}$ is the usual standard error of $\hat\lambda$. (Check also that $S' < 0$ there: a root of the score could be a minimum.)
+:::
+
+---
+
+**Q10.** Newton's method is a fixed-point iteration $x_{k+1} = g(x_k)$ with $g(x) = x - f(x)/f'(x)$. What is $g'(x^*)$ at a simple root, and what does that say about the speed, using what you know from *Bisection and fixed-point iteration*?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Differentiate $g$ with the quotient rule and use $f(x^*) = 0$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$g'(x) = 1 - \dfrac{f'(x)^2 - f(x)f''(x)}{f'(x)^2} = \dfrac{f(x)f''(x)}{f'(x)^2}$, which is $0$ at $x^*$ since $f(x^*) = 0$. A fixed-point iteration shrinks the error by about $|g'(x^*)|$ per step; with $g'(x^*) = 0$ the error shrinks faster than any fixed factor: the next term of Taylor gives $e_{k+1} \approx \tfrac12 g''(x^*)\,e_k^2$, quadratic convergence.
+:::
+
+---
+
+**Q11.** Your Newton loop stops when `abs(step) <= tol * abs(x)`, with `tol = 1e-12`. Give two situations where this rule alone is not enough, and what you add.
+
+::: {.callout-tip collapse="true" title="Hint"}
+What if the iteration never settles? What if the root is 0?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) If Newton diverges or cycles, the step never becomes small and the loop runs forever: add a maximum number of iterations (`maxit`) and a **warning** when it is reached, and check `is.finite()`. (2) If the root is at (or very near) 0, a **relative** test can never succeed, because $\text{tol}\cdot|x| \to 0$: add an absolute tolerance, e.g. `abs(step) <= tol * abs(x) + atol`. Also check afterwards that $|f(x)|$ is small and $x$ is in the meaningful range.
+:::
