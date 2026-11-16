@@ -15,6 +15,9 @@ and `quiz.qmd`. The order of units lives in the sidebar in `_quarto.yml`, not
 in folder names. Interactive demos are TypeScript in `demos/src/<name>/`
 (see [demos/README.md](demos/README.md)). Figures made by a script live next to
 the unit as `make-<unit>-figs.R` / `.py` and are regenerated with `make figs`.
+Rust versions of every exercise/quiz snippet live in `rust/examples/` as
+runnable files (see [rust/README.md](rust/README.md)); check them with
+`cd rust && cargo build --examples`.
 
 ## Building this site
 
@@ -27,4 +30,5 @@ make clean     # delete docs/ and the Quarto cache
 ```
 
 You will need [Quarto](https://quarto.org/docs/get-started/), a recent
-[R](https://cran.r-project.org/), and Python 3 with numpy/scipy/matplotlib.
+[R](https://cran.r-project.org/), Python 3 with numpy/scipy/matplotlib, and Rust
+(for checking the Rust solutions).

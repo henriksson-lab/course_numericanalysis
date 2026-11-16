@@ -41,7 +41,7 @@ in 64 bits: 1 sign bit, 11 bits for the exponent $e$ (from $-1022$ to $1023$) an
    $$\log \sum_k e^{a_k} = m + \log \sum_k e^{a_k - m}.$$
 8. **Small arguments.** `log1p(x)` $= \log(1+x)$ and `expm1(x)` $= e^x - 1$ stay accurate when $|x| \ll 1$, where `log(1 + x)` and `exp(x) - 1` lose digits.
 
-The basic tools in both languages:
+The basic tools in each language:
 
 ::: {.panel-tabset group="language"}
 
@@ -74,7 +74,29 @@ print(math.isclose(0.1 + 0.2, 0.3))    # compare with a tolerance
 # True
 ```
 
+### Rust
+
+```rust
+// rust/examples/floating_point_background.rs  —  cargo run --example floating_point_background
+fn main() {
+    println!("{}", 0.1 + 0.2 == 0.3);
+    println!("{:.20}", 0.1 + 0.2);       // show 20 decimals of the stored value
+    println!("{:e}", f64::EPSILON);      // machine epsilon; {:e} = scientific notation
+    // std has no all.equal/isclose: compare with a relative tolerance yourself
+    let (a, b): (f64, f64) = (0.1 + 0.2, 0.3);
+    println!("{}", (a - b).abs() <= 1e-9 * a.abs().max(b.abs()));
+}
+
+// Output:
+// false
+// 0.30000000000000004441
+// 2.220446049250313e-16
+// true
+```
+
 :::
+
+Rust prints numbers in its own format (e.g. `1e-3` rather than `1e-03`, `inf` rather than `Inf`); the values are the same unless the text says otherwise.
 
 ## By hand
 
@@ -161,6 +183,40 @@ print(math.isclose(0.1 + 0.2, 0.3))    # compare with a tolerance
 (c) **Genotype calling from 2000 reads.** At a site with $n = 2000$ reads, $k = 1010$ show the alternative base. With sequencing error rate 0.01, the probability that a read shows the alternative base is $q = 0.01$ (genotype AA), $0.5$ (AB) or $0.99$ (BB). For fixed reads, $\log P(\text{reads} \mid g) = k \log q + (n-k)\log(1-q)$. Add the log prior $\log(0.25, 0.5, 0.25)$, then compute $\log P(\text{reads})$ both naively and with `logsumexp`, and the posterior of each genotype.
 
 **C7. `expm1` and `log1p`.** For $\mu = 10^{-3}, 10^{-4}, \dots, 10^{-17}$, compute $1 - e^{-\mu}$ naively and with [`expm1`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Log.html) (Python: [`np.expm1`](https://numpy.org/doc/stable/reference/generated/numpy.expm1.html)). Print the relative difference. From which $\mu$ on is the naive version useless? Compare with B7(b).
+
+## Explore {#explore}
+
+The inspector below shows the 64 bits of a double, coloured as on the lecture slide: **s**ign, 11 **exponent** bits, 52 **fraction** bits. Type a number or a short expression (`+ - * / ^`, `eps`) and press Enter, or click a preset. Clicking a bit flips it. On the left, *stored exactly* is the complete decimal value of the stored binary number; on the right, the number line shows the stored double (blue), its neighbours (grey) and, as an orange ▲, the exact value **before rounding**: the number you typed, or the exact result of the last operation on the already stored operands.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="floatbits" data-x="0.1"></div>
+<script src="../demos/dist/floatbits.js"></script>
+```
+
+**E1. Why `0.1 + 0.2 != 0.3`.** Click 0.1, 0.2 and 0.3 in turn. Is each stored number above or below what you typed, and by what fraction of a gap? Then click 0.1+0.2. Where does the orange ▲ (the exact sum of the stored 0.1 and 0.2) lie, which neighbour is the stored 0.3, and why was the sum rounded up rather than down?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+0.1 and 0.2 are stored slightly too large (0.1000000000000000055511…, 0.2000000000000000111…), each 0.400 gaps above the typed value; 0.3 is stored slightly too small (0.29999999999999998889…), 0.200 gaps below. The exact sum of the stored 0.1 and 0.2 is 0.3000000000000000166533…, which lies **exactly halfway** (0.500 gaps) between two doubles: the one below is 0.29999999999999998890, the stored 0.3, and the one above is 0.30000000000000004441. A tie goes to the neighbour whose last fraction bit is 0, and that is the upper one (the stored 0.3 ends in …0011, the upper one in …0100). So the sum lands one gap ($2^{-54} \approx 5.55\times10^{-17}$) above the stored 0.3. Each individual rounding is tiny (relative error $5.55\times10^{-17}$ for 0.1, $9.25\times10^{-17}$ for the sum, both below $\varepsilon/2$), but `==` asks for the same bits.
+:::
+
+**E2. The gap.** Read *gap to next double* and *relative gap* for 1, 1+ε, the chromosome 1 length 248956422, 2^53 and 2^53+1. Also read the two gaps under the number line for 1 and for 2^53. What happens to the absolute and to the relative gap? What does 2^53+1 become, and why?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+At 1 the gap above is $2^{-52} \approx 2.22\times10^{-16} = \varepsilon$, but the gap **below** 1 is only $1.11\times10^{-16}$: 1 is a power of 2, where the spacing changes. 1+ε is the next double after 1 (the last fraction bit is 1). 248956422 is stored exactly (all whole numbers below $2^{53}$ are); its gap is $2^{-25} \approx 2.98\times10^{-8}$, relative gap $1.20\times10^{-16} = 0.539\,\varepsilon$. At $2^{53}$ the gap below is 1 and the gap above is 2. The absolute gap grows with $x$, while the relative gap always stays between $\varepsilon/2$ and $\varepsilon$ (B4). 2^53+1 is exactly halfway between $2^{53}$ and $2^{53}+2$ (the ▲ is 0.500 gaps above), and the tie goes to $2^{53}$, whose last bit is 0: `2^53 + 1 == 2^53`.
+:::
+
+**E3. Flip bits.** Click the preset 1. (a) Flip the last (rightmost) fraction bit. Which preset do you get? (b) Click 1 again and flip the rightmost exponent bit. Then flip the leftmost exponent bit instead. (c) From there, flip any fraction bit. Explain each result from the formula $(-1)^s \times 1.f \times 2^{e}$.
+
+::: {.callout-note collapse="true" title="Answer E3"}
+(a) 1.0000000000000002 = 1+ε: the last fraction bit is worth $2^{-52}$. (b) 1 has exponent field $01111111111_2 = 1023$, so $e = 0$. Flipping the rightmost exponent bit gives 1022, $e = -1$, so $x = 0.5$. Flipping the leftmost one instead gives $11111111111_2 = 2047$, the reserved "all ones" exponent: with fraction 0 that is `Inf`. (c) All-ones exponent with a nonzero fraction is `NaN`. `Inf` and `NaN` are ordinary bit patterns, which is why arithmetic can produce them silently (no error, no warning).
+:::
+
+**E4. The ends of the range.** Click 5e-324 and then 1e308*10. For 5e-324: what kind of number is stored, how many significant bits does it have, and how large is the rounding error of the typed value? For 1e308*10: what is the exact result and what is stored? Finally, the per-site likelihoods in the lecture are around 0.2 ($\log_{10} 0.2 \approx -0.7$): roughly after how many sites does a product of them fall below this smallest double?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+5e-324 is stored as $4.9406564584124654\times10^{-324} = 2^{-1074}$, the **smallest subnormal**: exponent field 0, and a single 1 in the last fraction bit, so only **1 significant bit**. The relative gap is 1 ($4.5\times10^{15}\,\varepsilon$), and the typed 5e-324 is rounded with a relative error of 1.19%, far above $\varepsilon/2$: subnormals trade precision for range. 1e308*10: the exact product of the stored 1e308 and 10 is $1.0000000000000000110\ldots\times10^{309}$, larger than the largest double $1.797\ldots\times10^{308}$, so the result is `Inf` (exponent all ones), with no warning. Below about half of $4.9\times10^{-324}$ ($\log_{10} \approx -323.6$) a product rounds to 0, so at $-0.7$ decades per site it takes about $323.6/0.7 \approx 460$ sites, close to the 470 sites for the simulated alignment on the "Back to the likelihood" slide.
+:::
 
 ## Hints
 
@@ -305,6 +361,36 @@ print(math.isclose(s, 1))
 # True
 ```
 
+### Rust
+
+```rust
+// rust/examples/floating_point_c1_solution.rs  —  cargo run --example floating_point_c1_solution
+fn main() {
+    // f64 is Rust's double; 1.0 / 3.0 needs the ".0" (1 / 3 would be integer division = 0)
+    for v in [0.1, 0.25, 0.3, 1.0 / 3.0, 0.5] {
+        println!("{:.20}", v);
+    }
+
+    let mut s: f64 = 0.0;                // `mut`: s is allowed to change
+    for _ in 0..10 {
+        s += 0.1;
+    }
+    println!("{}", s == 1.0);
+    println!("{:.20}", s);
+    println!("{}", (s - 1.0).abs() <= 1e-9); // compare with a tolerance
+}
+
+// Output:
+// 0.10000000000000000555
+// 0.25000000000000000000
+// 0.29999999999999998890
+// 0.33333333333333331483
+// 0.50000000000000000000
+// false
+// 0.99999999999999988898
+// true
+```
+
 :::
 
 Only 0.25 and 0.5 (powers of 2) are exact, as B2 predicts. Ten additions of the rounded 0.1 accumulate ten rounding errors, and the result misses 1 by one gap ($1.1\times10^{-16}$ below 1). (The built-in `sum(rep(0.1, 10))` in R and `sum([0.1] * 10)` in Python happen to give exactly 1, because they add with extra precision internally; do not rely on that.)
@@ -353,6 +439,39 @@ print(1e16 + 1 == 1e16)
 # True
 ```
 
+### Rust
+
+```rust
+// rust/examples/floating_point_c2_solution.rs  —  cargo run --example floating_point_c2_solution
+fn main() {
+    let mut eps: f64 = 1.0;
+    while 1.0 + eps / 2.0 != 1.0 {
+        eps /= 2.0;
+    }
+    println!("{:e}", eps);               // {:e} = scientific notation
+    println!("{:e}", f64::EPSILON);
+
+    // gap from the formula 2^(floor(log2|x|) - 52); a closure is an inline function
+    let gap = |x: f64| 2f64.powf(x.abs().log2().floor() - 52.0);
+    // x.next_up() is the next double above x, so next_up() - x is the true gap
+    // (like np.spacing)
+    for x in [1.0, 1000.0, 0.001, 3.1e9, 1e16] {
+        println!("{:e}  {:e}  {:e}", x, gap(x), x.next_up() - x);
+    }
+    println!("{}", 1e16 + 1.0 == 1e16);
+}
+
+// Output:
+// 2.220446049250313e-16
+// 2.220446049250313e-16
+// 1e0  2.220446049250313e-16  2.220446049250313e-16
+// 1e3  1.1368683772161603e-13  1.1368683772161603e-13
+// 1e-3  2.168404344971009e-19  2.168404344971009e-19
+// 3.1e9  4.76837158203125e-7  4.76837158203125e-7
+// 1e16  2e0  2e0
+// true
+```
+
 :::
 
 The loop stops at the last `eps` for which `1 + eps` is still bigger than 1: that is exactly machine epsilon. The gaps match the B4 table and `np.spacing`.
@@ -388,12 +507,34 @@ print(f"{conc[3]:.20f}")
 # 0.30000000000000004441
 ```
 
+### Rust
+
+```rust
+// rust/examples/floating_point_c3_solution.rs  —  cargo run --example floating_point_c3_solution
+fn main() {
+    // like seq(0, 1, by = 0.1): the i-th point is i * 0.1
+    let conc: Vec<f64> = (0..=10).map(|i| i as f64 * 0.1).collect();
+    // position() returns Option<usize>: Some(index) or None; indices start at 0
+    println!("{:?}", conc.iter().position(|&c| c == 0.3));
+
+    let near = |a: f64, b: f64, tol: f64| (a - b).abs() <= tol * a.abs().max(b.abs()).max(1.0);
+    let i = conc.iter().position(|&c| near(c, 0.3, 1e-9));
+    println!("{:?}", i);
+    println!("{:.20}", conc[i.unwrap()]);
+}
+
+// Output:
+// None
+// Some(3)
+// 0.30000000000000004441
+```
+
 :::
 
 The grid point is computed as $3 \times 0.1$, which is not the stored 0.3, so `==` finds nothing, without any error. (Python indices start at 0, so `[3]` is the same element as R's `4`.) The `max(..., 1)` in `near` makes the tolerance absolute for numbers below 1, so `near(x, 0)` also works.
 
 **C4.**
-(a) R prints `Inf`, `0`, `0`, `Inf`, `Inf`, `Inf`, `1e+290`, `0.1351999`, `0`, `NaN` for (a)–(i), matching B5. numpy returns `inf`, `0.0`, ... the same values, but also prints a `RuntimeWarning` for overflow and for $0/0$. (Plain Python floats differ again: `math.exp(1000)` raises an `OverflowError`.)
+(a) R prints `Inf`, `0`, `0`, `Inf`, `Inf`, `Inf`, `1e+290`, `0.1351999`, `0`, `NaN` for (a)–(i), matching B5. numpy returns `inf`, `0.0`, ... the same values, but also prints a `RuntimeWarning` for overflow and for $0/0$. (Plain Python floats differ again: `math.exp(1000)` raises an `OverflowError`.) Rust's `f64` behaves like R: `inf`, `0`, `NaN`, with no error and no warning.
 
 ::: {.panel-tabset group="language"}
 
@@ -422,6 +563,25 @@ print(x(1e-3) ** 2000 / x(2e-3) ** 2000)
 # nan                                 (plus a RuntimeWarning)
 print(2000 * (np.log(1e-3) - np.log(2e-3)))
 # -1386.2943611198907
+```
+
+### Rust
+
+```rust
+// rust/examples/floating_point_c4_solution_a.rs  —  cargo run --example floating_point_c4_solution_a
+fn main() {
+    // {:e} prints scientific notation; overflow gives inf, 0/0 gives NaN, no error or warning
+    println!("{:e}", 1e300 * 1e10 / 1e20);
+    println!("{:e}", 1e300 / 1e20 * 1e10);
+    println!("{}", 1e-3f64.powi(2000) / 2e-3f64.powi(2000));
+    println!("{}", 2000.0 * (1e-3f64.ln() - 2e-3f64.ln())); // the log of the ratio is fine
+}
+
+// Output:
+// inf
+// 1e290
+// NaN
+// -1386.2943611198907
 ```
 
 :::
@@ -455,9 +615,40 @@ print(np.cumsum(lens.astype(np.float64))[10:13])
 # [1.94376767e+09 2.07704298e+09 2.19140731e+09]
 ```
 
+### Rust
+
+```rust
+// rust/examples/floating_point_c4_solution_b.rs  —  cargo run --example floating_point_c4_solution_b
+fn main() {
+    let len: [i32; 13] = [248956422, 242193529, 198295559, 190214555, 181538259,
+                          170805979, 159345973, 145138636, 138394717, 133797422,
+                          135086622, 133275309, 114364328];   // chr1-13, GRCh38
+
+    // Plain `total + l` would stop the program in a debug build
+    // ("attempt to add with overflow") and wrap silently in a release build.
+    // Rust makes you choose explicitly:
+    let mut checked: Option<i32> = Some(0); // checked_add: None on overflow
+    let mut wrapped: i32 = 0;               // wrapping_add: wraps around like numpy int32
+    let mut as_f64: f64 = 0.0;              // convert to double: the fix
+    for (chr, &l) in len.iter().enumerate() {
+        checked = checked.and_then(|t| t.checked_add(l));
+        wrapped = wrapped.wrapping_add(l);
+        as_f64 += l as f64;
+        if chr >= 10 {                      // chromosomes 11-13 (index starts at 0)
+            println!("chr{}: {:?} {} {}", chr + 1, checked, wrapped, as_f64);
+        }
+    }
+}
+
+// Output:
+// chr11: Some(1943767673) 1943767673 1943767673
+// chr12: Some(2077042982) 2077042982 2077042982
+// chr13: None -2103559986 2191407310
+```
+
 :::
 
-The cumulative length passes $2^{31} - 1$ at chromosome 13. R returns `NA` with a warning; numpy `int32` **wraps around** to a negative number with no warning at all, which is worse. Converting to doubles fixes both.
+The cumulative length passes $2^{31} - 1$ at chromosome 13. R returns `NA` with a warning; numpy `int32` **wraps around** to a negative number with no warning at all, which is worse. Rust's `i32` makes you choose: plain `+` stops the program with "attempt to add with overflow" in a debug build (the default for `cargo run`) but wraps silently in a release build (`--release`); `checked_add` returns `None` on overflow, like R's `NA`; `wrapping_add` wraps around like numpy `int32`. Converting to doubles fixes all of them.
 
 **C5.**
 
@@ -501,6 +692,57 @@ print(counts.mean())
 # 3.1
 print(np.prod(poisson.pmf(counts[:300], 3)), np.prod(poisson.pmf(counts[:400], 3)))
 # 1.696959612854424e-234 2.024084667733e-312
+```
+
+### Rust
+
+```rust
+// rust/examples/floating_point_c5_solution.rs  —  cargo run --example floating_point_c5_solution
+use statrs::distribution::{Discrete, Poisson};
+
+// index of the FIRST largest value, like R's which.max and np.argmax
+fn which_max(v: &[f64]) -> usize {
+    let mut best = 0;
+    for i in 1..v.len() {
+        if v[i] > v[best] {
+            best = i;
+        }
+    }
+    best
+}
+
+fn main() {
+    let base: [u64; 10] = [2, 4, 3, 1, 5, 3, 2, 6, 3, 2];
+    let counts: Vec<u64> = base.repeat(1000);                  // 10 000 cells
+    let lambda: Vec<f64> = (0..=200).map(|i| 2.0 + i as f64 * 0.01).collect();
+
+    // likelihood (product) and log-likelihood (sum) for one lambda
+    let lik = |l: f64, x: &[u64]| {
+        let p = Poisson::new(l).unwrap();
+        x.iter().map(|&k| p.pmf(k)).product::<f64>()
+    };
+    let loglik = |l: f64, x: &[u64]| {
+        let p = Poisson::new(l).unwrap();
+        x.iter().map(|&k| p.ln_pmf(k)).sum::<f64>()
+    };
+    let liks: Vec<f64> = lambda.iter().map(|&l| lik(l, &counts)).collect();
+    let logliks: Vec<f64> = lambda.iter().map(|&l| loglik(l, &counts)).collect();
+
+    let min = liks.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = liks.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    println!("{} {}", min, max);
+    println!("{:.2}", lambda[which_max(&liks)]);
+    println!("{:.2}", lambda[which_max(&logliks)]);
+    println!("{}", counts.iter().sum::<u64>() as f64 / counts.len() as f64);
+    println!("{:e} {:e}", lik(3.0, &counts[..300]), lik(3.0, &counts[..400]));
+}
+
+// Output:
+// 0 0
+// 2.00
+// 3.10
+// 3.1
+// 1.6969596128544291e-234 2.024084667733e-312
 ```
 
 :::
@@ -549,6 +791,33 @@ for v in [[-500, -502], [2, 2, 2], [-1200, -1198, -1210], [-np.inf, -np.inf]]:
 # -inf -inf
 ```
 
+### Rust
+
+```rust
+// rust/examples/floating_point_c6_solution_a.rs  —  cargo run --example floating_point_c6_solution_a
+// &[f64] is a slice: a view of a list of numbers
+fn logsumexp(a: &[f64]) -> f64 {
+    let m = a.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    if m == f64::NEG_INFINITY {
+        return f64::NEG_INFINITY;                   // all terms impossible
+    }
+    m + a.iter().map(|x| (x - m).exp()).sum::<f64>().ln()
+}
+
+fn main() {
+    println!("{}", logsumexp(&[-500.0, -502.0]));
+    println!("{}", logsumexp(&[2.0, 2.0, 2.0]));
+    println!("{}", logsumexp(&[-1200.0, -1198.0, -1210.0]));
+    println!("{}", logsumexp(&[f64::NEG_INFINITY, f64::NEG_INFINITY]));
+}
+
+// Output:
+// -499.873071988957
+// 3.09861228866811
+// -1197.8730665771675
+// -inf
+```
+
 :::
 
 All match B6. (c), genotype calling:
@@ -587,6 +856,40 @@ print(my_logsumexp(a))
 # -1386.9875083004506
 print(np.exp(a - my_logsumexp(a)))          # posterior
 # [0. 1. 0.]
+```
+
+### Rust
+
+```rust
+// rust/examples/floating_point_c6_solution_b.rs  —  cargo run --example floating_point_c6_solution_b
+fn logsumexp(a: &[f64]) -> f64 {
+    let m = a.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    if m == f64::NEG_INFINITY {
+        return f64::NEG_INFINITY;
+    }
+    m + a.iter().map(|x| (x - m).exp()).sum::<f64>().ln()
+}
+
+fn main() {
+    let (n, k, err) = (2000.0, 1010.0, 0.01);       // reads, alt reads, error rate
+    let q: [f64; 3] = [err, 0.5, 1.0 - err];                 // P(alt read | genotype): AA, AB, BB
+    let prior: [f64; 3] = [0.25, 0.5, 0.25];
+    let a: Vec<f64> = (0..3)
+        .map(|g| k * q[g].ln() + (n - k) * (1.0 - q[g]).ln() + prior[g].ln())
+        .collect();
+    println!("{:?}", a);
+    println!("{}", a.iter().map(|x| x.exp()).sum::<f64>().ln());
+    let lse = logsumexp(&a);
+    println!("{}", lse);
+    let post: Vec<f64> = a.iter().map(|x| (x - lse).exp()).collect(); // posterior
+    println!("{:?}", post);
+}
+
+// Output:
+// [-4662.558014704058, -1386.9875083004506, -4570.655617701367]
+// -inf
+// -1386.9875083004506
+// [0.0, 1.0, 0.0]
 ```
 
 :::
@@ -648,9 +951,41 @@ for m_, r in zip(mu, relerr):
 # 1e-17  1.0e+00
 ```
 
+### Rust
+
+```rust
+// rust/examples/floating_point_c7_solution.rs  —  cargo run --example floating_point_c7_solution
+fn main() {
+    for k in 3..=17 {
+        let mu = 10f64.powi(-k);
+        let naive = 1.0 - (-mu).exp();
+        let stable = -(-mu).exp_m1();           // exp_m1 is Rust's expm1
+        let relerr = (naive - stable).abs() / stable;
+        println!("{:.0e}  {:.1e}", mu, relerr);
+    }
+}
+
+// Output:
+// 1e-3  3.0e-14
+// 1e-4  1.3e-14
+// 1e-5  5.7e-13
+// 1e-6  1.6e-11
+// 1e-7  4.9e-10
+// 1e-8  1.1e-9
+// 1e-9  2.8e-8
+// 1e-10  8.3e-8
+// 1e-11  8.3e-8
+// 1e-12  2.2e-5
+// 1e-13  3.1e-4
+// 1e-14  8.0e-4
+// 1e-15  8.0e-4
+// 1e-16  1.1e-1
+// 1e-17  1.0e0
+```
+
 :::
 
-The relative error grows roughly like $\varepsilon/\mu$, as B7(b) predicts: about $10^{-8}$ at $\mu = 10^{-9}$ (half the digits gone), $10^{-4}$ at $\mu = 10^{-13}$, and 100% from $\mu \approx 10^{-16}$ on, where $e^{-\mu}$ rounds to exactly 1. (A few small entries differ between R and Python because the two use slightly different `exp` routines; the pattern is the same.) The rule: whenever you compute $1 - e^{-x}$, $e^x - 1$ or $\log(1 \pm x)$ with a small $x$, use `expm1`/`log1p`.
+The relative error grows roughly like $\varepsilon/\mu$, as B7(b) predicts: about $10^{-8}$ at $\mu = 10^{-9}$ (half the digits gone), $10^{-4}$ at $\mu = 10^{-13}$, and 100% from $\mu \approx 10^{-16}$ on, where $e^{-\mu}$ rounds to exactly 1. (A few small entries differ between R, Python and Rust because they use slightly different `exp` routines: Rust agrees with R at $\mu = 10^{-7}$ and with Python at $10^{-8}$; the pattern is the same.) The rule: whenever you compute $1 - e^{-x}$, $e^x - 1$ or $\log(1 \pm x)$ with a small $x$, use `expm1`/`log1p`.
 :::
 
 ## Where this leads

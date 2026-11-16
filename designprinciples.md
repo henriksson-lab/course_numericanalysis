@@ -26,12 +26,18 @@ without being able to run it, nor a function call without knowing what it comput
 
 - **R is the main language. Slides are R only** — we do not have the
   manpower to maintain Python versions of the decks.
-- **Exercise pages also have Python.** Code on exercise and quiz pages
-  (background examples, prompts, hints, solutions, quiz answers) is a Quarto
-  `panel-tabset` with an **R** tab first (shown by default) and a **Python**
-  tab (numpy/scipy/matplotlib) second. Prose and figures follow the R
-  version. Python users therefore read the R on the slides and do the
-  exercises in Python.
+- **Exercise pages also have Python and Rust.** Code on exercise and quiz
+  pages (background examples, prompts, hints, solutions, quiz answers) is a
+  Quarto `panel-tabset` with an **R** tab first (shown by default), then
+  **Python** (numpy/scipy/matplotlib), then **Rust**. Prose and figures follow
+  the R version. Python and Rust users read the R on the slides and do the
+  exercises in their own language.
+- **Rust code lives in `rust/examples/`** as one runnable file per snippet
+  (`<unit>_<task>.rs`, see `rust/README.md`); the Rust tab shows that file and
+  its real output. Use the standard library when it is enough, otherwise only
+  the crates listed in `rust/README.md`. Where Rust has no counterpart to a
+  library call (e.g. R's `integrate`), name the crate used, or say plainly
+  that the Rust version is hand-written.
 - Keep the two tabs equivalent line by line where possible and make them print
   the same output. Where the library call differs (`uniroot` vs
   `scipy.optimize.brentq`, `deSolve::ode` vs `solve_ivp`), name both, and link
@@ -58,11 +64,17 @@ without being able to run it, nor a function call without knowing what it comput
   x = np.linspace(0, 1, 11)
   ```
 
+  ### Rust
+
+  ```rust
+  let x: Vec<f64> = (0..=10).map(|i| i as f64 / 10.0).collect();
+  ```
+
   :::
   ````
 
   `group="language"` makes all tabsets on a page switch together, so a reader
-  who picks Python once sees Python everywhere on that page.
+  who picks Python or Rust once sees that language everywhere on the page.
 - **Write it yourself first, then use the library.** The first encounter with a
   method is a short hand-written implementation (a 10-line Newton, a 15-line
   RK4); then compare with the production routine (`uniroot`/`brentq`,

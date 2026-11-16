@@ -19,7 +19,7 @@ the material needs.
 - Caveat: many know only one of the two languages. Teaching is in **R**, so R
   idioms (vectorisation, `%*%`, 1-indexing, `function`) are explained the
   first time they matter. Slides are R only; exercise
-  pages show every code example and solution in R and Python.
+  pages show every code example, hint and solution in R, Python and Rust.
 
 ### Mathematics
 - **A first calculus course:** derivatives and integrals in one variable,

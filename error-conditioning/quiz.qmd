@@ -79,7 +79,7 @@ A variance cannot be negative. What does an impossible value tell you?
 :::
 
 ::: {.callout-note collapse="true" title="Answer"}
-A negative variance is a symptom of cancellation in the one-pass formula, not noise. The clipped 0 is just as wrong. Use a centring (two-pass) formula or the library function: `var()` in R, `numpy.var` in Python. A quick check is to shift the data by a typical value and recompute: the variance must not change.
+A negative variance is a symptom of cancellation in the one-pass formula, not noise. The clipped 0 is just as wrong. Use a centring (two-pass) formula or the library function: `var()` in R, `numpy.var` in Python (Rust's standard library has none; the Rust tab centres by hand). A quick check is to shift the data by a typical value and recompute: the variance must not change.
 
 ::: {.panel-tabset group="language"}
 
@@ -102,6 +102,32 @@ print(np.mean(x**2) - np.mean(x)**2)   # one-pass: impossible
 # -64.0
 print(np.var(x))                       # library, population scaling
 # 0.0066666618982983055
+```
+
+### Rust
+
+```rust
+// rust/examples/error_conditioning_q6.rs  —  cargo run --example error_conditioning_q6
+// Negative variance from the one-pass formula vs a two-pass (centred) variance.
+// Note: .sum() adds left to right in plain doubles (R: extended precision,
+// numpy: pairwise), so a wrong one-pass value can differ between languages.
+fn main() {
+    let x: Vec<f64> = [0.1, 0.2, 0.3].iter().map(|v| 7e8 + v).collect();
+    let n = x.len() as f64;
+    let mean = x.iter().sum::<f64>() / n;
+    let mean_sq = x.iter().map(|v| v * v).sum::<f64>() / n;
+    println!("{}", mean_sq - mean * mean); // one-pass: impossible
+    // two-pass, population scaling (divides by n), as in C3
+    let var = x.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n;
+    println!("{}", var);
+    // The statrs crate's population_variance() (a running Welford update)
+    // gives 0.006666655937834776 here: correct to about 6 digits, far better
+    // than one-pass but less accurate than two-pass.
+}
+
+// Output:
+// -64
+// 0.0066666618982983055
 ```
 
 :::
@@ -139,6 +165,21 @@ print(np.sqrt(x**2 + 1) - x)
 # 0.0
 print(1 / (np.sqrt(x**2 + 1) + x))
 # 5e-09
+```
+
+### Rust
+
+```rust
+// rust/examples/error_conditioning_q7.rs  —  cargo run --example error_conditioning_q7
+fn main() {
+    let x: f64 = 1e8;
+    println!("{}", (x * x + 1.0).sqrt() - x);
+    println!("{:e}", 1.0 / ((x * x + 1.0).sqrt() + x)); // {:e}: scientific notation
+}
+
+// Output:
+// 0
+// 5e-9
 ```
 
 :::

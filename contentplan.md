@@ -57,7 +57,7 @@ calculus + one linear algebra course, applied focus):
 - One unit = one folder = `lec.qmd` (≤ 30 slides) + `quiz.qmd` + `exercise.qmd`,
   usually with one interactive demo.
 - **R is the main language.** Slides are R only. Exercise and quiz pages
-  show every code example and solution in R and Python (tabs).
+  show every code example, hint and solution in R, Python and Rust (tabs).
 - **[?]** Examination / certificate: is there an exam (written, by hand) or
   hand-in projects? This decides how much by-hand drill goes in the exercises.
 

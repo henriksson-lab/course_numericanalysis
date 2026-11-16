@@ -21,7 +21,7 @@ Use this when writing a new unit. Read first:
 - `exercise.qmd` — Goal → Background → By hand (B1, B2, …) → In code (C1, C2, …)
   → Where this leads. Solutions and hints in collapsible callouts as in the
   reference. **Every code block on this page — background examples, prompts,
-  hints, solutions — is an R + Python tabset**:
+  hints, solutions — is an R + Python + Rust tabset**:
 
   ````md
   ::: {.panel-tabset group="language"}
@@ -38,13 +38,23 @@ Use this when writing a new unit. Read first:
   ...
   ```
 
+  ### Rust
+
+  ```rust
+  ...
+  ```
+
   :::
   ````
 
   Python uses numpy/scipy/matplotlib only. Same printed output in both where
-  possible. No interactive demo / Explore section in this pass.
+  possible. Rust: each snippet is a runnable file
+  `rust/examples/<unit_snake>_<task>.rs` (see `rust/README.md` for naming and
+  the allowed crates); the tab shows its code and real output. Snippets that
+  are fragments in R/Python may be complete `fn main()` programs in Rust.
+  Interactive demo: see `plan/demo-brief.md`.
 - `quiz.qmd` — 8–12 short questions, each with a collapsible Hint and Answer.
-  Code in quiz answers, if any, is also R + Python tabset.
+  Code in quiz answers, if any, is also an R + Python + Rust tabset.
 - `make-<slug>-figs.R` — generates every figure as SVG (`svg()` from base R
   grDevices; cairo is available, svglite and ggplot2 are not guaranteed —
   use base graphics). Figures named `figNN-short-name.svg` in the unit folder.
@@ -55,7 +65,8 @@ Use this when writing a new unit. Read first:
 ## Code correctness
 
 Code is **static** (not executed at render time), so you must **run every R
-and every Python snippet yourself** (`Rscript --vanilla`, `python3 -I`) and
+, every Python and every Rust snippet yourself** (`Rscript --vanilla`,
+`python3 -I`, `cd rust && cargo run -q --example <name>`) and
 paste the real output. Put scratch scripts in a scratch directory, not in the
 unit folder. Floating-point outputs must be exactly what R/numpy print.
 Available: R 4.6 (base + deSolve may not be installed: use base R only),
