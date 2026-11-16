@@ -76,7 +76,7 @@ interface Result {
   ts: number[]; ys: number[];
 }
 
-function compute(samples: Sample[], noisy: boolean): Result {
+export function compute(samples: Sample[], noisy: boolean): Result {
   const ts = samples.map(s => s.t), ys = samples.map(s => yOf(s, noisy));
   const a = analyse(ts, ys, noisy);
   const pl = KA_GRID.map(ka => profileKa(ts, ys, ka));

@@ -190,7 +190,7 @@ set.seed(3); points(runif(250), runif(250), pch = 19, col = oi["orange"], cex = 
 text(0.5, 1.07, expression(O[2] ~ "in through the walls:" ~ c == 1), cex = 1.3, xpd = NA)
 text(0.5, 0.5, "every cell\nconsumes O2", cex = 1.4, font = 2)
 par_big(mar = c(4.5, 5, 2.5, 6))
-image(g, g, cfield, col = seq_pal, zlim = c(0, 1), asp = 1, xlab = "x (mm)", ylab = "y (mm)",
+image(g, g, cfield, col = seq_pal, zlim = c(0, 1), asp = 1, useRaster = TRUE, xlab = "x (mm)", ylab = "y (mm)",
       main = "Oxygen c = 1 - u  (16 129 unknowns)")
 contour(g, g, cfield, levels = 0.25, add = TRUE, lwd = 3, col = "white", labcex = 1.2,
         drawlabels = FALSE)
@@ -330,7 +330,7 @@ cfield <- 1 - matrix(as.vector(solve(A, b)), m, m)
 svg("fig06-gmres.svg", width = 13, height = 5.4)
 layout(matrix(1:2, 1), widths = c(1, 1.25))
 par_big(mar = c(4.5, 4.5, 3, 1))
-image(g, g, cfield, col = seq_pal, zlim = c(0, 1), asp = 1, xlab = "x (mm)", ylab = "y (mm)",
+image(g, g, cfield, col = seq_pal, zlim = c(0, 1), asp = 1, useRaster = TRUE, xlab = "x (mm)", ylab = "y (mm)",
       main = "Perfused chamber, flow ->, Pe = 50")
 contour(g, g, cfield, levels = 0.25, add = TRUE, lwd = 3, col = "white", drawlabels = FALSE)
 arrows(0.1, 0.5, 0.35, 0.5, lwd = 4, col = "white", length = 0.15)

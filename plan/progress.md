@@ -33,7 +33,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 28 | nonlinear-least-squares | done | running | |
 | 29 | identifiability | done | running | |
 | 30 | constrained-lp | done | done | done |
-| 31 | diffusion-explicit | done | running | |
+| 31 | diffusion-explicit | done | done | done |
 | 32 | diffusion-implicit | done | running | |
 | 33 | steady-state-2d | done | running | |
 | 34 | advection-diffusion | running | | |

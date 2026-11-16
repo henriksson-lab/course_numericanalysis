@@ -241,7 +241,7 @@ function mount(host: HTMLElement): void {
   star(P_FLIP, COL.flip, "mirror, V = 3.8 L", 14, -16, "start");
   const dyn = svgEl("g", {}, svgL);
   const handle = svgEl("circle", { r: 12, class: "handle gl-handle", stroke: COL.ink, fill: "#fff", "stroke-width": 3 }, svgL);
-  const handleLab = svgEl("text", { "font-weight": 700, stroke: "#fff", "stroke-width": 4, "paint-order": "stroke", "pointer-events": "none" }, svgL);
+  const handleLab = svgEl("text", { "text-anchor": "middle", "font-weight": 700, stroke: "#fff", "stroke-width": 4, "paint-order": "stroke", "pointer-events": "none" }, svgL);
   handleLab.textContent = "start";
 
   // click on the map moves the start; the start marker is draggable
@@ -345,7 +345,7 @@ function mount(host: HTMLElement): void {
     if (showGN) drawPath(runs.gn, COL.gn);
     const hx = sx(Math.log10(st.start[0])), hy = sy(Math.log10(st.start[1]));
     setAttrs(handle, { cx: hx, cy: hy });
-    setAttrs(handleLab, { x: hx + 16, y: hy + 6 });
+    setAttrs(handleLab, { x: hx, y: hy + 34 });
 
     // (b) data and curves
     svgD.replaceChildren();
