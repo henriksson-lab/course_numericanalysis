@@ -102,3 +102,13 @@ Brief: plan/xref-brief.md. Reports: plan/pass2/<group>.md.
 - For part10b-11 worker: iterative-solvers lec notes ~line 59 wrongly call its model the culture-chamber problem of steady-state-2d (it's a 1×1 mm gel, Φ=12) — reword; reaction-diffusion should state minutes vs seconds in one sentence.
 - Optional (audit): nonlinear-least-squares could add one sentence that the same methods fit growth/SIR models (several units point there). runge-kutta R tabs C2/C3/C6 still rely on C1/C4 functions (stated) — make self-contained in audit for consistency with Python.
 - newton-systems recap slide gained a row — check overflow.
+
+## Pass 3 (audit)
+
+Automated (coordinator):
+- Full site render: no warnings; anchored links all resolve.
+- Rust: 279/314 tabs match exactly; the rest are machine timings, blank-line formatting of nalgebra matrices, or 17 tabs with interleaved output comments (not auto-comparable). Release vs debug last-digit differences (powi) explained — pages use debug as their headers say.
+- Slide overflow: all 37 decks checked, no overflow.
+- Literature fact-checks collected in plan/factcheck.md — need web, deferred until course lead is present.
+
+Workers (plan/audit-brief.md, reports in plan/audit/): R/Python re-run, figures, by-hand and quiz arithmetic, text-vs-numbers. Groups as in pass 2.
