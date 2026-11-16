@@ -52,7 +52,7 @@ do not promise bit-identical agreement with R output on the page.
   succeed.
 - Load the rendered exercise page in headless Chrome
   (`google-chrome --headless=new --no-sandbox --window-size=1280,900
-  --virtual-time-budget=10000 --dump-dom file://.../docs/<unit>/exercise.html`)
+  --dump-dom file://.../docs/<unit>/exercise.html`)
   and confirm the demo mounted (its SVG is present in the DOM, no visible
   error). Use a fresh `--user-data-dir=$(mktemp -d)` per Chrome call and do
   NOT use `--virtual-time-budget` (it hangs here); wrap in `timeout 60`.
