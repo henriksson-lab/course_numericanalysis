@@ -41,12 +41,12 @@ fn rk_solve(step: Step, f: &Rhs, t0: f64, y0: &[f64], h: f64, n: usize) -> Vec<f
 fn main() {
     let methods: [(&str, Step); 4] = [("Euler", euler_step), ("Midpoint", midpoint_step),
                                       ("Heun", heun_step), ("RK4", rk4_step)];
-    // (a) check B1 and B2: drug clearance C' = -C, one step h = 0.5
-    let clear = |_t: f64, c: &[f64]| vec![-c[0]];
+    // (a) check B1 and B2: drug clearance C' = -0.8 C, C0 = 10 mg/L, one step h = 0.5
+    let clear = |_t: f64, c: &[f64]| vec![-0.8 * c[0]];
     for (name, s) in methods {
-        print!("{}: {:.7}  ", name, s(&clear, 0.0, &[1.0], 0.5)[0]);
+        println!("{}: {:.7}", name, s(&clear, 0.0, &[10.0], 0.5)[0]);
     }
-    println!("\nexact: {:.7}", (-0.5f64).exp());
+    println!("exact: {:.7}", 10.0 * (-0.4f64).exp());
 
     // (b) logistic: error in N(10) for h = 1, 1/2, ..., 1/64
     let f = |_t: f64, n: &[f64]| vec![0.8 * n[0] * (1.0 - n[0] / 1.2)];

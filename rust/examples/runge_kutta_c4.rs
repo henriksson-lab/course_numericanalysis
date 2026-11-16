@@ -40,12 +40,15 @@ fn main() {
         println!("rtol {:e}: error {:.3e}, steps {}, rejected {}, f evaluations {}",
                  rtol, s.y[n][0] - exact(10.0), n, s.nrej, 2 * (n + s.nrej));
     }
-    // (b) SIR epidemic to day 200
-    let (beta, gamma) = (0.3, 0.1);
-    let sir = |_t: f64, y: &[f64]| vec![-beta * y[0] * y[1], beta * y[0] * y[1] - gamma * y[1], gamma * y[1]];
-    let s = adapt_heun(&sir, 0.0, &[0.999, 0.001, 0.0], 200.0, 0.1, 1e-6, 1e-9);
+    // (b) SIR epidemic (people) to day 160
+    let (beta, gamma, n) = (0.3, 0.1, 10000.0);
+    let sir = |_t: f64, y: &[f64]| {
+        let (s, i) = (y[0], y[1]);
+        vec![-beta * s * i / n, beta * s * i / n - gamma * i, gamma * i]
+    };
+    let s = adapt_heun(&sir, 0.0, &[9990.0, 10.0, 0.0], 160.0, 0.1, 1e-6, 1e-6);
     println!("steps {}, rejected {}", s.h.len(), s.nrej);
-    for tq in [0.0, 13.0, 38.0, 100.0, 199.0] {
+    for tq in [0.0, 13.0, 38.0, 100.0, 159.0] {
         let i = s.t.iter().filter(|&&ti| ti <= tq).count() - 1; // step that starts before tq
         println!("h near t = {}: {:.3e}", tq, s.h[i]);
     }

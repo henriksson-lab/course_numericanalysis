@@ -22,7 +22,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 17 | fourier-fft | running | | |
 | 18 | finite-differences | done | done | done |
 | 19 | quadrature | running | | |
-| 20 | monte-carlo | done | running | |
+| 20 | monte-carlo | done | done | done |
 | 21 | euler | done | running | |
 | 22 | runge-kutta | running | | |
 | 23 | stiffness | running | | |
@@ -31,7 +31,8 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 26 | optimisation-1d | running | | |
 | 27 | gradient-methods | running | | |
 | 28 | nonlinear-least-squares | running | | |
-| 29–37 | | queued | | |
+| 29 | identifiability | running | | |
+| 30–37 | | queued | | |
 
 ## Audit notes (pass 3)
 
