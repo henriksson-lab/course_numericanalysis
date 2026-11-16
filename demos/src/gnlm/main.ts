@@ -196,7 +196,7 @@ function mount(host: HTMLElement): void {
   const tab = htmlEl("table", "gl-tab", "", right);
 
   // ---------------- landscape scales ----------------
-  const lx0 = 62, lx1 = WL - 10, ly0 = 34, ly1 = HL - 54;
+  const lx0 = 72, lx1 = WL - 10, ly0 = 34, ly1 = HL - 54;
   const sx = scale(L0, L1, lx0, lx1), sy = scale(L0, L1, ly1, ly0);
   const gx = (i: number) => sx(L0 + (L1 - L0) * i / (NG - 1));
   const gy = (j: number) => sy(L0 + (L1 - L0) * j / (NG - 1));
@@ -225,7 +225,7 @@ function mount(host: HTMLElement): void {
     svgEl("text", { x: lx0 - 8, y: sy(l) + 6, "text-anchor": "end", class: "sm" }, svgL).textContent = String(t);
   }
   svgEl("text", { x: (lx0 + lx1) / 2, y: HL - 8, "text-anchor": "middle" }, svgL).textContent = "absorption rate ka (per hour)";
-  const yl = svgEl("text", { x: 16, y: (ly0 + ly1) / 2, "text-anchor": "middle", transform: `rotate(-90 16 ${(ly0 + ly1) / 2})` }, svgL);
+  const yl = svgEl("text", { x: 15, y: (ly0 + ly1) / 2, "text-anchor": "middle", transform: `rotate(-90 15 ${(ly0 + ly1) / 2})` }, svgL);
   yl.textContent = "elimination rate ke (per hour)";
   const star = (p: number[], c: string, lab: string, dx: number, dy: number, anchor: string) => {
     const x = sx(Math.log10(p[0])), y = sy(Math.log10(p[1]));
@@ -237,7 +237,7 @@ function mount(host: HTMLElement): void {
     const t = svgEl("text", { x: x + dx, y: y + dy, "text-anchor": anchor, "font-weight": 700, stroke: "#fff", "stroke-width": 4, "paint-order": "stroke" }, svgL);
     t.style.fill = c; t.textContent = lab;
   };
-  star(P_HAT, COL.hat, "fit, V = 20.2 L", -12, 30, "end");
+  star(P_HAT, COL.hat, "fit, V = 20.2 L", 10, 30, "start");
   star(P_FLIP, COL.flip, "mirror, V = 3.8 L", 14, -16, "start");
   const dyn = svgEl("g", {}, svgL);
   const handle = svgEl("circle", { r: 12, class: "handle gl-handle", stroke: COL.ink, fill: "#fff", "stroke-width": 3 }, svgL);
@@ -369,7 +369,7 @@ function mount(host: HTMLElement): void {
     const offScale: string[] = [];
     const curve = (p: number[], c: string, w: number, dash = "", who = "") => {
       const ys = tg.map(t => bateman(t, p[0], p[1], p[2]));
-      if (who && !ys.every(v => Number.isFinite(v) && v > -1 && v < 6)) offScale.push(who);
+      if (who && !ys.every(v => Number.isFinite(v) && v > -4 && v < 40)) offScale.push(who);
       if (!ys.every(Number.isFinite)) return;
       const pts = tg.map((t, i) => `${tx(t).toFixed(1)},${cy(Math.max(-1, Math.min(6, ys[i]))).toFixed(1)}`).join(" ");
       svgEl("polyline", { points: pts, fill: "none", stroke: c, "stroke-width": w, "stroke-dasharray": dash }, cg);
@@ -391,7 +391,7 @@ function mount(host: HTMLElement): void {
     if (showLM) lg2(COL.lm, "Lev.–Marquardt", "", 3.5);
     if (offScale.length) {
       const t = svgEl("text", { x: dx1 - 4, y: ly + 8, "text-anchor": "end", "font-weight": 700 }, svgD);
-      t.style.fill = "#b00020"; t.textContent = `${offScale.join(", ")} curve off the scale`;
+      t.style.fill = "#b00020"; t.textContent = `${offScale.join(", ")} curve far off the scale`;
     }
 
     // (c) readout table

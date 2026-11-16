@@ -25,7 +25,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 20 | monte-carlo | done | done | done |
 | 21 | euler | done | done | done |
 | 22 | runge-kutta | done | done | done |
-| 23 | stiffness | done | running | |
+| 23 | stiffness | done | done | done |
 | 24 | phase-plane | done | done | done |
 | 25 | gillespie | done | running | |
 | 26 | optimisation-1d | done | done | done |
