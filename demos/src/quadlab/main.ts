@@ -354,7 +354,7 @@ function buildRules(box: HTMLElement, ds: DOMStringMap, uid: number): void {
     }
 
     // ---- (b) log-log
-    const L2 = 74, R2 = WB - 12;
+    const L2 = 74, R2 = WB - 24;
     const bx = scale(1, 10, L2, R2);                       // log2 n
     const EY0 = -16, EY1 = 4, by = scale(EY0, EY1, bot, top);
     const cl = (e: number) => Math.max(EY0 - 0.3, Math.min(EY1, Math.log10(Math.max(e, 1e-30))));

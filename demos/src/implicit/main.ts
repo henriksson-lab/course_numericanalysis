@@ -262,7 +262,7 @@ function buildRace(box: HTMLElement, ds: DOMStringMap, uid: number): () => void 
   const row2 = htmlEl("div", "im-row", "", box);
   const g2 = htmlEl("div", "im-group", "", row2);
   htmlEl("span", "", "r =", g2);
-  const rVals = [0.4, 0.5, 0.6, 4, 40, 100];
+  const rVals = [0.4, 0.5, 0.6, 1, 4, 10, 40, 100];
   const rBtns = presets(g2, rVals.map(r => ({ label: String(r), apply: () => { st.lr = Math.log10(r); rS.set(st.lr); draw(); } })));
   const tS = slider(row2, "time t", 0, 120, 0.5, st.t, v => { stop(); st.t = v; draw(); }, v => `${v.toFixed(1)} s`);
   const g3 = htmlEl("div", "im-group", "", row2);
@@ -368,7 +368,7 @@ function buildRace(box: HTMLElement, ds: DOMStringMap, uid: number): () => void 
       const t = svgEl("text", { x: x + 28, y, "font-weight": 600 }, svgA);
       t.style.fill = c; t.style.fillOpacity = String(op); t.textContent = txt;
     };
-    lg("exact (series)", 0, COL.exact, 0.6);
+    lg("exact", 0, COL.exact, 0.6);
     if (st.show.ftcs && (s0.blownAt.ftcs >= 0 || Math.abs(s0.c.ftcs[N >> 1]) > 2 || maxAbs(s0.c.ftcs) > 3)) {
       const t = svgEl("text", { x: la + 10, y: bot - 12, "font-weight": 700 }, svgA);
       t.style.fill = COL.warn;
@@ -400,8 +400,6 @@ function buildRace(box: HTMLElement, ds: DOMStringMap, uid: number): () => void 
     const lim = Math.log10(dtOf(0.5));
     svgEl("rect", { x: bx(lim), y: top, width: WB - 14 - bx(lim), height: bot - top, fill: COL.ftcs, "fill-opacity": 0.07 }, pgb);
     svgEl("line", { x1: bx(lim), x2: bx(lim), y1: top, y2: bot, stroke: COL.ftcs, "stroke-width": 2, "stroke-dasharray": "6 4" }, pgb);
-    const lt = svgEl("text", { x: bx(lim) + 6, y: by(-6.4), class: "sm" }, svgB);
-    lt.style.fill = "#8a5a00"; lt.textContent = "r > ½: FTCS unstable";
     // slope guides, anchored below BE and CN at dt = 1 s
     const ld = ec.dt.map(Math.log10);
     const at1 = (s: Scheme) => { let j = 0; for (let i = 0; i < ld.length; i++) if (Math.abs(ld[i]) < Math.abs(ld[j])) j = i; return Math.log10(ec.err[s][j]) - ld[j] * (s === "be" ? 1 : 2); };
@@ -425,10 +423,8 @@ function buildRace(box: HTMLElement, ds: DOMStringMap, uid: number): () => void 
         if (y <= LE1 + 0.3) svgEl("circle", { cx: bx(ld[i]), cy: by(y), r: 2.6, fill: COL[s] }, pgb);
       });
     }
-    if (st.show.ftcs) {
-      const t = svgEl("text", { x: bx(lim) + 6, y: top + 20, "font-weight": 600 }, svgB);
-      t.style.fill = COL.ftcs; t.textContent = "FTCS ↑ off the chart";
-    }
+    const tl = svgEl("text", { x: bx(lim) + 6, y: top + 20, "font-weight": 600 }, svgB);
+    tl.style.fill = "#a06800"; tl.textContent = "r > ½: FTCS unstable";
     // current dt markers
     const [nRef, dtRef] = refSteps(ic, dt);
     svgEl("line", { x1: bx(Math.log10(dtRef)), x2: bx(Math.log10(dtRef)), y1: top, y2: bot, stroke: COL.ink, "stroke-width": 1.2, "stroke-dasharray": "2 3" }, svgB);

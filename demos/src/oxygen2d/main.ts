@@ -257,8 +257,8 @@ function mount(host: HTMLElement): void {
     svgEl("text", { x: CBX + 20, y: MT + MH - v * MH / 200 + 6, class: "sm" }, svgA).textContent = String(v);
   }
   svgEl("text", { x: CBX - 4, y: MT - 10, class: "sm" }, svgA).textContent = "µM";
-  svgEl("rect", { x: CBX, y: MT + MH + 12, width: 16, height: 16, fill: COL.neg }, svgA);
-  svgEl("text", { x: CBX + 20, y: MT + MH + 26, class: "sm" }, svgA).textContent = "< 0";
+  svgEl("rect", { x: CBX, y: MT + MH + 34, width: 16, height: 16, fill: COL.neg }, svgA);
+  svgEl("text", { x: CBX + 20, y: MT + MH + 48, class: "sm" }, svgA).textContent = "< 0";
 
   // ------------------------------------------------------------------ mouse
   let painting = false;
@@ -464,9 +464,9 @@ function mount(host: HTMLElement): void {
 
   function drawCheck(): void {
     svgEl("text", { x: 8, y: 24, class: "ttl" }, svgB).textContent = "(b) grid check: halve h";
-    const xr = [12, 190, 270, 380, 458];
+    const xr = [12, 180, 262, 362, 458];
     ["h (µm)", "unknowns", "sweeps", "min c", "hypoxic"].forEach((t, i) => {
-      svgEl("text", { x: xr[i], y: 66, "text-anchor": i ? "end" : "start", "font-weight": 600 }, svgB).textContent = t;
+      svgEl("text", { x: xr[i], y: 66, "text-anchor": i ? "end" : "start", "font-weight": 600, "font-size": 17 }, svgB).textContent = t;
     });
     svgEl("line", { x1: 8, x2: WB - 8, y1: 76, y2: 76, class: "axis" }, svgB);
     HS.forEach((h, k) => {

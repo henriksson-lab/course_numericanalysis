@@ -38,7 +38,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 33 | steady-state-2d | done | running | |
 | 34 | advection-diffusion | running | | |
 | 35 | reaction-diffusion | running | | |
-| 36 | fem-outlook | running | (no demo: further reading) | |
+| 36 | fem-outlook | done | (no demo: further reading) | done |
 | 37 | iterative-solvers | running | (no demo) | |
 
 ## Audit notes (pass 3)
@@ -74,3 +74,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - steady-state-2d: [B1] 'mechanics not nutrients' claim from contentplan, not read — verify. Grid conventions: x_i = i h, µm/s/µM, ghost points, k = i + (j−1)nx — reconcile with diffusion-implicit in pass 2.
 - diffusion-implicit: R/Python solution tabs rely on Background-defined helpers (thomas, be_step, cn_step, exact) — decide self-contained convention in audit. h = 10 W/(m²K) from memory. Read [M2], [H1] full text (agent fetched before no-network rule); [M1], [H2] headline only. Embryo 1D model is our own.
 - gnlm demo: extra LM stop rule → 13 passes vs lecture slide's 15 (stated on page). Data panel y-axis clips good-start curve at 4 mg/L.
+- fem-outlook: notes assume content of steady-state-2d, reaction-diffusion, iterative-solvers, advection-diffusion lecture (T-sensor 100 µm, 1000 µm/s) — verify in pass 2. Hydrogel numbers own round values.
