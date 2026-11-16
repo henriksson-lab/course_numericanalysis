@@ -166,7 +166,7 @@ function buildLp(box: HTMLElement, uid: number, presetKey: string): void {
   // ---- geometry of the main plot (equal scales, so the gradient is perpendicular) ----
   const X0 = 56, Y0 = 446, PX = 32, XM = 11, YM = 13;
   const sx = (v: number) => X0 + PX * v, sy = (v: number) => Y0 - PX * v;
-  const CA: Vec = [262, 166], CK = 9;     // compass anchor (px) and px per unit of c
+  const CA: Vec = [258, 170], CK = 10;     // compass anchor (px) and px per unit of c
 
   const halfPlanes = (b = st.b, on = st.on, skip = -1): HalfPlane[] =>
     LIMITS.map((L, k) => (on[k] && k !== skip) ? hp(L, b[k]) : null).filter((h): h is HalfPlane => h !== null);
@@ -386,7 +386,8 @@ function buildLp(box: HTMLElement, uid: number, presetKey: string): void {
     ot.style.fill = "#8a5a00";
     ot.textContent = `ATP = ${fmt(cn[0], 1)}x₁ + ${fmt(cn[1], 1)}x₂`;
     const tip: Vec = [CA[0] + CK * cn[0], CA[1] - CK * cn[1]];
-    svgEl("line", { x1: CA[0], y1: CA[1], x2: tip[0], y2: tip[1], stroke: OI.orange, "stroke-width": 5, "marker-end": `url(#lg-arro-${uid})` }, svg);
+    const al = Math.hypot(tip[0] - CA[0], tip[1] - CA[1]), sh = Math.max(0, al - 13) / Math.max(al, 1e-9);
+    svgEl("line", { x1: CA[0], y1: CA[1], x2: CA[0] + (tip[0] - CA[0]) * sh, y2: CA[1] + (tip[1] - CA[1]) * sh, stroke: OI.orange, "stroke-width": 5, "marker-end": `url(#lg-arro-${uid})` }, svg);
     svgEl("circle", { cx: CA[0], cy: CA[1], r: 4, fill: OI.orange }, svg);
     const hd = svgEl("circle", { cx: tip[0], cy: tip[1], r: 12, class: "handle", stroke: OI.orange }, svg);
     draggable(hd, toC, (a, b) => {
@@ -432,7 +433,7 @@ function buildLp(box: HTMLElement, uid: number, presetKey: string): void {
   function drawScan(): void {
     const k = st.focus, L = LIMITS[k];
     scan.replaceChildren();
-    svgEl("text", { x: 6, y: 20, class: "ttl" }, scan).textContent = `best ATP against the ${L.name} limit`;
+    svgEl("text", { x: 6, y: 20, class: "ttl" }, scan).textContent = `best ATP vs ${L.name} limit`;
     if (!st.on[k]) {
       svgEl("text", { x: SW / 2, y: SH / 2, "text-anchor": "middle", class: "sm" }, scan).textContent = `tick ${L.name} to scan it`;
       return;
@@ -498,7 +499,7 @@ function buildFba(box: HTMLElement, uid: number): void {
 
   const main = htmlEl("div", "lg-main", "", box);
   const left = htmlEl("div", "lg-fplot", "", main);
-  const BW = 600, BH = 330;
+  const BW = 600, BH = 356;
   const bars = svgEl("svg", { viewBox: `0 0 ${BW} ${BH}`, role: "img", "aria-label": "Fluxes of the toy network" }, left);
   const OW = 600, OH = 200;
   const o2p = svgEl("svg", { viewBox: `0 0 ${OW} ${OH}`, role: "img", "aria-label": "Growth against the oxygen limit" }, left);
@@ -569,7 +570,7 @@ function buildFba(box: HTMLElement, uid: number): void {
 
     // ---- oxygen scan ----
     o2p.replaceChildren();
-    svgEl("text", { x: 6, y: 20, class: "ttl" }, o2p).textContent = "growth (red) and acetate (orange) against the oxygen limit";
+    svgEl("text", { x: 6, y: 20, class: "ttl" }, o2p).textContent = "growth (red), acetate (orange) vs oxygen limit";
     const ol = 60, or = OW - 14, ot = 32, ob = OH - 42;
     const N = 81, os: number[] = [], gs: number[] = [], as: number[] = [];
     for (let i = 0; i < N; i++) {

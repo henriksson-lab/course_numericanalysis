@@ -30,7 +30,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 25 | gillespie | done | running | |
 | 26 | optimisation-1d | done | running | |
 | 27 | gradient-methods | running | | |
-| 28 | nonlinear-least-squares | running | | |
+| 28 | nonlinear-least-squares | done | running | |
 | 29 | identifiability | running | | |
 | 30 | constrained-lp | done | running | |
 | 31 | diffusion-explicit | done | running | |
@@ -66,3 +66,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - lu demo: E5/swap reveals B5(b)(c) answers; E1/E2 show counts asked in B3(b)/B6(a) — decide in audit. lu/exercise.html needs a re-render (stale vs latest lufactor.js layout — page text unchanged).
 - gillespie: gene params differ from euler's (10/min, 0.2/min) — noted in slide notes; reconcile wording in pass 2. Adds SIR early-extinction (2 slides). Only 2 slides screenshotted.
 - stiffness: deSolve ode45 quirks on Robertson stated on slides; wall times machine-specific. Stray Chrome profile dir at /big/henriksson/temp/claude-tmp/claude-1001/chr1 (outside scratchpad) — clean up when user present.
+- nonlinear-least-squares: install minpack.lm. fig06 zigzag is real (FD step vs ODE tol).

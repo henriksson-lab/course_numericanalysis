@@ -198,6 +198,42 @@ Rust prints numbers in its own format (e.g. `1e-8` rather than `1e-08`); the val
 (b) Find $\hat r$ with Brent's method to $10^{-10}$. The data were simulated with $r = 0.8$.
 (c) Estimate the noise standard deviation as $\sqrt{\text{SSE}(\hat r)/(n - 1)}$. The simulation used 0.005.
 
+## Explore {#explore}
+
+The demo below runs the three minimisers of the lecture on the running examples, one function evaluation per **Step**, in your browser. Panel (a) shows the objective with the current bracket $[a, b]$ (shaded), the interior points, every point evaluated so far, and, for a parabolic step, the parabola (dashed) and its vertex. Drag the handles **a** and **b** below the axis to change the starting bracket. Panel (b) shows the bracket width $b - a$ and the error $|x - \hat x|$ of the current estimate against the number of evaluations on a log scale, with the line $0.618^n(b_0 - a_0)$ and the flat-bottom level $\sqrt{2\varepsilon|f(\hat x)|/f''(\hat x)}$; the table lists every step. **Brent** is the algorithm of R's `optimize`, step for step (R counts one evaluation more, because `optimize` evaluates $f$ once more to return `$objective`). **multistart** runs Brent on five equal sub-intervals of $[a, b]$; **zoom: flat bottom** plots $f(x) - f(\hat x)$ in a tiny window around the minimiser.
+
+The browser computes in the same IEEE doubles as R, Python and Rust; in the flat bottom the last digits can differ, because `exp` and `log` may be rounded differently.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="golden" data-problem="decay" data-method="golden"></div>
+<script src="../demos/dist/golden.js"></script>
+```
+
+**E1. (golden section, step by step)** On the decay rate $\text{SSE}(k)$ with **golden section** and the bracket $[0, 1]$, press **Step** four times. Write down the new point and the width after each step and compare with B2 and the lecture's table by hand. What is the ratio of consecutive widths? Then press **To end** with the default tolerance, and again with tol $10^{-10}$. How many evaluations, and how large is the error at the end? Which line in panel (b) does the width follow, and what does the error do in the last steps?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+The first step evaluates $x_1 = 0.3820$ and $x_2 = 0.6180$; then $0.2361$, $0.4721$ and $0.3262$, with widths $1, 0.618, 0.382, 0.236$: the same points as the table by hand, and a ratio of $0.618$ per evaluation. With the default tolerance ($1.2\times10^{-4}$) golden section stops after **21** evaluations at $0.37537$ with error $2.0\times10^{-5}$; with tol $10^{-10}$ after **50** evaluations (as in C2) with error $2.4\times10^{-10}$. The width lies exactly on the dashed $0.618^n$ line. The error follows it down to about $10^{-9}$ and then stops falling: the last rows all show $f = 0.002042809$, the comparisons are decided by rounding, close to the flat-bottom line at $4\times10^{-10}$. With tol $10^{-15}$ the width keeps shrinking to $10^{-15}$ (74 evaluations) and the error stays at $2.4\times10^{-10}$.
+:::
+
+**E2. (parabolic steps and Brent)** Switch to **parabolic** and press **Step** three times from $[0, 1]$. Where do the vertices land, and what happens if you press **To end**? Now switch to **Brent**, tol $10^{-10}$, and press **Step** repeatedly. Which steps are golden and which are parabolic? How many evaluations does Brent need, and how does that compare with E1? Finally drag **b** to about $0.6$ and run Brent again.
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Parabolic interpolation from $0, 0.5, 1$ jumps to $0.7018$, already worse than $0.5$, and then to $-1.509$, where $\text{SSE} = 3\times10^{10}$: the parabola through those points opens so steeply that its vertex is far outside. **To end** shows it wandering off to $k \approx 72$, out on the flat plateau, where the points end up on a line and some parabolas open downwards (the table notes "a maximum"). There is no bracket to stop it. Brent starts at $0.382$, takes two golden steps ($0.618$, $0.236$) and then only parabolic steps ($0.428$, $0.347$, $0.3775$, …); the error drops by several digits per step and it stops after **13** evaluations with error $4.9\times10^{-11}$, against 50 for golden section (R reports 14). The parabolic steps are safe here because each one must land inside the bracket and shrink; the bracket shrinks from 1 to $10^{-8}$. On $[0, 0.6]$ Brent starts at $0.229$ and still finds $\hat k = 0.3753873$ in 11 evaluations.
+:::
+
+**E3. (the wrong period)** Choose **circadian RSS(T)** (the curve is hidden: the method only sees its own points) and **golden section** on $[10, 40]$. Press **Step** three times and follow the decisions with B6(c). Then press **To end**. What period is returned, and does anything warn you? Press **plot the curve**, then **multistart**. Finally drag **a** to 15 and **b** to 35 and run **Brent**.
+
+::: {.callout-note collapse="true" title="Answer E3"}
+The first step evaluates $21.46$ (RSS $10.363$) and $28.54$ ($10.312$); $28.54$ is lower, so $[21.46, 40]$ is kept. The next point is $32.92$ ($10.249$), lower again, so $[28.54, 40]$ is kept and the dip at 24.6 h is outside the bracket for good. Golden section converges in 28 evaluations to $T = 32.4016$ h, RSS $10.225$ (Brent: 14 evaluations, same answer). Nothing in the run itself warns you: the width shrinks as nicely as on the decay problem, only the error stays at 7.8 h. With the curve plotted, the narrow, deep dip near 24.6 h (RSS $1.91$) is obvious. Multistart (Brent on $[10, 16], [16, 22], \dots$, 76 evaluations) finds interior minima at $14.59, 19.79, 24.63$ and $32.40$ h with RSS $10.39, 10.47, 1.908, 10.23$: comparing them picks $24.63$ h. On $[15, 35]$ Brent starts at $22.64$ (RSS $7.18$), already in the dip, and converges to $24.6305$ h in 11 evaluations.
+:::
+
+**E4. (the flat bottom)** Choose **ZTP −log L(λ)**, **Brent**, tol $10^{-15}$, and press **To end**. How large is the final error, compared with the flat-bottom line? Do the same with **golden section**. Then press **zoom: flat bottom**. How many of the 401 points in the window $\pm3\times10^{-8}$ have exactly the same $f$ as $f(\hat\lambda)$? Zoom in and out by a factor 10 and explain the picture with B5(c).
+
+::: {.callout-note collapse="true" title="Answer E4"}
+Brent stops after 12 evaluations with error $1.8\times10^{-8}$, golden section after 77 evaluations with error $1.2\times10^{-8}$, although its final bracket is only $9\times10^{-16}$ wide: asking for tol $10^{-15}$ does not help. Both errors are at the flat-bottom level $\sqrt{2\varepsilon \cdot 52.61/56.92} = 2.0\times10^{-8}$. (R's `optimize` on $[0.01, 10]$ happens to land closer, $6.9\times10^{-10}$, but that is luck inside the same band.) In the zoom, 76 of the 401 points have $f(\lambda) = f(\hat\lambda)$ exactly, spread from $-3.0\times10^{-8}$ to $3.1\times10^{-8}$; the others differ by one or a few gaps between doubles ($7.1\times10^{-15}$ near 52.6), a staircase around the red parabola $\tfrac12 f''\delta^2$. Zoomed in to $\pm3\times10^{-9}$, the parabola is far below one gap and the dots are pure rounding noise: no method that compares values of $f$ can tell these points apart. Zoomed out to $\pm3\times10^{-7}$, the dots follow the parabola and only 11 points in the middle are equal to $f(\hat\lambda)$. About 8 digits of $\hat\lambda = 1.218469\ldots$ are all a minimiser can deliver; for more, find the root of the score (C3).
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — stationary points and brackets (B1, B6)"}
