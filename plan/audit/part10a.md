@@ -82,7 +82,7 @@ How I ran the code:
   - steady-state-2d: lec, exercise, quiz
   - advection-diffusion: lec, exercise, quiz
 
-  (result appended below)
+  All 12 pages rendered. Some needed 2–4 tries because of concurrent glob/site_libs errors.
 - Decks: 25 / 25 / 27 / 28 `##` slides. No slides added.
 
 ## Unresolved

@@ -37,7 +37,7 @@ Method: every R block (lec, exercise, quiz) and every Python block (exercise, qu
 
 ## Renders
 
-All 12 pages render (see below).
+All 12 pages (lec, exercise, quiz × 4) render without errors or warnings after the edits. No slides were added, so the deck sizes are unchanged (29/26/26/26).
 
 ## Open
 
