@@ -19,7 +19,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 14 | eigen-algorithms | done | done | done |
 | 15 | polynomial-interpolation | done | done | done |
 | 16 | splines | done | done | done |
-| 17 | fourier-fft | done | running | |
+| 17 | fourier-fft | done | done | done |
 | 18 | finite-differences | done | done | done |
 | 19 | quadrature | running | | |
 | 20 | monte-carlo | done | done | done |
