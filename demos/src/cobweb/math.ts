@@ -23,7 +23,8 @@ export const f = (p: Params, N: number): number => g(p, N) - N;
 /** Upper end of the plotting range: 150, or more if the Ricker hump is higher. */
 export function range(p: Params): number {
   if (p.model === "bh") return 150;
-  const top = p.r > 1 ? K / p.r * Math.exp(p.r - 1) : 150;
+  if (p.r <= 1) return 150;
+  const top = K / p.r * Math.exp(p.r - 1);
   return Math.max(150, Math.ceil(top * 1.04 / 50) * 50);
 }
 

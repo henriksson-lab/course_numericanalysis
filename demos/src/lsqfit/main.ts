@@ -281,7 +281,7 @@ function mount(host: HTMLElement): void {
       if (rv !== r[i]) svgEl("circle", { cx: xx, cy: R(rv), r: 3.5, fill: COL.res }, layerA);
     });
     // legend
-    const lx = s === BCA ? aR - 190 : aL + 250, ly = s === BCA ? aB - 66 : aT + 18;
+    const lx = s === BCA ? aR - 190 : aL + 14, ly = aB - 66;
     svgEl("line", { x1: lx, x2: lx + 30, y1: ly, y2: ly, stroke: COL.qr, "stroke-width": 3 }, layerA);
     txt(layerA, lx + 36, ly + 6, "QR fit", {}, COL.qr);
     svgEl("line", { x1: lx, x2: lx + 30, y1: ly + 24, y2: ly + 24, stroke: COL.ne, "stroke-width": 2.5, "stroke-dasharray": "8 6" }, layerA);
@@ -300,8 +300,7 @@ function mount(host: HTMLElement): void {
       svgEl("rect", { x: bx(q.d - 0.5), y: bT, width: bx(1) - bx(0), height: bB - bT, fill: COL.shade, "fill-opacity": 0.1 }, layerB);
     }
     if (res.some(q => q.kappa * q.kappa > 1 / EPS)) {
-      const first = res.find(q => q.kappa * q.kappa > 1 / EPS)!.d;
-      txt(layerB, bx(first - 0.45), bB - 10, "κ(AᵀA) > 1/ε", { class: "sm" }, COL.ne);
+      txt(layerB, bR - 6, bT + 20, "κ(AᵀA) > 1/ε", { class: "sm", "text-anchor": "end" }, COL.ne);
     }
     // current degree
     svgEl("rect", { x: bx(d - 0.5), y: bT, width: bx(1) - bx(0), height: bB - bT, fill: "#000", "fill-opacity": 0.07 }, layerB);
@@ -335,6 +334,7 @@ function mount(host: HTMLElement): void {
     }
     // legend (bottom right is empty: errors are large there only for the normal equations)
     const lgx = bL + 12, lgy = bT + 18;
+    svgEl("rect", { x: lgx - 6, y: lgy - 14, width: 212, height: 100, rx: 4, fill: "#fff", "fill-opacity": 0.85 }, layerB);
     const lg = (i: number, label: string, c: string, dash: string, mark: "sq" | "ci" | "") => {
       const yy = lgy + i * 24;
       svgEl("line", { x1: lgx, x2: lgx + 30, y1: yy, y2: yy, stroke: c, "stroke-width": 2.5, "stroke-dasharray": dash }, layerB);
