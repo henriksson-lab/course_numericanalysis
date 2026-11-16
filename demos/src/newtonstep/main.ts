@@ -43,11 +43,11 @@ const STYLE = `
 [data-demo="${NAME}"] .qb-btn.go { font-weight: 600; }
 .reveal [data-demo="${NAME}"].qb-demo { font-size: 19px; gap: .3em; }
 .reveal [data-demo="${NAME}"] .ns-main { flex-wrap: nowrap; }
-.reveal [data-demo="${NAME}"] .ns-main svg { flex: 0 0 670px; max-width: 670px; }
+.reveal [data-demo="${NAME}"] .ns-main svg { flex: 0 0 630px; max-width: 630px; }
 .reveal [data-demo="${NAME}"] .ns-side { flex: 1 1 auto; }
 .reveal [data-demo="${NAME}"] .ns-tab { max-height: 340px; }
 .reveal [data-demo="${NAME}"] table { font-size: 18px; }
-.reveal [data-demo="${NAME}"] th, .reveal [data-demo="${NAME}"] td { padding: 1px 5px; }
+.reveal [data-demo="${NAME}"] th, .reveal [data-demo="${NAME}"] td { padding: 1px 5px; text-align: right; border-bottom: none; }
 .reveal [data-demo="${NAME}"] .qb-readout { font-size: 18px; }
 `;
 
@@ -357,7 +357,7 @@ function mount(host: HTMLElement): void {
 
     table.replaceChildren();
     const hr = htmlEl("tr", "", "", htmlEl("thead", "", "", table));
-    for (const h of ["step", p.sym + "ₖ", "f(" + p.sym + "ₖ)", "|error|", "digits", m === "bisection" ? "+ digits" : "× digits"]) htmlEl("th", "", h, hr);
+    for (const h of ["step", p.sym + "ₖ", "f(" + p.sym + "ₖ)", "|error|", "digits", m === "bisection" ? "+" : "×"]) htmlEl("th", "", h, hr);
     const tb = htmlEl("tbody", "", "", table);
     let prevD = NaN;
     const rootStr = full(p.root);
@@ -374,7 +374,7 @@ function mount(host: HTMLElement): void {
         htmlEl("span", "ok", xs.slice(0, nm), td); htmlEl("span", "rest", xs.slice(nm), td);
       } else if (nm === xs.length && nm > 0) htmlEl("span", "ok", xs, td);
       else td.textContent = xs;
-      htmlEl("td", "", sci(r.fx, 2), tr);
+      htmlEl("td", "", sci(r.fx, 1), tr);
       const { e, d } = errDigits(p, r.x);
       htmlEl("td", "", Number.isFinite(e) ? sci(e, 1) : "–", tr);
       const dTxt = !Number.isFinite(d) ? (e === 0 ? "all" : "–") : d >= 15.5 ? "all" : Math.max(0, d).toFixed(1);

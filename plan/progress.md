@@ -12,7 +12,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 7 | newton-systems | done | done | done |
 | 8 | lu | done | running | |
 | 9 | pivoting-conditioning | done | done | done |
-| 10 | structured-sparse | done | running | |
+| 10 | structured-sparse | done | done | done |
 | 11 | least-squares-qr | done | done | done |
 | 12 | svd | done | running | |
 | 13 | power-iteration | running | | |
@@ -24,7 +24,8 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 19 | quadrature | running | | |
 | 20 | monte-carlo | running | | |
 | 21 | euler | running | | |
-| 22–37 | | queued | | |
+| 22 | runge-kutta | running | | |
+| 23–37 | | queued | | |
 
 ## Audit notes (pass 3)
 

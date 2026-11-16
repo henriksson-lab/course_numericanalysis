@@ -24,7 +24,7 @@ const STYLE = `
 [data-demo="${NAME}"].qb-demo { flex-direction: column; gap: .4em; }
 [data-demo="${NAME}"] .dc-row { display: flex; flex-wrap: wrap; gap: .35em 1.2em; align-items: center; width: 100%; }
 [data-demo="${NAME}"] .dc-group { display: flex; gap: .4em; align-items: center; flex-wrap: wrap; }
-[data-demo="${NAME}"] .dc-row .qb-slider { min-width: 250px; flex: 1 1 250px; max-width: 400px; grid-template-columns: auto 1fr 3.8em; margin-right: .6em; }
+[data-demo="${NAME}"] .dc-row .qb-slider { min-width: 320px; flex: 1 1 320px; max-width: 440px; grid-template-columns: auto 1fr 3.8em; margin-right: .6em; }
 [data-demo="${NAME}"] .dc-row .qb-slider.off { opacity: .45; }
 [data-demo="${NAME}"] .dc-plots { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
 [data-demo="${NAME}"] .dc-plots svg { min-width: 0; height: auto; }
@@ -103,7 +103,7 @@ function mount(host: HTMLElement): void {
   const lS = slider(row1, "ridge λ", LAM0, LAM1, 0.05, st.ll, v => { st.ll = v; st.method = "ridge"; draw(); }, lamFmt);
   const row2 = htmlEl("div", "dc-row", "", host);
   const sS = slider(row2, "noise", 0, 0.2, 0.005, st.s, v => { st.s = v; recompute(); draw(); }, pct);
-  const dS = slider(row2, "CD4−CD8 difference", 0, 0.3, 0.01, st.d, v => { st.d = v; recompute(); draw(); }, pct);
+  const dS = slider(row2, "CD8 differs by", 0, 0.3, 0.01, st.d, v => { st.d = v; recompute(); draw(); }, pct);
   const sg = htmlEl("div", "dc-group", "", row2);
   htmlEl("span", "", "sample:", sg);
   const sBtns = presets(sg, [

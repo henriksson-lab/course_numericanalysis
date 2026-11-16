@@ -170,13 +170,13 @@ f48 <- function(t) cos(2 * pi * t / 4.8)
 svg("fig05-aliasing.svg", width = 12, height = 4.6)
 par(mar = c(4.8, 5.2, 1, 1), cex.lab = 1.5, cex.axis = 1.35)
 plot(tc, f48(tc), type = "l", col = oi["grey"], lwd = 1.5, xaxt = "n",
-     xlab = "time (h)", ylab = "expression", ylim = c(-1.25, 1.55))
+     xlab = "time (h)", ylab = "expression", ylim = c(-1.1, 2.0))
 axis(1, at = seq(0, 48, by = 4))
 lines(tc, cos(2 * pi * tc / 24), col = oi["orange"], lwd = 3, lty = 2)
 points(seq(0, 46, by = 2), f48(seq(0, 46, by = 2)), pch = 19, col = oi["blue"], cex = 1.5)
 points(seq(0, 44, by = 4), f48(seq(0, 44, by = 4)), pch = 21, bg = oi["orange"],
        cex = 2.2, lwd = 1.5)
-legend("top", horiz = TRUE, c("true rhythm, period 4.8 h", "every 2 h", "every 4 h",
+legend("top", ncol = 2, c("true rhythm, period 4.8 h", "every 2 h", "every 4 h",
        "24-h cosine through the 4-h samples"),
        col = c(oi["grey"], oi["blue"], "black", oi["orange"]),
        pt.bg = c(NA, NA, oi["orange"], NA), pch = c(NA, 19, 21, NA),
@@ -192,14 +192,16 @@ s25 <- spec(cos(2 * pi * tl / 25.5))
 s25h <- spec(cos(2 * pi * tl / 25.5), hann)
 kk <- 0:40
 svg("fig06-leakage.svg", width = 11, height = 5)
-par(mar = c(4.8, 5.4, 3.2, 1), cex.lab = 1.5, cex.axis = 1.3)
-plot(kk, pmax(s24, 1e-5), log = "y", type = "h", lwd = 6, col = oi["grey"],
-     ylim = c(1e-5, 1.5), yaxt = "n", xlab = "k (cycles per 120 h)",
-     ylab = "amplitude")
+par(mar = c(4.8, 6.4, 3.2, 1), cex.lab = 1.5, cex.axis = 1.3, mgp = c(4.5, 1, 0))
+plot(NA, log = "y", xlim = c(0, 40),
+     ylim = c(1e-5, 1.5), yaxt = "n", xaxt = "n", xlab = "", ylab = "amplitude")
+axis(1, mgp = c(3, 1, 0))
+mtext("k (cycles per 120 h)", 1, line = 3, cex = 1.5)
+segments(5, 1e-6, 5, s24[6], lwd = 6, col = oi["grey"])
 axis(2, at = 10^(-5:0), labels = c(expression(10^-5), expression(10^-4), "0.001",
      "0.01", "0.1", "1"), las = 1)
-axis(3, at = c(1, 2, 3, 4, 5, 10, 20, 40), labels = c(120, 60, 40, 30, 24, 12, 6, 3),
-     cex.axis = 1.1)
+axis(3, at = c(1, 5, 10, 20, 40), labels = c(120, 24, 12, 6, 3),
+     cex.axis = 1.2, mgp = c(3, 0.8, 0))
 mtext("period (h)", 3, line = 2, cex = 1.3)
 lines(kk + 0.12, s25, type = "b", pch = 19, col = oi["red"], lwd = 2)
 lines(kk - 0.12, s25h, type = "b", pch = 17, col = oi["blue"], lwd = 2)
@@ -249,7 +251,7 @@ for (i in 1:25) {
 }
 d0 <- outer(c(0:(N/2), -(N/2 - 1):-1), c(0:(N/2), -(N/2 - 1):-1),
             function(a, b) a^2 + b^2)
-psf <- exp(-d0 / (2 * 3^2)); psf <- psf / sum(psf)       # Gaussian, sd 3 px, centred at [1,1]
+psf <- exp(-d0 / (2 * 2^2)); psf <- psf / sum(psf)       # Gaussian, sd 2 px, centred at [1,1]
 H <- fft(psf)
 blur <- Re(fft(fft(img) * H, inverse = TRUE)) / N^2
 noisy <- blur + matrix(rnorm(N^2, sd = 0.01), N)

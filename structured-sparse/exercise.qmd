@@ -192,6 +192,42 @@ Eliminate the first column (subtract multiples of row 1 from rows 2–4). Which 
 (a) Run both on the morphogen system with $n = 1000$ cells and `tol = 1e-10`. How many iterations does each need? How close are they to the direct solution? (Python: compare with [`scipy.sparse.linalg.cg`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.cg.html).)
 (b) Run Jacobi on the matrix of B6(b) for 50 iterations. What happens?
 
+## Explore {#explore}
+
+The demo below runs Cholesky on the **pattern** of a sparse symmetric matrix, one column at a time, and only tracks which entries of $L$ become non-zero (it assumes no lucky cancellation). Panel (a) shows the pattern with rows and columns in elimination order: blue entries are non-zeros of $A$, vermillion entries are **fill-in**, and entries outlined in black were created by the last step. The finished rows and columns are faded; the box marks the next pivot. Panel (b) shows the same matrix as a network: one node per unknown (gene or cell), one link per non-zero pair. The number in a node is its place in the elimination order. Eliminating a node links all its remaining neighbours to each other, and every new link is a fill-in entry.
+
+The counters give the non-zeros of $A$, of $L$ so far, the fill-in so far, and the operations so far: a column with $c$ non-zeros below the pivot costs $(c + 1)^2$ (one square root, $c$ divisions, and $c(c+1)/2$ multiply-subtract pairs), which gives about $n^3/3$ for a full matrix. The table compares the five orderings for the current matrix, and for the same kind of matrix with $n = 1000$ (the 2D grid: $30 \times 30$). *Min degree* always eliminates the node with fewest remaining neighbours next; *RCM* (reverse Cuthill–McKee) numbers the nodes in breadth-first sweeps, which keeps the non-zeros near the diagonal.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="fillin" data-matrix="arrow" data-n="8" data-order="natural"></div>
+<script src="../demos/dist/fillin.js"></script>
+```
+
+**E1. (the hub first)** The arrow matrix with $n = 8$ genes is selected, hub first (natural order). Click **step ▶** once. How many neighbours does the pivot have, how many fill-in entries appear, and what does $L$ look like at the end (click **all**)? Now choose **reversed** (hub last) and step through all 8 columns. Compare nnz($L$) and the operations, and the column for $n = 1000$ with C7.
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Hub first: the pivot (the hub) has $c = 7$ neighbours, all $7 \cdot 6/2 = 21$ pairs of leaves get linked, and all 21 are new. That single step fills the whole lower right $7 \times 7$ block; in panel (b) every leaf is now linked to every other. At the end $L$ has 36 non-zeros, the full lower triangle $8 \cdot 9/2$, with 21 fill-in, and costs $1^2 + 2^2 + \dots + 8^2 = 204$ operations. Hub last: each leaf has only the hub as neighbour ($c = 1$, nothing to link), so no step creates fill-in; $L$ has $15 = 2n - 1$ non-zeros (the non-zeros of the lower triangle of $A$) and costs 29 operations. For $n = 1000$ the table gives 500 500 against 1999, the numbers of C7.
+:::
+
+**E2. (let the ordering choose)** Stay with the arrow matrix and try **shuffled**, **min degree** and **RCM**. Where does the hub land in each ordering (look at its number in panel (b)), and how much fill-in does each give? Then set $n = 30$ and compare natural with min degree.
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Shuffled puts the hub 4th: the three leaves before it cost nothing, then the hub still has $c = 4$ neighbours and links them, $4 \cdot 3/2 = 6$ fill-ins (nnz($L$) 21 instead of 15). The fill-in only depends on how many neighbours the hub has left when it goes. Min degree eliminates the leaves first (degree 1) and keeps the hub to the end (7th, with only the last leaf left), and RCM numbers the hub 7th too: both give 15 non-zeros, no fill-in, like hub last. At $n = 30$: natural has 465 non-zeros and 406 fill-ins and costs 9455 operations; min degree 59 non-zeros, no fill-in, 117 operations. This is what `Cholesky(A, perm = TRUE)` does for you: it finds a fill-reducing ordering before it factorises.
+:::
+
+**E3. (a row of cells)** Choose **tridiagonal**, $n = 12$ (the morphogen in a row of cells), natural order, and click **play**. Does any step create fill-in? Then choose **shuffled** and step through. What happens in panel (b) when a cell in the middle of the row is eliminated, and how many fill-ins does that give at most? Repeat with **band (width 2)**.
+
+::: {.callout-note collapse="true" title="Answer E3"}
+Natural order: each pivot has one remaining neighbour (the next cell), so there is nothing to link; no fill-in, $L$ has $2n - 1 = 23$ non-zeros, 45 operations, $4(n - 1) + 1$: the Thomas algorithm, $O(n)$. Shuffled: eliminating a cell whose two neighbours are both still there links those two neighbours, one new link that jumps over the eliminated cell. That is at most one fill-in per step, so the fill stays small (5 here, nnz($L$) 28, 70 operations; 2986 instead of 1999 at $n = 1000$), but the pattern in panel (a) is scattered, not a band, so Thomas could not be used. The band of width 2 behaves the same: no fill-in in natural order (33 non-zeros, 95 operations), 7 fill-ins shuffled. Elimination never fills outside the band when you go along the row.
+:::
+
+**E4. (a sheet of cells)** Choose **2D grid** with side 6 (36 cells, numbered row by row) in natural order. Click **step ▶** six times, eliminating the first row of cells. Where does the fill-in go in panel (a)? Click **all** and read nnz($L$). Then compare min degree and RCM, also for the $30 \times 30$ grid. Can any ordering avoid fill-in here?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+After the first row (6 steps) there are already 25 fill-ins. The first cell links its right neighbour to the cell below it; each later cell of the row links its right neighbour, the cell below it and the cells of the second row that earlier steps had already linked to it. In panel (a) all of this lands inside the band between the diagonal and the neighbour one row down (6 positions away), and the band fills up from the left. In natural order the whole band of width 6 fills in: $L$ has 221 non-zeros against 96 in the lower triangle of $A$ (125 fill-in), and costs 1451 operations. Min degree: 167 non-zeros (71 fill-in), 845 operations; RCM: 191 and 1101. For $30 \times 30$: 27 029 in natural order, the number on the lecture slide; min degree gives 10 351 (the lecture's AMD gets 10 231), RCM 19 315. No ordering reaches zero: in a sheet, every cell has four neighbours, and eliminating one always links some of them that were not linked before. In 2D (and much more in 3D) some fill-in is unavoidable; that is where iterative solvers come in.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — Cholesky by hand (B1)"}

@@ -1,0 +1,1088 @@
+---
+title: "Exercise: power iteration and friends"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- find the eigenvalues and eigenvectors of a 2 × 2 matrix by hand, and read a **Leslie matrix** (long-term growth rate, stable age distribution) and a **Markov chain** (stationary distribution) in terms of them,
+- write **power iteration** with normalisation and a residual-based stopping rule, and check it against `eigen()`,
+- predict the number of iterations from $|\lambda_2/\lambda_1|$, measure the rate from an error plot, and recognise the two failures: $|\lambda_2| = |\lambda_1|$ (no convergence) and $|\lambda_2/\lambda_1| \approx 1$ (false convergence),
+- compute the **Rayleigh quotient** and explain why it doubles the digits for symmetric matrices,
+- use **inverse iteration with a shift** (factor once, solve many times) to find the eigenvalue nearest a chosen number.
+
+The by-hand part needs pen, paper and a pocket calculator. The code part checks the hand answers and then works with the fish population and the cell-state chain from the lecture.
+
+## Background
+
+An **eigenvector** $\mathbf v \ne \mathbf 0$ of a square matrix $A$ satisfies $A\mathbf v = \lambda\mathbf v$; the number $\lambda$ is its **eigenvalue**. We order eigenvalues by size: $|\lambda_1| \ge |\lambda_2| \ge \dots$
+
+**Facts used below:**
+
+1. **2 × 2 by hand.** The eigenvalues solve $\det(A - \lambda I) = \lambda^2 - (\text{trace})\lambda + \det A = 0$. For each $\lambda$, solve $(A - \lambda I)\mathbf v = \mathbf 0$ (one equation is enough, the other is a multiple of it).
+2. **Leslie matrix.** Fertilities $F_i$ in the first row, survival probabilities $s_i$ on the subdiagonal; $\mathbf n_{t+1} = L\mathbf n_t$. The dominant eigenvalue $\lambda_1$ is the **long-term growth rate** per time step, and its eigenvector, rescaled to sum 1, is the **stable age distribution**.
+3. **Markov chain.** $P_{ij}$ = probability of moving from state $i$ to state $j$ in one step; rows sum to 1; proportions evolve as $\mathbf p_{t+1} = \mathbf p_tP$ (row vector). The **stationary distribution** $\boldsymbol\pi$ satisfies $\boldsymbol\pi P = \boldsymbol\pi$: it is the eigenvector of $P^T$ for $\lambda_1 = 1$, rescaled to sum 1.
+4. **Power iteration.** $\mathbf y = A\mathbf x_k$, estimate $\lambda$, $\mathbf x_{k+1} = \mathbf y/\|\mathbf y\|$. For nonnegative matrices normalise by the **sum** ($\mathbf x$ = proportions, estimate $\lambda \approx \mathrm{sum}(A\mathbf x_k)$); in general by the 2-norm.
+5. **Rate.** If $\mathbf x_0 = c_1\mathbf v_1 + c_2\mathbf v_2 + \dots$ with $c_1 \ne 0$, then $A^k\mathbf x_0 = \lambda_1^k\big(c_1\mathbf v_1 + c_2(\lambda_2/\lambda_1)^k\mathbf v_2 + \dots\big)$: the error falls by about $|\lambda_2/\lambda_1|$ per step (**linear convergence**), so one digit takes $1/\log_{10}(|\lambda_1/\lambda_2|)$ steps. No convergence if $|\lambda_2| = |\lambda_1|$.
+6. **Stopping.** Stop when the **residual** $\|A\mathbf x - \lambda\mathbf x\|$ is small. If successive changes shrink by a factor $c$ per step, the remaining error is about $\text{change}\cdot c/(1-c)$, which is much larger than the change when $c$ is near 1.
+7. **Rayleigh quotient.** $R(\mathbf x) = \mathbf x^TA\mathbf x / \mathbf x^T\mathbf x$, equal to $\lambda$ for an eigenvector. For **symmetric** $A$, an error $\delta$ in $\mathbf x$ gives an error of order $\delta^2$ in $R(\mathbf x)$.
+8. **Inverse iteration.** $(A - \sigma I)^{-1}$ has the same eigenvectors as $A$ and eigenvalues $1/(\lambda_i - \sigma)$. Power iteration with it (one linear solve per step) finds the eigenvalue **nearest the shift** $\sigma$, at rate $|\lambda_\text{nearest} - \sigma| / |\lambda_\text{next nearest} - \sigma|$. Factor $A - \sigma I$ once; then each step costs only a forward and back substitution.
+
+The basic tools in each language:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+L <- matrix(0, 4, 4)
+L[1, ] <- c(0, 1.5, 4, 5)                  # offspring per fish of each age
+L[cbind(2:4, 1:3)] <- c(0.3, 0.6, 0.5)     # survival to the next age
+ev <- eigen(L)
+ev$values
+# [1]  1.1773586+0.000000i -0.2662888+0.722404i -0.2662888-0.722404i
+# [4] -0.6447810+0.000000i
+Mod(ev$values)
+# [1] 1.1773586 0.7699203 0.7699203 0.6447810
+v <- Re(ev$vectors[, 1])
+v / sum(v)                                 # stable age distribution
+# [1] 0.69453711 0.17697339 0.09018836 0.03830114
+```
+
+### Python
+
+```python
+import numpy as np
+
+L = np.zeros((4, 4))
+L[0, :] = [0, 1.5, 4, 5]                   # offspring per fish of each age
+L[[1, 2, 3], [0, 1, 2]] = [0.3, 0.6, 0.5]  # survival to the next age
+vals, vecs = np.linalg.eig(L)
+order = np.argsort(-np.abs(vals))          # eig does not sort: largest |lambda| first
+vals, vecs = vals[order], vecs[:, order]
+print(vals)
+# [ 1.17735856+0.j         -0.2662888 +0.72240402j -0.2662888 -0.72240402j
+#  -0.64478097+0.j        ]
+print(np.abs(vals))
+# [1.17735856 0.76992031 0.76992031 0.64478097]
+v = vecs[:, 0].real
+print(v / v.sum())                         # stable age distribution
+# [0.69453711 0.17697339 0.09018836 0.03830114]
+```
+
+### Rust
+
+```rust
+// rust/examples/power_iteration_background.rs  —  cargo run --example power_iteration_background
+// Background: eigenvalues of the fish Leslie matrix with nalgebra.
+// nalgebra has no general (nonsymmetric) eigenvector routine, so we only get
+// the eigenvalues here; the eigenvector comes from power iteration (C1).
+use nalgebra::DMatrix;
+
+fn main() {
+    let l = DMatrix::from_row_slice(4, 4, &[
+        0.0, 1.5, 4.0, 5.0,      // offspring per fish of each age
+        0.3, 0.0, 0.0, 0.0,      // survival to the next age
+        0.0, 0.6, 0.0, 0.0,
+        0.0, 0.0, 0.5, 0.0,
+    ]);
+    let mut ev: Vec<_> = l.complex_eigenvalues().iter().cloned().collect();
+    ev.sort_by(|a, b| b.norm().partial_cmp(&a.norm()).unwrap()); // largest |lambda| first
+    for z in &ev {
+        println!("{:.7} {:+.7}i   |lambda| = {:.7}", z.re, z.im, z.norm());
+    }
+}
+
+// Output:
+// 1.1773586 +0.0000000i   |lambda| = 1.1773586
+// -0.2662888 +0.7224040i   |lambda| = 0.7699203
+// -0.2662888 -0.7224040i   |lambda| = 0.7699203
+// -0.6447810 +0.0000000i   |lambda| = 0.6447810
+```
+
+:::
+
+R's [`eigen`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html) sorts by decreasing $|\lambda|$; numpy's [`np.linalg.eig`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eig.html) does **not** sort, so sort yourself. Both return complex numbers for a nonsymmetric matrix and eigenvectors of **length 1 with an arbitrary sign**: rescale before you interpret them. nalgebra's [`complex_eigenvalues`](https://docs.rs/nalgebra/latest/nalgebra/base/struct.Matrix.html#method.complex_eigenvalues) gives eigenvalues only; for eigenvectors of a nonsymmetric matrix the Rust code below uses power and inverse iteration, written by hand. Rust prints numbers in its own format; the values agree with R and Python to the digits shown unless the text says otherwise.
+
+## By hand
+
+**B1. A two-age-class plant.** A perennial plant has first-year plants (class 1) and older plants (class 2). First-year plants produce 0.6 seedlings each, older plants 0.9; 80 % of first-year plants survive to the next year, older plants all die:
+$$L = \begin{pmatrix} 0.6 & 0.9 \\ 0.8 & 0 \end{pmatrix}.$$
+(a) Find the characteristic polynomial and both eigenvalues.
+(b) Find an eigenvector for each eigenvalue, and check $L\mathbf v = \lambda\mathbf v$.
+(c) What are the long-term growth rate and the stable stage distribution (as proportions)?
+(d) What is $|\lambda_2/\lambda_1|$? About how many power iterations does one decimal digit take?
+
+**B2. Power iteration by hand.** Same plant, start with older plants only: $\mathbf x_0 = (0, 1)$.
+(a) Compute $\mathbf x_1, \dots, \mathbf x_4$ **without** normalising ($\mathbf x_{k} = L\mathbf x_{k-1}$). For each $k$, compute the growth of the total, $\text{sum}(\mathbf x_k)/\text{sum}(\mathbf x_{k-1})$, and its error compared with $\lambda_1$.
+(b) Compute the ratio of successive errors. What number does it approach, and why does the sign alternate?
+(c) Write $\mathbf x_0$ as a combination of the eigenvectors from B1 and use it to predict the proportion of first-year plants after 10 years. How far is it from the stable distribution?
+
+**B3. A biennial plant.** A biennial plant forms a rosette in its first year and flowers in its second year (4 seedlings per plant), then dies; 25 % of rosettes survive to flower: $L = \begin{pmatrix} 0 & 4 \\ 0.25 & 0 \end{pmatrix}$.
+(a) Find the eigenvalues. What is $|\lambda_2/\lambda_1|$?
+(b) Compute $L^2$. Starting from 100 rosettes, $\mathbf x_0 = (100, 0)$, what are $\mathbf x_1, \mathbf x_2, \mathbf x_3$? What does the power-iteration estimate $\text{sum}(\mathbf x_k)/\text{sum}(\mathbf x_{k-1})$ do?
+(c) What is the growth per **two** years? Is there a stable stage distribution?
+(d) In a variant, 10 % of first-year plants flower early (fertility 0.4 in class 1): $L = \begin{pmatrix} 0.4 & 4 \\ 0.25 & 0 \end{pmatrix}$. Find the eigenvalues and $|\lambda_2/\lambda_1|$. Does power iteration converge now?
+
+**B4. A two-state cell chain.** Cells switch between proliferating (P) and quiescent (Q). Per day, a proliferating cell becomes quiescent with probability 0.1, a quiescent cell becomes proliferating with probability 0.2:
+$$P = \begin{pmatrix} 0.9 & 0.1 \\ 0.2 & 0.8 \end{pmatrix}.$$
+(a) Find the stationary distribution $\boldsymbol\pi$ from $\boldsymbol\pi P = \boldsymbol\pi$ and $\pi_1 + \pi_2 = 1$.
+(b) The eigenvalues of $P$ (and of $P^T$) are 1 and $\text{trace}(P) - 1$. Why? What is $\lambda_2$?
+(c) Start with proliferating cells only, $\mathbf p_0 = (1, 0)$. Compute $\mathbf p_1, \mathbf p_2, \mathbf p_3$ and the error in the first entry. By what factor does it shrink each day?
+(d) How many days until the error is below 0.01?
+(e) Another cell type switches with probabilities 0.001 and 0.002. What is $\lambda_2$? In a simulation the proportions change by only $10^{-6}$ from one day to the next. Roughly how far from equilibrium are they?
+
+**B5. Rayleigh quotient.** $A = \begin{pmatrix} 5 & 2 \\ 2 & 2 \end{pmatrix}$ (a covariance matrix of two traits) has eigenvalues 6 and 1 with eigenvectors $(2, 1)$ and $(1, -2)$.
+(a) For $\mathbf x = (1, 0.45)$, compute $A\mathbf x$, the sum ratio $\text{sum}(A\mathbf x)/\text{sum}(\mathbf x)$ and the Rayleigh quotient $\mathbf x^TA\mathbf x/\mathbf x^T\mathbf x$. Give the error of each.
+(b) Repeat for $\mathbf x = (1, 0.495)$, which is 10 times closer to the eigenvector direction $(1, 0.5)$. By what factor did each error shrink?
+(c) Explain the difference in one sentence.
+
+**B6. Inverse iteration.** Use the plant matrix of B1 ($\lambda = 1.2, -0.6$).
+(a) For the shifts $\sigma = 1$, $\sigma = 0$ and $\sigma = -0.5$, give the eigenvalues of $(L - \sigma I)^{-1}$, the eigenvalue of $L$ that inverse iteration finds, and the convergence rate. Compare with plain power iteration.
+(b) Do one step of inverse iteration with $\sigma = 1$ from $\mathbf x_0 = (0, 1)$: solve $(L - I)\mathbf y = \mathbf x_0$ by hand and rescale $\mathbf y$ to proportions. Compare the error with one step of power iteration (B2).
+(c) What happens with the shift $\sigma = 1.2$ exactly? Would the result still be useful in exact arithmetic? In floating point?
+
+## In code
+
+**C1. Power iteration.** Write `power_it(A, x, tol, maxit)` that normalises by the sum, estimates $\lambda$ as the growth of the total, stops when the residual $\|A\mathbf x - \lambda\mathbf x\|$ falls below `tol`, and returns $\lambda$, $\mathbf x$, the number of iterations and the residual.
+(a) Apply it to the fish Leslie matrix (Background) starting from the stocked lake, $(0, 1000, 0, 0)$, with `tol = 1e-10`. Report the growth rate, the stable age distribution and the iteration count.
+(b) Compare with `eigen()` (Python: `np.linalg.eig`): how large are the differences in $\lambda_1$ and in the distribution?
+(c) Check your answers to B1 with the plant matrix.
+
+**C2. The convergence rate.** For the fish, run 60 power iterations from $(0, 1, 0, 0)$ and record the error in the estimate of $\lambda_1$ and the largest error in the age distribution (take `eigen()` as the truth).
+(a) Plot both errors against $k$ on a log scale (R: `plot(..., log = "y")`; Python: `plt.semilogy`).
+(b) Fit a straight line to $\log_{10}$(distribution error) for $k = 10, \dots, 50$ and compare its slope with $\log_{10}|\lambda_2/\lambda_1|$.
+(c) Predict how many iterations it takes to shrink an error of 1 to $10^{-10}$. Compare with C1.
+
+**C3. Failures.**
+(a) Make the semelparous fish of the lecture (first row $(0, 0, 0, 12)$). Print $|\lambda_i|$, run `power_it` with `maxit = 200`, and report the iteration count and the final residual.
+(b) Run `power_it` on the biennial plant of B3 and on its early-flowering variant. Compare with your hand answers.
+(c) Run 5000 steps of $\mathbf x \leftarrow L\mathbf x$ for the fish **without** normalising. What do you get, and after roughly how many steps does it go wrong?
+
+**C4. The stationary distribution of cell states.** Use the cell-state chain of the lecture, $P$ = `(0.80, 0.15, 0.05; 0.05, 0.90, 0.05; 0.05, 0.10, 0.85)` (rows S, B, L).
+(a) Find $\boldsymbol\pi$ three ways: 100 steps of $\mathbf p \leftarrow \mathbf pP$ from $(1, 0, 0)$; the eigenvector of $P^T$ from `eigen()`; and as a **linear system**: $(P^T - I)\boldsymbol\pi^T = \mathbf 0$ with the last equation replaced by $\pi_1 + \pi_2 + \pi_3 = 1$.
+(b) The slow chain $P_\text{slow} = I + 0.01(P - I)$: iterate from $(1, 0, 0)$ until the largest change in one step is below $10^{-8}$. Report the number of steps and the true error.
+(c) Estimate the rate $c$ from the last two changes and the remaining error from $\text{change}\cdot c/(1-c)$ (fact 6). Compare with the true error.
+
+**C5. Rayleigh quotient against sum ratio.** Run power iteration with 2-norm normalisation for 80 steps. At each step compute the sum ratio $\text{sum}(A\mathbf x)/\text{sum}(\mathbf x)$ and the Rayleigh quotient $\mathbf x^TA\mathbf x/\mathbf x^T\mathbf x$, and record the first iteration at which each is within $10^{-10}$ of $\lambda_1$. Do this for
+(a) the trait correlation matrix $C$ = `(1, 0.4, 0.3; 0.4, 1, 0.2; 0.3, 0.2, 1)` (symmetric), starting from $(1, 0, 0)$, and
+(b) the fish Leslie matrix, starting from $(0, 1, 0, 0)$.
+Explain the difference with fact 7.
+
+**C6. Inverse iteration with a shift.** Write `inv_it(A, sigma, x, tol, maxit)` that **factors $A - \sigma I$ once** (R: [`Matrix::lu`](https://search.r-project.org/CRAN/refmans/Matrix/html/lu-methods.html) and `solve`; Python: [`scipy.linalg.lu_factor`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_factor.html) and `lu_solve`), normalises in the 2-norm, estimates $\lambda$ with the Rayleigh quotient of $A$, and stops on the residual.
+(a) Find the stationary distribution of the **slow** chain with $\sigma = 1 + 10^{-6}$. How many iterations? Compare with C4(b).
+(b) Find $\lambda_2$ of $P^T$ and its eigenvector with $\sigma = 0.82$, then try $\sigma = 0.77$. Which eigenvalues do you get, in how many iterations? Explain with fact 8.
+(c) The deviation from equilibrium shrinks by $\lambda_2$ per day. How many days after sorting does it take to fall to 1 % of its initial size?
+
+**C7. Rayleigh quotient iteration.** Write `rqi(A, x, tol, maxit)`: at each step set the shift to the current Rayleigh quotient, print it with 16 digits together with the residual, stop when the residual is below $10^{-9}$, otherwise solve $(A - \sigma I)\mathbf y = \mathbf x$ and normalise.
+(a) Run it on $C$ from $(1, 1, 1)$. How does the residual fall from step to step?
+(b) Run it from $(1, 0, 0)$ and from $(1, -1, 0)$. Which eigenvalues do you get?
+(c) What happens if you lower the tolerance to $10^{-12}$ in (a)? Why?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — eigenvalues and eigenvectors of a 2 × 2 (B1, B3, B4, B5)"}
+$\det\begin{pmatrix} a-\lambda & b \\ c & d-\lambda\end{pmatrix} = (a-\lambda)(d-\lambda) - bc$. For an eigenvector, take the first row of $(A - \lambda I)\mathbf v = \mathbf 0$, $(a - \lambda)v_1 + bv_2 = 0$, and pick $v_1$ to make the numbers nice. To check, multiply $A\mathbf v$ and compare entry by entry with $\lambda\mathbf v$. For a Markov chain, $\boldsymbol\pi P = \boldsymbol\pi$ gives one useful equation, e.g. $0.1\pi_1 = 0.2\pi_2$ ("flow out of P = flow into P").
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — the convergence rate (B2, B4, C2)"}
+Error after $k$ steps $\approx C\,|\lambda_2/\lambda_1|^k$. To reach a factor $10^{-d}$ you need $k = d/\log_{10}|\lambda_1/\lambda_2|$ steps. For a straight-line fit of $\log_{10}$ error against $k$: R [`lm(log10(err) ~ k)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html), Python [`np.polyfit(k, np.log10(err), 1)`](https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html); the slope is the first coefficient in Python and the second in R.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — matrix products and the Markov chain (C1, C4)"}
+R: `A %*% x` is the matrix product; `drop()` turns a one-column matrix into a vector; for the row vector of proportions, `p %*% P`. `eigen(t(P))` gives the eigenvectors of $P^T$ as columns. Python: `A @ x`, `p @ P`, `np.linalg.eig(P.T)`. For the linear system, [`solve(M, b)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html) / [`np.linalg.solve`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.solve.html).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — inverse iteration (B6, C6, C7)"}
+$(L - \sigma I)\mathbf y = \mathbf x$ for a 2 × 2: $\begin{pmatrix} a & b \\ c & d\end{pmatrix}^{-1} = \dfrac{1}{ad - bc}\begin{pmatrix} d & -b \\ -c & a\end{pmatrix}$. In code, never form the inverse: factor once and solve. R: `F <- Matrix::lu(Matrix::Matrix(M))`, then `as.vector(solve(F, x))`. Python: `F = scipy.linalg.lu_factor(M)`, then [`scipy.linalg.lu_solve(F, x)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_solve.html). Rust: `let lu = m.lu();` then `lu.solve(&x)`. RQI changes the shift every step, so there it has to factor every step (`solve(A - sigma * diag(n), x)`).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — failure checks (C3, C4)"}
+`Mod()` (R) / `np.abs()` (Python) of the eigenvalues shows whether two have the same size. `power_it` returns the iteration count: if it equals `maxit`, it did not converge. In C4, keep all changes in a vector so you can divide the last one by the one before.
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $\det\begin{pmatrix} 0.6-\lambda & 0.9 \\ 0.8 & -\lambda\end{pmatrix} = \lambda^2 - 0.6\lambda - 0.72 = (\lambda - 1.2)(\lambda + 0.6)$, so $\lambda_1 = 1.2$, $\lambda_2 = -0.6$.
+(b) $\lambda_1 = 1.2$: $-0.6v_1 + 0.9v_2 = 0$, so $\mathbf v_1 = (3, 2)$; check $L\mathbf v_1 = (1.8 + 1.8, 2.4) = (3.6, 2.4) = 1.2\,(3, 2)$. $\lambda_2 = -0.6$: $1.2v_1 + 0.9v_2 = 0$, so $\mathbf v_2 = (3, -4)$; check $L\mathbf v_2 = (1.8 - 3.6, 2.4) = (-1.8, 2.4) = -0.6\,(3, -4)$.
+(c) Growth 20 % per year; stable distribution $(3, 2)/5 = (0.6, 0.4)$: 60 % first-year plants.
+(d) $0.6/1.2 = 0.5$; one digit takes $1/\log_{10} 2 = 3.3$ steps.
+
+**B2.**
+(a)
+
+| $k$ | $\mathbf x_k$ | sum | growth of total | error |
+|---|---|---|---|---|
+| 0 | $(0, 1)$ | 1 | | |
+| 1 | $(0.9, 0)$ | 0.9 | 0.9 | $-0.3$ |
+| 2 | $(0.54, 0.72)$ | 1.26 | 1.4 | $+0.2$ |
+| 3 | $(0.972, 0.432)$ | 1.404 | 1.1143 | $-0.0857$ |
+| 4 | $(0.972, 0.7776)$ | 1.7496 | 1.2462 | $+0.0462$ |
+
+(b) $0.2/(-0.3) = -0.67$, $-0.0857/0.2 = -0.43$, $0.0462/(-0.0857) = -0.54$: approaching $\lambda_2/\lambda_1 = -0.5$. The sign alternates because $\lambda_2$ is negative: the $\mathbf v_2$ component flips sign every year (a surplus of old plants one year, of young plants the next).
+(c) $(0, 1) = \tfrac16(3, 2) - \tfrac16(3, -4)$. So $\mathbf x_k = \tfrac16 1.2^k\big[(3, 2) - (-0.5)^k(3, -4)\big]$, and the proportions are $\big[(3,2) - (-0.5)^k(3,-4)\big]/\big(5 + (-0.5)^k\big)$. At $k = 10$, $(-0.5)^{10} = 1/1024$: first-year proportion $(3 - 0.00293)/5.00098 = 0.5993$, an error of $7\times10^{-4}$ (about $0.6\cdot 0.5^{10}$).
+
+**B3.**
+(a) $\lambda^2 - 1 = 0$: $\lambda = \pm 1$, so $|\lambda_2/\lambda_1| = 1$.
+(b) $L^2 = I$. $\mathbf x_1 = (0, 25)$, $\mathbf x_2 = (100, 0)$, $\mathbf x_3 = (0, 25)$: the population alternates between a rosette year and a flowering year. The estimate alternates between $25/100 = 0.25$ and $100/25 = 4$ and never converges.
+(c) Growth per two years is $\lambda^2 = 1$ (the population exactly replaces itself). There is no stable stage distribution that is reached: any start just cycles with period 2. (The eigenvector $(4, 1)/5$ for $\lambda = 1$ exists, but only a population that starts exactly in it stays there.)
+(d) $\lambda^2 - 0.4\lambda - 1 = 0$: $\lambda = (0.4 \pm \sqrt{4.16})/2 = 1.2198$ and $-0.8198$; $|\lambda_2/\lambda_1| = 0.672$. Now power iteration converges (about 5.8 steps per digit). A little early flowering breaks the cycle.
+
+**B4.**
+(a) $0.1\pi_1 = 0.2\pi_2$ and $\pi_1 + \pi_2 = 1$: $\boldsymbol\pi = (2/3, 1/3)$.
+(b) Every row of $P$ sums to 1, so $P(1, 1)^T = (1, 1)^T$: 1 is an eigenvalue. The eigenvalues add up to the trace, $1.7$, so $\lambda_2 = 0.7$. ($P$ and $P^T$ have the same eigenvalues.)
+(c) $\mathbf p_1 = (0.9, 0.1)$, $\mathbf p_2 = (0.83, 0.17)$, $\mathbf p_3 = (0.781, 0.219)$. Errors in the first entry: $0.2333, 0.1633, 0.1143$; each is $0.7$ times the previous: $\lambda_2$.
+(d) Error $= \tfrac13\,0.7^k < 0.01$ gives $0.7^k < 0.03$, $k > \log 0.03/\log 0.7 = 9.8$: 10 days.
+(e) $\lambda_2 = 1 - 0.001 - 0.002 = 0.997$. Error $\approx 10^{-6}\cdot 0.997/0.003 \approx 3.3\times10^{-4}$: more than 300 times the change per step.
+
+**B5.**
+(a) $A\mathbf x = (5.9, 2.9)$. Sum ratio $8.8/1.45 = 6.069$ (error $0.069$). Rayleigh quotient: $\mathbf x^TA\mathbf x = 5.9 + 1.305 = 7.205$, $\mathbf x^T\mathbf x = 1.2025$, $R = 5.9917$ (error $0.0083$).
+(b) $A\mathbf x = (5.99, 2.99)$. Sum ratio $8.98/1.495 = 6.0067$ (error $0.0067$, 10 times smaller). Rayleigh quotient: $(5.99 + 1.48005)/1.245025 = 5.99992$ (error $8.0\times10^{-5}$, 100 times smaller).
+(c) $A$ is symmetric, so its eigenvectors are orthogonal and the first-order error in the Rayleigh quotient cancels: error $\delta$ in the vector gives error $\propto\delta^2$ in $R$, but $\propto\delta$ in the sum ratio.
+
+**B6.**
+(a) Eigenvalues of $(L - \sigma I)^{-1}$ are $1/(1.2 - \sigma)$ and $1/(-0.6 - \sigma)$.
+
+| $\sigma$ | eigenvalues of $(L - \sigma I)^{-1}$ | finds | rate |
+|---|---|---|---|
+| power iteration | — | 1.2 | $0.6/1.2 = 0.5$ |
+| 1 | $5$, $-0.625$ | 1.2 | $0.2/1.6 = 0.125$ |
+| 0 | $0.833$, $-1.667$ | $-0.6$ | $0.6/1.2 = 0.5$ |
+| $-0.5$ | $0.588$, $-10$ | $-0.6$ | $0.1/1.7 = 0.059$ |
+
+(b) $L - I = \begin{pmatrix} -0.4 & 0.9 \\ 0.8 & -1 \end{pmatrix}$, determinant $0.4 - 0.72 = -0.32$. $\mathbf y = \frac{1}{-0.32}\begin{pmatrix} -1 & -0.9 \\ -0.8 & -0.4\end{pmatrix}\begin{pmatrix}0\\1\end{pmatrix} = \frac{(-0.9, -0.4)}{-0.32} = (2.8125, 1.25)$. Proportions $(0.6923, 0.3077)$: error $0.092$, down from $0.6$ (a factor 0.15, close to the rate 0.125). One step of power iteration gave $(1, 0)$, error $0.4$.
+(c) $L - 1.2I$ is singular: the system has no unique solution, and in exact arithmetic the method breaks down. In floating point the matrix is only *nearly* singular (rounding in $\sigma$ and in the elimination); the solution is huge but points almost exactly along $\mathbf v_1$, so after normalising it is an excellent eigenvector (lecture slide "Shift exactly at the eigenvalue?"). R's `solve` refuses with "system is computationally singular"; a shift of $1.2 + 10^{-12}$ avoids that.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+power_it <- function(A, x, tol = 1e-10, maxit = 1000) {
+  x <- x / sum(x)
+  for (k in 1:maxit) {
+    y <- drop(A %*% x)
+    lambda <- sum(y)                     # growth factor of the total
+    r <- sqrt(sum((y - lambda * x)^2))   # residual ||Ax - lambda x||
+    x <- y / lambda                      # normalise: proportions
+    if (r < tol) break
+  }
+  list(lambda = lambda, x = x, k = k, r = r)
+}
+out <- power_it(L, c(0, 1000, 0, 0))
+out$lambda; out$x; out$k; out$r
+# [1] 1.177359
+# [1] 0.69453711 0.17697339 0.09018836 0.03830114
+# [1] 55
+# [1] 6.106086e-11
+ev <- eigen(L)
+lam1 <- Re(ev$values[1])
+v <- Re(ev$vectors[, 1]);  v <- v / sum(v)
+c(abs(out$lambda - lam1), max(abs(out$x - v)))
+# [1] 3.995249e-11 1.306152e-11
+plant <- matrix(c(0.6, 0.9,
+                  0.8, 0.0), 2, byrow = TRUE)
+o2 <- power_it(plant, c(0, 1));  o2$lambda;  o2$x;  o2$k
+# [1] 1.2
+# [1] 0.6 0.4
+# [1] 36
+```
+
+### Python
+
+```python
+def power_it(A, x, tol=1e-10, maxit=1000):
+    x = np.asarray(x, dtype=float)
+    x = x / x.sum()
+    for k in range(1, maxit + 1):
+        y = A @ x
+        lam = y.sum()                      # growth factor of the total
+        r = np.linalg.norm(y - lam * x)    # residual ||Ax - lambda x||
+        x = y / lam                        # normalise: proportions
+        if r < tol:
+            break
+    return lam, x, k, r
+
+lam, x, k, r = power_it(L, [0, 1000, 0, 0])
+print(lam, x, k, r)
+# 1.177358562492074 [0.69453711 0.17697339 0.09018836 0.03830114] 55 6.10605739549467e-11
+vals, vecs = np.linalg.eig(L)
+i = np.argmax(np.abs(vals))
+lam1 = vals[i].real
+v = vecs[:, i].real; v = v / v.sum()
+print(abs(lam - lam1), np.max(np.abs(x - v)))
+# 3.9952929853370733e-11 1.306149632895881e-11
+plant = np.array([[0.6, 0.9],
+                  [0.8, 0.0]])
+lam2, x2, k2, r2 = power_it(plant, [0, 1])
+print(lam2, x2, k2)
+# 1.2000000000104774 [0.6 0.4] 36
+```
+
+### Rust
+
+```rust
+// rust/examples/power_iteration_c1.rs  —  cargo run --example power_iteration_c1
+// C1: power iteration for the fish Leslie matrix and the 2 x 2 plant.
+use nalgebra::{DMatrix, DVector};
+
+// returns (lambda, x, iterations, residual)
+fn power_it(a: &DMatrix<f64>, x0: &[f64], tol: f64, maxit: usize) -> (f64, DVector<f64>, usize, f64) {
+    let mut x = DVector::from_row_slice(x0);
+    x /= x.sum();
+    let (mut lambda, mut r, mut k) = (0.0, f64::INFINITY, 0);
+    while k < maxit {
+        k += 1;
+        let y = a * &x;
+        lambda = y.sum();                       // growth factor of the total
+        r = (&y - lambda * &x).norm();          // residual ||Ax - lambda x||
+        x = y / lambda;                         // normalise: proportions
+        if r < tol {
+            break;
+        }
+    }
+    (lambda, x, k, r)
+}
+
+fn main() {
+    let l = DMatrix::from_row_slice(4, 4, &[
+        0.0, 1.5, 4.0, 5.0,
+        0.3, 0.0, 0.0, 0.0,
+        0.0, 0.6, 0.0, 0.0,
+        0.0, 0.0, 0.5, 0.0,
+    ]);
+    let (lam, x, k, r) = power_it(&l, &[0.0, 1000.0, 0.0, 0.0], 1e-10, 1000);
+    println!("{} {:.8?} {} {:e}", lam, x.as_slice(), k, r);
+    // compare with the largest eigenvalue from nalgebra (eigenvalues only)
+    let lam1 = l.complex_eigenvalues().iter().map(|z| z.re).fold(f64::MIN, f64::max);
+    println!("{:e}", (lam - lam1).abs());
+
+    let plant = DMatrix::from_row_slice(2, 2, &[0.6, 0.9, 0.8, 0.0]);
+    let (lam, x, k, _) = power_it(&plant, &[0.0, 1.0], 1e-10, 1000);
+    println!("{} {:?} {}", lam, x.as_slice(), k);
+}
+
+// Output:
+// 1.177358562492074 [0.69453711, 0.17697339, 0.09018836, 0.03830114] 55 6.10607297211099e-11
+// 3.9957370745469234e-11
+// 1.2000000000104776 [0.5999999999895226, 0.40000000001047736] 36
+```
+
+:::
+
+The long-term growth rate is $\lambda_1 = 1.1774$ (17.7 % per year) and the stable age distribution is 69.5 % age 0, 17.7 % age 1, 9.0 % age 2, 3.8 % age 3, reached in 55 iterations. The differences from `eigen()` are about $4\times10^{-11}$ and $10^{-11}$: the residual tolerance $10^{-10}$ translates into an error of the same order. The plant gives $\lambda_1 = 1.2$ and $(0.6, 0.4)$, as in B1; it needs 36 iterations because its rate is 0.5 (3.3 steps per digit, about 33 for 10 digits). (The Rust code has no nonsymmetric eigenvector routine to compare the distribution with; C2 uses many power steps as the reference instead.)
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+ev <- eigen(L);  lam1 <- Re(ev$values[1])
+v <- Re(ev$vectors[, 1]);  v <- v / sum(v)
+K <- 60;  err_l <- err_x <- numeric(K)
+x <- c(0, 1, 0, 0)
+for (k in 1:K) {
+  y <- drop(L %*% x)
+  err_l[k] <- abs(sum(y) - lam1)
+  x <- y / sum(y)
+  err_x[k] <- max(abs(x - v))
+}
+plot(1:K, err_x, log = "y", type = "o", xlab = "iteration", ylab = "error")
+lines(1:K, err_l, type = "o", col = "orange")
+k <- 10:50
+coef(lm(log10(err_x[k]) ~ k))[2]           # measured slope
+#          k
+# -0.1848601
+log10(Mod(ev$values[2]) / lam1)            # predicted slope
+# [1] -0.184463
+log(1e-10) / log(Mod(ev$values[2]) / lam1) # steps to shrink an error of 1 to 1e-10
+# [1] 54.21142
+```
+
+### Python
+
+```python
+import matplotlib.pyplot as plt
+
+vals, vecs = np.linalg.eig(L)
+order = np.argsort(-np.abs(vals)); vals, vecs = vals[order], vecs[:, order]
+lam1 = vals[0].real
+v = vecs[:, 0].real; v = v / v.sum()
+K = 60
+err_l = np.zeros(K); err_x = np.zeros(K)
+x = np.array([0, 1, 0, 0.0])
+for k in range(K):
+    y = L @ x
+    err_l[k] = abs(y.sum() - lam1)
+    x = y / y.sum()
+    err_x[k] = np.max(np.abs(x - v))
+plt.semilogy(range(1, K + 1), err_x, "o-", range(1, K + 1), err_l, "^-")
+plt.xlabel("iteration"); plt.ylabel("error"); plt.show()
+k = np.arange(10, 51)
+print(np.polyfit(k, np.log10(err_x[k - 1]), 1)[0])   # measured slope
+# -0.1848600759557397
+print(np.log10(abs(vals[1]) / lam1))                  # predicted slope
+# -0.18446296884419802
+print(np.log(1e-10) / np.log(abs(vals[1]) / lam1))
+# 54.21142282734399
+```
+
+### Rust
+
+```rust
+// rust/examples/power_iteration_c2.rs  —  cargo run --example power_iteration_c2
+// C2: error per iteration and the measured convergence rate.
+use nalgebra::{DMatrix, DVector};
+
+fn main() {
+    let l = DMatrix::from_row_slice(4, 4, &[
+        0.0, 1.5, 4.0, 5.0,
+        0.3, 0.0, 0.0, 0.0,
+        0.0, 0.6, 0.0, 0.0,
+        0.0, 0.0, 0.5, 0.0,
+    ]);
+    // "exact" answer: many power steps (nalgebra has no nonsymmetric eigenvectors)
+    let mut v = DVector::from_row_slice(&[0.25, 0.25, 0.25, 0.25]);
+    for _ in 0..500 {
+        v = &l * &v;
+        v /= v.sum();
+    }
+    let mut ev: Vec<f64> = l.complex_eigenvalues().iter().map(|z| z.norm()).collect();
+    ev.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    let ratio = ev[1] / ev[0];
+
+    let kmax = 60;
+    let mut err_x = vec![0.0; kmax];
+    let mut x = DVector::from_row_slice(&[0.0, 1.0, 0.0, 0.0]);
+    for k in 0..kmax {
+        let y = &l * &x;
+        x = &y / y.sum();
+        err_x[k] = (&x - &v).amax();             // max |x - v|
+    }
+    // least-squares slope of log10(error) against k for k = 10..50
+    let ks: Vec<f64> = (10..=50).map(|k| k as f64).collect();
+    let es: Vec<f64> = (10..=50).map(|k| err_x[k - 1].log10()).collect();
+    let (mk, me) = (ks.iter().sum::<f64>() / 41.0, es.iter().sum::<f64>() / 41.0);
+    let slope = ks.iter().zip(&es).map(|(k, e)| (k - mk) * (e - me)).sum::<f64>()
+        / ks.iter().map(|k| (k - mk).powi(2)).sum::<f64>();
+    println!("{}", slope);                          // measured slope
+    println!("{}", ratio.log10());                  // predicted slope
+    println!("{}", 1e-10f64.ln() / ratio.ln());
+}
+
+// Output:
+// -0.18486007627020512
+// -0.184462968844199
+// 54.2114228273437
+```
+
+:::
+
+Both errors fall along a straight line on the log scale (the plot looks like the lecture's "How fast?" figure), with wiggles because $\lambda_2$ is complex. The measured slope $-0.1849$ matches $\log_{10}|\lambda_2/\lambda_1| = -0.1845$. The prediction of 54 iterations matches the 55 of C1 (the constant in front of $|\lambda_2/\lambda_1|^k$ is of order 1 here).
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+Ls <- L;  Ls[1, ] <- c(0, 0, 0, 12)
+Mod(eigen(Ls)$values)
+# [1] 1.019427 1.019427 1.019427 1.019427
+o <- power_it(Ls, c(0, 1, 0, 0), maxit = 200);  c(o$k, o$r)
+# [1] 200.0000000   0.4242641
+biennial <- matrix(c(0,    4,
+                     0.25, 0), 2, byrow = TRUE)
+o <- power_it(biennial, c(1, 0), maxit = 200);  c(o$k, o$lambda, o$r)
+# [1] 200.000000   4.000000   5.656854
+early <- matrix(c(0.4,  4,
+                  0.25, 0), 2, byrow = TRUE)
+eigen(early)$values
+# [1]  1.2198039 -0.8198039
+o <- power_it(early, c(1, 0));  c(o$k, o$lambda, o$r)
+# [1] 5.800000e+01 1.219804e+00 9.907570e-11
+x <- c(0, 1, 0, 0)
+for (k in 1:5000) x <- L %*% x
+drop(x)
+# [1] NaN NaN NaN NaN
+```
+
+### Python
+
+```python
+Ls = L.copy(); Ls[0, :] = [0, 0, 0, 12]
+print(np.abs(np.linalg.eigvals(Ls)))
+# [1.01942655 1.01942655 1.01942655 1.01942655]
+lam, x, k, r = power_it(Ls, [0, 1, 0, 0], maxit=200); print(k, r)
+# 200 0.4242640687119285
+biennial = np.array([[0, 4], [0.25, 0]])
+lam, x, k, r = power_it(biennial, [1, 0], maxit=200); print(k, lam, r)
+# 200 4.0 5.656854249492381
+early = np.array([[0.4, 4], [0.25, 0]])
+print(np.linalg.eigvals(early))
+# [ 1.2198039 -0.8198039]
+lam, x, k, r = power_it(early, [1, 0]); print(k, lam, r)
+# 58 1.2198039028336238 9.907569956169108e-11
+x = np.array([0, 1, 0, 0.0])
+for k in range(5000):
+    x = L @ x
+print(x)
+# [nan nan nan nan]                   (plus RuntimeWarnings: overflow, invalid value)
+```
+
+### Rust
+
+```rust
+// rust/examples/power_iteration_c3.rs  —  cargo run --example power_iteration_c3
+// C3: power iteration fails when |lambda2| = |lambda1|; and why we normalise.
+use nalgebra::{DMatrix, DVector};
+
+fn power_it(a: &DMatrix<f64>, x0: &[f64], tol: f64, maxit: usize) -> (f64, usize, f64) {
+    let mut x = DVector::from_row_slice(x0);
+    x /= x.sum();
+    let (mut lambda, mut r, mut k) = (0.0, f64::INFINITY, 0);
+    while k < maxit {
+        k += 1;
+        let y = a * &x;
+        lambda = y.sum();
+        r = (&y - lambda * &x).norm();
+        x = y / lambda;
+        if r < tol {
+            break;
+        }
+    }
+    (lambda, k, r)
+}
+
+fn main() {
+    let ls = DMatrix::from_row_slice(4, 4, &[
+        0.0, 0.0, 0.0, 12.0,                         // spawn once, at age 3
+        0.3, 0.0, 0.0, 0.0,
+        0.0, 0.6, 0.0, 0.0,
+        0.0, 0.0, 0.5, 0.0,
+    ]);
+    let m: Vec<f64> = ls.complex_eigenvalues().iter().map(|z| z.norm()).collect();
+    println!("{:?}", m);
+    let (_, k, r) = power_it(&ls, &[0.0, 1.0, 0.0, 0.0], 1e-10, 200);
+    println!("{} {}", k, r);
+    let biennial = DMatrix::from_row_slice(2, 2, &[0.0, 4.0, 0.25, 0.0]);
+    println!("{:?}", power_it(&biennial, &[1.0, 0.0], 1e-10, 200));
+    let early = DMatrix::from_row_slice(2, 2, &[0.4, 4.0, 0.25, 0.0]);
+    println!("{:?}", early.complex_eigenvalues().iter().map(|z| z.re).collect::<Vec<f64>>());
+    println!("{:?}", power_it(&early, &[1.0, 0.0], 1e-10, 1000));
+
+    let l = DMatrix::from_row_slice(4, 4, &[
+        0.0, 1.5, 4.0, 5.0,
+        0.3, 0.0, 0.0, 0.0,
+        0.0, 0.6, 0.0, 0.0,
+        0.0, 0.0, 0.5, 0.0,
+    ]);
+    let mut x = DVector::from_row_slice(&[0.0, 1.0, 0.0, 0.0]);
+    for _ in 0..5000 {
+        x = &l * &x;                                 // no normalisation
+    }
+    println!("{:?}", x.as_slice());
+}
+
+// Output:
+// [1.0194265469082844, 1.0194265469082844, 1.0194265469082695, 1.0194265469082695]
+// 200 0.4242640687119285
+// (4.0, 200, 5.656854249492381)
+// [1.219803902718557, -0.8198039027185569]
+// (1.2198039028336238, 58, 9.907569956169108e-11)
+// [NaN, NaN, NaN, NaN]
+```
+
+:::
+
+(a) All four eigenvalues have modulus $1.0194 = 1.08^{1/4}$; power iteration stops at `maxit` with a residual of 0.42, nowhere near the tolerance. (b) The biennial plant cycles too (the last estimate happens to be 4, the residual is 5.7), exactly as in B3; with early flowering it converges to $\lambda_1 = 1.2198$ in 58 iterations, consistent with the rate 0.672 (about 5.8 steps per digit). (c) Without normalisation the entries grow like $1.177^k$ and overflow to `Inf` after about $709.8/\ln 1.177 \approx 4350$ steps; the next product then contains $0\cdot\infty$ and $\infty - \infty$, so everything becomes `NaN`. numpy warns, R and Rust do not.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+P <- matrix(c(0.80, 0.15, 0.05,
+              0.05, 0.90, 0.05,
+              0.05, 0.10, 0.85), 3, byrow = TRUE)
+p <- c(1, 0, 0)
+for (day in 1:100) p <- p %*% P
+drop(p)
+# [1] 0.20 0.55 0.25
+e <- eigen(t(P))
+pi_e <- Re(e$vectors[, 1]);  pi_e / sum(pi_e)
+# [1] 0.20 0.55 0.25
+M <- t(P) - diag(3);  M[3, ] <- 1          # replace one equation by sum(pi) = 1
+solve(M, c(0, 0, 1))
+# [1] 0.20 0.55 0.25
+Pslow <- diag(3) + 0.01 * (P - diag(3))
+p <- c(1, 0, 0);  change <- numeric(0)
+for (k in 1:1e5) {
+  p_new <- drop(p %*% Pslow)
+  change[k] <- max(abs(p_new - p));  p <- p_new
+  if (change[k] < 1e-8) break
+}
+k
+# [1] 5406
+c_est <- change[k] / change[k - 1];  c_est
+# [1] 0.998
+change[k] * c_est / (1 - c_est)            # estimated error
+# [1] 4.984783e-06
+max(abs(p - c(0.2, 0.55, 0.25)))           # true error
+# [1] 4.984782e-06
+```
+
+### Python
+
+```python
+P = np.array([[0.80, 0.15, 0.05],
+              [0.05, 0.90, 0.05],
+              [0.05, 0.10, 0.85]])
+p = np.array([1.0, 0, 0])
+for day in range(100):
+    p = p @ P
+print(p)
+# [0.2  0.55 0.25]
+vals, vecs = np.linalg.eig(P.T)
+i = np.argmax(np.abs(vals))
+pi_e = vecs[:, i].real; print(pi_e / pi_e.sum())
+# [0.2  0.55 0.25]
+M = P.T - np.eye(3); M[2, :] = 1           # replace one equation by sum(pi) = 1
+print(np.linalg.solve(M, [0, 0, 1]))
+# [0.2  0.55 0.25]
+Pslow = np.eye(3) + 0.01 * (P - np.eye(3))
+p = np.array([1.0, 0, 0]); change = []
+for k in range(1, 100001):
+    p_new = p @ Pslow
+    change.append(np.max(np.abs(p_new - p))); p = p_new
+    if change[-1] < 1e-8:
+        break
+print(k)
+# 5406
+c_est = change[-1] / change[-2]; print(c_est)
+# 0.9980000000942788
+print(change[-1] * c_est / (1 - c_est))    # estimated error
+# 4.984782676381614e-06
+print(np.max(np.abs(p - [0.2, 0.55, 0.25])))  # true error
+# 4.9847824174775734e-06
+```
+
+### Rust
+
+```rust
+// rust/examples/power_iteration_c4.rs  —  cargo run --example power_iteration_c4
+// C4: stationary distribution of the cell-state chain three ways; the slow chain.
+use nalgebra::{DMatrix, RowDVector};
+
+fn main() {
+    let p = DMatrix::from_row_slice(3, 3, &[
+        0.80, 0.15, 0.05,
+        0.05, 0.90, 0.05,
+        0.05, 0.10, 0.85,
+    ]);
+    let mut d = RowDVector::from_row_slice(&[1.0, 0.0, 0.0]);   // row vector
+    for _ in 0..100 {
+        d = &d * &p;
+    }
+    println!("{:?}", d.as_slice());
+    // linear system: (P^T - I) pi = 0 with the last equation replaced by sum(pi) = 1
+    let mut m = p.transpose() - DMatrix::<f64>::identity(3, 3);
+    m.row_mut(2).fill(1.0);
+    let pi = m.lu().solve(&nalgebra::DVector::from_row_slice(&[0.0, 0.0, 1.0])).unwrap();
+    println!("{:?}", pi.as_slice());
+
+    let pslow = DMatrix::<f64>::identity(3, 3) + 0.01 * (&p - DMatrix::<f64>::identity(3, 3));
+    let mut d = RowDVector::from_row_slice(&[1.0, 0.0, 0.0]);
+    let mut change: Vec<f64> = Vec::new();
+    let mut k = 0;
+    while k < 100_000 {
+        k += 1;
+        let d_new = &d * &pslow;
+        change.push((&d_new - &d).amax());
+        d = d_new;
+        if *change.last().unwrap() < 1e-8 {
+            break;
+        }
+    }
+    println!("{}", k);
+    let n = change.len();
+    let c_est = change[n - 1] / change[n - 2];
+    println!("{}", c_est);
+    println!("{:e}", change[n - 1] * c_est / (1.0 - c_est));        // estimated error
+    let truth = RowDVector::from_row_slice(&[0.2, 0.55, 0.25]);
+    println!("{:e}", (&d - truth).amax());                           // true error
+}
+
+// Output:
+// [0.20000000000025706, 0.5500000000506705, 0.24999999994907462]
+// [0.19999999999999996, 0.5500000000000002, 0.24999999999999986]
+// 5406
+// 0.9980000000942788
+// 4.984782676381614e-6
+// 4.984782417977174e-6
+```
+
+:::
+
+(a) All three routes give $\boldsymbol\pi = (0.20, 0.55, 0.25)$. (The Rust output shows all digits: after 100 days the simulation is still $5\times10^{-11}$ off, as $0.8^{100} = 2\times10^{-10}$ predicts; R and numpy print fewer digits.) The linear-system route is exact up to rounding and is the method of choice for a small chain; it needs one equation replaced because $P^T - I$ is singular. (b) The slow chain stops after 5406 steps with a true error of $5.0\times10^{-6}$, 500 times the tolerance. (c) The ratio of the last two changes is $0.998 = \lambda_2$, and $\text{change}\cdot c/(1-c)$ reproduces the true error almost exactly. This is the check to run whenever an iteration converges slowly.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+C <- matrix(c(1.0, 0.4, 0.3,
+              0.4, 1.0, 0.2,
+              0.3, 0.2, 1.0), 3)
+compare <- function(A, x, lam1, K = 80) {
+  e_sum <- e_rq <- numeric(K)
+  for (k in 1:K) {
+    y <- drop(A %*% x)
+    e_sum[k] <- abs(sum(y) / sum(x) - lam1)
+    e_rq[k]  <- abs(sum(x * y) / sum(x * x) - lam1)
+    x <- y / sqrt(sum(y^2))
+  }
+  c(sum_ratio = which(e_sum < 1e-10)[1], rayleigh = which(e_rq < 1e-10)[1])
+}
+compare(C, c(1, 0, 0), eigen(C)$values[1])
+# sum_ratio  rayleigh
+#        29        16
+compare(L, c(0, 1, 0, 0), Re(eigen(L)$values[1]))
+# sum_ratio  rayleigh
+#        53        53
+```
+
+### Python
+
+```python
+C = np.array([[1.0, 0.4, 0.3],
+              [0.4, 1.0, 0.2],
+              [0.3, 0.2, 1.0]])
+def compare(A, x, lam1, K=80):
+    x = np.asarray(x, dtype=float)
+    e_sum = np.zeros(K); e_rq = np.zeros(K)
+    for k in range(K):
+        y = A @ x
+        e_sum[k] = abs(y.sum() / x.sum() - lam1)
+        e_rq[k] = abs(x @ y / (x @ x) - lam1)
+        x = y / np.linalg.norm(y)
+    first = lambda e: int(np.argmax(e < 1e-10)) + 1 if np.any(e < 1e-10) else None
+    return first(e_sum), first(e_rq)
+print(compare(C, [1, 0, 0], np.linalg.eigvalsh(C).max()))
+# (29, 16)
+print(compare(L, [0, 1, 0, 0], np.abs(np.linalg.eigvals(L)).max()))
+# (53, 53)
+```
+
+### Rust
+
+```rust
+// rust/examples/power_iteration_c5.rs  —  cargo run --example power_iteration_c5
+// C5: sum ratio against Rayleigh quotient, symmetric and nonsymmetric.
+use nalgebra::{DMatrix, DVector};
+
+// first iteration at which each estimate is within 1e-10 of lam1
+fn compare(a: &DMatrix<f64>, x0: &[f64], lam1: f64, kmax: usize) -> (Option<usize>, Option<usize>) {
+    let mut x = DVector::from_row_slice(x0);
+    let (mut first_sum, mut first_rq) = (None, None);
+    for k in 1..=kmax {
+        let y = a * &x;
+        let e_sum = (y.sum() / x.sum() - lam1).abs();
+        let e_rq = (x.dot(&y) / x.dot(&x) - lam1).abs();
+        if e_sum < 1e-10 && first_sum.is_none() { first_sum = Some(k); }
+        if e_rq < 1e-10 && first_rq.is_none() { first_rq = Some(k); }
+        x = &y / y.norm();
+    }
+    (first_sum, first_rq)
+}
+
+fn main() {
+    let c = DMatrix::from_row_slice(3, 3, &[1.0, 0.4, 0.3, 0.4, 1.0, 0.2, 0.3, 0.2, 1.0]);
+    let lam_c = c.clone().symmetric_eigen().eigenvalues.max();
+    println!("{:?}", compare(&c, &[1.0, 0.0, 0.0], lam_c, 80));
+    let l = DMatrix::from_row_slice(4, 4, &[
+        0.0, 1.5, 4.0, 5.0,
+        0.3, 0.0, 0.0, 0.0,
+        0.0, 0.6, 0.0, 0.0,
+        0.0, 0.0, 0.5, 0.0,
+    ]);
+    let lam_l = l.complex_eigenvalues().iter().map(|z| z.norm()).fold(0.0, f64::max);
+    println!("{:?}", compare(&l, &[0.0, 1.0, 0.0, 0.0], lam_l, 80));
+}
+
+// Output:
+// (Some(29), Some(16))
+// (Some(53), Some(53))
+```
+
+:::
+
+For the symmetric $C$ ($|\lambda_2/\lambda_1| = 0.505$), the Rayleigh quotient reaches $10^{-10}$ in 16 iterations, the sum ratio needs 29: about half, because the Rayleigh error falls like $0.505^{2k}$ (fact 7). For the nonsymmetric Leslie matrix both need 53: its eigenvectors are not orthogonal, so the first-order error does not cancel. (For symmetric matrices `eigen(C, symmetric = TRUE)` / [`np.linalg.eigvalsh`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvalsh.html) / nalgebra's `symmetric_eigen` use a faster, more accurate algorithm; *How `eigen()` works, and big problems* explains why.)
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+library(Matrix)
+inv_it <- function(A, sigma, x, tol = 1e-12, maxit = 100) {
+  F <- lu(Matrix(A - sigma * diag(nrow(A))))   # factor once
+  for (k in 1:maxit) {
+    y <- as.vector(solve(F, x))                # cheap solve each step
+    x <- y / sqrt(sum(y^2))
+    Ax <- drop(A %*% x)
+    lambda <- sum(x * Ax)
+    r <- sqrt(sum((Ax - lambda * x)^2))
+    if (r < tol) break
+  }
+  list(lambda = lambda, x = x, k = k, r = r)
+}
+Pslow <- diag(3) + 0.01 * (P - diag(3))
+o <- inv_it(t(Pslow), 1 + 1e-6, c(1, 0, 0));  o$k;  o$x / sum(o$x)
+# [1] 3
+# [1] 0.20 0.55 0.25
+for (s in c(0.82, 0.77)) {
+  o <- inv_it(t(P), s, c(1, 0, 0))
+  cat(s, o$k, o$lambda, round(o$x, 4), "\n")
+}
+# 0.82 21 0.8 0 -0.7071 0.7071
+# 0.77 58 0.75 0.7071 -0.7071 0
+log(0.01) / log(0.8)                           # days to 1 % of the deviation
+# [1] 20.6377
+```
+
+### Python
+
+```python
+from scipy.linalg import lu_factor, lu_solve
+
+def inv_it(A, sigma, x, tol=1e-12, maxit=100):
+    F = lu_factor(A - sigma * np.eye(A.shape[0]))   # factor once
+    x = np.asarray(x, dtype=float)
+    for k in range(1, maxit + 1):
+        y = lu_solve(F, x)                          # cheap solve each step
+        x = y / np.linalg.norm(y)
+        Ax = A @ x
+        lam = x @ Ax
+        r = np.linalg.norm(Ax - lam * x)
+        if r < tol:
+            break
+    return lam, x, k, r
+
+Pslow = np.eye(3) + 0.01 * (P - np.eye(3))
+lam, x, k, r = inv_it(Pslow.T, 1 + 1e-6, [1, 0, 0]); print(k, x / x.sum())
+# 3 [0.2  0.55 0.25]
+for s in [0.82, 0.77]:
+    lam, x, k, r = inv_it(P.T, s, [1, 0, 0])
+    print(s, k, lam, np.round(x, 4))
+# 0.82 21 0.8000000000003004 [-0.     -0.7071  0.7071]
+# 0.77 58 0.7499999999995218 [ 0.7071 -0.7071 -0.    ]
+print(np.log(0.01) / np.log(0.8))
+# 20.637702317032343
+```
+
+### Rust
+
+```rust
+// rust/examples/power_iteration_c6.rs  —  cargo run --example power_iteration_c6
+// C6: inverse iteration with a shift; LU factorisation computed once.
+use nalgebra::{DMatrix, DVector};
+
+fn inv_it(a: &DMatrix<f64>, sigma: f64, x0: &[f64], tol: f64, maxit: usize) -> (f64, DVector<f64>, usize) {
+    let n = a.nrows();
+    let lu = (a - sigma * DMatrix::<f64>::identity(n, n)).lu();   // factor once
+    let mut x = DVector::from_row_slice(x0);
+    let (mut lambda, mut k) = (0.0, 0);
+    while k < maxit {
+        k += 1;
+        let y = lu.solve(&x).expect("singular matrix");             // cheap solve each step
+        x = &y / y.norm();
+        let ax = a * &x;
+        lambda = x.dot(&ax);
+        if (&ax - lambda * &x).norm() < tol {
+            break;
+        }
+    }
+    (lambda, x, k)
+}
+
+fn main() {
+    let p = DMatrix::from_row_slice(3, 3, &[
+        0.80, 0.15, 0.05,
+        0.05, 0.90, 0.05,
+        0.05, 0.10, 0.85,
+    ]);
+    let id = DMatrix::<f64>::identity(3, 3);
+    let pslow = &id + 0.01 * (&p - &id);
+    let (_, x, k) = inv_it(&pslow.transpose(), 1.0 + 1e-6, &[1.0, 0.0, 0.0], 1e-12, 100);
+    println!("{} {:?}", k, (&x / x.sum()).as_slice());
+    for s in [0.82, 0.77] {
+        let (lam, x, k) = inv_it(&p.transpose(), s, &[1.0, 0.0, 0.0], 1e-12, 100);
+        let xr: Vec<f64> = x.iter().map(|v| (v * 1e4).round() / 1e4).collect();
+        println!("{} {} {} {:?}", s, k, lam, xr);
+    }
+    println!("{}", 0.01f64.ln() / 0.8f64.ln());
+}
+
+// Output:
+// 3 [0.20000000005113747, 0.5499999999800605, 0.24999999996880207]
+// 0.82 21 0.8000000000003004 [-0.0, -0.7071, 0.7071]
+// 0.77 58 0.749999999999522 [0.7071, -0.7071, -0.0]
+// 20.637702317032343
+```
+
+:::
+
+(a) Three solves give the stationary distribution of the slow chain to about 10 digits, against 5406 steps and 5 digits for plain iteration in C4(b). The rate is $10^{-6}/(0.002 + 10^{-6}) = 5\times10^{-4}$. (b) $\sigma = 0.82$ gives $\lambda_2 = 0.8$ with eigenvector $(0, -1, 1)/\sqrt2$ in 21 iterations (rate $0.02/0.07 = 0.29$); $\sigma = 0.77$ is nearer to $\lambda_3 = 0.75$ and returns that one instead, with eigenvector $(1, -1, 0)/\sqrt2$, in 58 iterations (rate $0.02/0.03 = 0.67$). Inverse iteration does not know which eigenvalue you want. (c) $0.8^k = 0.01$ at $k = 20.6$: about three weeks after sorting, the cell mix is within 1 % of the deviation it started with.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+rqi <- function(A, x, tol = 1e-9, maxit = 20) {
+  x <- x / sqrt(sum(x^2))
+  for (k in 0:maxit) {
+    Ax <- drop(A %*% x)
+    sigma <- sum(x * Ax)                      # Rayleigh quotient = new shift
+    r <- sqrt(sum((Ax - sigma * x)^2))
+    cat(k, format(sigma, digits = 16), signif(r, 2), "\n")
+    if (r < tol) break                        # stop BEFORE A - sigma I is singular
+    y <- solve(A - sigma * diag(nrow(A)), x)
+    x <- y / sqrt(sum(y^2))
+  }
+  invisible(list(lambda = sigma, x = x))
+}
+rqi(C, c(1, 1, 1))
+# 0 1.600000000000001 0.082
+# 1 1.607466805519397 0.00069
+# 2 1.607467358251512 4.4e-10
+rqi(C, c(1, 0, 0))
+# 0 1 0.5
+# 1 0.8344827586206898 0.41
+# 2 0.8034821418899356 0.054
+# 3 0.8113094152535012 0.0017
+# 4 0.811320901374934 8.2e-08
+# 5 0.8113209013749626 1.7e-16
+rqi(C, c(1, -1, 0))
+# 0 0.5999999999999999 0.071
+# 1 0.5813620071684588 0.0059
+# 2 0.5812117404375324 3.8e-06
+# 3 0.5812117403735247 1.1e-15
+```
+
+### Python
+
+```python
+def rqi(A, x, tol=1e-9, maxit=20):
+    x = np.asarray(x, dtype=float); x = x / np.linalg.norm(x)
+    for k in range(maxit + 1):
+        Ax = A @ x
+        sigma = x @ Ax                       # Rayleigh quotient = new shift
+        r = np.linalg.norm(Ax - sigma * x)
+        print(k, f"{sigma:.16g}", f"{r:.2g}")
+        if r < tol:                          # stop before A - sigma I is singular
+            break
+        y = np.linalg.solve(A - sigma * np.eye(A.shape[0]), x)
+        x = y / np.linalg.norm(y)
+    return sigma, x
+
+rqi(C, [1, 1, 1])
+# 0 1.600000000000001 0.082
+# 1 1.607466805519396 0.00069
+# 2 1.607467358251513 4.4e-10
+rqi(C, [1, 0, 0])
+# 0 1 0.5
+# 1 0.8344827586206898 0.41
+# 2 0.8034821418899357 0.054
+# 3 0.8113094152535011 0.0017
+# 4 0.8113209013749341 8.2e-08
+# 5 0.8113209013749628 1.2e-16
+rqi(C, [1, -1, 0])
+# 0 0.5999999999999999 0.071
+# 1 0.5813620071684588 0.0059
+# 2 0.5812117404375325 3.8e-06
+# 3 0.5812117403735249 1.1e-15
+```
+
+### Rust
+
+```rust
+// rust/examples/power_iteration_c7.rs  —  cargo run --example power_iteration_c7
+// C7: Rayleigh quotient iteration on the trait correlation matrix.
+use nalgebra::{DMatrix, DVector};
+
+fn rqi(a: &DMatrix<f64>, x0: &[f64], tol: f64, maxit: usize) {
+    let n = a.nrows();
+    let mut x = DVector::from_row_slice(x0);
+    x /= x.norm();
+    for k in 0..=maxit {
+        let ax = a * &x;
+        let sigma = x.dot(&ax);                       // Rayleigh quotient = new shift
+        let r = (&ax - sigma * &x).norm();
+        println!("{} {} {:.2e}", k, sigma, r);
+        if r < tol {                                  // stop before A - sigma I is singular
+            break;
+        }
+        let y = (a - sigma * DMatrix::<f64>::identity(n, n)).lu().solve(&x).unwrap();
+        x = &y / y.norm();
+    }
+}
+
+fn main() {
+    let c = DMatrix::from_row_slice(3, 3, &[1.0, 0.4, 0.3, 0.4, 1.0, 0.2, 0.3, 0.2, 1.0]);
+    rqi(&c, &[1.0, 1.0, 1.0], 1e-9, 20);
+    rqi(&c, &[1.0, 0.0, 0.0], 1e-9, 20);
+    rqi(&c, &[1.0, -1.0, 0.0], 1e-9, 20);
+}
+
+// Output:
+// 0 1.6000000000000005 8.16e-2
+// 1 1.6074668055193964 6.94e-4
+// 2 1.6074673582515129 4.43e-10
+// 0 1 5.00e-1
+// 1 0.8344827586206898 4.14e-1
+// 2 0.8034821418899358 5.37e-2
+// 3 0.8113094152535013 1.66e-3
+// 4 0.8113209013749338 8.17e-8
+// 5 0.8113209013749628 1.24e-16
+// 0 0.5999999999999999 7.07e-2
+// 1 0.5813620071684588 5.91e-3
+// 2 0.5812117404375325 3.84e-6
+// 3 0.581211740373525 1.10e-15
+```
+
+:::
+
+(a) The residual goes $0.082 \to 6.9\times10^{-4} \to 4.4\times10^{-10}$: roughly cubed each step ($0.082^3 = 5.5\times10^{-4}$, $(6.9\times10^{-4})^3 = 3.3\times10^{-10}$), so $\lambda_1 = 1.607467358251512$ is correct to all digits after two steps. (b) From $(1, 0, 0)$ RQI converges to $\lambda_2 = 0.8113$, from $(1, -1, 0)$ to $\lambda_3 = 0.5812$: it finds whichever eigenvalue the starting Rayleigh quotient is nearest to, not the largest. (c) With `tol = 1e-12`, R's `solve` stops with "system is computationally singular: reciprocal condition number = 6.9e-17", because the shift now equals $\lambda_1$ to machine precision. numpy and nalgebra do not check the condition number and simply carry on; the result is still a good eigenvector (lecture slide "Shift exactly at the eigenvalue?"), but stopping on the residual first is the clean solution.
+:::
+
+## Where this leads
+
+- ***How `eigen()` works, and big problems*** (next unit): `eigen()` finds **all** eigenvalues with the QR algorithm, which is, in outline, a clever shifted inverse iteration on all vectors at once. For a few eigenpairs of a **huge sparse** matrix (the top principal components of a 100 000-cell dataset), Krylov methods (Lanczos, `irlba`, `RSpectra`, `scipy.sparse.linalg.eigsh`) improve on power iteration by keeping all the vectors $\mathbf x, A\mathbf x, A^2\mathbf x, \dots$ instead of only the last one.
+- ***Equilibria, stability and the phase plane*** (Part 8): the stability of an equilibrium of an ODE model is decided by the eigenvalues of its Jacobian, and the slowest-decaying direction is again an eigenvector.
+- ***Stochastic simulation*** (Part 8): the Markov chains there run in continuous time; their long-run behaviour is again a stationary distribution.
+- ***Iterative linear solvers in depth*** (Part 11): Jacobi and similar methods converge at a rate set by the largest eigenvalue of an iteration matrix, the same $|\lambda|^k$ argument as in this unit.

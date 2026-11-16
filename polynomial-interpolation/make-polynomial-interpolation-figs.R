@@ -203,9 +203,9 @@ for (j in seq_along(ns8)) {
 
 fig("fig08-monomial-vs-bary.svg", expr = {
   plot(ns8, e_bar, log = "y", type = "b", pch = 17, col = col_blu, lwd = 2,
-       ylim = c(1e-13, 1), yaxt = "n", xlab = "degree n  (Chebyshev times, 0-48 h)",
+       ylim = c(1e-13, 1e2), yaxt = "n", xlab = "degree n  (Chebyshev times, 0-48 h)",
        ylab = "max |error| (OD)")
-  logaxis(2, seq(-13, 0, 2))
+  logaxis(2, seq(-12, 2, 2))
   lines(ns8, e_mon, type = "b", pch = 19, col = col_ver, lwd = 2)
   lines(ns8, e_raw, type = "b", pch = 15, col = col_org, lwd = 2, cex = 1.3)
   legend("bottomleft", c("barycentric formula",

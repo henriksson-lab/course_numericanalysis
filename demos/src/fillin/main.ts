@@ -46,7 +46,8 @@ const STYLE = `
 .reveal [data-demo="${NAME}"].qb-demo { font-size: 19px; gap: .25em; }
 .reveal [data-demo="${NAME}"] .qb-readout { font-size: 17px; padding: .25em .45em; }
 .reveal [data-demo="${NAME}"] .qb-btn { font-size: .85em; padding: .15em .55em; }
-.reveal [data-demo="${NAME}"] .fi-main svg { flex-basis: 600px; max-width: 690px; }
+.reveal [data-demo="${NAME}"] .fi-main svg { flex-basis: 640px; max-width: 750px; }
+.reveal [data-demo="${NAME}"] .fi-side { flex-basis: 360px; }
 .reveal [data-demo="${NAME}"] .qb-note { display: none; }
 `;
 
@@ -404,7 +405,7 @@ function mount(host: HTMLElement): void {
       const k = s - 1, c = el.c[k];
       let created = 0;
       for (const f of el.fill.values()) if (f === k) created++;
-      stepInfo.textContent = `Step ${s}: unknown ${el.perm[k] + 1} had c = ${c} remaining neighbour${c === 1 ? "" : "s"}; ` +
+      stepInfo.textContent = `Step ${s}: the pivot had c = ${c} remaining neighbour${c === 1 ? "" : "s"}; ` +
         `elimination links them all: ${c * (c - 1) / 2} pair${c * (c - 1) / 2 === 1 ? "" : "s"}, ${created} new (fill-in). ` +
         `Operations (c + 1)² = ${(c + 1) ** 2}.`;
     }
