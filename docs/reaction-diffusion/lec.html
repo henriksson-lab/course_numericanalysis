@@ -547,7 +547,7 @@ Numerical analysis for biologists
 <ul>
 <li>The denominator <span class="math inline">\ge 1</span>: the diffusion part never limits <span class="math inline">\Delta t</span>.</li>
 <li>The numerator is <strong>Euler on the reaction</strong>: <span class="math inline">|1 - k\Delta t| \le 1</span> needs <span class="math inline">\Delta t \le 2/k</span>, and the uniform mode (<span class="math inline">q = 0</span>) gets <strong>no help</strong> from diffusion.</li>
-<li>Fast receptor binding at 1 per s: IMEX needs <span class="math inline">\Delta t \le 2</span> s, as slow as explicit diffusion on a 30 µm grid.</li>
+<li>Fast receptor binding at 1 per s: IMEX needs <span class="math inline">\Delta t \le 2</span> s, as slow as explicit diffusion on a 2.6 µm grid.</li>
 <li><strong>Check:</strong> compute <span class="math inline">\Delta t\,\lambda</span> for the eigenvalues <span class="math inline">\lambda</span> of the reaction Jacobian, and stay inside Euler’s stability region (<span class="math inline">|1 + \Delta t\lambda| \le 1</span>).</li>
 </ul>
 <aside class="notes">
@@ -758,7 +758,7 @@ Numerical analysis for biologists
 <span id="cb5-10"><a aria-hidden="true" tabindex="-1"></a>  u <span class="ot">&lt;-</span> <span class="fu">solve_diff</span>(u <span class="sc">+</span> dt <span class="sc">*</span> f, <span class="dv">1</span>); v <span class="ot">&lt;-</span> <span class="fu">solve_diff</span>(v <span class="sc">+</span> dt <span class="sc">*</span> g, d)   <span class="co"># diffusion: implicit</span></span>
 <span id="cb5-11"><a aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
-<li>Periodic grid: <a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/fft.html"><code>fft</code></a> diagonalises the five-point Laplacian, so the implicit solve is a <strong>division</strong>. 2 s in R.</li>
+<li>Periodic grid: <a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/fft.html"><code>fft</code></a> diagonalises the five-point Laplacian, so the implicit solve is a <strong>division</strong>. About 2 s in R (machine-dependent).</li>
 </ul>
 <aside class="notes">
 <p>The same IMEX Euler as in 1D; only the linear solve differs. Why periodic and FFT, and not the sparse Kronecker Laplacian of <a href="../steady-state-2d/lec.html"><em>Steady state in two dimensions</em></a>: a periodic box stands for a small patch of a large tissue without edge effects, and on a periodic grid the five-point Laplacian is diagonalised by the FFT (<a href="../fourier-fft/lec.html"><em>Fourier series and the FFT</em></a>), so each implicit step is a division instead of a sparse solve. The eigenvectors of the five-point Laplacian are then the 2D Fourier modes, with eigenvalues -(4/dx<sup>2)(sin</sup>2(pi k/N) + sin^2(pi l/N)): that is kap. So: transform, divide each coefficient by 1 + dt D kap, transform back. Cost O(N^2 log N) per step, much cheaper than a sparse solve. With walls instead of periodic edges one would use the sparse Kronecker matrix and a sparse direct solve, as in Steady state in two dimensions, or a cosine transform. Explicit FTCS would need dt &lt;= dx^2/(4 d) = 0.0125 for v: 16 000 steps instead of 2000. lcg is a tiny random number generator (Park–Miller) defined in the exercise so that all three languages start from the same noise; R’s runif would do as well. fft in R does the 2D transform of a matrix; Python numpy.fft.fft2.</p>

@@ -105,7 +105,7 @@ $\text{SSE}'(k) = 0$ has **no closed form**.
 ::::
 
 ::: notes
-The numbers are simulated with k = 0.35 per hour plus noise (sd 0.03), rounded to 3 decimals, so that we know the truth. The Gaussian log-likelihood is -SSE/(2 sigma^2) plus a constant, so for Gaussian noise "maximum likelihood" and "least squares" are the same fit; that is why we can minimise SSE. A common shortcut is to regress log(y) on t with lm, which is linear and has a formula. It gives k = 0.348, not 0.375: taking logs gives the small, noisy late points much more weight. It is a different statistical model (multiplicative noise), not a wrong one, but if the noise is additive the nonlinear fit is the MLE. The half-life is log(2)/k.
+The numbers are simulated with k = 0.35 per hour plus noise (sd 0.03), rounded to 3 decimals, so that we know the truth. The Gaussian log-likelihood is -SSE/(2 sigma^2) plus a constant, so for Gaussian noise "maximum likelihood" and "least squares" are the same fit; that is why we can minimise SSE. A common shortcut is to regress log(y) on t with lm, which is linear and has a formula. Through the origin, lm(log(y) ~ 0 + t), it gives k = 0.348 (0.335 with an intercept), not 0.375: taking logs gives the small, noisy late points much more weight. It is a different statistical model (multiplicative noise), not a wrong one, but if the noise is additive the nonlinear fit is the MLE. The half-life is log(2)/k.
 :::
 
 ## The objective function {.smaller}
@@ -124,7 +124,7 @@ round(sapply(k, sse), 4)
 - One low valley near $k = 0.4$. For large $k$ the curve flattens (all predictions near 0) and **bends the other way** (yellow).
 
 ::: notes
-The objective function (also cost, loss) is what we minimise. sse takes a single k, so we use sapply to evaluate it on a vector of k values. Evaluating on a coarse grid is always the first thing to do: it shows where the minimum is, roughly, and whether there is more than one. The yellow region, where SSE'' < 0, will matter for Newton. For k -> infinity the model predicts 0 for every t > 0, and SSE tends to (1-1)^2 plus the sum of the other y^2, about 1.47.
+The objective function (also cost, loss) is what we minimise. sse takes a single k, so we use sapply to evaluate it on a vector of k values. Evaluating on a coarse grid is always the first thing to do: it shows where the minimum is, roughly, and whether there is more than one. The yellow region, where SSE'' < 0, will matter for Newton. For k -> infinity the model predicts 0 for every t > 0, and SSE tends to (1-1)^2 plus the sum of the other y^2, about 1.41.
 :::
 
 ## Brackets for a minimum {.smaller}
@@ -170,7 +170,7 @@ $$(1 - g)L = g \cdot gL \quad\Longrightarrow\quad g^2 + g - 1 = 0 \quad\Longrigh
 - Bisection for roots: 0.5 per evaluation ($\log_{10} 2 = 0.30$ digits). Golden section: $\log_{10}(1/0.618) = 0.21$ digits per evaluation.
 
 ::: notes
-g is 1 over the golden ratio phi = 1.618, hence the name. 1 - g = g^2 = 0.382. The symmetric case (keep [x1, b]) gives the same equation. Linear convergence in the sense of Convergence and cost: the error bound is multiplied by a fixed factor each evaluation. From width 1 to 1e-8 takes log(1e-8)/log(0.618) = 38 evaluations, plus the two to start. Golden section is optimal among methods that only compare function values, in the worst case; it is slower than bisection because comparing two values carries less information than a sign.
+g is 1 over the golden ratio phi = 1.618, hence the name. 1 - g = g^2 = 0.382. The symmetric case (keep [x1, b]) gives the same equation. Linear convergence in the sense of Convergence and cost: the error bound is multiplied by a fixed factor each evaluation. From width 1 to 1e-8 takes log(1e-8)/log(0.618) = 38.3, so 39 evaluations, plus the two to start. Golden section is optimal among methods that only compare function values, in the worst case; it is slower than bisection because comparing two values carries less information than a sign.
 :::
 
 ## Golden section by hand {.smaller}
@@ -208,7 +208,7 @@ golden(sse, 0, 1)
 # [1] 0.3753873
 ```
 
-- One new `f` per pass through the loop. Width $< 10^{-8}$ after 38 passes.
+- One new `f` per pass through the loop. Width $< 10^{-8}$ after 39 passes.
 - **Cannot fail** on a unimodal function: no start value, no derivative, never leaves $[a, b]$.
 
 ::: notes
@@ -220,10 +220,10 @@ Nine lines. In each branch: shrink the interval, shift the surviving point into 
 ![](fig05-convergence.svg){width="72%" fig-align="center"}
 
 - Golden section: a straight line on a log scale, slope $\log_{10} 0.618 = -0.21$ per evaluation. **Linear**.
-- Brent and Newton: superlinear, but they **stall** near $10^{-9}$ and $10^{-13}$. Why the floors differ comes in a few slides.
+- Brent and Newton: superlinear, but they **stall** near $10^{-10}$ and $10^{-13}$. Why the floors differ comes in a few slides.
 
 ::: notes
-Error of the best point found so far, against the number of function evaluations, all on SSE(k). Golden section's staircase follows 0.618^n; it reaches 1e-9 after about 42 evaluations. Brent (optimize with tol = 1e-12) and Newton (from 0.2, counting two evaluations per step for SSE' and SSE'') reach 1e-8 in about 10 evaluations. Brent stalls at about 5e-10: it compares values of f, and those values stop changing near the minimum. Newton works with the derivative and gets further. Keep this picture in mind for the slide on the flat bottom.
+Error of the best point found so far, against the number of function evaluations, all on SSE(k). Golden section's staircase follows 0.618^n; it reaches 1e-9 after about 42 evaluations. Brent (optimize with tol = 1e-12) and Newton (from 0.2, counting two evaluations per step for SSE' and SSE'') reach 1e-8 in about 10 evaluations. Brent stalls at about 5e-11: it compares values of f, and those values stop changing near the minimum. Newton works with the derivative and gets further. Keep this picture in mind for the slide on the flat bottom.
 :::
 
 ## Parabolic interpolation {.smaller}
@@ -380,7 +380,7 @@ Check d1 and d2 against numDeriv::grad and numDeriv::hessian before trusting the
 - **Checks:** $f''(x_k) > 0$ at every step, and $f(x_{k+1}) < f(x_k)$. If either fails, do not take the step.
 
 ::: notes
-Root-finding Newton does not care whether a root of f' is a minimum or a maximum; it heads for whatever stationary point the local model suggests. From k = 1 the nearest "stationary point" of the local model is a maximum at 3.96, and beyond that SSE keeps rising slowly towards its limit 1.47 at infinity, so Newton follows it out. The two checks are the start of the safeguards in the next unit: if f'' <= 0 use a different direction, and if f does not decrease, shorten the step (line search). Or bracket first and let Brent do the work.
+Root-finding Newton does not care whether a root of f' is a minimum or a maximum; it heads for whatever stationary point the local model suggests. From k = 1 the nearest "stationary point" of the local model is a maximum at 3.96, and beyond that SSE keeps rising slowly towards its limit 1.41 at infinity, so Newton follows it out. The two checks are the start of the safeguards in the next unit: if f'' <= 0 use a different direction, and if f does not decrease, shorten the step (line search). Or bracket first and let Brent do the work.
 :::
 
 ## Convexity {.smaller}
@@ -447,7 +447,7 @@ c(rss(24.63047), rss(32.40162))
 # [1]  1.908081 10.225063
 ```
 
-- A **grid** finds the right basin; a local method (Brent, Newton) then polishes it. 121 + 10 evaluations.
+- A **grid** finds the right basin; a local method (Brent, Newton) then polishes it. 121 + 9 evaluations.
 - The grid spacing must be smaller than the narrowest dip you care about. Too coarse and it can miss it too.
 - Alternatives: **multistart** (run from many starting points, keep the best), and always **compare** the objective at the candidates.
 

@@ -113,3 +113,4 @@ Automated (coordinator):
 
 Workers (plan/audit-brief.md, reports in plan/audit/): R/Python re-run, figures, by-hand and quiz arithmetic, text-vs-numbers. Groups as in pass 2.
 - audit parts5-6 done. Left: re-run fourier-fft/make-fourier-fft-figs.R on an idle machine (fig04 timings); fourier-fft demo numbers not re-checked.
+- audit part10b-11 done. Left: re-time reaction-diffusion and iterative-solvers timings on an idle machine (load ~250 during audit).
