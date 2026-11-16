@@ -147,9 +147,9 @@ points(t0 + h, exact(t0 + h), pch = 4, cex = 2, lwd = 3)
 legend("topleft", c("exact", "Euler: slope k1 at the start",
                     "midpoint: slope at the half-step point (open circle)",
                     "Heun: average of k1 and the slope at the Euler point",
-                    "x  exact value at t + h"),
+                    "exact value at t + h"),
        col = c(oi[c("grey", "red", "orange", "green")], "black"), lwd = c(4, 3, 3, 3, NA),
-       cex = 1.2, bty = "n")
+       pch = c(NA, NA, NA, NA, 4), cex = 1.2, bty = "n")
 dev.off()
 
 ## ---- fig03: RK4 stages ------------------------------------------------------
@@ -173,9 +173,9 @@ points(t0 + h, y1, pch = 15, cex = 1.8, col = oi["green"])
 points(t0 + h, exact(t0 + h), pch = 4, cex = 2, lwd = 3)
 legend("topleft", c("k1 at the start", "k2 at the half step (via k1)",
                     "k3 at the half step (via k2)", "k4 at the end (via k3)",
-                    "RK4 step: weights 1, 2, 2, 1 (/6)", "x  exact value"),
+                    "RK4 step: weights 1, 2, 2, 1 (/6)", "exact value"),
        col = c(cols, oi["green"], "black"), lwd = c(4, 4, 4, 4, 2, NA),
-       lty = c(1, 1, 1, 1, 2, NA), cex = 1.2, bty = "n")
+       lty = c(1, 1, 1, 1, 2, NA), pch = c(NA, NA, NA, NA, 15, 4), cex = 1.2, bty = "n")
 dev.off()
 
 ## ---- fig04 + fig05: order and cost ----------------------------------------
@@ -221,6 +221,7 @@ dev.off()
 ## ---- fig06: repressilator and adaptive steps -------------------------------
 
 s <- dp5(repress, 0, rep0, 50, rtol = 1e-6, atol = 1e-6)
+fx <- rk_solve(rk4_step, repress, 0, rep0, 0.2, 250)   # fixed-step RK4, h = 0.2
 svg("fig06-repressilator.svg", width = 12, height = 6)
 layout(matrix(1:2, 2), heights = c(1.15, 1))
 par(mar = c(1, 6, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
@@ -228,14 +229,17 @@ pc <- oi[c("blue", "red", "green")]
 tq <- seq(0, 50, by = 0.05)
 plot(range(s$t), c(0, max(s$y[, 4:6])), type = "n", xaxt = "n", las = 1,
      xlab = "", ylab = "protein p")
-for (j in 4:6) lines(s$t, s$y[, j], lwd = 3, col = pc[j - 3])
-legend("topright", c("LacI", "TetR", "cI"), col = pc, lwd = 3, cex = 1.2, bty = "n", horiz = TRUE)
+for (j in 5:6) lines(s$t, s$y[, j], lwd = 1.5, col = pc[j - 3])
+lines(s$t, s$y[, 4], lwd = 3.5, col = pc[1])
+lines(fx$t, fx$y[, 4], lwd = 3, lty = 2, col = "black")
+legend("topleft", c("LacI", "TetR", "cI", "LacI, fixed-step RK4, h = 0.2"), col = c(pc, "black"),
+       lwd = c(3.5, 1.5, 1.5, 3), lty = c(1, 1, 1, 2), cex = 1.2, bty = "n", ncol = 2)
 par(mar = c(5, 6, 0.5, 1))
 plot(s$t[-1], s$h, log = "y", type = "h", lwd = 1, col = oi["grey"], las = 1,
-     xlab = "time (mRNA lifetimes)", ylab = "step size h")
+     xlab = "time (mRNA lifetimes)", ylab = "")
+title(ylab = "step size h", line = 4.3)
 points(s$t[-1], s$h, pch = 19, cex = 0.5, col = oi["orange"])
-abline(h = 0.01, lty = 2, lwd = 2, col = oi["purple"])
-text(44, 0.013, "fixed RK4 needs h = 0.01", col = oi["purple"], cex = 1.2, pos = 3)
+abline(h = 0.2, lty = 2, lwd = 2, col = "black")
 dev.off()
 
 ## ---- fig07: conserved quantity of the predator-prey model --------------------
@@ -290,10 +294,11 @@ dev.off()
 y0s <- c(0.999, 0.001, 0)
 s <- dp5(sir, 0, y0s, 120, rtol = 1e-4, atol = 1e-8)
 svg("fig09-dense-output.svg", width = 11, height = 5.5)
-par(mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
+par(mar = c(5, 6.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
 fine <- dp5(sir, 0, y0s, 120, rtol = 1e-10, atol = 1e-12)
 plot(fine$t, fine$y[, 2], type = "l", lwd = 6, col = oi["grey"], las = 1,
-     xlab = "time (days)", ylab = "infected fraction I")
+     xlab = "time (days)", ylab = "")
+title(ylab = "infected fraction I", line = 4.5)
 lines(s$t, s$y[, 2], lwd = 2, lty = 2, col = oi["red"])
 tq <- seq(0, 120, by = 0.25)
 iq <- findInterval(tq, s$t, rightmost.closed = TRUE)
@@ -309,11 +314,11 @@ dev.off()
 ## ---- fig10: events -------------------------------------------------------
 
 svg("fig10-events.svg", width = 12, height = 5.3)
-par(mfrow = c(1, 2), mar = c(5, 5.8, 2.5, 1), cex.lab = 1.5, cex.axis = 1.3, cex.main = 1.4)
+par(mfrow = c(1, 2), mar = c(5, 6.8, 2.5, 1), cex.lab = 1.5, cex.axis = 1.3, cex.main = 1.4)
 g <- beta * fine$y[, 1] - gamma
 plot(fine$t, g, type = "l", lwd = 4, col = oi["grey"], xlim = c(20, 60), ylim = c(-0.1, 0.2),
-     las = 1, xlab = "time (days)", ylab = expression(g == beta * S - gamma),
-     main = "peak of I: g changes sign")
+     las = 1, xlab = "time (days)", ylab = "", main = "peak of I: g changes sign")
+title(ylab = expression(g == beta * S - gamma), line = 4.8)
 abline(h = 0, lty = 3)
 gs <- beta * s$y[, 1] - gamma
 points(s$t, gs, pch = 19, cex = 1.4, col = oi["red"])
@@ -324,17 +329,18 @@ lines(tq, beta * hermite(tq, s$t[i], s$t[i + 1], s$y[i, 1], s$y[i + 1, 1], s$f[i
 tpk <- uniroot(function(t) beta * hermite(t, s$t[i], s$t[i + 1], s$y[i, 1], s$y[i + 1, 1],
                                           s$f[i, 1], s$f[i + 1, 1]) - gamma, c(s$t[i], s$t[i + 1]))$root
 points(tpk, 0, pch = 4, cex = 2.2, lwd = 3)
-text(tpk, -0.03, sprintf("t = %.2f", tpk), cex = 1.3, pos = 4)
+text(tpk, 0.02, sprintf("t = %.2f", tpk), cex = 1.3, pos = 4)
 legend("topright", c("solver steps", "dense output in the step", "root of g"),
        col = c(oi[c("red", "blue")], "black"), pch = c(19, NA, 4), lwd = c(NA, 3, 3), cex = 1.15, bty = "n")
-# missed event: prey dips below a threshold between two coarse steps
+# missed event: predators rise above a threshold between two coarse steps
 k <- rk_solve(rk4_step, lv, 0, lv0, 0.01, 1500)
-plot(k$t, k$y[, 1], type = "l", lwd = 4, col = oi["grey"], xlim = c(0, 15), las = 1,
-     xlab = "time (years)", ylab = "prey x", main = "threshold x = 3: missed by big steps")
-abline(h = 3, lty = 2, lwd = 2, col = oi["purple"])
+plot(k$t, k$y[, 2], type = "l", lwd = 4, col = oi["grey"], xlim = c(0, 15), ylim = c(0, 30),
+     las = 1, xlab = "time (years)", ylab = "", main = "threshold y = 20: missed by big steps")
+title(ylab = "predators y", line = 4)
+abline(h = 20, lty = 2, lwd = 2, col = oi["purple"])
 tc <- seq(0, 15, by = 2.5)
-points(tc, k$y[match(round(tc, 2), round(k$t, 2)), 1], pch = 19, cex = 1.5, col = oi["red"])
-legend("topright", c("solution", "values at steps of 2.5 yr", "threshold"),
+points(tc, k$y[match(round(tc, 2), round(k$t, 2)), 2], pch = 19, cex = 1.5, col = oi["red"])
+legend("topleft", c("solution", "values at steps of 2.5 yr", "threshold"),
        col = c(oi[c("grey", "red", "purple")]), lwd = c(4, NA, 2), lty = c(1, NA, 2),
        pch = c(NA, 19, NA), cex = 1.15, bty = "n")
 dev.off()

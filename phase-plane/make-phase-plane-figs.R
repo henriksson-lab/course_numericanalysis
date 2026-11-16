@@ -100,8 +100,11 @@ for (uu in c(0.15, 0.8, 1.7, 2.4, 3.2)) {
 states()
 text(0.45, 0.45, "u ↑  v ↑", cex = 1.3)
 text(2.7, 2.9, "u ↓  v ↓", cex = 1.3)
-text(2.5, 1.05, "u ↓  v ↑", cex = 1.3)
-text(1.05, 2.6, "u ↑  v ↓", cex = 1.3)
+# the two thin lenses between the curves
+arrows(2.45, 1.5, 1.95, 0.8, length = 0.08, lwd = 1.5)
+text(2.5, 1.62, "u \u2191  v \u2193", cex = 1.3)
+arrows(1.45, 2.45, 0.75, 1.95, length = 0.08, lwd = 1.5)
+text(1.55, 2.55, "u \u2193  v \u2191", cex = 1.3)
 legend("topright", c("du/dt = 0  (u-nullcline)", "dv/dt = 0  (v-nullcline)"),
        col = c(oi["blue"], oi["red"]), lwd = 3, cex = 1.15, bg = "white")
 dev.off()
@@ -238,7 +241,7 @@ ord <- order(sep[, 1]); sep <- sep[ord, ]
 sep <- sep[sep[, 1] >= 0 & sep[, 1] <= 4 & sep[, 2] >= 0 & sep[, 2] <= 4, ]
 lines(sep, lwd = 3, col = oi["orange"])
 segments(0, 0, 4, 4, lty = 3, lwd = 2)
-legend("bottomright", c("U on", "middle", "V on", "separatrix", "u = v"), fill = c(cols[1:3], NA, NA),
+legend(1.2, 4, c("U on", "middle", "V on", "separatrix", "u = v"), fill = c(cols[1:3], NA, NA),
        border = c("black", "black", "black", NA, NA), lty = c(NA, NA, NA, 1, 3),
        lwd = c(NA, NA, NA, 3, 2), col = c(NA, NA, NA, oi["orange"], "black"), cex = 1.1, bg = "white")
 dev.off()
