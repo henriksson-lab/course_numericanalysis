@@ -29,8 +29,10 @@ fig <- function(file, w = 9, h = 5.2, expr) {
 ## ---- the running example (same code as on the slides) ----------------------
 
 pk <- function(t, ka, ke, V, D = 100) D * ka / (V * (ka - ke)) * (exp(-ke * t) - exp(-ka * t))
-t <- c(0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 24)                  # hours
-y <- c(0.98, 1.89, 2.69, 3.47, 3.39, 3.00, 2.77, 1.98, 1.35, 0.52, 0.28)  # mg/L
+# data from *Nonlinear least squares and ODE fitting*: ka = 1 /h, ke = 0.2 /h,
+# V = 20 L, D = 100 mg, noise N(0, 0.1^2) mg/L, rounded to 2 decimals
+t <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12)                          # hours
+y <- c(1.02, 1.88, 2.34, 2.98, 3.27, 3.26, 3.17, 2.77, 1.92, 1.23, 1.00, 0.61)  # mg/L
 late <- t >= 3                                                   # sparse design
 ts <- t[late]; ys <- y[late]
 
@@ -44,14 +46,14 @@ prof1 <- function(ka, tt, yy, start = list(ke = 0.2, V = 20)) {
   f <- tryCatch(nls(yy ~ pk(tt, ka, ke, V), start = start), error = function(e) NULL)
   if (is.null(f)) c(NA, NA, NA) else c(deviance(f), coef(f))
 }
-tfine <- seq(0, 24, by = 0.05)
+tfine <- seq(0, 12, by = 0.02)
 
 ## ---- fig01: three ka values, same fit to the late data ----------------------
 
 fig("fig01-same-fit.svg", w = 10, h = 5.2, expr = {
-  kas <- c(coef(fits)["ka"], 2, 20)
+  kas <- c(coef(fits)["ka"], 3, 20)
   cols <- c(oi["blue"], oi["orange"], oi["purple"])
-  plot(NA, xlim = c(0, 24), ylim = c(0, 5), xlab = "time after dose (h)",
+  plot(NA, xlim = c(0, 12), ylim = c(0, 5), xlab = "time after dose (h)",
        ylab = "concentration (mg/L)")
   for (i in 1:3) {
     pr <- prof1(kas[i], ts, ys)
@@ -62,7 +64,7 @@ fig("fig01-same-fit.svg", w = 10, h = 5.2, expr = {
   abline(v = 3, col = oi["grey"], lty = 3)
   legend("topright", bty = "n", cex = 1.25, lwd = 3, lty = 1:3, col = cols,
          legend = c(sprintf("ka = %.2f /h (best fit)", kas[1]),
-                    "ka = 2 /h", "ka = 20 /h"))
+                    "ka = 3 /h", "ka = 20 /h"))
   legend("right", bty = "n", cex = 1.25, pch = c(19, 1), col = c("black", oi["grey"]),
          pt.cex = 1.5, legend = c("measured (from 3 h)", "not measured"))
 })
@@ -73,7 +75,7 @@ fig("fig02-flipflop.svg", w = 12, h = 5.2, expr = {
   par(mfrow = c(1, 2))
   p1 <- coef(fit)
   p2 <- c(p1[2], p1[1], p1[3] * p1[2] / p1[1])
-  plot(t, y, pch = 19, cex = 1.5, xlim = c(0, 24), ylim = c(0, 4),
+  plot(t, y, pch = 19, cex = 1.5, xlim = c(0, 12), ylim = c(0, 4),
        xlab = "time after dose (h)", ylab = "concentration (mg/L)")
   lines(tfine, pk(tfine, p1[1], p1[2], p1[3]), col = oi["blue"], lwd = 5)
   lines(tfine, pk(tfine, p2[1], p2[2], p2[3]), col = oi["orange"], lwd = 2.5, lty = 2)
@@ -90,12 +92,12 @@ fig("fig02-flipflop.svg", w = 12, h = 5.2, expr = {
     min(a, b, na.rm = TRUE)
   })
   plot(g, (d - deviance(fit)) / s2, type = "l", lwd = 3, col = oi["blue"], log = "x",
-       ylim = c(0, 25), xlab = "ka (1/h), fixed", ylab = expression(Delta * SSE / s^2))
+       ylim = c(0, 100), xlab = "ka (1/h), fixed", ylab = expression(Delta * SSE / s^2))
   abline(h = 3.84, lty = 2, col = oi["grey"], lwd = 2)
   abline(v = c(p1[1], p1[2]), lty = 3, col = oi["grey"])
-  text(p1[2], 23, expression(ka == hat(k)[e]), pos = 4, cex = 1.2)
-  text(p1[1], 23, expression(ka == hat(k)[a]), pos = 4, cex = 1.2)
-  text(25, 5, "3.84", cex = 1.15, col = "grey40")
+  text(p1[2], 92, expression(ka == hat(k)[e]), pos = 4, cex = 1.2)
+  text(p1[1], 92, expression(ka == hat(k)[a]), pos = 4, cex = 1.2)
+  text(25, 8, "3.84", cex = 1.15, col = "grey40")
 })
 
 ## ---- fig03: SSE over (ka, V), ke re-fitted ----------------------------------
@@ -125,7 +127,7 @@ slice <- function(tt, yy, f, s2, title) {
 }
 fig("fig03-sse-slice.svg", w = 12, h = 5.4, expr = {
   par(mfrow = c(1, 2))
-  slice(t, y, fit, s2, "all 11 samples")
+  slice(t, y, fit, s2, "all 12 samples")
   legend("bottomright", bty = "n", cex = 1.15, lwd = 2.5, lty = c(1, 2),
          col = c(oi["blue"], oi["red"]), legend = c(expression(Delta * SSE / s^2), "Wald ellipse"),
          bg = "white")
@@ -149,7 +151,7 @@ fig("fig04-profiles.svg", w = 10, h = 5.4, expr = {
   text(25, 4.4, "3.84", cex = 1.15, col = "grey40")
   legend("topright", bty = "n", cex = 1.2, lwd = c(3, 3, 2), lty = c(1, 1, 3),
          col = c(oi["blue"], oi["orange"], "black"),
-         legend = c("profile, all 11 samples", "profile, samples from 3 h",
+         legend = c("profile, all 12 samples", "profile, samples from 3 h",
                     "Wald (from the SE), each design"))
 })
 
@@ -157,7 +159,7 @@ fig("fig04-profiles.svg", w = 10, h = 5.4, expr = {
 
 fig("fig05-sensitivity.svg", w = 10, h = 5.2, expr = {
   p <- coef(fit)
-  tf <- seq(0.01, 24, by = 0.05)
+  tf <- seq(0.01, 12, by = 0.02)
   Js <- jacobian(function(lp) pk(tf, exp(lp[1]), exp(lp[2]), exp(lp[3])), log(p))
   par(mar = c(4.8, 5.6, 1.5, 1))
   matplot(tf, Js, type = "l", lty = c(1, 2, 4), lwd = 3,
@@ -186,10 +188,10 @@ fig("fig06-sloppy.svg", w = 10, h = 5.4, expr = {
   e2 <- eigen(crossprod(jacobian(function(lp) pk(ts, exp(lp[1]), exp(lp[2]), exp(lp[3])), log(p))))$values
   p2 <- c(ka = 1, k10 = 0.2, k12 = 0.3, k21 = 0.15, V = 20)
   e3 <- eigen(crossprod(jacobian(function(lp) do.call(pk2, c(list(t), as.list(exp(lp)))), log(p2))))$values
-  plot(NA, xlim = c(0.5, 3.5), ylim = c(-4.5, 0.3), xaxt = "n",
+  plot(NA, xlim = c(0.5, 3.5), ylim = c(-5, 0.3), xaxt = "n",
        xlab = "", ylab = expression(log[10] ~ (lambda / lambda[max])))
-  axis(1, at = 1:3, labels = c("1 compartment\n11 samples", "1 compartment\nfrom 3 h",
-                               "2 compartments\n11 samples"), padj = 0.6, cex.axis = 1.2)
+  axis(1, at = 1:3, labels = c("1 compartment\n12 samples", "1 compartment\nfrom 3 h",
+                               "2 compartments\n12 samples"), padj = 0.6, cex.axis = 1.2)
   for (i in 1:3) {
     e <- list(e1, e2, e3)[[i]]
     segments(i - 0.3, log10(e / e[1]), i + 0.3, log10(e / e[1]), lwd = 4,

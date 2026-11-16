@@ -34,7 +34,7 @@ fn main() {
     let (x, v, nv) = vertex_lp([6.0, 3.0], &a, &b);
     println!("x = {} {}  ATP = {}  corners: {}", x[0], x[1], v, nv);
     for (n, k) in [(4, 2), (20, 10), (100, 50), (1000, 500)] {
-        print!("{:e}  ", choose(n, k));
+        print!("{:.6e}  ", choose(n, k));
     }
     println!();
 }

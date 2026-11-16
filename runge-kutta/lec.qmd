@@ -284,6 +284,18 @@ adapt_heun <- function(f, t, y, tend, h, rtol = 1e-6, atol = 1e-9) {
 This is the whole idea of an adaptive solver in 12 lines. The scaled error compares the error estimate to the allowed error sc (next slides explain rtol and atol); err <= 1 means within tolerance. Whether accepted or rejected, the next h is chosen from the same formula: after a good step it grows, after a bad step it shrinks. For an embedded pair whose low-order member has order q, the exponent is -1/(q+1); for Dormand-Prince 5(4) it is -1/5. The numbers come from the logistic example with h = 1 initially, atol = 1e-9 and rtol = 1e-3: sc = 1.02e-4 for the first step, the estimate 0.0136 is 133 times too large, and 0.9 * 133^(-1/2) = 0.078 is clipped to the minimum factor 0.2.
 :::
 
+## Try it: four slopes, then adaptive steps
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="rkstep" data-tab="adapt" data-model="logistic" data-method="rk4" data-h="1" data-system="lv" data-pair="dp" data-logtol="-3"></div>
+<script src="../demos/dist/rkstep.js"></script>
+```
+
+::: notes
+Live in the browser; the adaptive solver is the controller of the previous slide with Dormand-Prince 5(4), first step 0.01, rtol = atol. Start on predator-prey at rtol 1e-3: 67 accepted steps, 19 rejected (red crosses), 517 f evaluations; the dots in (c) are sparse, the orbit in (e) is a polygon that wanders off the grey reference, V drifts by 0.032. Point at panel (d): long steps (about 1.4 years) when both populations are low, short ones when they are high and changing fast; the crosses come just after the step has grown too far. Click 1e-6: 229 steps, drift 2e-6, the orbit closes. Switch to the repressilator at 1e-6 and compare the three pairs: Heun-Euler 39 000 steps, Bogacki-Shampine 1700, Dormand-Prince 492 (the same as deSolve's ode45 to within 1 %). Heun-Euler at 1e-9 gives up after 150 000 attempts. If there is time, go back to the first tab: RK4 on the logistic curve with h = 1, press "next stage" four times to build k1..k4 (the table of "One RK4 step by hand"), then show panel (b) against h (slopes 1, 2, 4) and against f evaluations (RK4 about 140 evaluations for 1e-6, Euler about 60 000).
+:::
+
 ## Dormand–Prince 5(4): `ode45`, `RK45`, `Dopri5` {.smaller}
 
 The standard adaptive explicit solver (Dormand & Prince, 1980):

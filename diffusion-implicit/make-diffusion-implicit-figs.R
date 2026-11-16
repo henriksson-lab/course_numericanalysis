@@ -100,15 +100,16 @@ z <- 10^seq(-2, 3, length.out = 400)   # z = 4 r sin^2(theta/2) = dt * |eigenval
 svg("fig02-amplification.svg", width = 10, height = 5.2)
 par(mar = c(5, 5.5, 1, 1), cex.lab = 1.5, cex.axis = 1.3)
 plot(z, exp(-z), log = "x", type = "l", lwd = 4, col = "black", ylim = c(-1.6, 1.05),
-     xlab = expression(Delta * t ~ "x decay rate of the mode   (" * 4 * r ~ sin^2 * "(" * theta * "/2))"),
-     ylab = "growth factor per step g", las = 1)
+     xlab = expression(z == Delta * t %*% "decay rate of the mode" ~ "=" ~ 4 * r ~ sin^2 * "(" * theta * "/2)"),
+     ylab = "growth factor per step g", las = 1, xaxt = "n")
+axis(1, at = 10^(-2:3), labels = c("0.01", "0.1", "1", "10", "100", "1000"))
 abline(h = c(-1, 0, 1), col = oi["grey"], lty = c(2, 1, 2))
 lines(z, 1 - z, lwd = 4, col = oi["orange"])
 lines(z, 1 / (1 + z), lwd = 4, col = oi["blue"])
 lines(z, (1 - z / 2) / (1 + z / 2), lwd = 4, col = oi["red"])
 abline(v = 2, lty = 3, lwd = 2)
 text(2.3, -1.45, "FTCS limit", pos = 4, cex = 1.2)
-legend("bottomleft", c("exact  exp(-z)", "FTCS  1 - z", "backward Euler  1/(1+z)",
+legend("topright", c("exact  exp(-z)", "FTCS  1 - z", "backward Euler  1/(1+z)",
                        "Crank-Nicolson  (1-z/2)/(1+z/2)"),
        lwd = 4, col = c("black", oi["orange"], oi["blue"], oi["red"]), cex = 1.2, bty = "n")
 dev.off()
@@ -176,3 +177,57 @@ dev.off()
 
 ## ---- fig04: order of accuracy on the chamber -----------------------------------------
 ## (filled in below)
+## The chamber of the previous unit: L = 500 um, D = 1000 um^2/s, both
+## reservoirs at c = 0, initial c = sin(pi x / L). Exact solution: the sine
+## decays as exp(-D (pi/L)^2 t). Error = max over the nodes at t = 30 s.
+
+D <- 1000; Lc <- 500
+be_step <- function(c, r) {                # c includes the two boundary values
+  m <- length(c) - 2; i <- 2:(m + 1)
+  d <- c[i]
+  d[1] <- d[1] + r * c[1]; d[m] <- d[m] + r * c[m + 2]
+  c[i] <- thomas(rep(-r, m), rep(1 + 2 * r, m), rep(-r, m), d)
+  c
+}
+cn_step <- function(c, r) {
+  m <- length(c) - 2; i <- 2:(m + 1)
+  d <- c[i] + r / 2 * (c[i - 1] - 2 * c[i] + c[i + 1])
+  d[1] <- d[1] + r / 2 * c[1]; d[m] <- d[m] + r / 2 * c[m + 2]
+  c[i] <- thomas(rep(-r / 2, m), rep(1 + r, m), rep(-r / 2, m), d)
+  c
+}
+sine_err <- function(N, dt, step, tend = 30) {
+  dx <- Lc / N; x <- seq(0, Lc, by = dx); c <- sin(pi * x / Lc)
+  for (k in 1:round(tend / dt)) c <- step(c, D * dt / dx^2)
+  max(abs(c - exp(-D * (pi / Lc)^2 * tend) * sin(pi * x / Lc)))
+}
+dts <- 6 / 2^(0:7)
+e_be <- sapply(dts, function(h) sine_err(400, h, be_step))
+e_cn <- sapply(dts, function(h) sine_err(400, h, cn_step))
+e_cn50 <- sapply(dts, function(h) sine_err(50, h, cn_step))
+Ns <- c(10, 20, 40, 80, 160, 320)
+e_dx <- sapply(Ns, function(N) sine_err(N, 0.01, cn_step))
+
+svg("fig04-order.svg", width = 12, height = 5.2)
+par(mfrow = c(1, 2), mar = c(5, 6.5, 3, 1), mgp = c(3.6, 1, 0), cex.lab = 1.5, cex.axis = 1.3, cex.main = 1.5)
+plot(dts, e_be, log = "xy", type = "b", pch = 19, lwd = 3, col = oi["blue"],
+     ylim = c(1e-9, 0.1), xlab = expression("time step " * Delta * t ~ "(s)"),
+     ylab = "max error at t = 30 s", las = 1, yaxt = "n", main = "refine time")
+axis(2, at = 10^(-9:-1), labels = parse(text = paste0("10^", -9:-1)), las = 1)
+lines(dts, e_cn, type = "b", pch = 19, lwd = 3, col = oi["red"])
+lines(dts, e_cn50, type = "b", pch = 1, lwd = 2, lty = 2, col = oi["red"])
+lines(dts, 0.8 * e_be[1] * (dts / dts[1]), lty = 3, lwd = 2)
+lines(dts, 0.5 * e_cn[1] * (dts / dts[1])^2, lty = 3, lwd = 2)
+text(0.07, 1.5e-3, "slope 1", cex = 1.2); text(0.35, 6e-7, "slope 2", cex = 1.2)
+legend("bottomright", c("backward Euler, N = 400", "Crank-Nicolson, N = 400",
+                        expression("Crank-Nicolson, N = 50 (" * Delta * x == 10 ~ mu * m * ")")),
+       lwd = c(3, 3, 2), lty = c(1, 1, 2), pch = c(19, 19, 1),
+       col = oi[c("blue", "red", "red")], cex = 1.1, bty = "n")
+plot(Lc / Ns, e_dx, log = "xy", type = "b", pch = 19, lwd = 3, col = oi["red"],
+     xlab = expression("grid spacing " * Delta * x ~ "(" * mu * "m)"),
+     ylab = "max error at t = 30 s", las = 1, yaxt = "n",
+     main = "refine space (Crank-Nicolson, Δt = 0.01 s)")
+axis(2, at = 10^(-7:-2), labels = parse(text = paste0("10^", -7:-2)), las = 1)
+lines(Lc / Ns, 0.5 * e_dx[1] * (Ns[1] / Ns)^2, lty = 3, lwd = 2)
+text(12, 2.5e-5, "slope 2", cex = 1.2)
+dev.off()

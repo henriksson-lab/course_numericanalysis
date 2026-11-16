@@ -274,7 +274,7 @@ function mount(host: HTMLElement): void {
     st.steps = eliminate(A);
     st.solved = []; st.current = -1;
     buildSampleButtons();
-    if (st.tab === "solve" && factors()) solveSample(st.B[0], "#1");
+    if (st.tab === "solve" && factors()) solveSample(st.B[0], "Consumer #1");
     drawSolve();
   }
   function go(k: number): void {
@@ -286,7 +286,7 @@ function mount(host: HTMLElement): void {
     facBox.style.display = t === "factor" ? "flex" : "none";
     solBox.style.display = t === "solve" ? "flex" : "none";
     tabBtns.forEach((b, i) => b.classList.toggle("active", (i === 0) === (t === "factor")));
-    if (t === "solve" && st.solved.length === 0 && factors()) solveSample(st.B[0], "#1");
+    if (t === "solve" && st.solved.length === 0 && factors()) solveSample(st.B[0], "Consumer #1");
     drawSolve();
   }
   const last = () => st.steps[st.steps.length - 1];
@@ -407,7 +407,7 @@ function mount(host: HTMLElement): void {
   function buildSampleButtons(): void {
     sGroup.innerHTML = "";
     htmlEl("span", "lu-count", "sample:", sGroup);
-    st.B.forEach((b, j) => button(sGroup, `consumer #${j + 1}`, () => { solveSample(b, `#${j + 1}`); drawSolve(); }));
+    st.B.forEach((b, j) => button(sGroup, `consumer #${j + 1}`, () => { solveSample(b, `Consumer #${j + 1}`); drawSolve(); }));
     button(sGroup, "solve another sample ▶", () => { newSample(); drawSolve(); }, "active");
     button(sGroup, "reset count", () => { st.solved = []; st.current = -1; st.r = rng(seed); drawSolve(); });
   }
@@ -427,7 +427,7 @@ function mount(host: HTMLElement): void {
     } while (f[N - 1] < 2);
     const fx = f.map(v => Frac.of(v, 20));
     const b = st.A0.map(row => row.reduce((s, a, j) => s.add(a.mul(fx[j])), ZERO));
-    solveSample(b, `new ${st.solved.filter(s => s.label.startsWith("new")).length + 1}`);
+    solveSample(b, `New sample ${st.solved.filter(s => s.label.startsWith("New")).length + 1}`);
   }
   function solveLU(L: M, U: M, b: Frac[]): { y: Frac[]; x: Frac[] } {
     const N = b.length, y: Frac[] = [], x: Frac[] = Array(N).fill(ZERO);
@@ -454,7 +454,7 @@ function mount(host: HTMLElement): void {
     const ys = (i: number) => `y${sub(String(i + 1))}`, xs = (i: number) => `f${sub(String(i + 1))}`;
     const bs = (i: number) => `b${sub(String(i + 1))}`;
     const term = (c: Frac, v: Frac) => `${par(fr(c), c)}·${par(dec(v), v)}`;
-    let h = `<div class="lu-title">Consumer ${s.label}: b = ${vecTxt(s.b)}</div>`;
+    let h = `<div class="lu-title">${s.label}: b = ${vecTxt(s.b)}</div>`;
     if (st.perm.some((p, i) => p !== i)) h += `<div class="lu-count">rows reordered like A: P b = ${vecTxt(pb)}</div>`;
     h += `<div class="lu-mats">` + matrix(F.L.map(r => r.map(v => fr(v))), "<b>L</b> (kept)") + matrix(F.U.map(r => r.map(v => fr(v))), "<b>U</b> (kept)") + `</div>`;
     h += `<div class="lu-eq"><div class="h">Forward substitution L y = b, top to bottom:</div>`;
@@ -547,7 +547,7 @@ function mount(host: HTMLElement): void {
     const t2 = svgEl("text", { x: 8, y: 66 }, svgC);
     const ratio = m ? again(m) / once(m) : 1;
     t2.innerHTML = `<tspan fill="${COL.blue}" font-weight="700">factor once: ${sci(once(m))}</tspan>`
-      + `<tspan fill="#555">  m = ${m}${m ? `, ${ratio.toFixed(ratio < 10 ? 2 : 1)}× fewer` : ""}</tspan>`;
+      + `<tspan fill="#555">  m = ${m}${ratio > 1.005 ? `, ${ratio.toFixed(ratio < 10 ? 2 : 1)}× fewer` : m ? ", the same" : ""}</tspan>`;
     for (let k = 0; k <= 4; k++) {
       const v = unit * k;
       svgEl("line", { x1: L, x2: R, y1: sy(v), y2: sy(v), class: "grid" }, svgC);

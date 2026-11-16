@@ -16,7 +16,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 11 | least-squares-qr | done | done | done |
 | 12 | svd | done | done | done |
 | 13 | power-iteration | done | done | done |
-| 14 | eigen-algorithms | done | running | |
+| 14 | eigen-algorithms | done | done | done |
 | 15 | polynomial-interpolation | done | done | done |
 | 16 | splines | done | done | done |
 | 17 | fourier-fft | running | | |
@@ -35,7 +35,8 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 30 | constrained-lp | running | | |
 | 31 | diffusion-explicit | running | | |
 | 32 | diffusion-implicit | running | | |
-| 33–37 | | queued | | |
+| 33 | steady-state-2d | running | | |
+| 34–37 | | queued | | |
 
 ## Audit notes (pass 3)
 

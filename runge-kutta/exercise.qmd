@@ -219,6 +219,48 @@ fn main() {
 (b) Find the first time the lynx population reaches 20 (from below).
 (c) Now look only at the solution at $t = 0, 2.5, 5, \dots, 15$. Is there a sign change of $y - 20$? Compare with B7(c).
 
+## Explore {#explore}
+
+The demo below runs the methods of this unit in your browser. The tab **One step, four slopes** takes one step from $t = 0$ on the logistic OD curve ($K = 1.2$, $N_0 = 0.05$, $r = 0.8$) or on drug clearance ($C' = -0.8\,C$, $C_0 = 10$). Panel (a) draws every stage as a dot with its slope, the dashed line that leads to it, and the combined step (green square) next to the exact value (open circle). **next stage** reveals the stages one at a time. Panel (b) shows the error at $t = 10$ for all four methods against $h$, or against the number of $f$ evaluations, with the current method and $h$ as a large dot. The tab **Adaptive steps** solves predator–prey (50 years) or the repressilator ($t = 0 \dots 50$) with an embedded pair and the controller from the lecture (`rtol = atol`, first step $h = 0.01$). Panel (c) puts a dot at every accepted step over a tight reference solution (grey), panel (d) shows the step size with rejected attempts as red crosses, and panel (e) shows the phase plane.
+
+The browser uses the same IEEE doubles as R, Python and Rust, so the fixed-step numbers match the lecture to the digits shown. The adaptive solver is the controller of the slides, not deSolve's or scipy's, so its step counts are close to those of `ode45`/`RK45` but not identical (first step, error norm and step limits differ).
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="rkstep" data-tab="step" data-model="logistic" data-method="rk4" data-h="1" data-system="lv" data-pair="dp" data-logtol="-3"></div>
+<script src="../demos/dist/rkstep.js"></script>
+```
+
+**E1. (four slopes)** On the logistic curve with **RK4** and $h = 1$, press **next stage** four times. For each stage, write down where the slope is evaluated and its value, and say which earlier slope leads to the point. Why is $k_3$ larger than $k_2$, although both are taken at $t = 0.5$? Compare the combined value with the exact one, then switch to **Euler**, **Midpoint** and **Heun** at the same $h$ and compare the errors of the single step.
+
+::: {.callout-note collapse="true" title="Answer E1"}
+$k_1 = f(0, 0.05) = 0.03833$; $k_2 = f(0.5, 0.06917) = 0.05214$, reached along slope $k_1$; $k_3 = f(0.5, 0.07607) = 0.05700$, reached along $k_2$; $k_4 = f(1, 0.10700) = 0.07797$, reached along $k_3$. The curve bends upwards, so $k_1$ (the slope at the start) underestimates the rise; the point for $k_3$ is built with the steeper $k_2$, so it lies higher, where the logistic curve is steeper. The weighted slope $(k_1 + 2k_2 + 2k_3 + k_4)/6$ gives $N_1 = 0.1057646$ against the exact $0.1058708$: error $-1.1\times10^{-4}$. One step of Euler is off by $-0.018$, midpoint by $-3.7\times10^{-3}$ and Heun by $-4.0\times10^{-3}$: RK4 is 160 times better than Euler for 4 times the work.
+:::
+
+**E2. (order)** Still on the logistic curve, set $h = 1$, $0.5$ and $0.25$ for **Euler**, **Heun** and **RK4**, and note the error at $t = 10$ and the readout "halving h divides it by". What does each ratio approach, and which slope does the big dot follow in panel (b)? Why is Heun worse than Euler at $h = 2$ (the right end of the curves)?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Euler: $7.45\times10^{-3}$, $3.41\times10^{-3}$, $1.61\times10^{-3}$; ratios $2.2, 2.1, 2.1 \to 2 = 2^1$. Heun: $8.80\times10^{-3}$, $1.51\times10^{-3}$, $3.36\times10^{-4}$; ratios $5.8, 4.5, 4.2 \to 4 = 2^2$. RK4: $1.83\times10^{-4}$, $9.25\times10^{-6}$, $5.31\times10^{-7}$; ratios $19.8, 17.4, 16.6 \to 16 = 2^4$. The dots lie on lines of slope 1, 2 and 4. At $h = 2$ Heun's error is $0.099$, Euler's $0.037$: the methods are outside the asymptotic regime: the $h^2$ term is not yet small compared with the higher terms, and the order only says how errors behave for small $h$.
+:::
+
+**E3. (what accuracy costs)** Switch panel (b) to **f evaluations**. For each of Euler, Heun and RK4, read off roughly how many evaluations of $f$ are needed for an error of $10^{-6}$ (the dotted line); extrapolate along the slope if the curve does not reach it. Which method is cheapest when one digit is enough?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+RK4 crosses $10^{-6}$ between 80 evaluations ($h = 0.5$, $9.3\times10^{-6}$) and 160 ($h = 0.25$, $5.3\times10^{-7}$), so about 140. Heun crosses between 1280 ($1.2\times10^{-6}$) and 2560 ($3.1\times10^{-7}$) evaluations, so about 1400. Euler is still at $2.4\times10^{-5}$ at the end of its curve (2560 evaluations); along slope $-1$ it needs about 25 times more, roughly 60 000. These are the numbers of the lecture. For an error of about $10^{-2}$ all three need 10–20 evaluations (Euler $7.5\times10^{-3}$ with 10, Heun $8.8\times10^{-3}$ and RK4 $5.5\times10^{-3}$ with 20): if one digit is enough, Euler is as cheap as any.
+:::
+
+**E4. (adaptive steps on predator–prey)** Open **Adaptive steps**, choose **predator–prey** and **Dormand–Prince 5(4)** with `rtol = 1e-3`. Read the numbers of accepted and rejected steps, of $f$ evaluations, and the drift of the conserved quantity $V$. Where in the cycle are the steps short, and where long? Then go to `1e-6`. By what factor did the number of steps grow, and what did you get for it?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+`rtol = 1e-3`: 67 accepted steps, 19 rejected, 517 evaluations, $\max|V(t) - V(0)| = 0.032$; the orbit in (e) is visibly polygonal and wanders off the grey reference. The steps grow from $0.01$ to about $1.4$ years when both populations are low (hares about 12, lynx about 4) and shrink to about $0.35$ when they are high and changing fast (hares crashing, lynx peaking); the rejections (red crosses) come where the step had grown too far before such a phase. `rtol = 1e-6`: 229 accepted, 55 rejected, 1705 evaluations, drift $2.1\times10^{-6}$; steps from $0.14$ (hares about 26, lynx 22) to $0.42$ (lynx about 4). A factor 1000 in tolerance costs only 3.4 times more steps (for an order-5 method, $1000^{1/5} = 4$) and makes the drift 15 000 times smaller. Compare with fixed steps in C3: Euler with 5000 steps drifts by 0.51.
+:::
+
+**E5. (higher order pays)** Choose the **repressilator** at `rtol = 1e-6` and try all three pairs. Record the accepted steps, $f$ evaluations and the error in $p_1(50)$. Then go to `1e-5` and `1e-7` with each pair: by what factor does the number of steps grow per factor 10 in `rtol`? Finally try **Heun–Euler** at `1e-9`. What happens, and what would you use in practice?
+
+::: {.callout-note collapse="true" title="Answer E5"}
+At `1e-6`: Heun–Euler 39 065 steps, 78 138 evaluations, error $3.7\times10^{-4}$; Bogacki–Shampine 1689 steps, 5074 evaluations, error $-1.3\times10^{-2}$; Dormand–Prince 492 steps, 2959 evaluations, error $-2.5\times10^{-4}$ (deSolve's `ode45` takes 487 steps). Per factor 10 in `rtol` the step count grows by about $3.2 = 10^{1/2}$ (Heun–Euler: 12 355, 39 065, 123 530), $2.2 = 10^{1/3}$ (Bogacki–Shampine: 784, 1689, 3667) and $1.6 = 10^{1/5}$ (Dormand–Prince: 317, 492, 769): the exponent is $1/(q+1)$ from the controller. The same `rtol` does not mean the same error at $t = 50$: the tolerance controls the error per step, and the errors add up over the cycles (Bogacki–Shampine is 50 times worse here). Heun–Euler at `1e-9` needs steps of about $10^{-6}$ and stops at $t = 6.6$ after 150 000 attempts. In practice, use Dormand–Prince (`ode45`, `RK45`, `Dopri5`), and check the answer by tightening the tolerance.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — one step by hand (B1, B2)"}

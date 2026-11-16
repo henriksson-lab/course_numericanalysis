@@ -170,6 +170,46 @@ For $d = 1, 10^{-1}, \dots, 10^{-6}$, compute $\mathbf b = A_4\mathbf f$, then $
 (a) Run your `lu_nopivot` on the matrix from B5. Write a one-line check that detects the failure. Then swap rows 2 and 3, factorise, and solve for the consumer in B5(c).
 (b) Run `lu_nopivot` with forward and back substitution on $\begin{pmatrix} 10^{-20} & 1 \\ 1 & 1\end{pmatrix}\mathbf x = \begin{pmatrix} 1 \\ 2\end{pmatrix}$. Does your check from (a) catch this? Compute the residual of your answer and of the library's.
 
+## Explore {#explore}
+
+The demo below runs the lecture's mixing model (C3 plants, maize, fish) in exact fractions. Tab **1. Factorise A = LU** does elimination one multiplier at a time: each multiplier $\ell_{ik}$ is written into $L$ at the spot where it makes the new 0 in $U$ (green in both), and the product $L\cdot U$ is shown beside them. Tab **2. Solve for samples** keeps $L$ and $U$ and solves each consumer by forward and back substitution only, written out line by line. It marks the consumer among the sources in isotope space, and counts operations for two strategies: *factor once* (13 to factorise, then 15 per sample) and *re-eliminate for every sample* (13 + 15 = 28 each time). The **zero pivot** button loads the matrix from B5.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="lufactor" data-matrix="mixing"></div>
+<script src="../demos/dist/lufactor.js"></script>
+```
+
+**E1. (the multipliers fill $L$)** In tab 1, click **next ▶** through the elimination. For each step write down the multiplier, where it lands in $L$, the new row of $U$ and the running operation count. Look at the check panel at every step, including the middle ones where $L$ still has grey zeros. What does it show, and why does it hold even halfway?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Step 1: $\ell_{21} = -26 \div 1 = -26$, row 2 of $U$ becomes $(0, 16, 8)$, 5 operations. Step 2: $\ell_{31} = 2 \div 1 = 2$, row 3 becomes $(0, 4, 12)$, 10 so far. Step 3: $\ell_{32} = 4 \div 16 = \tfrac14$, row 3 becomes $(0, 0, 10)$, 13 in total. These are the $L$ and $U$ of the lecture. The check panel shows $L\cdot U = A$ ✓ at **every** step. Each step subtracts $\ell_{ik}$ times row $k$ from row $i$ of $U$ and at the same time writes $\ell_{ik}$ into $L$, and multiplying by $L$ adds that multiple back. The two changes cancel in the product, so no information is lost at any point. The grey zeros are multipliers not computed yet; those rows have not been touched.
+:::
+
+**E2. (forward substitution replays elimination)** Switch to tab 2. Consumer #1 is solved. Read off $\mathbf y$ and compare it with the slide "Why triangular is good". Then click consumers #2 and #3. Write down $\mathbf y$ and the diet for each. How many operations does each sample cost, and which numbers stay the same from one consumer to the next?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Consumer #1: $\mathbf y = (1, 6.4, 2)$, $\mathbf f = (0.5, 0.3, 0.2)$, as on the slide. Consumer #2: $\mathbf y = (1, 11.2, 2)$, $\mathbf f = (0.2, 0.6, 0.2)$. Consumer #3: $\mathbf y = (1, 8.8, 7)$, $\mathbf f = (0.1, 0.2, 0.7)$. Each sample costs 15 operations: 6 in forward substitution (3 multiply–subtract pairs) and 9 in back substitution (3 pairs and 3 divisions). $L$ and $U$, and so the multipliers $-26$, $2$, $\tfrac14$ and the pivots $1$, $16$, $10$, are the same every time. Only $\mathbf b$, $\mathbf y$ and $\mathbf f$ change. $\mathbf y$ is exactly the $\mathbf b$ column that the augmented matrix $[A \mid \mathbf b]$ would hold after elimination, so the forward substitution step replays the row operations on $\mathbf b$.
+:::
+
+**E3. (a consumer outside the triangle)** Click consumer #4. Which fraction is negative? Where is the consumer in the isotope plot? Did anything go wrong numerically?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+$\mathbf y = (1, 2, 6.5)$ and $\mathbf f = (0.55, -0.20, 0.65)$: maize gets $-20$ %. The point $(-24, 9)$ lies outside the source triangle (red dot), to the upper left of the C3–fish edge. The arithmetic is exact and $A\mathbf f = \mathbf b$ holds; the substitutions are the same 15 operations as before. The negative fraction is a **model** problem: a missing source or wrong source values. It is not a numerical failure.
+:::
+
+**E4. (when does factor once pay?)** Click **reset count**, then **solve another sample ▶** ten times. Read both totals and the ratio for $n = 3$. Then click $n = 1000$ (the same counts for a $1000\times1000$ matrix). Why does keeping $L$ and $U$ gain so little for the $3 \times 3$ mixing model and so much for $n = 1000$? What does the ratio approach for very many samples in each case?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+After 10 samples with $n = 3$: re-eliminating costs $10 \cdot 28 = 280$ operations, factor once $13 + 10\cdot 15 = 163$, 1.72 times fewer. With $n = 1000$: $6.7\cdot10^9$ against $6.9\cdot10^8$, 9.74 times fewer. For $n = 3$ the factorisation (13) costs about as much as one solve (15), so skipping it saves at most a factor $28/15 = 1.87$. For $n = 1000$ one factorisation ($\approx \tfrac23 n^3 = 6.7\cdot10^8$) costs as much as 333 solves ($2n^2 = 2\cdot10^6$). For $m \ll 333$ the saving is about $m$, and for very many samples it approaches $(F + S)/S \approx 334$. This is the $n/3$ ratio from the lecture's cost table. A 10 000-consumer study with a $3\times3$ matrix does not care (B6(d)). A $1000\times1000$ implicit time step does.
+:::
+
+**E5. (a zero pivot)** Click **zero pivot (two sources at −26 ‰)** and then **run to end** in tab 1. Where does elimination stop, and what would `lu_nopivot` store in row 3? Try tab 2. Then go back, click the swap button, and step through again. Give $L$ and $U$, and solve consumer #1 in tab 2.
+
+::: {.callout-note collapse="true" title="Answer E5"}
+After step 1, $U$ has rows $(1, 1, 1)$, $(0, 0, 16)$, $(0, 8, 4)$: the pivot $u_{22}$ is 0, and $\ell_{32} = 8 \div 0$ is impossible. In doubles, $\ell_{32} = \text{Inf}$ and row 3 becomes $(0, \text{NaN}, -\text{Inf})$, as on the lecture slide, with no error message. Tab 2 has no factors to reuse. After swapping rows 2 and 3: $\ell_{21} = 2$, $\ell_{31} = -26$, $\ell_{32} = 0 \div 8 = 0$, so $L = \begin{pmatrix} 1&0&0\\2&1&0\\-26&0&1\end{pmatrix}$ and $U = \begin{pmatrix} 1&1&1\\0&8&4\\0&0&16\end{pmatrix}$, again 13 operations and $L\cdot U$ equal to the reordered $A$. Consumer #1, reordered to $P\mathbf b = (1, 6.5, -20)$, gives $\mathbf y = (1, 4.5, 6)$ and $\mathbf f = (0.25, 0.375, 0.375)$, the answer of B5(c). The matrix was never singular; the rows were only in an unlucky order. Choosing that order automatically is partial pivoting, in the next unit.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — elimination and multipliers (B1, B2, B4)"}
