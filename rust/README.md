@@ -23,3 +23,6 @@ Allowed crates (see `Cargo.toml`); use the standard library when it is enough:
 | `statrs` | distributions, special functions | `dpois`, `lgamma` / `scipy.stats`, `scipy.special` |
 | `rand`, `rand_distr` | seeded random numbers | `set.seed`, `rnorm` / `numpy.random` |
 | `quadrature` | numerical integration | `integrate` / `scipy.integrate.quad` |
+| `rustfft` | FFT | `fft` / `numpy.fft`, `scipy.fft` |
+| `ode_solvers` | ODE solvers (Dopri5, Rk4, Dop853) | `deSolve::ode` / `scipy.integrate.solve_ivp` |
+| `minilp` | linear programming | `lpSolve::lp` / `scipy.optimize.linprog` |
