@@ -29,7 +29,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 24 | phase-plane | done | done | done |
 | 25 | gillespie | done | running | |
 | 26 | optimisation-1d | done | done | done |
-| 27 | gradient-methods | running | | |
+| 27 | gradient-methods | done | running | |
 | 28 | nonlinear-least-squares | done | running | |
 | 29 | identifiability | running | | |
 | 30 | constrained-lp | done | running | |
@@ -68,3 +68,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - stiffness: deSolve ode45 quirks on Robertson stated on slides; wall times machine-specific. Stray Chrome profile dir at /big/henriksson/temp/claude-tmp/claude-1001/chr1 (outside scratchpad) — clean up when user present.
 - nonlinear-least-squares: install minpack.lm. fig06 zigzag is real (FD step vs ODE tol).
 - quadrature: from memory — bioequivalence 80–125 %, regulators accept sampled AUC, WinNonlin/PKNCA rules. Romberg recap assumes Richardson (4D(h/2)−D(h))/3 form — check vs finite-differences in pass 2.
+- gradient-methods: slides not screenshotted; densest 'What optim, minimize and argmin do', 'When Newton fails'. From memory: optim ndeps=1e-3 central; scipy forward diff step √ε·max(1,|x|); BFGS gtol 1e-5; McKinnon 1998. rust/examples/gradient_methods_shared/defs.rs included via include! (new pattern).

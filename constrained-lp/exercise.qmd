@@ -251,6 +251,46 @@ fn main() {
 (b) A measured growth rate of 20 is added as a constraint BIO $\ge 20$. What does the solver report?
 (c) Solve $\max\ 6x_1 + 3x_2$ subject to $4x_1 \le 12$ only (the middle panel of the lecture's failure figure). Do all three languages report "unbounded"?
 
+## Explore {#explore}
+
+The demo below solves the lecture's LPs in your browser. The first tab, **LP in 2 variables**, draws the ATP LP: the feasible polygon (blue), each limit as a coloured line (tick a limit to switch it on, drag its slider to move it), and the objective $c_1 x_1 + c_2 x_2$ as dashed orange level lines; the solid orange line is the best level. Set $c_1$ and $c_2$ with the sliders or drag the orange arrow (the gradient of the objective). The optimum is the large red corner, or a red edge in a tie. **step ▶** walks the simplex path from $(0, 0)$, one corner per click, and the readout gives the rate of every edge leaving the current corner: the change in ATP per unit of the variable or the slack that the move frees. The shadow prices are measured by re-solving with the limit moved a little down and a little up; at a kink the two differ, and the readout shows both. The small plot on the right scans the best ATP against one limit (choose it with **scan**): its slope is the shadow price. The second tab, **FBA toy network**, solves the 9-reaction network of the lecture with a small simplex method written for the demo, including knock-outs, the flux variability ranges and an oxygen scan.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="lpgeom" data-preset="lecture"></div>
+<script src="../demos/dist/lpgeom.js"></script>
+```
+
+**E1. (the simplex walk)** Click **ATP LP**, then **step ▶** until the button stops. Write down the corners visited, the ATP at each and the rate of the edge taken. At the last corner, what are the rates of the two edges leaving it? Compare them with the shadow prices in the readout.
+
+::: {.callout-note collapse="true" title="Answer E1"}
+$(0, 0)$, ATP 0 → $(3, 0)$, ATP 18, along $x_2 = 0$ at $+6$ per unit $x_1$ (proteome stops it before carbon) → $(2, 4)$, ATP 24, along the proteome line at $+1.5$ per unit $x_2$. From $(2, 4)$ both edges lose ATP: $-2$ per unit of carbon freed (back along the proteome line) and $-1$ per unit of proteome freed (along the carbon line), so $(2, 4)$ is optimal. The shadow prices are carbon 2 and proteome 1: at the optimum, the rate of leaving a constraint is minus its shadow price. Freeing a unit of carbon costs 2 ATP, and **getting** one more unit of carbon gains 2 ATP; that is why the multipliers decide optimality.
+:::
+
+**E2. (the objective chooses the corner)** Keep $c_1 = 6$ and lower $c_2$ (the ATP per unit of fermentation) in steps of 0.5, down to 1. At which value does the optimum leave $(2, 4)$, and what does the readout say exactly at that value? Then set $c_2 = 3$ again and raise it to 6. Finally click **tie: 8x₁+2x₂** and walk the simplex path. How does the walk notice a tie?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+For $c_2 = 2, 2.5, 3$ the optimum stays at $(2, 4)$. At $c_2 = 1.5$ the level lines are parallel to the proteome line ($6/1.5 = 4/1$): **tie**, the whole edge $(3, 0)$–$(2, 4)$ is optimal with ATP 18. At $c_2 = 1$ the optimum is pure respiration, $(3, 0)$, ATP 18. Raising $c_2$ to 6 makes the level lines parallel to the carbon line: tie on the edge $(2, 4)$–$(0, 6)$, ATP 36; above that ratio pure fermentation would win. The optimal corner changes only when the level lines turn past an edge, so the mix $(2, 4)$ is robust to quite large changes in the yields. With $8x_1 + 2x_2$ the walk stops at $(3, 0)$, ATP 24, and reports the edge along the proteome line with rate $0$: no improving edge, so the corner is optimal, but a zero rate means the neighbour $(2, 4)$ is just as good. A solver returns one of them and says nothing.
+:::
+
+**E3. (shadow prices and kinks)** Click **ATP LP**, choose **scan: carbon**, and move the carbon limit from 6 to 7, then down to 3 and 2. Note the optimum, the ATP and the carbon shadow price each time. Then click **oxygen ≤ 1.5**, choose **scan: oxygen**, and move the oxygen limit from 1.5 to 2 and 3. What happens to the prices at oxygen 2, and why?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+Carbon 7: optimum $(1.67, 5.33)$, ATP 26, price 2 (one more unit of carbon gave $+2$, as predicted). Carbon 3: optimum $(3, 0)$, ATP 18, and the readout says "6 below / 2 above (kink)": three constraints are active there ($x_2 \ge 0$, carbon and proteome). Carbon 2: $(2, 0)$, ATP 12, price 6: with little carbon only respiration runs and proteome is slack. The scan is a broken line whose slope is the shadow price, with a kink at carbon 3. With oxygen 1.5: $(1.5, 4.5)$, ATP 22.5, prices carbon 3, proteome 0, oxygen 3 (as in B5). At oxygen 2 the optimum is $(2, 4)$, ATP 24, and every price shows a kink: oxygen "3 below / 0 above". Oxygen, carbon and proteome all pass through $(2, 4)$: a **degenerate** corner, where the prices are not unique. At oxygen 3 the oxygen line no longer touches the optimum: price 0, and carbon 2, proteome 1 as without oxygen. A shadow price only holds until the next kink.
+:::
+
+**E4. (unbounded and infeasible)** Click **unbounded** and walk the simplex path. What does the walk report, and which limit, ticked back on, makes the LP bounded again? Then click **infeasible**. Lower the demand until the LP becomes feasible. What is the feasible set at that point, and what does the readout give as the price of the demand?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+Only one limit is switched on, oxygen $x_1 \le 3$ (the same as $4x_1 \le 12$ on the lecture's failure slide). The walk goes $(0, 0) \to (3, 0)$, then finds the edge up the line $x_1 = 3$ with rate $+3$ per unit $x_2$ and no end: unbounded. Ticking carbon ($\le 6$) gives the optimum $(3, 3)$, ATP 27; ticking proteome ($\le 12$) gives $(0, 12)$, ATP 36. Either missing limit makes the problem unbounded: in FBA, a forgotten uptake bound. The infeasible case has carbon $\le 6$ and demand $\ge 8$; it stays infeasible down to demand 6.5. At demand 6 the feasible set shrinks to the segment of the carbon line from $(0, 6)$ to $(6, 0)$, and the optimum is $(6, 0)$, ATP 36. The demand price reads "0 (infeasible above)": lowering the demand does not change the best ATP, and raising it makes the LP infeasible, so there is no price from above.
+:::
+
+**E5. (FBA: knock-outs and oxygen)** Open **FBA toy network**. For the wild type, read the growth, the shadow prices and the fluxes that are not determined. Knock out GLY alone, then GLY and BYP1 together, then RES alone (untick the others between runs). Finally click **wild type** and lower the oxygen limit from 15 to 10 and 4, and read the prices and the acetate secretion.
+
+::: {.callout-note collapse="true" title="Answer E5"}
+Wild type: growth 15, glucose price 1.5, oxygen price 0 (10 of 15 used), and GLY, BYP1, BYP2 each range over $[0, 10]$: the solver's GLY = 10 is one corner of an optimal edge. KO GLY: growth still 15, and now every flux is determined (the bypass carries all the glucose). KO GLY + BYP1: growth 0, lethal: a synthetic lethal pair. KO RES: growth 6.667, oxygen use 0, acetate 13.333 (fermentation only). Oxygen 10: growth 15, oxygen price "0.833 below / 0 above" and glucose price "1.5 below / 0.667 above": a kink, exactly where acetate secretion stops in the oxygen scan. Oxygen 4: growth 10, acetate 8, prices glucose 0.667 and oxygen 0.833, the numbers of C7.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — bounds and KKT (B1, C1)"}

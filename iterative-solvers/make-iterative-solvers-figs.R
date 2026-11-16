@@ -19,7 +19,7 @@
 # Makes:
 #   fig01-chamber.svg     the oxygen field and the hypoxic core (m = 127)
 #   fig02-fillin.svg      non-zeros of the Cholesky factor vs unknowns, 2D and 3D
-#   fig03-smooth.svg      Jacobi error after 0, 10, 200 sweeps: it becomes smooth
+#   fig03-smooth.svg      Gauss-Seidel error after 0, 10, 200 sweeps: it becomes smooth
 #   fig04-residuals.svg   residual vs iteration, m = 63: Jacobi, GS, CG, IC-CG
 #   fig05-counts.svg      iterations vs grid size, log-log, with multigrid
 #   fig06-gmres.svg       perfused chamber (advection-diffusion): field, and
@@ -232,14 +232,15 @@ legend("topleft", bty = "n", cex = 1.3, lwd = c(3, 2, 3, 2), lty = c(1, 2, 1, 2)
                   "2D: Cholesky factor L", "2D: matrix A (5-point)"))
 dev.off()
 
-## ---- fig03: the Jacobi error becomes smooth ---------------------------------------
+## ---- fig03: the Gauss-Seidel error becomes smooth ----------------------------------
+# (plain Jacobi also keeps a checkerboard mode, eigenvalue -cos(pi h); see notes)
 
 m <- 31; A <- lap2(m); b <- rhs(m); xs <- as.vector(solve(A, b)); g <- (1:m) / (m + 1)
-set.seed(1); x <- xs + rnorm(m^2) * 0.02
+set.seed(1); x <- xs + rnorm(m^2) * 0.02; M <- tril(A)
 errs <- list()
 for (it in 0:200) {
   if (it %in% c(0, 10, 200)) errs[[as.character(it)]] <- matrix(x - xs, m, m)
-  x <- x + (b - (A %*% x)[, 1]) / 4
+  x <- x + as.vector(solve(M, b - (A %*% x)[, 1]))
 }
 svg("fig03-smooth.svg", width = 13, height = 4.6)
 par(mfrow = c(1, 3)); par_big(mar = c(2, 2, 3.5, 1))

@@ -238,6 +238,46 @@ $$A = \begin{pmatrix} -2 & 1 & 0 \\ 1 & -2 & 1 \\ 0 & 1 & -2 \end{pmatrix}.$$
 (b) How long until the closed end of the dead-end chamber reaches $c = 0.95$? Express it as a multiple of $L^2/D$.
 (c) Close both ends and start with a bolus: $c = 1$ for $230 \le x \le 270$ µm, 0 elsewhere. At $t = 0$, $5$ and $60$ s print the trapezoid total $\Delta x\,(\tfrac12 c_0 + c_1 + \dots + c_{N-1} + \tfrac12 c_N)$, the plain $\Delta x \sum_i c_i$, and the largest $c$. Which total is conserved? What does the profile approach?
 
+## Explore {#explore}
+
+The demo below runs FTCS for the chemotaxis chamber in your browser: source $c = 1$ at $x = 0$, empty channel at $t = 0$, and at $x = L$ either a sink ($c = 0$) or a wall (no flux, ghost point). Panel (a) shows the profile on the grid (dots), the exact series solution (line) and the steady state (dashed), with the time in minutes and seconds. Panel (b) plots the distance from the steady state, $\max_i |c_i - c_\infty(x_i)|$, against time on log–log axes, with the 5 % level, the time scale $L^2/D$ (green) and the exact curve (dashed). The animation spends the same number of seconds on every decade of time. When you change a setting the run restarts, and the old curve stays in (b) as a faint trace (the last three). **1 step** advances one time step; red dots are values outside $[0, 1]$. The readout gives $\Delta x$, $\Delta t$, the step count, $tD/L^2$, the zigzag factor $1 - 4r$ and the time at which the profile came within 5 %.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="ftcs" data-d="1000" data-l="500" data-n="50" data-r="0.4" data-bc="sink"></div>
+<script src="../demos/dist/ftcs.js"></script>
+```
+
+**E1. (small molecule and protein)** Click **▶ run** for the small molecule in the 500 µm chamber and watch both panels. When is the profile within 5 % of the straight line, in seconds, minutes and units of $L^2/D$? Then click **protein** and run again. By what factor does the time change, and how does the new curve in (b) compare with the faint trace of the first run?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Small molecule: within 5 % after **64.4 s = 1.07 min**, $0.2578\,L^2/D$, 1611 steps of $\Delta t = 0.04$ s. Early on the attractant fills only the first few grid points and the distance stays near 1; it then falls steeply once the profile straightens. Protein ($D = 100$ µm²/s): **644 s = 10.7 min**, again $0.2578\,L^2/D$ and again 1611 steps, now of $\Delta t = 0.4$ s. Ten times smaller $D$, ten times longer. In (b) the new curve has exactly the same shape as the faint one, shifted right by one decade, and the green $L^2/D$ line (250 s, then 2500 s) moves with it. The 5 % point always sits at about a quarter of $L^2/D$.
+:::
+
+**E2. (doubling the length)** Back to the **small molecule**. Move the $L$ slider from 500 to 1000 µm and run. Read the 5 % time and compare with E1. Then click **protein** for the 1 mm chamber. Finally: an experimenter wants the protein gradient within 10 minutes. Try $L = 450$ µm.
+
+::: {.callout-note collapse="true" title="Answer E2"}
+$L = 1000$ µm: **257.8 s = 4.30 min**, four times the 64.4 s of the 500 µm chamber. In (b) the curve and the $L^2/D$ line (now 1000 s) move right by $\log_{10} 4 \approx 0.6$ decade, without changing shape: time enters only as $tD/L^2$, and the readout still says 1611 steps and $0.2578\,L^2/D$. Doubling $L$ quadruples the wait. Protein in 1 mm: **43.0 min** (2578 s). At $L = 450$ µm the protein needs **8.70 min** (522 s), and at 500 µm it needs 10.7 min, so the longest channel is just under 500 µm ($L \le \sqrt{600 \cdot 100 / 0.258} \approx 480$ µm, as in B2(c)).
+:::
+
+**E3. (the grid does not change the physics, only the cost)** Click **reset all**. With $r = 0.4$, set $N = 20$, then $N = 100$, and run each to the 5 % point. Then go back to $N = 50$ and try $r = 0.25$. Record the 5 % time and the number of steps each time.
+
+::: {.callout-note collapse="true" title="Answer E3"}
+$N = 20$: 64.3 s (257 steps, $\Delta t = 0.25$ s, $0.2570\,L^2/D$). $N = 50$: 64.4 s (1611 steps). $N = 100$: 64.4 s (6444 steps, $\Delta t = 0.01$ s). $N = 50$, $r = 0.25$: 64.5 s (2578 steps). The answer agrees to three digits on every grid, and the dots stay on the exact curve; only the cost changes. With $r$ fixed, doubling $N$ quarters $\Delta t = r\,\Delta x^2/D$, so it takes 4× the steps, each with twice the points: 8× the work, as in C3. A smaller $r$ only adds steps without making the answer better in a useful way.
+:::
+
+**E4. (breaking the limit)** Click **reset all**, then **r = 0.5** and run: the dots stay smooth. Now click **r = 0.52** and press **1 step** repeatedly. After how many steps does the first red dot (a value outside $[0, 1]$) appear, and where? Then press **▶ run** and watch until the run stops. Repeat with **r = 0.6**. What does the readout say about the zigzag factor?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+At $r = 0.5$ every value stays in $[0, 1]$ and the run reaches 5 % at about 64 s, like $r = 0.4$. At $r = 0.52$ the first value leaves $[0, 1]$ after **27 steps** (1.40 s), at the steep front near the source; neighbouring points then alternate up and down, the checkerboard. The readout gives $1 - 4r = -1.08$: the zigzag flips sign and grows by 8 % per step. Run on, and the zigzag spreads across the channel, the distance in (b) leaves the top of the plot (about $4\times10^{15}$ near 30 s, as in C4) and the run stops when the values overflow to $\pm\infty$ at **8.06 min** (483.7 s, 9302 steps). At $r = 0.6$ ($1 - 4r = -1.4$) the first red dot comes after **7 steps** and the overflow after 125 s (2086 steps). A time step only 4 % above the limit destroys the solution; the maximum-principle check catches it within seconds.
+:::
+
+**E5. (sink or wall)** Click **reset all**, run once with the sink, then click **wall (no flux)** and run. What does the profile approach? When is it within 5 % of that steady state, in units of $L^2/D$? Compare the two curves in (b).
+
+::: {.callout-note collapse="true" title="Answer E5"}
+With a wall the profile fills up and approaches $c = 1$ everywhere: no gradient at all. It is within 5 % (the wall end at 0.95) after **328.0 s = 5.47 min = 1.312 $L^2/D$**, 8200 steps, five times the 64.4 s of the open chamber, and what is reached is useless for chemotaxis. In (b) the wall curve falls much more slowly at late times: its slowest mode is a quarter sine with rate $\pi^2 D/(4L^2)$, four times slower than the half sine of the open chamber, as if the channel were twice as long (B7, C5).
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — units (B1, B2)"}
