@@ -10,7 +10,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 5 | bisection-fixedpoint | done | done | done |
 | 6 | newton | done | done | done |
 | 7 | newton-systems | done | done | done |
-| 8 | lu | done | running | |
+| 8 | lu | done | done | done |
 | 9 | pivoting-conditioning | done | done | done |
 | 10 | structured-sparse | done | done | done |
 | 11 | least-squares-qr | done | done | done |
@@ -63,3 +63,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - fourier-fft: from memory — 4.8-h ultradian example, p53 ~5.5 h, Hes1 ~2 h periods, 'sample every 2 h' guideline. R fft prime-length slowness claim measured here.
 - constrained-lp: from memory — iML1515 2712 reactions / 1877 metabolites, Recon3D ~13 000 reactions. Install: lpSolve, numDeriv.
 - diffusion-explicit: slides not visually checked ('FTCS by hand', 'When is the gradient established?', 'No-flux boundary').
+- lu demo: E5/swap reveals B5(b)(c) answers; E1/E2 show counts asked in B3(b)/B6(a) — decide in audit. lu/exercise.html needs a re-render (stale vs latest lufactor.js layout — page text unchanged).

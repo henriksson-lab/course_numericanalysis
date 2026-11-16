@@ -34,6 +34,7 @@ const STYLE = `
 .reveal [data-demo="${NAME}"].qb-demo { font-size: 18px; }
 .reveal [data-demo="${NAME}"] .nq-ctrl { flex-basis: 330px; }
 .reveal [data-demo="${NAME}"] .qb-readout { font-size: 16px; }
+.reveal [data-demo="${NAME}"] .nq-plot svg { max-height: 530px; }
 .reveal [data-demo="${NAME}"] .qb-btn { font-size: 16px; padding: .15em .5em; }
 @media (max-width: 900px) {
   [data-demo="${NAME}"].qb-demo { flex-wrap: wrap; }

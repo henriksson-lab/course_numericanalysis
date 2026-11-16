@@ -264,7 +264,7 @@ spots <- function(u) {
 pal <- hcl.colors(64, "viridis")
 img <- function(u, main, zl = c(0, 3.3)) {
   N <- nrow(u); xx <- (1:N - 0.5) * 80 / N
-  image(xx, xx, pmin(pmax(u, zl[1]), zl[2]), col = pal, zlim = zl, asp = 1, axes = FALSE,
+  image(xx, xx, pmin(pmax(u, zl[1]), zl[2]), col = pal, zlim = zl, asp = 1, axes = FALSE, useRaster = TRUE,
         xlab = "", ylab = "", main = main)
   box()
 }

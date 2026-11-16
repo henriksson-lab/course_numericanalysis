@@ -1,6 +1,6 @@
 // C7: backward Euler damps a 24-hour oscillation; an explicit library solver does not.
 use nalgebra::{DMatrix, DVector};
-use ode_solvers::{Dopri5, System, Vector2};
+use ode_solvers::{Dopri5, OutputType, System, Vector2};
 use std::f64::consts::PI;
 
 const W: f64 = 2.0 * PI / 24.0;                       // one cycle per 24 h
@@ -25,6 +25,7 @@ fn main() {
         println!("backward Euler h = {:4.2}: amplitude after 10 days {:.6}", h, amp(y[0], y[1]));
     }
     let mut s = Dopri5::new(Osc, 0.0, 240.0, 240.0, Vector2::new(1.0, 0.0), 1e-8, 1e-10);
+    s.set_output(OutputType::Sparse);                 // last output = the step that ends at t = 240
     let st = s.integrate().unwrap();
     let y = s.y_out().last().unwrap();
     println!("Dopri5: amplitude {:.6}, steps {}", amp(y[0], y[1]), st.accepted_steps);

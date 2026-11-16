@@ -61,7 +61,7 @@ fn reference(t: f64) -> DVector<f64> {
 fn main() {
     let ys = reference(0.1);                                        // after the binding transient
     let pref = reference(10.1)[3];
-    for h in [0.2, 0.1, 0.05, 0.02, 0.01] {
+    for h in [0.2f64, 0.1, 0.05, 0.02, 0.01] {
         let n = (10.0 / h).round() as usize;
         let e1 = (beuler(&ys, h, n)[3] - pref).abs();
         let e2 = (bdf2(&ys, &reference(0.1 + h), h, n)[3] - pref).abs();

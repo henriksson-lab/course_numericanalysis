@@ -45,7 +45,7 @@ fn main() {
         let y = euler(&y0, h, (10.0 / h) as usize);      // t = 10 s (3333 steps for 3 ms)
         println!("{}", y.iter().map(|v| format!("{:.6}", v)).collect::<Vec<_>>().join(" "));
     }
-    for h in [1.0, 0.1, 0.01] {
+    for h in [1.0f64, 0.1, 0.01] {
         let n = (10.0 / h).round() as usize;
         let (y, newton) = beuler(&y0, h, n, 1e-10);
         println!("h = {:4.2}  P(10) = {:.6}  Newton its/step = {:.2}  E+C = {:.10}  S+C+P = {:.10}",

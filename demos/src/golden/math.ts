@@ -108,7 +108,7 @@ export const PROBLEMS: Record<ProbKey, Problem> = {
   },
   circadian: {
     key: "circadian", label: "circadian RSS(T)", f: rss, xname: "period T (h)", fname: "RSS(T)",
-    view: [10, 40], ylim: [0, 12], xstar: TStar, fstar: rss(TStar), f2: f2num(rss, TStar, 1e-3),
+    view: [10, 40], ylim: [0, 12.5], xstar: TStar, fstar: rss(TStar), f2: f2num(rss, TStar, 1e-3),
     other: TLocal, digits: 3,
   },
   ztp: {
