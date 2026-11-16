@@ -112,3 +112,4 @@ Automated (coordinator):
 - Literature fact-checks collected in plan/factcheck.md — need web, deferred until course lead is present.
 
 Workers (plan/audit-brief.md, reports in plan/audit/): R/Python re-run, figures, by-hand and quiz arithmetic, text-vs-numbers. Groups as in pass 2.
+- audit parts5-6 done. Left: re-run fourier-fft/make-fourier-fft-figs.R on an idle machine (fig04 timings); fourier-fft demo numbers not re-checked.

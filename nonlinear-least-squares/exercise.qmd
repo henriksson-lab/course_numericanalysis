@@ -20,7 +20,7 @@ By the end of this exercise you should be able to:
 - fit an **ODE model** with the solver inside the residual function, and choose the solver **tolerance** and the **finite-difference step** so that they fit together,
 - run a **multistart** and recognise two minima with the same RSS (the **flip-flop**).
 
-The by-hand part needs pen, paper and a calculator with `exp`. The code part checks your hand answers and then fits the three-parameter model, first in closed form, then as an ODE.
+The by-hand part needs pen, paper and a calculator with `exp`. The code part checks your hand answers and then fits the three-parameter model, first in closed form, then as an ODE. The PK model is only the example: the same methods and the same code fit the logistic growth curve of [*Why numerical analysis?*](../intro/lec.qmd) or an SIR epidemic model ([*Initial value problems and Euler's method*](../euler/lec.qmd)); only the model function changes.
 
 ## Background
 
@@ -404,7 +404,7 @@ fn main() {
 
 :::
 
-The concentration peaks at 2.01 h at 3.34 mg/L. At $k_a = k_e$ the formula is $0/0$ = `NaN`, although the limit $D k t e^{-kt}/V$ is perfectly finite (0.8187 and 1.7973 mg/L). Close to the diagonal the formula still works but subtracts two exponentials that agree to about 9 digits: catastrophic cancellation ([*Error, conditioning and stability*](../error-conditioning/lec.qmd)), with a worst-case relative error of $\varepsilon/10^{-9} \approx 2\times10^{-7}$. Here the result differs from the limit by $1.6\times10^{-9}$, which is mostly the genuine effect of $k_a - k_e = 10^{-9}$; at $k_a - k_e = 10^{-13}$ the cancellation would leave only about 3 digits. The ODE form has no such problem; an optimiser that crosses $k_a = k_e$ with the formula can hit `NaN`.
+The concentration peaks at 2.01 h at 3.34 mg/L. At $k_a = k_e$ the formula is $0/0$ = `NaN`, although the limit $D k t e^{-kt}/V$ is perfectly finite (0.8187 and 1.7973 mg/L). Close to the diagonal the formula still works but subtracts two exponentials that agree to about 9 digits: catastrophic cancellation ([*Error, conditioning and stability*](../error-conditioning/lec.qmd)), with a worst-case relative error of $\varepsilon/10^{-9} \approx 2\times10^{-7}$. Here, at $t = 1$ h, the result differs from the limit by $1.6\times10^{-9}$ (relative), but the exact value (computed with 40 digits) differs by $4.5\times10^{-9}$: the genuine effect of $k_a - k_e = 10^{-9}$ and the rounding error of the cancellation (about $3\times10^{-9}$) are of the same size; at $k_a - k_e = 10^{-13}$ the cancellation would leave only about 3 digits. The ODE form has no such problem; an optimiser that crosses $k_a = k_e$ with the formula can hit `NaN`.
 
 **C2.**
 
@@ -1387,7 +1387,7 @@ fn main() {
 
 :::
 
-(a) With `tol = 1e-2` the fitted $k_a$ is wrong in the 3rd digit, with $10^{-3}$ (scipy's default `rtol`!) in the 4th. Worse, the **reported** RSS is wrong: at `tol = 1e-3` R reports 0.06641, *below* the true minimum 0.06647; the optimiser partly fits the solver's error. From `tol = 1e-8` on, all digits shown agree with the closed-form fit. In Rust, `tol = 1e-6` needs 17 iterations instead of 7: the noisy objective makes acceptance decisions erratic. (b) The solver error in the RSS is $10^{-4}$ at `tol = 1e-3`, comparable with the RSS change from a 0.3 % change in $k_a$ ($0.0011 \times 0.3^2$); at $10^{-10}$ it is about $10^{-10}$. Rule: set `rtol`/`atol` explicitly, 100–1000 times tighter than the precision you want, refit with a tighter tolerance, and keep the digits that agree. Different solvers (lsoda, RK45, Dopri5) give different numbers at loose tolerances and the same at tight ones.
+(a) With `tol = 1e-2` the fitted $k_a$ is wrong in the 3rd digit, with $10^{-3}$ (scipy's default `rtol`!) in the 4th. Worse, the **reported** RSS is wrong: at `tol = 1e-3` R reports 0.06641, *below* the true minimum 0.06647; the optimiser partly fits the solver's error. From `tol = 1e-8` on, all digits shown agree with the closed-form fit. In Rust, `tol = 1e-6` needs 17 iterations instead of 7: the noisy objective makes acceptance decisions erratic. (b) The solver error in the RSS is $10^{-4}$ at `tol = 1e-3`, comparable with the RSS change from a 0.3 % change in $k_a$ ($0.0011 \times 0.3^2$); at $10^{-10}$ it is below $10^{-9}$ (R $5\times10^{-10}$, scipy $3\times10^{-11}$). Rule: set `rtol`/`atol` explicitly, 100–1000 times tighter than the precision you want, refit with a tighter tolerance, and keep the digits that agree. Different solvers (lsoda, RK45, Dopri5) give different numbers at loose tolerances and the same at tight ones.
 
 **C7.**
 

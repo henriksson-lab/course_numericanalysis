@@ -624,7 +624,7 @@ x_1 &amp;= 1 - x_2 - x_3 = 0.5
 <section id="factor-once-solve-many" class="slide level2 smaller">
 <h2>Factor once, solve many</h2>
 <p>Right-hand sides that arrive <strong>one at a time</strong> (a new sample, the next time step, the next Newton step with a frozen Jacobian):</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)                    <span class="co"># times: our server, one thread; yours differ</span></span>
 <span id="cb6-2"><a aria-hidden="true" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="dv">1000</span>; A <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">rnorm</span>(n <span class="sc">*</span> n), n)</span>
 <span id="cb6-3"><a aria-hidden="true" tabindex="-1"></a>Bm <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">rnorm</span>(n <span class="sc">*</span> <span class="dv">200</span>), n)                    <span class="co"># 200 right-hand sides</span></span>
 <span id="cb6-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">system.time</span>(<span class="cf">for</span> (j <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">200</span>) x <span class="ot">&lt;-</span> <span class="fu">solve</span>(A, Bm[, j]))[<span class="st">"elapsed"</span>]</span>
@@ -678,7 +678,7 @@ x_1 &amp;= 1 - x_2 - x_3 = 0.5
 <li>LU of <span class="math inline">A</span>: <span class="math inline">\tfrac23 n^3</span>, plus <span class="math inline">n</span> right-hand sides: about <span class="math inline">\tfrac43 n^3</span> more. Total <span class="math inline">\approx 2n^3</span>, <strong>3 times</strong> one factorisation.</li>
 <li>Then <span class="math inline">A^{-1}\mathbf b</span> costs <span class="math inline">2n^2</span>, the same as forward + back substitution.</li>
 </ul>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">system.time</span>(<span class="fu">solve</span>(A))[<span class="st">"elapsed"</span>]       <span class="co"># n = 1000, one thread</span></span>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">system.time</span>(<span class="fu">solve</span>(A))[<span class="st">"elapsed"</span>]       <span class="co"># n = 1000, one thread, our server</span></span>
 <span id="cb7-2"><a aria-hidden="true" tabindex="-1"></a><span class="co">#  0.068</span></span>
 <span id="cb7-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">system.time</span>(<span class="fu">lu</span>(A))[<span class="st">"elapsed"</span>]</span>
 <span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a><span class="co">#  0.018</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -712,7 +712,7 @@ x_1 &amp;= 1 - x_2 - x_3 = 0.5
 <span id="cb8-10"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="fu">max</span>(<span class="fu">abs</span>(x_lu <span class="sc">-</span> f)),        <span class="fu">max</span>(<span class="fu">abs</span>(x_inv <span class="sc">-</span> f)))          <span class="co"># errors</span></span>
 <span id="cb8-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 2.060296e-13 4.786171e-13</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
-<li>The <strong>residual</strong> <span class="math inline">\mathbf b - A\mathbf x</span> of <code>solve(A, b)</code> is at rounding level; the inverse’s is <span class="math inline">10^4</span> times larger. The error is also larger.</li>
+<li>The <strong>residual</strong> <span class="math inline">\mathbf b - A\mathbf x</span> of <code>solve(A, b)</code> is at rounding level (here exactly 0); the inverse’s is about <span class="math inline">10^3</span> times rounding level. The error is also larger.</li>
 </ul>
 <aside class="notes">
 <p>Two sources with almost the same signature make the matrix nearly singular (kappa(A4) is about 8e4; what a condition number means is the next unit, which uses a flow-cytometry example rather than A4). Both answers lose some digits because of that. But the LU solution is backward stable (as in Error, conditioning and stability): it is the exact solution for a matrix within rounding of A4, so its residual is at the level of epsilon. The inverse route is not: its residual grows with the condition number. The residual is the check you can always run, because it does not need the true answer.</p>

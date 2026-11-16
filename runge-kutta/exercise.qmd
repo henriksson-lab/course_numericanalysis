@@ -589,7 +589,28 @@ Midpoint and Heun agree on the linear clearance problem (B1c), and RK4 gives $6.
 ### R
 
 ```r
-# uses the step functions, `methods` and `rk_solve` from C1
+# the steppers and rk_solve of C1, repeated so this block runs on its own
+euler_step <- function(f, t, y, h) y + h * f(t, y)
+heun_step <- function(f, t, y, h) {
+  k1 <- f(t, y)
+  k2 <- f(t + h, y + h * k1)
+  y + h / 2 * (k1 + k2)
+}
+rk4_step <- function(f, t, y, h) {
+  k1 <- f(t, y)
+  k2 <- f(t + h / 2, y + h / 2 * k1)
+  k3 <- f(t + h / 2, y + h / 2 * k2)
+  k4 <- f(t + h, y + h * k3)
+  y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+}
+rk_solve <- function(step, f, t0, y0, h, n) {
+  t <- t0 + (0:n) * h
+  Y <- matrix(0, n + 1, length(y0)); Y[1, ] <- y0
+  for (i in 1:n) Y[i + 1, ] <- step(f, t[i], Y[i, ], h)
+  list(t = t, y = Y)
+}
+methods <- list(Euler = euler_step, Heun = heun_step, RK4 = rk4_step)
+
 f <- function(t, N) 0.8 * N * (1 - N / 1.2)
 exact <- function(t) 1.2 / (1 + (1.2 / 0.05 - 1) * exp(-0.8 * t))
 nsteps <- 10 * 2^(0:13)                      # h = 1, 1/2, ..., 1/8192
@@ -717,7 +738,27 @@ RK4 needs 160 evaluations where Heun needs 2560 and Euler 82 000 (the powers-of-
 ### R
 
 ```r
-# uses the step functions, `methods` and `rk_solve` from C1
+# the steppers and rk_solve of C1, repeated so this block runs on its own
+euler_step <- function(f, t, y, h) y + h * f(t, y)
+heun_step <- function(f, t, y, h) {
+  k1 <- f(t, y)
+  k2 <- f(t + h, y + h * k1)
+  y + h / 2 * (k1 + k2)
+}
+rk4_step <- function(f, t, y, h) {
+  k1 <- f(t, y)
+  k2 <- f(t + h / 2, y + h / 2 * k1)
+  k3 <- f(t + h / 2, y + h / 2 * k2)
+  k4 <- f(t + h, y + h * k3)
+  y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+}
+rk_solve <- function(step, f, t0, y0, h, n) {
+  t <- t0 + (0:n) * h
+  Y <- matrix(0, n + 1, length(y0)); Y[1, ] <- y0
+  for (i in 1:n) Y[i + 1, ] <- step(f, t[i], Y[i, ], h)
+  list(t = t, y = Y)
+}
+
 a <- 1; b <- 0.1; c <- 0.075; d <- 1.5               # per year
 lv <- function(t, y) c(a * y[1] - b * y[1] * y[2], c * y[1] * y[2] - d * y[2])
 V  <- function(x, y) c * x - d * log(x) + b * y - a * log(y)
@@ -864,7 +905,7 @@ fn main() {
 
 :::
 
-Euler's drift of $0.51$ in $V$ (compare $V(0) - V^* = 0.48$, the whole "height" of the orbit above the equilibrium) means the orbit has moved as far from the true one as the true one is from the equilibrium: useless. RK4 with ten times larger steps keeps $V$ to $6\times10^{-6}$. With tolerance $10^{-3}$ the adaptive solvers drift by 0.02–0.04, visible on a plot after a few cycles; with $10^{-6}$ by $10^{-6}$. The defaults of `solve_ivp` (`rtol = 1e-3`) are too loose for a long oscillatory simulation; set `rtol` and `atol` yourself. The three libraries take different numbers of steps for the same tolerance (different first step, step limits and controller details), and deSolve also caps the step at the spacing of `times` (here 1 year).
+Euler's drift of $0.51$ in $V$ (compare $V(0) - V^* = 0.48$, the whole "height" of the orbit above the equilibrium) means the orbit has moved as far from the true one as the true one is from the equilibrium: useless. RK4 with ten times larger steps keeps $V$ to $6\times10^{-6}$. With tolerance $10^{-3}$ the adaptive solvers drift by 0.017–0.04, visible on a plot after a few cycles; with $10^{-6}$ by $10^{-6}$. The defaults of `solve_ivp` (`rtol = 1e-3`) are too loose for a long oscillatory simulation; set `rtol` and `atol` yourself. The three libraries take different numbers of steps for the same tolerance (different first step, step limits and controller details), and deSolve also caps the step at the spacing of `times` (here 1 year).
 
 **C4.**
 
@@ -1208,7 +1249,25 @@ fn main() {
 ### R
 
 ```r
-# uses adapt_heun from C4
+# adapt_heun of C4, repeated so this block runs on its own
+adapt_heun <- function(f, t, y, tend, h, rtol = 1e-6, atol = 1e-9) {
+  ts <- t; hs <- c(); Y <- y; nrej <- 0
+  while (t < tend) {
+    h   <- min(h, tend - t)
+    k1  <- f(t, y); k2 <- f(t + h, y + h * k1)
+    ylo <- y + h * k1                            # Euler, order 1
+    yhi <- y + h / 2 * (k1 + k2)                 # Heun, order 2
+    sc  <- atol + rtol * pmax(abs(y), abs(yhi))
+    err <- sqrt(mean(((yhi - ylo) / sc)^2))
+    if (err <= 1) {                              # accept and record
+      t <- t + h; y <- yhi
+      ts <- c(ts, t); hs <- c(hs, h); Y <- rbind(Y, y)
+    } else nrej <- nrej + 1                      # reject: retry with smaller h
+    h <- h * min(5, max(0.2, 0.9 * err^(-1/2)))
+  }
+  list(t = ts, h = hs, y = unname(Y), nrej = nrej)
+}
+
 beta <- 0.3; gamma <- 0.1; N <- 10000
 sir <- function(t, y) {
   S <- y[1]; I <- y[2]

@@ -426,15 +426,9 @@ print(round(cov2cor(vcov(fit)), 3))
 # (d) check B3
 A <- 10; k <- 0.5; tb <- c(0, 1, 2)
 Jb <- cbind(exp(-k * tb), -A * tb * exp(-k * tb))
-A <- 10; k <- 0.5; tb <- c(0, 1, 2)
-Jb <- cbind(exp(-k * tb), -A * tb * exp(-k * tb))
-A <- 10; k <- 0.5; tb <- c(0, 1, 2)
-Jb <- cbind(exp(-k * tb), -A * tb * exp(-k * tb))
 Cb <- 0.2^2 * solve(crossprod(Jb))
 print(round(sqrt(diag(Cb)), 4)); print(round(cov2cor(Cb)[1, 2], 4))
 # [1] 0.1947 0.0250
-NA
-print(round(sqrt(diag(Cb)), 4)); print(round(cov2cor(Cb)[1, 2], 4))
 # [1] 0.5462
 ```
 
@@ -755,7 +749,7 @@ fn main() {
 
 :::
 
-$H$ and $2J^TJ$ differ by at most 0.3 % (in the $k_a$–$k_a$ entry): the residual term in fact 3 is small, and the SEs from $H$ differ from those of `vcov` in the third digit. With $\sigma = 0.1$ known the SEs are larger by the factor $\sigma/s = 0.1/0.0859 = 1.16$. From $(0.5, 0.1, 10)$, BFGS in R and Python lands on the **flip-flop** minimum $(0.191, 1.015, 3.80)$: same SSE, and SEs that are just as small. The Rust LM fit happens to stay on the first branch from both starts; which minimum you get depends on the algorithm as well as the start. Python's `hess_inv` is the BFGS approximation built up from gradients during the run: from the first start it gives SEs 3 times too small. Never use it for standard errors; compute the Hessian at the solution.
+$H$ and $2J^TJ$ differ by at most 0.3 % (in the $k_a$–$k_a$ entry): the residual term in fact 3 is small, and the SEs from $H$ differ from those of `vcov` in the third digit. With $\sigma = 0.1$ known the SEs are larger by the factor $\sigma/s = 0.1/0.0859 = 1.16$. From $(0.5, 0.1, 10)$, BFGS in R and Python lands on the **flip-flop** minimum $(0.191, 1.015, 3.80)$: same SSE, and SEs that are just as small. The Rust LM fit happens to stay on the first branch from both starts; which minimum you get depends on the algorithm as well as the start. Python's `hess_inv` is the BFGS approximation built up from gradients during the run: from the first start it gives SEs 2 to 6 times too small. Never use it for standard errors; compute the Hessian at the solution.
 
 **C3.**
 
@@ -796,7 +790,7 @@ for (i in 1:4) {
 p4 = np.array([1.0151, 0.1906, 20.22, 1.0])        # near the fit, F = 1
 J4 = jacobian(lambda lp: bateman(tt, np.exp(lp[0]), np.exp(lp[1]), np.exp(lp[2] - lp[3])), np.log(p4))
 U, d, Vt = np.linalg.svd(J4)
-print(np.array2string(d, precision=3))
+print(np.array2string(d, precision=3, suppress_small=False))
 # [1.189e+01 3.483e+00 1.048e+00 1.100e-11]
 v4 = Vt[3] * np.sign(Vt[3, 2])
 print(np.round(v4, 3))
@@ -1332,7 +1326,7 @@ def sloppy(ts):
     J = jacobian(lambda lp: pk2(ts, *np.exp(lp)), np.log(p2))
     lam, vec = np.linalg.eigh(J.T @ J)
     lam, vec = lam[::-1], vec[:, ::-1]          # largest first, as in R
-    print("eigenvalues:", np.array2string(lam, precision=3))
+    print("eigenvalues:", np.array2string(lam, precision=3, suppress_small=False))
     print("decades:", np.round(np.log10(lam[0] / lam), 2))
     print("SE along eigenvectors (sigma = 0.1):", np.array2string(0.1 / np.sqrt(lam), precision=3))
     v5 = vec[:, 4] * np.sign(vec[0, 4])

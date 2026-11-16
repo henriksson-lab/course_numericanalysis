@@ -260,7 +260,7 @@ newton_sys <- function(F, J, x, tol = 1e-12, maxit = 50) {
   warning("no convergence")
   x
 }
-print(newton_sys(F, J, c(3, 0.5)), digits = 16)
+print(newton_sys(F, J, c(3, 0.5)), digits = 15)
 # [1] 2.618033988749895 0.381966011250105
 ```
 
@@ -286,7 +286,7 @@ Error $\|\mathbf x_k - \mathbf x^*\|$ from $(3, 0.5)$:
 | 1 | $5.7\times10^{-2}$ |
 | 2 | $2.1\times10^{-3}$ |
 | 3 | $2.9\times10^{-6}$ |
-| 4 | $5.8\times10^{-12}$ |
+| 4 | $5.9\times10^{-12}$ |
 | 5 | $< 10^{-16}$ |
 
 - The exponent roughly **doubles** each step, as in 1-D: $e_{k+1} \approx C\,e_k^2$.
@@ -302,7 +302,7 @@ Same signature as in Convergence and cost: on a log axis, linear convergence is 
 
 ```r
 starts <- rbind(c(3, 0.5), c(0.5, 3), c(1, 1), c(1, 0.2), c(4, 4))
-t(apply(starts, 1, function(s) newton_sys(F, J, s)))   # (printing switched off)
+t(apply(starts, 1, function(s) newton_sys(F, J, s)))   # one run per row
 #          [,1]     [,2]
 # [1,] 2.618034 0.381966       U on, V off
 # [2,] 0.381966 2.618034       V on, U off
@@ -316,7 +316,7 @@ t(apply(starts, 1, function(s) newton_sys(F, J, s)))   # (printing switched off)
 - The start $(1, 0.2)$ has more U than V, yet Newton lands on "V on". Newton's choice is not the cell's choice.
 
 ::: notes
-The apply line runs Newton from each row of starts (the cat line is switched off for this slide). The first two answers are mirror images: the model is symmetric under swapping u and v. The middle state has u = v = 1.2134, the real root of u^3 + u - 3 = 0. A start on the diagonal u = v stays on the diagonal for ever (by symmetry), so (1,1) and (4,4) can only find the middle state. The fourth start is the interesting one: biologically a cell with U = 1 and V = 0.2 will switch U on, but Newton jumps to the other state. Next slide shows why.
+The apply line runs Newton from each row of starts. The first two answers are mirror images: the model is symmetric under swapping u and v. The middle state has u = v = 1.2134, the real root of u^3 + u - 3 = 0. A start on the diagonal u = v stays on the diagonal for ever (by symmetry), so (1,1) and (4,4) can only find the middle state. The fourth start is the interesting one: biologically a cell with U = 1 and V = 0.2 will switch U on, but Newton jumps to the other state. Next slide shows why.
 :::
 
 ## Where Newton goes vs where the cell goes {.smaller}
@@ -458,7 +458,7 @@ newton_sys(F, J, c(2.0, 0.55))      # a nearby start: "U on"
 ```
 
 - $\det J \approx 0$: the linear model is nearly flat in some direction, so the step is **huge**. It lands at $u < 0$, which is not a concentration.
-- With a non-integer Hill coefficient ($n = 2.5$) the same kind of jump gives $(-3.2)^{2.5}$ = `NaN`, and Newton returns `NaN`.
+- With a non-integer Hill coefficient ($n = 2.5$) the same kind of jump gives $(-3.25)^{2.5}$ = `NaN`, and Newton returns `NaN`.
 - **Check:** watch $\|\boldsymbol\delta\|$ and $\det J$ (or the condition number); check `all(is.finite(x))` and `all(x >= 0)`.
 
 ::: notes

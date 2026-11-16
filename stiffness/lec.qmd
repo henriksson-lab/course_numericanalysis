@@ -204,7 +204,8 @@ $$y_{n+1} = \frac{1}{1 - h\lambda}\, y_n, \qquad R(z) = \frac{1}{1 - z}.$$
 
 ```r
 z <- -0.8 * c(0.5, 2, 3, 10)            # h * lambda for C' = -0.8 C, h = 0.5, 2, 3, 10
-rbind(euler = 1 + z, rk4 = 1 + z + z^2/2 + z^3/6 + z^4/24, beuler = 1 / (1 - z))
+round(rbind(euler = 1 + z, rk4 = 1 + z + z^2/2 + z^3/6 + z^4/24,
+            beuler = 1 / (1 - z)), 3)
 #         [,1]   [,2]   [,3]    [,4]
 # euler  0.600 -0.600 -1.400  -7.000
 # rk4    0.670  0.270  0.558 110.333
@@ -254,7 +255,7 @@ This is a root-finding problem: use **Newton**, from [*Newton for systems of equ
 | $y$ | 1 | $1 - \frac{1}{3} = 0.6667$ | $0.6667 - \frac{0.1111}{2.333} = 0.6190$ | 0.61803 |
 
 ::: notes
-This is the slide that ties Part 8 back to Part 2. A Newton solve per step, each needing the Jacobian and a linear solve (Gaussian elimination as LU). In one variable the Jacobian of G is 1 - h f'(y). The exact backward Euler value here is (sqrt(5) - 1)/2 = 0.618034, the golden ratio again; the exact ODE solution at t = 0.1 is 1/(1 + kt) = 0.5, so the backward Euler step itself is not very accurate at this h, but Newton solved its equation to 5 digits in 3 iterations. Quadratic convergence: errors 0.38, 0.049, 0.00097, 4e-7.
+This is the slide that ties Part 8 back to Part 2. A Newton solve per step, each needing the Jacobian and a linear solve (Gaussian elimination as LU). In one variable the Jacobian of G is 1 - h f'(y). The exact backward Euler value here is (sqrt(5) - 1)/2 = 0.618034, the golden ratio again; the exact ODE solution at t = 0.1 is 1/(1 + kt) = 0.5, so the backward Euler step itself is not very accurate at this h, but Newton solved its equation to 5 digits in 3 iterations. Quadratic convergence: errors 0.38, 0.049, 0.0010, 5e-7.
 :::
 
 ## Backward Euler with Newton in R {.smaller}
@@ -293,11 +294,11 @@ Fourteen lines. The outer loop is time stepping, the inner loop is Newton. For s
 ```r
 Y <- beuler(f, jac, c(10, 1, 0, 0),
             h = 0.1, n = 300)
-Y[c(11, 101, 301), ]       # t = 1, 10, 30 s
-#           [,1]   [,2]      [,3]    [,4]
-# [1,] 8.2153795 0.1095 0.8905306  0.8941
-# [2,] 1.4245101 0.4145 0.5854757  7.9900
-# [3,] 0.0001077 0.9999 0.0001072  9.9998
+round(Y[c(11, 101, 301), ], 4)   # t = 1, 10, 30 s
+#        [,1]   [,2]   [,3]   [,4]
+# [1,] 8.2154 0.1095 0.8905 0.8941
+# [2,] 1.4245 0.4145 0.5855 7.9900
+# [3,] 0.0001 0.9999 0.0001 9.9998
 ```
 
 - 300 steps of 0.1 s; on average 3.4 Newton iterations each.
@@ -326,7 +327,7 @@ Error in $P$ after 10 s (from $t = 0.1$ s, after the binding transient):
 ::::
 
 ::: notes
-Slopes read off as in Convergence and cost: backward Euler loses a factor 10 in h and gains a factor 10 in error, BDF2 gains a factor 100. At h = 0.01 s backward Euler has error 1.3e-3 with 1000 steps. Explicit Euler cannot take that step at all; its largest stable step, 1.5 ms, gives 4.6e-4 with 6700 steps. BDF2 reaches 2e-6 at h = 0.01. We started at t = 0.1 s from the reference solution so that the plot shows the order on the smooth part; including the 1 ms transient adds a hump for intermediate h, where the step is comparable to the fast time scale.
+Slopes read off as in Convergence and cost: backward Euler loses a factor 10 in h and gains a factor 10 in error, BDF2 gains a factor 100. At h = 0.01 s backward Euler has error 1.3e-3 with 1000 steps. Explicit Euler cannot take that step at all; at h = 1.5 ms, close to its stability limit of 2 ms, it gives 4.8e-4 with 6700 steps. BDF2 reaches 2e-6 at h = 0.01. We started at t = 0.1 s from the reference solution so that the plot shows the order on the smooth part; including the 1 ms transient adds a hump for intermediate h, where the step is comparable to the fast time scale.
 :::
 
 ## Higher order: BDF {.smaller}
@@ -452,7 +453,7 @@ radau 26 steps 269 f-evals 0.002 s  y2: 9.185542e-06
 ```
 
 - **600 times** more steps for RK45, and its $y_2$ is 3 % off: 59 000 steps at the edge of stability pile up error (a tighter `atol` does not cure it).
-- To $t = 10^{11}$: lsoda takes 1595 steps. RK45, held at $h \approx 10^{-3}$, would need about $10^{14}$.
+- To $t = 10^{11}$ (`rtol = 1e-8`): lsoda takes 1595 steps. RK45, held at $h \approx 10^{-3}$, would need about $10^{14}$.
 
 ::: notes
 The fast eigenvalue at t = 40 is about -3400, so RK45 is limited to h of about 3.3/3400, 1e-3, for the whole run: 40 / 1e-3 is 40 000 steps plus the early phase. The stiff solvers take 26 to 98 steps. Radau takes the fewest steps but each one costs more f calls (three implicit stages). Timings are from our laptop; on a second run ode45 took 2.8 s, the stiff solvers stay at a few milliseconds. ode45 is also less accurate in y2: with atol = 1e-10 it still returns 8.89e-6, so this is not just a loose tolerance; scipy's RK45 gets y2 right with 34 500 steps (exercise), so the deSolve number is a warning rather than a law. deSolve's ode45 needs hini = 1e-4 here: with its automatic first step it can stall on this problem. For the run to 1e11 the stiff solvers' step grows to 1e9 and more; an explicit method stays at 1e-3 for ever.

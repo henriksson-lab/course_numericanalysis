@@ -229,7 +229,7 @@ The demo below computes everything in your browser: piecewise linear interpolati
 **E1. (local versus global)** With **OD, 11 exact values**, untick *not-a-knot*, tick *polynomial* (degree 10) and switch panel (b) to **change**. The selected point is $t = 5$; press **+** once (the read rises by 0.05). Click near the middle of the intervals at $t^* \approx 4.5, 3.5, 2.5, 1.5, 0.5$ and write down the change of the natural spline and of the polynomial. By what factor does the spline's change shrink per interval? Where is the polynomial's change largest?
 
 ::: {.callout-note collapse="true" title="Answer E1"}
-Natural spline: $0.030$, $-0.0064$, $0.0017$, $-4.7\times10^{-4}$, $1.6\times10^{-4}$. The sign alternates and the size falls by a factor of about 4 per interval (4.7, 3.7, 3.6, 2.9; the last one is affected by the natural end). That is the factor $2 + \sqrt3 \approx 3.7$ of the lecture: the ratio of diagonal to off-diagonal in the tridiagonal system. On the log axis of panel (b) the spline's change is a V of straight lines around $t = 5$ (the dips are where it changes sign). Polynomial: $0.033$, $-0.016$, $0.021$, $-0.050$, $0.247$: the change **grows** towards the ends, and at $t = 0.5$ it is five times as large as the move itself (the same $0.247$ at $t = 9.5$). Every coefficient of the polynomial depends on every point; each piece of the spline depends mostly on its neighbours. Piecewise linear (tick it) changes only on $[4, 6]$ and is exactly 0 elsewhere.
+Natural spline: $0.030$, $-0.0064$, $0.0017$, $-4.7\times10^{-4}$, $1.6\times10^{-4}$. The sign alternates and the size falls by a factor of about 4 per interval (4.7, 3.7, 3.7, 3.0; the last one is affected by the natural end). That is the factor $2 + \sqrt3 \approx 3.7$ of the lecture: the ratio of diagonal to off-diagonal in the tridiagonal system. On the log axis of panel (b) the spline's change is a V of straight lines around $t = 5$ (the dips are where it changes sign). Polynomial: $0.033$, $-0.016$, $0.021$, $-0.050$, $0.247$: the change **grows** towards the ends, and at $t = 0.5$ it is five times as large as the move itself (the same $0.247$ at $t = 9.5$). Every coefficient of the polynomial depends on every point; each piece of the spline depends mostly on its neighbours. Piecewise linear (tick it) changes only on $[4, 6]$ and is exactly 0 elsewhere.
 :::
 
 **E2. (overshoot and end conditions)** Click **gene time course** (probe at $t^* = 3$ h). Tick *not-a-knot* and *monotone (PCHIP)*. Read $S(3)$ and the minimum for every curve. Which give negative expression? Compare with C4.
@@ -334,10 +334,10 @@ K <- 1.2; N0 <- 0.05; r <- 0.8
 od <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
 tt <- seq(0, 10, by = 0.01)                        # fine grid for the max error
 for (h in c(2, 1, 0.5, 0.25, 0.125)) {
-  x <- seq(0, 10, by = h); y <- od(x)
-  e_lin <- max(abs(approx(x, y, tt)$y - od(tt)))
-  e_nat <- max(abs(splinefun(x, y, method = "natural")(tt) - od(tt)))
-  e_def <- max(abs(splinefun(x, y)(tt) - od(tt)))  # R default, "fmm"
+  xh <- seq(0, 10, by = h); yh <- od(xh)
+  e_lin <- max(abs(approx(xh, yh, tt)$y - od(tt)))
+  e_nat <- max(abs(splinefun(xh, yh, method = "natural")(tt) - od(tt)))
+  e_def <- max(abs(splinefun(xh, yh)(tt) - od(tt)))  # R default, "fmm"
   cat(sprintf("h = %5.3f  linear %.2e  natural %.2e  default %.2e\n",
               h, e_lin, e_nat, e_def))
 }
@@ -358,10 +358,10 @@ K, N0, r = 1.2, 0.05, 0.8
 od = lambda t: K / (1 + (K / N0 - 1) * np.exp(-r * t))
 tt = np.linspace(0, 10, 1001)                      # fine grid for the max error
 for h in [2, 1, 0.5, 0.25, 0.125]:
-    x = np.linspace(0, 10, round(10 / h) + 1); y = od(x)
-    e_lin = np.max(np.abs(np.interp(tt, x, y) - od(tt)))
-    e_nat = np.max(np.abs(CubicSpline(x, y, bc_type="natural")(tt) - od(tt)))
-    e_def = np.max(np.abs(CubicSpline(x, y)(tt) - od(tt)))   # default: not-a-knot
+    xh = np.linspace(0, 10, round(10 / h) + 1); yh = od(xh)
+    e_lin = np.max(np.abs(np.interp(tt, xh, yh) - od(tt)))
+    e_nat = np.max(np.abs(CubicSpline(xh, yh, bc_type="natural")(tt) - od(tt)))
+    e_def = np.max(np.abs(CubicSpline(xh, yh)(tt) - od(tt)))   # default: not-a-knot
     print(f"h = {h:5.3f}  linear {e_lin:.2e}  natural {e_nat:.2e}  default {e_def:.2e}")
 # h = 2.000  linear 3.04e-02  natural 7.03e-03  default 2.14e-02
 # h = 1.000  linear 9.10e-03  natural 1.31e-03  default 2.27e-04
@@ -672,21 +672,21 @@ clamped_M <- function(x, y, d0, dn) {             # S'(x_1) = d0, S'(x_n) = dn
 K <- 1.2; N0 <- 0.05; r <- 0.8
 od   <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
 rate <- function(t) r * od(t) * (1 - od(t) / K)
-x <- 0:10; y <- od(x)
+xk <- 0:10; yk <- od(xk)
 tt <- seq(0, 10, by = 0.01); early <- tt <= 1
 err <- function(S) c(all = max(abs(S - od(tt))), first_hour = max(abs(S - od(tt))[early]))
-rbind(natural = err(spline_eval(x, y, natural_M(x, y), tt)),
-      clamped = err(spline_eval(x, y, clamped_M(x, y, rate(0), rate(10)), tt)),
-      flat    = err(spline_eval(x, y, clamped_M(x, y, 0, 0), tt)),
-      default = err(splinefun(x, y)(tt)))
+rbind(natural = err(spline_eval(xk, yk, natural_M(xk, yk), tt)),
+      clamped = err(spline_eval(xk, yk, clamped_M(xk, yk, rate(0), rate(10)), tt)),
+      flat    = err(spline_eval(xk, yk, clamped_M(xk, yk, 0, 0), tt)),
+      default = err(splinefun(xk, yk)(tt)))
 #                  all   first_hour
 # natural 0.0013133512 1.313351e-03
 # clamped 0.0002275886 3.058918e-05
 # flat    0.0065443510 6.544351e-03
 # default 0.0002532774 2.161325e-04
 library(pracma)                                    # check the clamped spline
-max(abs(spline_eval(x, y, clamped_M(x, y, rate(0), rate(10)), tt) -
-        cubicspline(x, y, tt, endp2nd = TRUE, der = rate(c(0, 10)))))
+max(abs(spline_eval(xk, yk, clamped_M(xk, yk, rate(0), rate(10)), tt) -
+        cubicspline(xk, yk, tt, endp2nd = TRUE, der = rate(c(0, 10)))))
 # [1] 2.220446e-16
 ```
 
@@ -708,16 +708,16 @@ def clamped_M(x, y, d0, dn):                      # S'(x_0) = d0, S'(x_{n-1}) = 
 K, N0, r = 1.2, 0.05, 0.8
 od = lambda t: K / (1 + (K / N0 - 1) * np.exp(-r * t))
 rate = lambda t: r * od(t) * (1 - od(t) / K)
-x = np.arange(11.0); y = od(x)
+xk = np.arange(11.0); yk = od(xk)
 tt = np.linspace(0, 10, 1001); early = tt <= 1
 def err(S):
     e = np.abs(S - od(tt)); return f"{e.max():.4e} {e[early].max():.4e}"
-print("natural", err(spline_eval(x, y, natural_M(x, y), tt)))
-print("clamped", err(spline_eval(x, y, clamped_M(x, y, rate(0), rate(10)), tt)))
-print("flat   ", err(spline_eval(x, y, clamped_M(x, y, 0, 0), tt)))
-print("default", err(CubicSpline(x, y)(tt)))
-cs = CubicSpline(x, y, bc_type=((1, rate(0)), (1, rate(10))))   # check the clamped spline
-print(np.max(np.abs(spline_eval(x, y, clamped_M(x, y, rate(0), rate(10)), tt) - cs(tt))))
+print("natural", err(spline_eval(xk, yk, natural_M(xk, yk), tt)))
+print("clamped", err(spline_eval(xk, yk, clamped_M(xk, yk, rate(0), rate(10)), tt)))
+print("flat   ", err(spline_eval(xk, yk, clamped_M(xk, yk, 0, 0), tt)))
+print("default", err(CubicSpline(xk, yk)(tt)))
+cs = CubicSpline(xk, yk, bc_type=((1, rate(0)), (1, rate(10))))   # check the clamped spline
+print(np.max(np.abs(spline_eval(xk, yk, clamped_M(xk, yk, rate(0), rate(10)), tt) - cs(tt))))
 # natural 1.3134e-03 1.3134e-03
 # clamped 2.2759e-04 3.0589e-05
 # flat    6.5444e-03 6.5444e-03

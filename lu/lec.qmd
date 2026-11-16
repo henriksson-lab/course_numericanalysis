@@ -299,7 +299,7 @@ Timed with a single BLAS thread (OPENBLAS_NUM_THREADS=1, see the figure script),
 Right-hand sides that arrive **one at a time** (a new sample, the next time step, the next Newton step with a frozen Jacobian):
 
 ```r
-set.seed(1)
+set.seed(1)                    # times: our server, one thread; yours differ
 n <- 1000; A <- matrix(rnorm(n * n), n)
 Bm <- matrix(rnorm(n * 200), n)                    # 200 right-hand sides
 system.time(for (j in 1:200) x <- solve(A, Bm[, j]))["elapsed"]
@@ -335,7 +335,7 @@ Built from measured single-call times at n = 1000 (see the figure script): solve
 - Then $A^{-1}\mathbf b$ costs $2n^2$, the same as forward + back substitution.
 
 ```r
-system.time(solve(A))["elapsed"]       # n = 1000, one thread
+system.time(solve(A))["elapsed"]       # n = 1000, one thread, our server
 #  0.068
 system.time(lu(A))["elapsed"]
 #  0.018
@@ -365,7 +365,7 @@ c(max(abs(x_lu - f)),        max(abs(x_inv - f)))          # errors
 # [1] 2.060296e-13 4.786171e-13
 ```
 
-- The **residual** $\mathbf b - A\mathbf x$ of `solve(A, b)` is at rounding level; the inverse's is $10^4$ times larger. The error is also larger.
+- The **residual** $\mathbf b - A\mathbf x$ of `solve(A, b)` is at rounding level (here exactly 0); the inverse's is about $10^3$ times rounding level. The error is also larger.
 
 ::: notes
 Two sources with almost the same signature make the matrix nearly singular (kappa(A4) is about 8e4; what a condition number means is the next unit, which uses a flow-cytometry example rather than A4). Both answers lose some digits because of that. But the LU solution is backward stable (as in Error, conditioning and stability): it is the exact solution for a matrix within rounding of A4, so its residual is at the level of epsilon. The inverse route is not: its residual grows with the condition number. The residual is the check you can always run, because it does not need the true answer.

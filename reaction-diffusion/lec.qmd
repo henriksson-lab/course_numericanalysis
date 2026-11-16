@@ -195,7 +195,7 @@ $$G(q) = \frac{1 - k\,\Delta t}{1 + D q^2\,\Delta t}.$$
 
 - The denominator $\ge 1$: the diffusion part never limits $\Delta t$.
 - The numerator is **Euler on the reaction**: $|1 - k\Delta t| \le 1$ needs $\Delta t \le 2/k$, and the uniform mode ($q = 0$) gets **no help** from diffusion.
-- Fast receptor binding at 1 per s: IMEX needs $\Delta t \le 2$ s, as slow as explicit diffusion on a 30 µm grid.
+- Fast receptor binding at 1 per s: IMEX needs $\Delta t \le 2$ s, as slow as explicit diffusion on a 2.6 µm grid.
 - **Check:** compute $\Delta t\,\lambda$ for the eigenvalues $\lambda$ of the reaction Jacobian, and stay inside Euler's stability region ($|1 + \Delta t\lambda| \le 1$).
 
 ::: notes
@@ -338,7 +338,7 @@ for (n in 1:2000) {                  # to t = 200
 }
 ```
 
-- Periodic grid: [`fft`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/fft.html) diagonalises the five-point Laplacian, so the implicit solve is a **division**. 2 s in R.
+- Periodic grid: [`fft`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/fft.html) diagonalises the five-point Laplacian, so the implicit solve is a **division**. About 2 s in R (machine-dependent).
 
 ::: notes
 The same IMEX Euler as in 1D; only the linear solve differs. Why periodic and FFT, and not the sparse Kronecker Laplacian of [*Steady state in two dimensions*](../steady-state-2d/lec.qmd): a periodic box stands for a small patch of a large tissue without edge effects, and on a periodic grid the five-point Laplacian is diagonalised by the FFT ([*Fourier series and the FFT*](../fourier-fft/lec.qmd)), so each implicit step is a division instead of a sparse solve. The eigenvectors of the five-point Laplacian are then the 2D Fourier modes, with eigenvalues -(4/dx^2)(sin^2(pi k/N) + sin^2(pi l/N)): that is kap. So: transform, divide each coefficient by 1 + dt D kap, transform back. Cost O(N^2 log N) per step, much cheaper than a sparse solve. With walls instead of periodic edges one would use the sparse Kronecker matrix and a sparse direct solve, as in Steady state in two dimensions, or a cosine transform. Explicit FTCS would need dt <= dx^2/(4 d) = 0.0125 for v: 16 000 steps instead of 2000. lcg is a tiny random number generator (Park–Miller) defined in the exercise so that all three languages start from the same noise; R's runif would do as well. fft in R does the 2D transform of a matrix; Python numpy.fft.fft2.
