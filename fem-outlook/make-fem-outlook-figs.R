@@ -83,11 +83,10 @@ draw_pillars <- function(col = oi["grey"], border = oi["black"]) {
 svg("fig01-staircase.svg", width = 12, height = 4.6)
 par(mfrow = c(1, 2), mar = c(1, 1, 3, 1))
 plot(NA, xlim = c(0, W), ylim = c(0, H), asp = 1, axes = FALSE, xlab = "", ylab = "")
-title("The chamber: round pillars", cex.main = 1.6)
+title(paste0("The chamber: 600 × 400 ", um, ", pillars r = 50 ", um), cex.main = 1.6)
 rect(0, 0, W, H, col = "#EAF4FB", border = oi["black"], lwd = 2)
 draw_pillars()
 arrows(-5, 200, 60, 200, length = 0.12, lwd = 3, col = oi["blue"])
-text(300, -12, paste("600 ×", 400, um, ", pillars r = 50", um), cex = 1.3, xpd = NA)
 
 hgrid <- 25
 plot(NA, xlim = c(0, W), ylim = c(0, H), asp = 1, axes = FALSE, xlab = "", ylab = "")
@@ -101,7 +100,7 @@ th <- seq(0, 2 * pi, length.out = 200)
 for (i in seq_len(nrow(centres)))
   lines(centres$x[i] + R * cos(th), centres$y[i] + R * sin(th), col = oi["red"], lwd = 2.5)
 rect(0, 0, W, H, border = oi["black"], lwd = 2)
-dev.off()
+invisible(dev.off())
 
 ## ---- fig02: finite volumes -----------------------------------------------------
 
@@ -120,7 +119,7 @@ text(2.6, 0.4, expression(J["out"]), cex = 1.5, col = oi["blue"])
 text(2.0, 2.1, "uptake", cex = 1.4, col = oi["red"], adj = 0)
 text(1.8, 0.8, "cell i", cex = 1.3)
 
-plot(NA, xlim = c(0, 4), ylim = c(0, 3), asp = 1, axes = FALSE, xlab = "", ylab = "")
+plot(NA, xlim = c(0, 4), ylim = c(-0.6, 3), asp = 1, axes = FALSE, xlab = "", ylab = "")
 title("2D: the same balance on a triangle", cex.main = 1.6)
 P <- rbind(c(0.8, 0.4), c(3.4, 0.7), c(1.8, 2.6))
 polygon(P, col = "#FCE9C8", border = oi["black"], lwd = 2)
@@ -130,8 +129,8 @@ for (s in 1:3) {
   arrows(m[1] - 0.35 * nrm[1], m[2] - 0.35 * nrm[2], m[1] + 0.35 * nrm[1], m[2] + 0.35 * nrm[2],
          lwd = 3, length = 0.12, col = oi["blue"])
 }
-text(2.0, 1.25, "sum of 3 face fluxes\n= uptake inside", cex = 1.25)
-dev.off()
+text(2.0, -0.45, "sum of the 3 face fluxes = uptake inside", cex = 1.3)
+invisible(dev.off())
 
 ## ---- fig03: hat functions --------------------------------------------------------
 
@@ -160,7 +159,7 @@ lines(xn, uj, lwd = 3.5, col = oi["black"])
 points(xn, uj, pch = 19, cex = 1.4)
 legend("topright", c("exact u", expression(u[h]~"(piecewise linear)")), lty = c(2, 1),
        lwd = c(2, 3.5), col = c(oi["grey"], oi["black"]), bty = "n", cex = 1.3)
-dev.off()
+invisible(dev.off())
 
 ## ---- fig04: assembly -----------------------------------------------------------
 
@@ -180,11 +179,11 @@ for (i in 1:n) for (j in 1:n) if (abs(i - j) <= 1)
 rect(0, 0, n, n, border = oi["black"], lwd = 1.5)
 text(n / 2, -0.4, "assembled matrix: tridiagonal", cex = 1.3)
 ## element matrix
-text(11, 5.2, "element e, length h_e:", cex = 1.35)
+text(11, 5.2, expression("element e, length " * h[e] * ":"), cex = 1.35)
 text(11, 3.9, expression(frac(D, h[e]) * bgroup("(", atop(" 1  -1", "-1   1"), ")")), cex = 1.6)
 text(11, 2.3, expression(+ frac(k * h[e], 6) * bgroup("(", atop("2  1", "1  2"), ")")), cex = 1.6)
 text(11, 0.8, "added into rows/columns e, e+1", cex = 1.3)
-dev.off()
+invisible(dev.off())
 
 ## ---- fig05: slab profiles --------------------------------------------------------
 
@@ -204,7 +203,7 @@ for (zoom in c(FALSE, TRUE)) {
                     col = c(oi["black"], oi["orange"], oi["blue"]), lwd = 2.5,
                     pch = c(NA, 19, 17), bty = "n", cex = 1.3)
 }
-dev.off()
+invisible(dev.off())
 
 ## ---- fig06: error vs N -------------------------------------------------------------
 
@@ -219,10 +218,10 @@ plot(Ns, err[, 1], log = "xy", type = "o", pch = 19, lwd = 2.5, col = oi["orange
      xlab = "number of elements N", ylab = "max nodal error", ylim = range(err))
 lines(Ns, err[, 2], type = "o", pch = 17, lwd = 2.5, col = oi["blue"], cex = 1.3)
 lines(Ns, 0.5 * err[3, 1] * (Ns / Ns[3])^-2, lty = 2, col = oi["grey"], lwd = 2)
-text(160, 0.5 * err[3, 1] * (160 / Ns[3])^-2, "slope -2", pos = 1, cex = 1.3, col = oi["grey"])
-legend("topright", c("uniform", "graded  x = L (i/N)²"), col = c(oi["orange"], oi["blue"]),
-       pch = c(19, 17), lwd = 2.5, bty = "n", cex = 1.3)
-dev.off()
+legend("topright", c("uniform", "graded  x = L (i/N)²", "slope -2"),
+       col = c(oi["orange"], oi["blue"], oi["grey"]), lty = c(1, 1, 2),
+       pch = c(19, 17, NA), lwd = 2.5, bty = "n", cex = 1.3)
+invisible(dev.off())
 
 ## ---- fig07: negative concentration --------------------------------------------------
 
@@ -244,7 +243,7 @@ plot(hs / lam, -D / hs + k * hs / 6, type = "l", lwd = 3, col = oi["blue"],
 abline(h = 0, col = oi["grey"]); abline(v = sqrt(6), lty = 2, lwd = 2, col = oi["red"])
 text(sqrt(6), 1.2, expression(sqrt(6)), pos = 4, cex = 1.4, col = oi["red"])
 title("Sign of  -D/h + kh/6", cex.main = 1.5)
-dev.off()
+invisible(dev.off())
 
 ## ---- fig08: 2D triangle mesh -----------------------------------------------------
 
@@ -253,7 +252,7 @@ dev.off()
 svg("fig08-mesh2d.svg", width = 12, height = 4.6)
 par(mfrow = c(1, 2), mar = c(1, 1, 3, 1))
 mesh_cell <- function(x0, y0, a = 100, r = R, M = 32, Rn = 6, grade = 1.6) {
-  th <- 2 * pi * (0:(M - 1)) / M + pi / M
+  th <- 2 * pi * (0:(M - 1)) / M          # M divisible by 8: corners included
   s <- ((0:Rn) / Rn)^grade
   sq <- cbind(cos(th), sin(th)) / pmax(abs(cos(th)), abs(sin(th))) * a
   ci <- cbind(cos(th), sin(th)) * r
@@ -282,7 +281,7 @@ title("Zoom: small triangles at the wall", cex.main = 1.6)
 for (tr in mesh_cell(300, 300)) polygon(tr, col = "#EAF4FB", border = oi["blue"], lwd = 1.2)
 th <- seq(0, 2 * pi, length.out = 200)
 polygon(300 + R * cos(th), 300 + R * sin(th), col = oi["grey"], border = oi["black"], lwd = 2)
-dev.off()
+invisible(dev.off())
 cat("triangles:", length(alltris), " grid cells in pillars (fig01):", sum(solid), "\n")
 
 ## ---- fig09: Poiseuille ---------------------------------------------------------------
@@ -295,12 +294,12 @@ par(mfrow = c(1, 2), mar = c(4.5, 4.8, 3, 1)); par_big()
 yf <- seq(0, w, length.out = 300)
 plot(G / 2 * yf * (w - yf), yf, type = "l", lwd = 3, col = oi["blue"],
      xlab = paste0("speed (", um, "/s)"), ylab = paste0("y across channel (", um, ")"),
-     xlim = c(0, 1600))
+     xlim = c(0, 2100))
 points(uh, yh, pch = 19, cex = 1.5, col = oi["red"])
 abline(v = ubar, lty = 2, col = oi["grey"], lwd = 2)
-text(ubar, 95, "mean", pos = 2, cex = 1.3, col = oi["grey"])
+text(ubar, 3, "mean", pos = 4, cex = 1.3, col = oi["grey"])
 title("Straight channel: a parabola", cex.main = 1.5)
-legend("bottomright", c("exact", "FEM nodes (5 elements)"), col = c(oi["blue"], oi["red"]),
+legend("topright", c("exact", "FEM, 5 elements"), col = c(oi["blue"], oi["red"]),
        lwd = c(3, NA), pch = c(NA, 19), bty = "n", cex = 1.2)
 ## sketch: pillars, no formula
 par(mar = c(1, 1, 3, 1))
@@ -310,7 +309,7 @@ rect(0, 0, W, H, col = "#EAF4FB", border = oi["black"], lwd = 2)
 draw_pillars()
 for (yy in c(20, 200, 380)) arrows(10, yy, 60, yy, length = 0.1, lwd = 2.5, col = oi["blue"])
 text(300, 200, "?", cex = 4, col = oi["red"])
-dev.off()
+invisible(dev.off())
 
 cat("uniform/graded max err N=10:", err[2, ], "\n")
 print(round(uh, 6))

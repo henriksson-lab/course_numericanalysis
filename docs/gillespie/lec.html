@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-html/tabby.min.js"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/light-border.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-662ae1889177880cb371f83234c0a158.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
+  <meta name="generator" content="quarto-1.7.30">
+
+  <meta name="author" content="Numerical analysis for biologists">
+  <title>Numerical analysis for biologists – Stochastic simulation</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reset.css">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reveal.css">
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+      }
+    pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+    div.sourceCode
+      { color: #24292e;  }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span { color: #24292e; } /* Normal */
+    code span.al { color: #ff5555; font-weight: bold; } /* Alert */
+    code span.an { color: #6a737d; } /* Annotation */
+    code span.at { color: #d73a49; } /* Attribute */
+    code span.bn { color: #005cc5; } /* BaseN */
+    code span.bu { color: #d73a49; } /* BuiltIn */
+    code span.cf { color: #d73a49; } /* ControlFlow */
+    code span.ch { color: #032f62; } /* Char */
+    code span.cn { color: #005cc5; } /* Constant */
+    code span.co { color: #6a737d; } /* Comment */
+    code span.cv { color: #6a737d; } /* CommentVar */
+    code span.do { color: #6a737d; } /* Documentation */
+    code span.dt { color: #d73a49; } /* DataType */
+    code span.dv { color: #005cc5; } /* DecVal */
+    code span.er { color: #ff5555; text-decoration: underline; } /* Error */
+    code span.ex { color: #d73a49; font-weight: bold; } /* Extension */
+    code span.fl { color: #005cc5; } /* Float */
+    code span.fu { color: #6f42c1; } /* Function */
+    code span.im { color: #032f62; } /* Import */
+    code span.in { color: #6a737d; } /* Information */
+    code span.kw { color: #d73a49; } /* Keyword */
+    code span.op { color: #24292e; } /* Operator */
+    code span.ot { color: #6f42c1; } /* Other */
+    code span.pp { color: #d73a49; } /* Preprocessor */
+    code span.re { color: #6a737d; } /* RegionMarker */
+    code span.sc { color: #005cc5; } /* SpecialChar */
+    code span.ss { color: #032f62; } /* SpecialString */
+    code span.st { color: #032f62; } /* String */
+    code span.va { color: #e36209; } /* Variable */
+    code span.vs { color: #032f62; } /* VerbatimString */
+    code span.wa { color: #ff5555; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/theme/quarto-bf56578b9c06c165c166475cd19dbcd1.css">
+  <script>window.backupDefine = window.define; window.define = undefined;</script><script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css">
+  <link href="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/quarto-support/footer.css" rel="stylesheet">
+  <style type="text/css">
+    .reveal div.sourceCode {
+      margin: 0;
+      overflow: auto;
+    }
+    .reveal div.hanging-indent {
+      margin-left: 1em;
+      text-indent: -1em;
+    }
+    .reveal .slide:not(.center) {
+      height: 100%;
+    }
+    .reveal .slide.scrollable {
+      overflow-y: auto;
+    }
+    .reveal .footnotes {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .reveal .slide .absolute {
+      position: absolute;
+      display: block;
+    }
+    .reveal .footnotes ol {
+      counter-reset: ol;
+      list-style-type: none; 
+      margin-left: 0;
+    }
+    .reveal .footnotes ol li:before {
+      counter-increment: ol;
+      content: counter(ol) ". "; 
+    }
+    .reveal .footnotes ol li > p:first-child {
+      display: inline-block;
+    }
+    .reveal .slide ul,
+    .reveal .slide ol {
+      margin-bottom: 0.5em;
+    }
+    .reveal .slide ul li,
+    .reveal .slide ol li {
+      margin-top: 0.4em;
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide ul[role="tablist"] li {
+      margin-bottom: 0;
+    }
+    .reveal .slide ul li > *:first-child,
+    .reveal .slide ol li > *:first-child {
+      margin-block-start: 0;
+    }
+    .reveal .slide ul li > *:last-child,
+    .reveal .slide ol li > *:last-child {
+      margin-block-end: 0;
+    }
+    .reveal .slide .columns:nth-child(3) {
+      margin-block-start: 0.8em;
+    }
+    .reveal blockquote {
+      box-shadow: none;
+    }
+    .reveal .tippy-content>* {
+      margin-top: 0.2em;
+      margin-bottom: 0.7em;
+    }
+    .reveal .tippy-content>*:last-child {
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide > img.stretch.quarto-figure-center,
+    .reveal .slide > img.r-stretch.quarto-figure-center {
+      display: block;
+      margin-left: auto;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-left,
+    .reveal .slide > img.r-stretch.quarto-figure-left  {
+      display: block;
+      margin-left: 0;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-right,
+    .reveal .slide > img.r-stretch.quarto-figure-right  {
+      display: block;
+      margin-left: auto;
+      margin-right: 0; 
+    }
+  </style>
+</head>
+<body class="quarto-light">
+  <div class="reveal">
+    <div class="slides">
+
+<section id="title-slide" class="quarto-title-block center">
+  <h1 class="title">Stochastic simulation</h1>
+  <p class="subtitle">Part 8 — Ordinary differential equations</p>
+
+<div class="quarto-title-authors">
+<div class="quarto-title-author">
+<div class="quarto-title-author-name">
+Numerical analysis for biologists 
+</div>
+</div>
+</div>
+
+</section>
+<section id="about-this-lecture" class="slide level2 smaller">
+<h2>About this lecture</h2>
+<p>So far in Part 8 a model was an ODE: one smooth curve, the same in every cell. With <strong>10 mRNA molecules per cell</strong> that picture breaks.</p>
+<ul>
+<li>When copy numbers are small, reactions are <strong>random events</strong>. Each has a <strong>propensity</strong>: its probability per unit time.</li>
+<li>The <strong>chemical master equation</strong> describes the probabilities of all states, but it is far too large to solve. We <strong>sample</strong> it instead.</li>
+<li><strong>Gillespie’s algorithm</strong> (the SSA): draw <em>when</em> the next reaction happens (an exponential waiting time) and <em>which</em> one it is (in proportion to its propensity). Exact, and 10 lines of code.</li>
+<li>Many runs give a <strong>distribution</strong>. Its mean is compared with the ODE; its spread is the biology.</li>
+<li>When the SSA is too slow: <strong>tau-leaping</strong>, and <strong>Euler–Maruyama</strong> for stochastic differential equations, each with its failure.</li>
+<li>Biology: <strong>transcriptional bursting</strong> and the cell-to-cell variability it causes; the <strong>Fano factor</strong>.</li>
+</ul>
+<aside class="notes">
+<p>This is the last unit of Part 8. The previous four units treated an ODE as the model and asked how to solve it accurately. Here the model itself changes: a cell with ten copies of an mRNA does not have a concentration that changes smoothly; it has a whole number of molecules that jumps up and down at random times. The numerical method is a Monte Carlo method (Random numbers and Monte Carlo), and its accuracy is a statistical question: how many runs, what standard error. We hand-write the algorithm in R; packages exist (GillespieSSA2, adaptivetau in R; gillespy2 in Python), but the algorithm is the point and is short.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="recap-the-mrna-ode" class="slide level2 smaller">
+<h2>Recap: the mRNA ODE</h2>
+<p>From <em>Initial value problems and Euler’s method</em>: mRNA made at rate <span class="math inline">k</span>, each molecule degraded at rate <span class="math inline">\delta</span>:</p>
+<p><span class="math display">m'(t) = k - \delta\, m, \qquad m(0) = 0 \quad\Rightarrow\quad m(t) = \frac{k}{\delta}\left(1 - e^{-\delta t}\right).</span></p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>value</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">k</span></td>
+<td>10 per hour</td>
+<td>transcription rate</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\delta</span></td>
+<td>1 per hour</td>
+<td>degradation rate per molecule (mean lifetime 1 h)</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">k/\delta</span></td>
+<td>10 molecules</td>
+<td>steady state</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>The ODE says: every cell reaches <strong>exactly 10.0</strong> molecules after a few hours, and stays there.</li>
+<li>A single-molecule FISH (smFISH) experiment counts mRNA in single cells. Do all cells have 10?</li>
+</ul>
+<aside class="notes">
+<p>Same model as in the Euler unit (there with alpha = 10 per minute and delta = 0.2 per minute, steady state 50); here a gene expressed at a lower level, with times in hours, so that the steady state is 10 molecules. smFISH counts individual mRNA molecules as fluorescent dots, so it gives a whole number per cell for thousands of cells: a distribution, not a curve. The question of this lecture: what does the model predict for that distribution?</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-biology-problem-first-two-genes-same-mean" class="slide level2">
+<h2>A biology problem first: two genes, same mean</h2>
+
+<img data-src="fig01-two-genes.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:88.0%"><ul>
+<li>Two genes, both with a mean of 10 mRNA per cell. Gene A: a narrow peak. Gene B: one cell in five has <strong>none</strong>, a few have 40+.</li>
+<li>The ODE gives the same answer, 10, for both. It cannot tell them apart.</li>
+</ul>
+<aside class="notes">
+<p>These are simulated cells (1000 per gene), made with the two models of this lecture; real smFISH data look like this (Raj et al.&nbsp;2006, mammalian cells; Zenklusen et al.&nbsp;2008, yeast). Gene A is transcribed at a steady rate. Gene B is transcribed in bursts: the promoter switches on now and then, makes a burst of mRNA, and switches off. Such bursting is common in mammalian genes and is one source of cell-to-cell variability in genetically identical cells in the same environment: a clonal population is not uniform. Whether a cell has 0 or 40 copies of a transcription factor can decide its fate. The mean, which is all an ODE predicts, is identical.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="when-copy-numbers-are-small-the-ode-is-not-enough" class="slide level2">
+<h2>When copy numbers are small, the ODE is not enough</h2>
+
+<img data-src="fig02-small-numbers.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:85.0%"><ul>
+<li>The same model, scaled by its steady state. With 10 molecules, single cells fluctuate by <span class="math inline">\pm 30\%</span>; with 1000, by <span class="math inline">\pm 3\%</span>.</li>
+<li>The relative fluctuation is about <span class="math inline">1/\sqrt{\text{mean}}</span>: <span class="math inline">1/\sqrt{10} = 0.32</span>, <span class="math inline">1/\sqrt{1000} = 0.032</span>.</li>
+</ul>
+<aside class="notes">
+<p>The ODE is the limit of many molecules: when every species is present in thousands of copies, the random fluctuations average out and the deterministic curve describes each cell well. Bacteria have about 1 mRNA copy per gene on average, mammalian cells a few to a few hundred; many transcription factors are present in tens to hundreds of copies; a gene has 1 or 2 copies of its promoter. So in gene expression the small-number case is the rule. The 1/sqrt(mean) law is the Poisson law (variance = mean), which we will see is exact for this model.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="reactions-as-random-events" class="slide level2 smaller">
+<h2>Reactions as random events</h2>
+<p>A reaction <span class="math inline">j</span> has a <strong>propensity</strong> <span class="math inline">a_j(\mathbf x)</span>: in a short time <span class="math inline">dt</span> it happens with probability <span class="math inline">a_j(\mathbf x)\,dt</span>. It changes the state <span class="math inline">\mathbf x</span> by a fixed <strong>stoichiometry</strong> vector.</p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>reaction</th>
+<th></th>
+<th>propensity <span class="math inline">a_j</span></th>
+<th>change <span class="math inline">(m, p)</span></th>
+<th>at <span class="math inline">(m, p) = (10, 100)</span></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>transcription</td>
+<td><span class="math inline">\varnothing \to M</span></td>
+<td><span class="math inline">k = 10</span></td>
+<td><span class="math inline">(+1, 0)</span></td>
+<td>10 per h</td>
+</tr>
+<tr class="even">
+<td>mRNA decay</td>
+<td><span class="math inline">M \to \varnothing</span></td>
+<td><span class="math inline">\delta_m m = 1 \cdot m</span></td>
+<td><span class="math inline">(-1, 0)</span></td>
+<td>10 per h</td>
+</tr>
+<tr class="odd">
+<td>translation</td>
+<td><span class="math inline">M \to M + P</span></td>
+<td><span class="math inline">k_p m = 2\, m</span></td>
+<td><span class="math inline">(0, +1)</span></td>
+<td>20 per h</td>
+</tr>
+<tr class="even">
+<td>protein decay</td>
+<td><span class="math inline">P \to \varnothing</span></td>
+<td><span class="math inline">\delta_p p = 0.2\, p</span></td>
+<td><span class="math inline">(0, -1)</span></td>
+<td>20 per h</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Total propensity <span class="math inline">a_0 = \sum_j a_j = 60</span> per hour: a reaction every minute on average.</li>
+<li>The ODE uses the <strong>same</strong> rates: <span class="math inline">m' = k - \delta_m m</span>, <span class="math inline">p' = k_p m - \delta_p p</span>, i.e.&nbsp;(change vectors) × (propensities).</li>
+</ul>
+<aside class="notes">
+<p>The propensity is the rate of the ODE, read as a probability per unit time. “Each mRNA is degraded at rate 1 per hour” means each molecule has probability delta dt of being degraded in the next dt, so with m molecules the probability that one of them goes is delta m dt. A protein is made from an mRNA: translation does not use up the mRNA, so its change vector is (0, +1). Steady state of the ODE: m = 10, p = k_p m / delta_p = 100. For a reaction between two molecules (A + B), the propensity is c times a times b; for two molecules of the same kind, c a (a - 1)/2. These combinatorial factors are where the stochastic and the deterministic model start to differ.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-chemical-master-equation-in-words" class="slide level2 smaller">
+<h2>The chemical master equation, in words</h2>
+<p><span class="math inline">P_n(t)</span> = probability that a cell has <span class="math inline">n</span> mRNA molecules at time <span class="math inline">t</span>. Probability flows <strong>into</strong> state <span class="math inline">n</span> from <span class="math inline">n-1</span> (a molecule made) and <span class="math inline">n+1</span> (one degraded), and <strong>out</strong> of <span class="math inline">n</span> by any reaction:</p>
+<p><span class="math display">\frac{dP_n}{dt} = \underbrace{k\,P_{n-1} + \delta\,(n+1)\,P_{n+1}}_{\text{in}} - \underbrace{(k + \delta n)\,P_n}_{\text{out}}.</span></p>
+<p>For <span class="math inline">n = 3</span>: <span class="math inline">\;P_3' = 10\,P_2 + 4\,P_4 - 13\,P_3</span>.</p>
+<ul>
+<li>A <strong>linear ODE system</strong>, one equation per state. Its steady state here is <strong>Poisson(10)</strong>.</li>
+<li>But one equation per <strong>state</strong>: (promoter, mRNA ≤ 100, protein ≤ 500) has <span class="math inline">2 \cdot 101 \cdot 501 \approx 10^5</span> states; an epidemic in 10 000 people about <span class="math inline">5 \cdot 10^7</span>.</li>
+<li>So we do not solve the master equation; we <strong>sample</strong> from it, one cell at a time.</li>
+</ul>
+<aside class="notes">
+<p>The chemical master equation (CME) is the exact description of a well-mixed reacting system: it is the Kolmogorov forward equation of a continuous-time Markov chain whose states are the molecule counts. It is linear in the P’s, so in principle we know how to solve it: a matrix exponential, or for the steady state a null vector of the rate matrix (an eigenvector for eigenvalue 0, as for the Markov chains in Power iteration and friends). The problem is size: one unknown per possible state, and the number of states is the product of the ranges of all species. Detailed balance gives the steady state of the one-species case by hand: k P_{n-1} = delta n P_n, so P_n = (k/delta)^n / n! P_0, the Poisson distribution (exercise B3).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="gillespies-idea-two-questions-per-step" class="slide level2">
+<h2>Gillespie’s idea: two questions per step</h2>
+
+<img data-src="fig03-ssa-step.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:90.0%"><ul>
+<li><strong>When?</strong> With total propensity <span class="math inline">a_0</span>, the waiting time is exponential with rate <span class="math inline">a_0</span>: inverse transform <span class="math inline">\tau = -\log(u_1)/a_0</span>.</li>
+<li><strong>Which?</strong> Reaction <span class="math inline">j</span> with probability <span class="math inline">a_j/a_0</span>: cut <span class="math inline">[0, a_0)</span> into pieces of length <span class="math inline">a_j</span>, see where <span class="math inline">u_2 a_0</span> falls.</li>
+</ul>
+<aside class="notes">
+<p>Gillespie (1976, 1977) showed that these two draws produce exact sample paths of the master equation: no time step, no approximation beyond the model itself. Why exponential: each reaction j would fire after an exponential time with rate a_j if nothing else happened; the first of several independent exponentials is exponential with the sum of the rates, and it is reaction j with probability a_j / a0. Both draws are inverse-transform sampling from Random numbers and Monte Carlo: the continuous one for the exponential (with u in place of 1 - u, since both are uniform), the discrete one for the reaction, exactly the base-composition example there. After the reaction the propensities change, so they are recomputed before the next step.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="one-step-by-hand" class="slide level2 smaller">
+<h2>One step by hand</h2>
+<p>State <span class="math inline">m = 10</span>: <span class="math inline">a_1 = k = 10</span> (make), <span class="math inline">a_2 = \delta m = 10</span> (degrade), <span class="math inline">a_0 = 20</span> per hour.</p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>uniform</th>
+<th>computation</th>
+<th>result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>when?</td>
+<td><span class="math inline">u_1 = 0.3</span></td>
+<td><span class="math inline">\tau = -\log(0.3)/20 = 1.204/20</span></td>
+<td><span class="math inline">0.0602</span> h (3.6 min)</td>
+</tr>
+<tr class="even">
+<td>which?</td>
+<td><span class="math inline">u_2 = 0.62</span></td>
+<td><span class="math inline">u_2 a_0 = 12.4 \ge a_1 = 10</span></td>
+<td>degrade: <span class="math inline">m \to 9</span></td>
+</tr>
+</tbody>
+</table>
+<p>Next step: <span class="math inline">a = (10, 9)</span>, <span class="math inline">a_0 = 19</span>; with <span class="math inline">u_1 = 0.9</span>, <span class="math inline">u_2 = 0.2</span>: <span class="math inline">\tau = 0.105/19 = 0.0055</span> h; <span class="math inline">0.2 \cdot 19 = 3.8 &lt; 10</span>: make, <span class="math inline">m \to 10</span>.</p>
+<ul>
+<li>The time advances by <strong>random, unequal</strong> steps, one reaction per step. There is no step size <span class="math inline">h</span> to choose.</li>
+<li>Mean waiting time <span class="math inline">1/a_0</span>: 3 minutes here. A busier cell takes more, smaller steps.</li>
+</ul>
+<aside class="notes">
+<p>Do this on the board. The time axis is not a grid: the algorithm jumps from event to event. Between events nothing happens, so the state is a step function of time. Compare with Euler: there we chose h and the error depended on it; here the only error is the randomness, which we control by the number of runs. The expected number of steps in a time T is about a0 T; that is the cost of the method, and it is large when molecule numbers are large (the propensities grow with them).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="gillespies-algorithm-in-r" class="slide level2 smaller">
+<h2>Gillespie’s algorithm in R</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a aria-hidden="true" tabindex="-1"></a>k <span class="ot">&lt;-</span> <span class="dv">10</span>; delta <span class="ot">&lt;-</span> <span class="dv">1</span>                      <span class="co"># per hour: transcription, mRNA decay</span></span>
+<span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
+<span id="cb1-3"><a aria-hidden="true" tabindex="-1"></a>t <span class="ot">&lt;-</span> <span class="dv">0</span>; m <span class="ot">&lt;-</span> <span class="dv">0</span>; tt <span class="ot">&lt;-</span> <span class="dv">0</span>; mm <span class="ot">&lt;-</span> <span class="dv">0</span>         <span class="co"># no mRNA at t = 0</span></span>
+<span id="cb1-4"><a aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> (t <span class="sc">&lt;</span> <span class="dv">10</span>) {</span>
+<span id="cb1-5"><a aria-hidden="true" tabindex="-1"></a>  a <span class="ot">&lt;-</span> <span class="fu">c</span>(k, delta <span class="sc">*</span> m); a0 <span class="ot">&lt;-</span> <span class="fu">sum</span>(a)     <span class="co"># propensities: make, degrade</span></span>
+<span id="cb1-6"><a aria-hidden="true" tabindex="-1"></a>  t <span class="ot">&lt;-</span> t <span class="sc">-</span> <span class="fu">log</span>(<span class="fu">runif</span>(<span class="dv">1</span>)) <span class="sc">/</span> a0            <span class="co"># 1. when? waiting time ~ Exp(a0)</span></span>
+<span id="cb1-7"><a aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> m <span class="sc">+</span> <span class="cf">if</span> (<span class="fu">runif</span>(<span class="dv">1</span>) <span class="sc">*</span> a0 <span class="sc">&lt;</span> a[<span class="dv">1</span>]) <span class="dv">1</span> <span class="cf">else</span> <span class="sc">-</span><span class="dv">1</span>   <span class="co"># 2. which? make or degrade</span></span>
+<span id="cb1-8"><a aria-hidden="true" tabindex="-1"></a>  tt <span class="ot">&lt;-</span> <span class="fu">c</span>(tt, t); mm <span class="ot">&lt;-</span> <span class="fu">c</span>(mm, m)         <span class="co"># record every event</span></span>
+<span id="cb1-9"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-10"><a aria-hidden="true" tabindex="-1"></a><span class="fu">length</span>(tt) <span class="sc">-</span> <span class="dv">1</span>                           <span class="co"># reactions in 10 h</span></span>
+<span id="cb1-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 223</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><code>mm</code> jumps by <span class="math inline">\pm 1</span> at the times <code>tt</code>: 0, 0.133, 0.183, 0.317, … h. Plot it as a step function, <code>plot(tt, mm, type = "s")</code>.</li>
+<li>With <span class="math inline">a_0 \approx 20</span> per hour, 10 hours take about 200 steps.</li>
+</ul>
+<aside class="notes">
+<p><a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Uniform.html">runif</a> never returns exactly 0 in R, so the log is safe; in Python and Rust the generators can return 0, so the exercise uses 1 - u there. The comparison runif(1) * a0 &lt; a[1] is the discrete inverse transform for two reactions. Growing a vector with c() inside a loop is slow for long runs (it copies every time); fine for a few hundred events, and the general function on the next slide records only at chosen times. Starting at m = 0, the first propensities are (10, 0), so the first reaction must be a transcription.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-general-ssa" class="slide level2 smaller">
+<h2>A general SSA</h2>
+<p>Any network: a <strong>stoichiometry matrix</strong> <code>S</code> (one column per reaction) and a <strong>propensity function</strong>.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a aria-hidden="true" tabindex="-1"></a>ssa <span class="ot">&lt;-</span> <span class="cf">function</span>(x, S, propensity, times) {   <span class="co"># S: species x reactions</span></span>
+<span id="cb2-2"><a aria-hidden="true" tabindex="-1"></a>  out <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="dv">0</span>, <span class="fu">length</span>(times), <span class="fu">length</span>(x)); t <span class="ot">&lt;-</span> <span class="dv">0</span>; i <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">repeat</span> {</span>
+<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a>    a <span class="ot">&lt;-</span> <span class="fu">propensity</span>(x); a0 <span class="ot">&lt;-</span> <span class="fu">sum</span>(a)</span>
+<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a>    t <span class="ot">&lt;-</span> t <span class="sc">-</span> <span class="fu">log</span>(<span class="fu">runif</span>(<span class="dv">1</span>)) <span class="sc">/</span> a0               <span class="co"># Inf if a0 = 0: nothing more happens</span></span>
+<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> (i <span class="sc">&lt;=</span> <span class="fu">length</span>(times) <span class="sc">&amp;&amp;</span> times[i] <span class="sc">&lt;</span> t) { out[i, ] <span class="ot">&lt;-</span> x; i <span class="ot">&lt;-</span> i <span class="sc">+</span> <span class="dv">1</span> }</span>
+<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (i <span class="sc">&gt;</span> <span class="fu">length</span>(times)) <span class="fu">return</span>(out)</span>
+<span id="cb2-8"><a aria-hidden="true" tabindex="-1"></a>    j <span class="ot">&lt;-</span> <span class="fu">findInterval</span>(<span class="fu">runif</span>(<span class="dv">1</span>) <span class="sc">*</span> a0, <span class="fu">cumsum</span>(a)) <span class="sc">+</span> <span class="dv">1</span>   <span class="co"># reaction j w.p. a_j / a0</span></span>
+<span id="cb2-9"><a aria-hidden="true" tabindex="-1"></a>    x <span class="ot">&lt;-</span> x <span class="sc">+</span> S[, j]</span>
+<span id="cb2-10"><a aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-11"><a aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Records the state at fixed output <code>times</code>: the state <strong>before</strong> the jump is the state at every output time up to the jump.</li>
+<li><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/findInterval.html"><code>findInterval</code></a> on the cumulative propensities picks the reaction; a reaction with <span class="math inline">a_j = 0</span> is never chosen.</li>
+</ul>
+<aside class="notes">
+<p>Walk through the while loop: the next event happens at time t; every output time before t sees the current state x, because nothing changes until then. When all output times are filled, return. If all propensities are zero (an absorbing state, such as an extinct population), a0 = 0, the waiting time is infinite, and all remaining output times get the final state. findInterval(v, cumsum(a)) counts how many cumulative sums are &lt;= v; adding 1 gives the reaction whose piece contains v. This is the “direct method”; the “next reaction method” (Gibson and Bruck 2000) is a faster variant for large networks.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="many-cells-a-distribution-and-its-mean" class="slide level2 smaller">
+<h2>Many cells: a distribution, and its mean</h2>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>S1 <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="sc">-</span><span class="dv">1</span>), <span class="at">nrow =</span> <span class="dv">1</span>)          <span class="co"># 1 species (m), 2 reactions</span></span>
+<span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a>bd <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">c</span>(<span class="dv">10</span>, <span class="dv">1</span> <span class="sc">*</span> x)            <span class="co"># propensities: k, delta * m</span></span>
+<span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
+<span id="cb3-4"><a aria-hidden="true" tabindex="-1"></a>tm <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.5</span>, <span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">10</span>)</span>
+<span id="cb3-5"><a aria-hidden="true" tabindex="-1"></a>M <span class="ot">&lt;-</span> <span class="fu">replicate</span>(<span class="dv">2000</span>, <span class="fu">ssa</span>(<span class="dv">0</span>, S1, bd, tm)[, <span class="dv">1</span>])   <span class="co"># 4 times x 2000 cells</span></span>
+<span id="cb3-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(<span class="at">ssa =</span> <span class="fu">rowMeans</span>(M), <span class="at">se =</span> <span class="fu">apply</span>(M, <span class="dv">1</span>, sd) <span class="sc">/</span> <span class="fu">sqrt</span>(<span class="dv">2000</span>),</span>
+<span id="cb3-7"><a aria-hidden="true" tabindex="-1"></a>      <span class="at">ode =</span> <span class="dv">10</span> <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> <span class="fu">exp</span>(<span class="sc">-</span>tm)))</span>
+<span id="cb3-8"><a aria-hidden="true" tabindex="-1"></a><span class="co">#           [,1]      [,2]       [,3]        [,4]</span></span>
+<span id="cb3-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ssa 3.85750000 6.3285000 8.66400000 10.11850000</span></span>
+<span id="cb3-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># se  0.04415962 0.0558243 0.06451847  0.06981881</span></span>
+<span id="cb3-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ode 3.93469340 6.3212056 8.64664717  9.99954600</span></span>
+<span id="cb3-12"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">mean =</span> <span class="fu">mean</span>(M[<span class="dv">4</span>, ]), <span class="at">var =</span> <span class="fu">var</span>(M[<span class="dv">4</span>, ]))       <span class="co"># Poisson: var = mean</span></span>
+<span id="cb3-13"><a aria-hidden="true" tabindex="-1"></a><span class="co">#      mean       var</span></span>
+<span id="cb3-14"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 10.118500  9.749332</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The SSA mean agrees with the ODE <strong>within 2 SE</strong> at every time. Variance ≈ mean: Fano factor ≈ 1.</li>
+</ul>
+<aside class="notes">
+<p><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/lapply.html">replicate</a> runs 2000 independent cells; each column of M is one cell at the four times. The mean over cells is a Monte Carlo estimate, so it comes with a standard error sd / sqrt(N), exactly as in Random numbers and Monte Carlo. The largest deviation is 1.7 SE (at t = 10), which is ordinary. For this model (all propensities linear in the state) the mean of the master equation obeys the ODE exactly; that is a check we can always run when the propensities are linear. In Python and Rust the streams differ (different generators), so the numbers in the exercise differ in the second decimal; compare them with their SEs, not digit by digit.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="runs-mean-and-distribution" class="slide level2">
+<h2>Runs, mean and distribution</h2>
+
+<img data-src="fig04-bd-runs.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:90.0%"><ul>
+<li>Single cells wander around 10; the <strong>average</strong> of many follows the ODE.</li>
+<li>At <span class="math inline">t = 10</span> h the counts follow <strong>Poisson(10)</strong>, the steady state of the master equation. A check with a known answer.</li>
+</ul>
+<aside class="notes">
+<p>Left: five single-cell trajectories (grey steps), the mean of 2000 runs on a grid of times (dots) and the ODE (blue). Right: the histogram of the 2000 counts at t = 10 h (from the slide before) against the Poisson(10) probabilities. Always test a stochastic simulator on such a case before trusting it on a model without a known answer, exactly as we tested Monte Carlo on the binomial overlap count.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-classic-bug-averaging-over-events" class="slide level2 smaller">
+<h2>A classic bug: averaging over events</h2>
+<p>One long run, mean of <span class="math inline">m</span> after a 10 h burn-in, computed two ways:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>); t <span class="ot">&lt;-</span> <span class="dv">0</span>; m <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a>n_ev <span class="ot">&lt;-</span> <span class="dv">0</span>; sum_ev <span class="ot">&lt;-</span> <span class="dv">0</span>; area <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb4-3"><a aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> (t <span class="sc">&lt;</span> <span class="dv">5000</span>) {</span>
+<span id="cb4-4"><a aria-hidden="true" tabindex="-1"></a>  a <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">10</span>, <span class="dv">1</span> <span class="sc">*</span> m); a0 <span class="ot">&lt;-</span> <span class="fu">sum</span>(a)</span>
+<span id="cb4-5"><a aria-hidden="true" tabindex="-1"></a>  tau <span class="ot">&lt;-</span> <span class="sc">-</span><span class="fu">log</span>(<span class="fu">runif</span>(<span class="dv">1</span>)) <span class="sc">/</span> a0</span>
+<span id="cb4-6"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (t <span class="sc">&gt;</span> <span class="dv">10</span>) area <span class="ot">&lt;-</span> area <span class="sc">+</span> m <span class="sc">*</span> tau          <span class="co"># m holds for a time tau</span></span>
+<span id="cb4-7"><a aria-hidden="true" tabindex="-1"></a>  t <span class="ot">&lt;-</span> t <span class="sc">+</span> tau</span>
+<span id="cb4-8"><a aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> m <span class="sc">+</span> <span class="cf">if</span> (<span class="fu">runif</span>(<span class="dv">1</span>) <span class="sc">*</span> a0 <span class="sc">&lt;</span> a[<span class="dv">1</span>]) <span class="dv">1</span> <span class="cf">else</span> <span class="sc">-</span><span class="dv">1</span></span>
+<span id="cb4-9"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (t <span class="sc">&gt;</span> <span class="dv">10</span>) { n_ev <span class="ot">&lt;-</span> n_ev <span class="sc">+</span> <span class="dv">1</span>; sum_ev <span class="ot">&lt;-</span> sum_ev <span class="sc">+</span> m }   <span class="co"># one record per event</span></span>
+<span id="cb4-10"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb4-11"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">per_event =</span> sum_ev <span class="sc">/</span> n_ev, <span class="at">time_weighted =</span> area <span class="sc">/</span> (t <span class="sc">-</span> <span class="dv">10</span>))</span>
+<span id="cb4-12"><a aria-hidden="true" tabindex="-1"></a><span class="co">#     per_event time_weighted</span></span>
+<span id="cb4-13"><a aria-hidden="true" tabindex="-1"></a><span class="co">#     10.455514      9.957675</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Events happen <strong>more often</strong> when <span class="math inline">m</span> is large (<span class="math inline">a_0 = 10 + m</span>), so averaging over events overweights large <span class="math inline">m</span>: 10.5 instead of 10.</li>
+<li><strong>Check:</strong> weight each state by how <strong>long</strong> it lasts, or sample at fixed times (as <code>ssa</code> does).</li>
+</ul>
+<aside class="notes">
+<p>A confident wrong answer that runs without any warning. The expected per-event mean is exactly 10.5 here: the event-sampled distribution is proportional to P_n times (10 + n), with mean (100 + 110) / 20. The error is 5% for this model and can be much larger when propensities vary a lot (bursty genes). The same bug appears when people take every row of an SSA output table as an equally likely snapshot. Packages that return all events (rather than fixed output times) invite it.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="bursting-the-telegraph-promoter" class="slide level2 smaller">
+<h2>Bursting: the telegraph promoter</h2>
+<p>The promoter switches between <strong>off</strong> and <strong>on</strong>; it is transcribed only when on.</p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>reaction</th>
+<th>propensity</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>off → on</td>
+<td><span class="math inline">k_{\text{on}}\,(1 - g)</span></td>
+<td><span class="math inline">k_{\text{on}} = 0.5</span> per h (a burst every 2 h)</td>
+</tr>
+<tr class="even">
+<td>on → off</td>
+<td><span class="math inline">k_{\text{off}}\, g</span></td>
+<td><span class="math inline">k_{\text{off}} = 4.5</span> per h (on for 13 min)</td>
+</tr>
+<tr class="odd">
+<td>transcription</td>
+<td><span class="math inline">k_m\, g</span></td>
+<td><span class="math inline">k_m = 100</span> per h while on</td>
+</tr>
+<tr class="even">
+<td>mRNA decay, translation, protein decay</td>
+<td><span class="math inline">\delta_m m</span>, <span class="math inline">k_p m</span>, <span class="math inline">\delta_p p</span></td>
+<td>1, 2, 0.2 per h, as before</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><span class="math inline">g \in \{0, 1\}</span> is the promoter state. Each burst makes on average <span class="math inline">k_m/k_{\text{off}} = 22</span> mRNA.</li>
+<li>ODE for the means: <span class="math inline">g^* = \frac{k_{\text{on}}}{k_{\text{on}} + k_{\text{off}}} = 0.1</span>, <span class="math inline">\;m^* = \frac{k_m g^*}{\delta_m} = 10</span>, <span class="math inline">\;p^* = 100</span>: <strong>the same</strong> as the constitutive gene.</li>
+</ul>
+<aside class="notes">
+<p>The two-state or “telegraph” model (Peccoud and Ycart 1995): the name comes from the on-off signal of the promoter. Biologically, “on” can be a state with the right transcription factors and chromatin opened; many mammalian genes are on only a small fraction of the time and fire bursts of transcripts. We chose the rates so that the mean mRNA and protein levels equal those of the constitutive gene: k_m g* = 10 per hour on average. So the two genes have the same ODE, and the difference is entirely in the noise. The single promoter copy (g is 0 or 1) is the extreme case of a small copy number.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-telegraph-model-in-r" class="slide level2 smaller">
+<h2>The telegraph model in R</h2>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a aria-hidden="true" tabindex="-1"></a>S3 <span class="ot">&lt;-</span> <span class="fu">rbind</span>(<span class="at">g =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="sc">-</span><span class="dv">1</span>, <span class="dv">0</span>,  <span class="dv">0</span>, <span class="dv">0</span>,  <span class="dv">0</span>),   <span class="co"># promoter: on, off</span></span>
+<span id="cb5-2"><a aria-hidden="true" tabindex="-1"></a>            <span class="at">m =</span> <span class="fu">c</span>(<span class="dv">0</span>,  <span class="dv">0</span>, <span class="dv">1</span>, <span class="sc">-</span><span class="dv">1</span>, <span class="dv">0</span>,  <span class="dv">0</span>),   <span class="co"># mRNA: make, degrade</span></span>
+<span id="cb5-3"><a aria-hidden="true" tabindex="-1"></a>            <span class="at">p =</span> <span class="fu">c</span>(<span class="dv">0</span>,  <span class="dv">0</span>, <span class="dv">0</span>,  <span class="dv">0</span>, <span class="dv">1</span>, <span class="sc">-</span><span class="dv">1</span>))   <span class="co"># protein: make, degrade</span></span>
+<span id="cb5-4"><a aria-hidden="true" tabindex="-1"></a>telegraph <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">c</span>(<span class="fl">0.5</span> <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> x[<span class="dv">1</span>]), <span class="fl">4.5</span> <span class="sc">*</span> x[<span class="dv">1</span>], <span class="dv">100</span> <span class="sc">*</span> x[<span class="dv">1</span>],</span>
+<span id="cb5-5"><a aria-hidden="true" tabindex="-1"></a>                           <span class="dv">1</span> <span class="sc">*</span> x[<span class="dv">2</span>], <span class="dv">2</span> <span class="sc">*</span> x[<span class="dv">2</span>], <span class="fl">0.2</span> <span class="sc">*</span> x[<span class="dv">3</span>])</span>
+<span id="cb5-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
+<span id="cb5-7"><a aria-hidden="true" tabindex="-1"></a>Y <span class="ot">&lt;-</span> <span class="fu">t</span>(<span class="fu">replicate</span>(<span class="dv">1000</span>, <span class="fu">ssa</span>(<span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>), S3, telegraph, <span class="dv">30</span>)[<span class="dv">1</span>, ]))  <span class="co"># ~20 s</span></span>
+<span id="cb5-8"><a aria-hidden="true" tabindex="-1"></a>fano <span class="ot">&lt;-</span> <span class="cf">function</span>(v) <span class="fu">var</span>(v) <span class="sc">/</span> <span class="fu">mean</span>(v)</span>
+<span id="cb5-9"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">mean_m =</span> <span class="fu">mean</span>(Y[, <span class="dv">2</span>]), <span class="at">Fano_m =</span> <span class="fu">fano</span>(Y[, <span class="dv">2</span>]),</span>
+<span id="cb5-10"><a aria-hidden="true" tabindex="-1"></a>  <span class="at">mean_p =</span> <span class="fu">mean</span>(Y[, <span class="dv">3</span>]), <span class="at">Fano_p =</span> <span class="fu">fano</span>(Y[, <span class="dv">3</span>]))</span>
+<span id="cb5-11"><a aria-hidden="true" tabindex="-1"></a><span class="co">#    mean_m    Fano_m    mean_p    Fano_p</span></span>
+<span id="cb5-12"><a aria-hidden="true" tabindex="-1"></a><span class="co">#  10.10700  15.26168 100.21200  32.92882</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Same <code>ssa</code>, new <code>S</code> and propensities. 1000 cells at <span class="math inline">t = 30</span> h (six protein lifetimes: steady state).</li>
+<li>Means 10 and 100, as the ODE says. The variance is 15 times the mean for mRNA, 33 times for protein.</li>
+</ul>
+<aside class="notes">
+<p>Nothing in the algorithm changes; only the model description. Starting values: promoter off, no mRNA, no protein; t = 30 h is long enough to forget the start (protein lifetime 5 h, e^-6 = 0.25% of the initial transient left). The constitutive gene in the same set-up (exercise C2) gives means 10.15 and 100.9 and Fano factors 1.02 and 2.64. 1000 cells take about 20 s in R, because every one of about 1800 reactions per cell is a trip through an R loop; the Rust version in the exercise takes under a second.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="bursts-in-time" class="slide level2">
+<h2>Bursts in time</h2>
+
+<img data-src="fig05-telegraph.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:90.0%"><ul>
+<li>Green bands: promoter <strong>on</strong>. mRNA jumps up in a burst, then decays; long stretches with <strong>zero</strong> mRNA.</li>
+<li>The protein (lifetime 5 h) <strong>averages</strong> over several mRNA bursts, but still swings from 20 to 110.</li>
+</ul>
+<aside class="notes">
+<p>Same mean, very different single-cell behaviour. The constitutive gene (left) stays near 10 mRNA and 100 proteins. The bursty gene (right) has long silent periods and short bursts. The protein integrates over its lifetime, which smooths the mRNA bursts, but a few hours without a burst still drain it. A cell that needs this protein above a threshold will sometimes fall below it by chance: this is how bursting turns into different fates for identical cells (e.g.&nbsp;persistence to antibiotics, competence in Bacillus subtilis, lineage choice).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-fano-factor" class="slide level2 smaller">
+<h2>The Fano factor</h2>
+<p><span class="math display">F = \frac{\text{variance}}{\text{mean}} \qquad \text{Poisson: } F = 1.</span></p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>exact</th>
+<th>simulated (1000 cells)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>constitutive mRNA</td>
+<td><span class="math inline">1</span></td>
+<td>1.02</td>
+</tr>
+<tr class="even">
+<td>bursty mRNA: <span class="math inline">1 + \dfrac{k_m k_{\text{off}}}{(k_{\text{on}} + k_{\text{off}})(k_{\text{on}} + k_{\text{off}} + \delta_m)} = 1 + \dfrac{100 \cdot 4.5}{5 \cdot 6}</span></td>
+<td><span class="math inline">16</span></td>
+<td>15.3</td>
+</tr>
+<tr class="odd">
+<td>constitutive protein: <span class="math inline">1 + \dfrac{k_p}{\delta_m + \delta_p} = 1 + \dfrac{2}{1.2}</span></td>
+<td><span class="math inline">2.67</span></td>
+<td>2.64</td>
+</tr>
+<tr class="even">
+<td>bursty protein</td>
+<td><span class="math inline">32.5</span></td>
+<td>32.9</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><span class="math inline">F = 1</span>: molecules made <strong>one at a time</strong>, independently. <span class="math inline">F &gt; 1</span>: made in <strong>bursts</strong>; roughly <span class="math inline">1 +</span> burst size.</li>
+<li>A measured <span class="math inline">F \gg 1</span> for an mRNA is evidence for transcriptional bursting.</li>
+</ul>
+<aside class="notes">
+<p>The exact formulas come from the master equation (for linear propensities the mean and variance satisfy closed linear ODEs; the exercise uses only the results). Even a constitutive promoter gives protein F &gt; 1: each mRNA makes a burst of proteins (on average k_p / delta_m = 2 per mRNA lifetime), so protein noise has a translational-burst part. The SE of a simulated Fano factor is roughly F sqrt(2/N), about 5% with 1000 cells, so 15.3 against 16 is fine. Caveat for data: the Fano factor depends on units. Fluorescence in arbitrary units, a times the molecule count, has F multiplied by a; only counts of molecules can be compared with 1.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="protein-distributions" class="slide level2">
+<h2>Protein distributions</h2>
+
+<img data-src="fig06-protein.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:88.0%"><ul>
+<li>Constitutive: a little wider than Poisson(100) (Fano 2.6). Bursty: spread from 0 to 300 (Fano 33), with the same mean.</li>
+<li>Many genes, many cells: a plot of <span class="math inline">F</span> against the mean separates bursty genes from Poisson-like ones.</li>
+</ul>
+<aside class="notes">
+<p>The 1000 cells of the previous two slides. The dashed curve is the Poisson distribution with the same mean, the narrowest a birth-death process can give. This is the kind of comparison made in single-cell studies of gene expression noise (e.g.&nbsp;Taniguchi et al.&nbsp;2010, E. coli, protein and mRNA in single cells). Note how badly the ODE describes the bursty population: the “typical” cell is not at 100.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="when-the-mean-is-not-the-ode-extinction" class="slide level2 smaller">
+<h2>When the mean is not the ODE: extinction</h2>
+<p>The SIR epidemic from <em>Initial value problems and Euler’s method</em> (<span class="math inline">N = 10\,000</span>, <span class="math inline">\beta = 0.3</span>, <span class="math inline">\gamma = 0.1</span> per day, <span class="math inline">R_0 = 3</span>), but starting from <strong>one</strong> case:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a>sir_fate <span class="ot">&lt;-</span> <span class="cf">function</span>(I0, <span class="at">N =</span> <span class="dv">10000</span>, <span class="at">beta =</span> <span class="fl">0.3</span>, <span class="at">gamma =</span> <span class="fl">0.1</span>) {</span>
+<span id="cb6-2"><a aria-hidden="true" tabindex="-1"></a>  S <span class="ot">&lt;-</span> N <span class="sc">-</span> I0; I <span class="ot">&lt;-</span> I0</span>
+<span id="cb6-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">while</span> (I <span class="sc">&gt;</span> <span class="dv">0</span> <span class="sc">&amp;&amp;</span> I <span class="sc">&lt;</span> <span class="dv">100</span>) {                 <span class="co"># stop: extinct, or 100 infected</span></span>
+<span id="cb6-4"><a aria-hidden="true" tabindex="-1"></a>    a1 <span class="ot">&lt;-</span> beta <span class="sc">*</span> S <span class="sc">*</span> I <span class="sc">/</span> N; a2 <span class="ot">&lt;-</span> gamma <span class="sc">*</span> I  <span class="co"># infection, recovery</span></span>
+<span id="cb6-5"><a aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="fu">runif</span>(<span class="dv">1</span>) <span class="sc">*</span> (a1 <span class="sc">+</span> a2) <span class="sc">&lt;</span> a1) { S <span class="ot">&lt;-</span> S <span class="sc">-</span> <span class="dv">1</span>; I <span class="ot">&lt;-</span> I <span class="sc">+</span> <span class="dv">1</span> } <span class="cf">else</span> I <span class="ot">&lt;-</span> I <span class="sc">-</span> <span class="dv">1</span></span>
+<span id="cb6-6"><a aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb6-7"><a aria-hidden="true" tabindex="-1"></a>  I <span class="sc">==</span> <span class="dv">0</span>                                     <span class="co"># TRUE if the outbreak died out</span></span>
+<span id="cb6-8"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-9"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>); ext <span class="ot">&lt;-</span> <span class="fu">replicate</span>(<span class="dv">10000</span>, <span class="fu">sir_fate</span>(<span class="dv">1</span>))</span>
+<span id="cb6-10"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">extinct =</span> <span class="fu">mean</span>(ext), <span class="at">se =</span> <span class="fu">sd</span>(ext) <span class="sc">/</span> <span class="fu">sqrt</span>(<span class="dv">10000</span>))</span>
+<span id="cb6-11"><a aria-hidden="true" tabindex="-1"></a><span class="co">#     extinct          se</span></span>
+<span id="cb6-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.334800000 0.004719441</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The ODE always predicts an epidemic. One in three outbreaks <strong>dies out</strong> early (<span class="math inline">1/R_0 = 0.333</span>).</li>
+</ul>
+<aside class="notes">
+<p>The infection propensity beta S I / N is nonlinear (a product of two counts), but that is not the main point; the main point is the absorbing state I = 0, which the ODE never reaches. Early on, the first case recovers before infecting anyone with probability gamma / (beta + gamma) = 1/4, and the full extinction probability of the branching process is 1/R0 (exercise B7). Once 100 people are infected, extinction is practically impossible, so we stop there; we need only the order of events, not the times, for this question. The same kind of question: does a new mutant lineage survive drift, does a noise kick switch the toggle switch to its other stable state (Equilibria, stability and the phase plane)? The ODE answers none of them.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="single-outbreaks-vs-the-ode" class="slide level2">
+<h2>Single outbreaks vs the ODE</h2>
+
+<img data-src="fig07-sir.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:80.0%"><ul>
+<li>Runs that take off look like the ODE, but <strong>shifted in time</strong> by a random delay. Their <strong>average</strong> is lower and wider than the ODE curve.</li>
+<li>The ODE is the mean only for <strong>linear</strong> propensities. Otherwise: simulate, and compare.</li>
+</ul>
+<aside class="notes">
+<p>The 20 outbreaks that take off all peak at about 3000 infected, like the ODE, but the time to reach a few hundred cases varies by weeks, because the early phase with a handful of cases is dominated by chance. Averaging over runs, including the ones that died out, gives a curve with a lower and wider peak than any single run: the mean of the stochastic model is not the solution of the ODE. Fitting an ODE to a stochastic outbreak can therefore give wrong rates (Part 9). For linear propensities the ODE is exactly the mean (the mRNA examples); for nonlinear ones it is an approximation that is good when all counts are large.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-cost-one-step-per-reaction" class="slide level2 smaller">
+<h2>The cost: one step per reaction</h2>
+<table class="caption-top">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>model</th>
+<th><span class="math inline">a_0</span> (reactions per hour)</th>
+<th>steps for 30 h, 1 cell</th>
+<th>1000 cells in R</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>mRNA only, mean 10</td>
+<td>20</td>
+<td>600</td>
+<td>4 s</td>
+</tr>
+<tr class="even">
+<td>gene, mRNA 10, protein 100</td>
+<td>60</td>
+<td>1 800</td>
+<td>20 s</td>
+</tr>
+<tr class="odd">
+<td>gene, mRNA 100, protein 10 000</td>
+<td>4 200</td>
+<td>126 000</td>
+<td>25 min</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>The work grows with the <strong>number of molecules</strong>, not with the accuracy wanted. Abundant species make the SSA slow, even when nothing interesting happens to them.</li>
+<li>Rust or C is 20–50 times faster than an R loop (exercise). Beyond that, <strong>approximate</strong>: many reactions per step.</li>
+</ul>
+<aside class="notes">
+<p>The SSA is exact but simulates every single reaction. In the third row, 10 000 proteins with lifetime 5 h means 2000 degradation events per hour, and as many translations. Compiled code helps by a constant factor. The algorithmic way out is to stop simulating each event: fire many reactions in one step when the propensities hardly change during that step. That is tau-leaping. The numbers in the last column are estimates from the measured cost of about 10 microseconds per step in R.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="tau-leaping-and-its-failure" class="slide level2 smaller">
+<h2>Tau-leaping, and its failure</h2>
+<p>Take a fixed step <span class="math inline">\tau</span>; reaction <span class="math inline">j</span> fires a <strong>Poisson</strong><span class="math inline">(a_j \tau)</span> number of times, propensities frozen during the step.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a>tau_leap <span class="ot">&lt;-</span> <span class="cf">function</span>(tau, <span class="at">t_end =</span> <span class="dv">10</span>, <span class="at">k =</span> <span class="dv">10</span>, <span class="at">delta =</span> <span class="dv">1</span>) {</span>
+<span id="cb7-2"><a aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="dv">0</span>; went_negative <span class="ot">&lt;-</span> <span class="cn">FALSE</span></span>
+<span id="cb7-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (n <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">round</span>(t_end <span class="sc">/</span> tau)) {</span>
+<span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a>    m <span class="ot">&lt;-</span> m <span class="sc">+</span> <span class="fu">rpois</span>(<span class="dv">1</span>, k <span class="sc">*</span> tau) <span class="sc">-</span> <span class="fu">rpois</span>(<span class="dv">1</span>, delta <span class="sc">*</span> m <span class="sc">*</span> tau)   <span class="co"># many reactions per leap</span></span>
+<span id="cb7-5"><a aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (m <span class="sc">&lt;</span> <span class="dv">0</span>) { went_negative <span class="ot">&lt;-</span> <span class="cn">TRUE</span>; m <span class="ot">&lt;-</span> <span class="dv">0</span> }             <span class="co"># impossible: clip</span></span>
+<span id="cb7-6"><a aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb7-7"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">c</span>(m, went_negative)</span>
+<span id="cb7-8"><a aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th><span class="math inline">\tau</span> (h)</th>
+<th>0.01</th>
+<th>0.1</th>
+<th>0.5</th>
+<th>1</th>
+<th>1.5</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>var at <span class="math inline">t = 10</span> (exact 10)</td>
+<td>9.9</td>
+<td>10.0</td>
+<td>12.8</td>
+<td>20.4</td>
+<td>33.7</td>
+</tr>
+<tr class="even">
+<td>runs with a <strong>negative</strong> count</td>
+<td>0.1%</td>
+<td>0.4%</td>
+<td>1.9%</td>
+<td>10%</td>
+<td>32%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Large <span class="math inline">\tau</span>: wrong variance and <strong>negative molecule numbers</strong>. <strong>Check:</strong> <span class="math inline">\delta\tau \ll 1</span> (each propensity changes little per leap); count negatives; halve <span class="math inline">\tau</span>.</li>
+</ul>
+<aside class="notes">
+<p>Tau-leaping (Gillespie 2001) is to the SSA what Euler’s method is to the exact ODE solution: a fixed step, frozen rates, an error that grows with the step. The Poisson number of degradations does not know how many molecules there are: with m = 3 and delta tau = 1.5 it removes 4.5 on average. Clipping to zero hides the failure and biases the result. The variance is wrong even without negatives: for this model the tau-leap variance is 2k/(delta (2 - delta tau)), 20 instead of 10 at tau = 1 (exercise C4). Production codes choose tau adaptively and switch to exact SSA steps for species with few molecules (<a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Poisson.html">rpois</a>; the adaptivetau package in R).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="eulermaruyama-for-stochastic-differential-equations" class="slide level2 smaller">
+<h2>Euler–Maruyama for stochastic differential equations</h2>
+<p>With many molecules, replace the Poisson numbers by normals with the same mean and variance: the <strong>chemical Langevin equation</strong> <span class="math inline">\;dm = (k - \delta m)\,dt + \sqrt{k + \delta m}\;dW</span>. <strong>Euler–Maruyama</strong>: an Euler step plus a random kick of size <span class="math inline">\sqrt h</span>.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a aria-hidden="true" tabindex="-1"></a>em <span class="ot">&lt;-</span> <span class="cf">function</span>(h, k, <span class="at">t_end =</span> <span class="dv">10</span>, <span class="at">delta =</span> <span class="dv">1</span>) {</span>
+<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb8-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (n <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">round</span>(t_end <span class="sc">/</span> h))</span>
+<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a>    m <span class="ot">&lt;-</span> m <span class="sc">+</span> (k <span class="sc">-</span> delta <span class="sc">*</span> m) <span class="sc">*</span> h <span class="sc">+</span> <span class="fu">sqrt</span>((k <span class="sc">+</span> delta <span class="sc">*</span> m) <span class="sc">*</span> h) <span class="sc">*</span> <span class="fu">rnorm</span>(<span class="dv">1</span>)</span>
+<span id="cb8-5"><a aria-hidden="true" tabindex="-1"></a>  m</span>
+<span id="cb8-6"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb8-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>); m <span class="ot">&lt;-</span> <span class="fu">replicate</span>(<span class="dv">2000</span>, <span class="fu">em</span>(<span class="at">h =</span> <span class="fl">0.01</span>, <span class="at">k =</span> <span class="dv">10</span>))</span>
+<span id="cb8-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">mean =</span> <span class="fu">mean</span>(m), <span class="at">var =</span> <span class="fu">var</span>(m))</span>
+<span id="cb8-9"><a aria-hidden="true" tabindex="-1"></a><span class="co">#     mean      var</span></span>
+<span id="cb8-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 9.917764 9.817142</span></span>
+<span id="cb8-11"><a aria-hidden="true" tabindex="-1"></a>m <span class="ot">&lt;-</span> <span class="fu">replicate</span>(<span class="dv">2000</span>, <span class="fu">em</span>(<span class="at">h =</span> <span class="fl">0.01</span>, <span class="at">k =</span> <span class="fl">0.5</span>)); <span class="fu">mean</span>(<span class="fu">is.nan</span>(m))   <span class="co"># mean 0.5 molecules</span></span>
+<span id="cb8-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.076          (Warning: NaNs produced)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Mean 10, variance 10: right. With a mean of <strong>0.5</strong> molecules, <span class="math inline">m</span> goes negative and <span class="math inline">\sqrt{\cdot}</span> gives <code>NaN</code> in 8% of runs. <strong>Continuous noise needs large numbers.</strong></li>
+</ul>
+<aside class="notes">
+<p>The drift term is the ODE right-hand side; the diffusion term has variance (sum of propensities) per unit time, matching the Poisson numbers of a tau-leap step. Euler-Maruyama is Euler’s method with a normal kick of standard deviation sqrt(h) times the noise strength; it has weak order 1 (for means and variances) and strong order 1/2 (for single paths), lower than the order 1 of Euler for ODEs. SDEs also model noise outside chemistry: fluctuating environments, Brownian motion of particles, population sizes with environmental noise. The failure is the opposite of the SSA’s cost problem: the approximation is only valid when every species has many copies.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="checklist-is-my-stochastic-simulation-right" class="slide level2 smaller">
+<h2>Checklist: is my stochastic simulation right?</h2>
+<ul>
+<li><strong>Test on a known answer</strong>: birth–death should give Poisson(<span class="math inline">k/\delta</span>); for linear propensities the mean must follow the ODE.</li>
+<li><strong>Every estimate has an error bar</strong>: mean <span class="math inline">\pm 2\,\text{SE}</span> over cells; a Fano factor from 1000 cells is uncertain by about 5%.</li>
+<li><strong>Sample at fixed times</strong>, or weight by duration: never average over events.</li>
+<li>Run long enough to forget the start (several lifetimes of the slowest species).</li>
+<li><strong>Seeds</strong>: set once; R, numpy and Rust have different generators, so <strong>trajectories differ</strong> between languages. Compare <strong>statistics</strong>, not trajectories.</li>
+<li>Tau-leaping and Euler–Maruyama: no negative counts, no <code>NaN</code>; halve the step and compare.</li>
+</ul>
+<aside class="notes">
+<p>A stochastic simulation always returns plausible-looking numbers, so the checks are about the statistics. The cross-language point is practical: the exercise solutions in R, Python and Rust give different numbers for every run (and the Python seed for one task happens to give a mean 3 SE from the truth, which is what happens now and then). Agreement means agreement within the standard errors. A result that depends on the seed by more than its error bar is not a result.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="summary" class="slide level2 smaller">
+<h2>Summary</h2>
+<ul>
+<li>Small copy numbers: reactions are <strong>random events</strong> with <strong>propensities</strong>; the ODE describes only the mean, and only for linear propensities.</li>
+<li>The <strong>chemical master equation</strong> is exact but has one equation per state; we <strong>sample</strong> it.</li>
+<li><strong>Gillespie’s SSA</strong>: <span class="math inline">\tau = -\log(u_1)/a_0</span>, reaction <span class="math inline">j</span> with probability <span class="math inline">a_j/a_0</span>. Exact, no step size, cost one step per reaction.</li>
+<li><strong>Many runs → distribution</strong>: mean <span class="math inline">\pm</span> SE against the ODE; sample at fixed times.</li>
+<li><strong>Tau-leaping</strong> (Poisson numbers per step) and <strong>Euler–Maruyama</strong> (normal kicks) are faster; they fail with negative counts or <code>NaN</code> when numbers are small.</li>
+<li>Biology: <strong>transcriptional bursting</strong> (telegraph promoter) gives Fano factor <span class="math inline">\gg 1</span>; constitutive transcription gives Poisson, <span class="math inline">F = 1</span>. Early <strong>extinction</strong> of an outbreak, which no ODE shows.</li>
+</ul>
+<p><strong>Next:</strong> Part 9, <em>Optimisation in one dimension</em>: from simulating models to fitting them.</p>
+<aside class="notes">
+<p>The SSA closes Part 8: from ODEs solved accurately to the stochastic models behind them. Part 9 turns to fitting model parameters to data; Nonlinear least squares and ODE fitting fits ODE models, and the variability seen here is one reason why an ODE fitted to single-cell data can mislead. The Monte Carlo ideas (standard errors, seeds, known-answer tests) from Random numbers and Monte Carlo carried over unchanged.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+
+
+</section>
+    </div>
+  <div class="quarto-auto-generated-content" style="display: none;">
+<div class="footer footer-default">
+
+</div>
+</div></div>
+
+  <script>window.backupDefine = window.define; window.define = undefined;</script>
+  <script src="../site_libs/revealjs/dist/reveal.js"></script>
+  <!-- reveal.js plugins -->
+  <script src="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.js"></script>
+  <script src="../site_libs/revealjs/plugin/pdf-export/pdfexport.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/quarto-support/support.js"></script>
+  
+
+  <script src="../site_libs/revealjs/plugin/notes/notes.js"></script>
+  <script src="../site_libs/revealjs/plugin/search/search.js"></script>
+  <script src="../site_libs/revealjs/plugin/zoom/zoom.js"></script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://revealjs.com/config/
+      Reveal.initialize({
+'controlsAuto': false,
+'previewLinksAuto': false,
+'pdfSeparateFragments': false,
+'autoAnimateEasing': "ease",
+'autoAnimateDuration': 1,
+'autoAnimateUnmatched': true,
+'jumpToSlide': true,
+'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
+'smaller': false,
+ 
+        // Display controls in the bottom right corner
+        controls: true,
+
+        // Help the user learn the controls by providing hints, for example by
+        // bouncing the down arrow when they first encounter a vertical slide
+        controlsTutorial: false,
+
+        // Determines where controls appear, "edges" or "bottom-right"
+        controlsLayout: 'edges',
+
+        // Visibility rule for backwards navigation arrows; "faded", "hidden"
+        // or "visible"
+        controlsBackArrows: 'visible',
+
+        // Display a presentation progress bar
+        progress: true,
+
+        // Display the page number of the current slide
+        slideNumber: 'c/t',
+
+        // 'all', 'print', or 'speaker'
+        showSlideNumber: 'all',
+
+        // Add the current slide number to the URL hash so that reloading the
+        // page/copying the URL will return you to the same slide
+        hash: true,
+
+        // Start with 1 for the hash rather than 0
+        hashOneBasedIndex: false,
+
+        // Flags if we should monitor the hash and change slides accordingly
+        respondToHashChanges: true,
+
+        // Push each slide change to the browser history
+        history: false,
+
+        // Enable keyboard shortcuts for navigation
+        keyboard: true,
+
+        // Enable the slide overview mode
+        overview: true,
+
+        // Disables the default reveal.js slide layout (scaling and centering)
+        // so that you can use custom CSS layout
+        disableLayout: false,
+
+        // Vertical centering of slides
+        center: false,
+
+        // Enables touch navigation on devices with touch input
+        touch: true,
+
+        // Loop the presentation
+        loop: false,
+
+        // Change the presentation direction to be RTL
+        rtl: false,
+
+        // see https://revealjs.com/vertical-slides/#navigation-mode
+        navigationMode: 'linear',
+
+        // Randomizes the order of slides each time the presentation loads
+        shuffle: false,
+
+        // Turns fragments on and off globally
+        fragments: true,
+
+        // Flags whether to include the current fragment in the URL,
+        // so that reloading brings you to the same fragment position
+        fragmentInURL: false,
+
+        // Flags if the presentation is running in an embedded mode,
+        // i.e. contained within a limited portion of the screen
+        embedded: false,
+
+        // Flags if we should show a help overlay when the questionmark
+        // key is pressed
+        help: true,
+
+        // Flags if it should be possible to pause the presentation (blackout)
+        pause: true,
+
+        // Flags if speaker notes should be visible to all viewers
+        showNotes: false,
+
+        // Global override for autoplaying embedded media (null/true/false)
+        autoPlayMedia: null,
+
+        // Global override for preloading lazy-loaded iframes (null/true/false)
+        preloadIframes: null,
+
+        // Number of milliseconds between automatically proceeding to the
+        // next slide, disabled when set to 0, this value can be overwritten
+        // by using a data-autoslide attribute on your slides
+        autoSlide: 0,
+
+        // Stop auto-sliding after user input
+        autoSlideStoppable: true,
+
+        // Use this method for navigation when auto-sliding
+        autoSlideMethod: null,
+
+        // Specify the average time in seconds that you think you will spend
+        // presenting each slide. This is used to show a pacing timer in the
+        // speaker view
+        defaultTiming: null,
+
+        // Enable slide navigation via mouse wheel
+        mouseWheel: false,
+
+        // The display mode that will be used to show slides
+        display: 'block',
+
+        // Hide cursor if inactive
+        hideInactiveCursor: true,
+
+        // Time before the cursor is hidden (in ms)
+        hideCursorTime: 5000,
+
+        // Opens links in an iframe preview overlay
+        previewLinks: false,
+
+        // Transition style (none/fade/slide/convex/concave/zoom)
+        transition: 'none',
+
+        // Transition speed (default/fast/slow)
+        transitionSpeed: 'default',
+
+        // Transition style for full page slide backgrounds
+        // (none/fade/slide/convex/concave/zoom)
+        backgroundTransition: 'none',
+
+        // Number of slides away from the current that are visible
+        viewDistance: 3,
+
+        // Number of slides away from the current that are visible on mobile
+        // devices. It is advisable to set this to a lower number than
+        // viewDistance in order to save resources.
+        mobileViewDistance: 2,
+
+        // The "normal" size of the presentation, aspect ratio will be preserved
+        // when the presentation is scaled to fit different resolutions. Can be
+        // specified using percentage units.
+        width: 1280,
+
+        height: 720,
+
+        // Factor of the display size that should remain empty around the content
+        margin: 0.1,
+
+        // reveal.js plugins
+        plugins: [QuartoLineHighlight, PdfExport, RevealMenu, QuartoSupport,
+
+          RevealNotes,
+          RevealSearch,
+          RevealZoom
+        ]
+      });
+    </script>
+    <script id="quarto-html-after-body" type="application/javascript">
+      window.document.addEventListener("DOMContentLoaded", function (event) {
+        const tabsets =  window.document.querySelectorAll(".panel-tabset-tabby")
+        tabsets.forEach(function(tabset) {
+          const tabby = new Tabby('#' + tabset.id);
+        });
+        const isCodeAnnotation = (el) => {
+          for (const clz of el.classList) {
+            if (clz.startsWith('code-annotation-')) {                     
+              return true;
+            }
+          }
+          return false;
+        }
+        const onCopySuccess = function(e) {
+          // button target
+          const button = e.trigger;
+          // don't keep focus
+          button.blur();
+          // flash "checked"
+          button.classList.add('code-copy-button-checked');
+          var currentTitle = button.getAttribute("title");
+          button.setAttribute("title", "Copied!");
+          let tooltip;
+          if (window.bootstrap) {
+            button.setAttribute("data-bs-toggle", "tooltip");
+            button.setAttribute("data-bs-placement", "left");
+            button.setAttribute("data-bs-title", "Copied!");
+            tooltip = new bootstrap.Tooltip(button, 
+              { trigger: "manual", 
+                customClass: "code-copy-button-tooltip",
+                offset: [0, -8]});
+            tooltip.show();    
+          }
+          setTimeout(function() {
+            if (tooltip) {
+              tooltip.hide();
+              button.removeAttribute("data-bs-title");
+              button.removeAttribute("data-bs-toggle");
+              button.removeAttribute("data-bs-placement");
+            }
+            button.setAttribute("title", currentTitle);
+            button.classList.remove('code-copy-button-checked');
+          }, 1000);
+          // clear code selection
+          e.clearSelection();
+        }
+        const getTextToCopy = function(trigger) {
+            const codeEl = trigger.previousElementSibling.cloneNode(true);
+            for (const childEl of codeEl.children) {
+              if (isCodeAnnotation(childEl)) {
+                childEl.remove();
+              }
+            }
+            return codeEl.innerText;
+        }
+        const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+          text: getTextToCopy
+        });
+        clipboard.on('success', onCopySuccess);
+        if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+          const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+            text: getTextToCopy,
+            container: window.document.getElementById('quarto-embedded-source-code-modal')
+          });
+          clipboardModal.on('success', onCopySuccess);
+        }
+          var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+          var mailtoRegex = new RegExp(/^mailto:/);
+            var filterRegex = new RegExp('/' + window.location.host + '/');
+          var isInternal = (href) => {
+              return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+          }
+          // Inspect non-navigation links and adorn them if external
+         var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+          for (var i=0; i<links.length; i++) {
+            const link = links[i];
+            if (!isInternal(link.href)) {
+              // undo the damage that might have been done by quarto-nav.js in the case of
+              // links that we want to consider external
+              if (link.dataset.originalHref !== undefined) {
+                link.href = link.dataset.originalHref;
+              }
+            }
+          }
+        function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+          const config = {
+            allowHTML: true,
+            maxWidth: 500,
+            delay: 100,
+            arrow: false,
+            appendTo: function(el) {
+                return el.closest('section.slide') || el.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'light-border',
+            placement: 'bottom-start',
+          };
+          if (contentFn) {
+            config.content = contentFn;
+          }
+          if (onTriggerFn) {
+            config.onTrigger = onTriggerFn;
+          }
+          if (onUntriggerFn) {
+            config.onUntrigger = onUntriggerFn;
+          }
+            config['offset'] = [0,0];
+            config['maxWidth'] = 700;
+          window.tippy(el, config); 
+        }
+        const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+        for (var i=0; i<noterefs.length; i++) {
+          const ref = noterefs[i];
+          tippyHover(ref, function() {
+            // use id or data attribute instead here
+            let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+            try { href = new URL(href).hash; } catch {}
+            const id = href.replace(/^#\/?/, "");
+            const note = window.document.getElementById(id);
+            if (note) {
+              return note.innerHTML;
+            } else {
+              return "";
+            }
+          });
+        }
+        const findCites = (el) => {
+          const parentEl = el.parentElement;
+          if (parentEl) {
+            const cites = parentEl.dataset.cites;
+            if (cites) {
+              return {
+                el,
+                cites: cites.split(' ')
+              };
+            } else {
+              return findCites(el.parentElement)
+            }
+          } else {
+            return undefined;
+          }
+        };
+        var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+        for (var i=0; i<bibliorefs.length; i++) {
+          const ref = bibliorefs[i];
+          const citeInfo = findCites(ref);
+          if (citeInfo) {
+            tippyHover(citeInfo.el, function() {
+              var popup = window.document.createElement('div');
+              citeInfo.cites.forEach(function(cite) {
+                var citeDiv = window.document.createElement('div');
+                citeDiv.classList.add('hanging-indent');
+                citeDiv.classList.add('csl-entry');
+                var biblioDiv = window.document.getElementById('ref-' + cite);
+                if (biblioDiv) {
+                  citeDiv.innerHTML = biblioDiv.innerHTML;
+                }
+                popup.appendChild(citeDiv);
+              });
+              return popup.innerHTML;
+            });
+          }
+        }
+      });
+      </script>
+    
+
+</body></html>

@@ -113,32 +113,13 @@ round(svd(J4 %*% diag(p4))$v[, 4], 3)
 
 ![](fig02-flipflop.svg){width="88%" fig-align="center"}
 
-Swap $k_a \leftrightarrow k_e$ and set $V' = V\,k_e/k_a$: the formula gives **the same** $C(t)$ for every $t$.
+Recap from *Nonlinear least squares and ODE fitting*: swap $k_a \leftrightarrow k_e$, set $V' = V\,k_e/k_a$, and $C(t)$ is **identical** for every $t$.
 
-- Two exact minima with the same SSE: $(1.015, 0.191, 20.2)$ and $(0.191, 1.015, 3.80)$. Each is **locally** identifiable; globally the data cannot choose.
-- Right: fix $k_a$, re-fit the rest, plot the rise in SSE. Two wells of equal depth.
-
-::: notes
-Check the algebra: with ka and ke swapped the prefactor becomes ke/(V'(ke-ka)) and the bracket changes sign, so the curve is unchanged if ke/V' = ka/V. Biologically: is the drug absorbed fast and eliminated slowly, or absorbed slowly and eliminated fast? The concentration curve alone cannot say. Slow-release formulations really do show "flip-flop kinetics" (absorption slower than elimination), so this is not only a mathematical curiosity. The right panel is a profile, which we define properly later: for each fixed ka, re-fit ke and V and record the SSE. The hump between the wells is what keeps an optimiser on one side: which minimum you get depends on the starting values.
-:::
-
-## The flip-flop in practice
-
-```r
-fit2 <- nls(y ~ pk(t, ka, ke, V), start = list(ka = 0.1, ke = 0.5, V = 5))
-coef(fit2)
-#        ka        ke         V
-# 0.1906156 1.0150718 3.7963082
-c(deviance(fit), deviance(fit2))
-# [1] 0.06646744 0.06646744
-```
-
-- Same residuals, different parameters. Neither run warns.
-- **Check:** multistart (previous unit). Equal-SSE minima at different parameter values mean a structural problem, not a convergence problem.
-- **Fix:** use outside knowledge. An IV dose gives $k_e$ directly; or impose $k_a > k_e$ by fitting $k_a = k_e + e^{\delta}$.
+- Two exact minima, same SSE ($0.066467$): $(1.015, 0.191, 20.2)$ and $(0.191, 1.015, 3.80)$. Each is **locally** identifiable (right: fix $k_a$, re-fit the rest: two wells of equal depth); globally the data cannot choose.
+- **Check:** multistart. Equal SSE at different parameters = a symmetry, not a convergence problem. **Fix:** outside knowledge: an IV dose gives $k_e$; or impose $k_a > k_e$ by fitting $k_a = k_e + e^{\delta}$.
 
 ::: notes
-The multistart check from the previous unit was a guard against local minima. Here it finds two minima with identical SSE to all printed digits, which is the signature of a symmetry in the model. The second solution has V = 3.8 L, which is physiologically odd for many drugs, but only outside knowledge can say that. Constraining ka > ke is a modelling decision: make it explicitly and say so.
+The previous unit found the two minima with a multistart and checked the algebra: with ka and ke swapped the prefactor becomes ke/(V'(ke-ka)) and the bracket changes sign, so the curve is unchanged if ke/V' = ka/V. What is new here is the classification and the right-hand panel. It is a profile, which we define properly later: for each fixed ka, re-fit ke and V and record the rise in SSE. The two wells have exactly equal depth; the hump between them is what keeps an optimiser on one side, so which minimum you get depends on the start (and, exercise C2 shows, on the algorithm). Slow-release formulations really do show flip-flop kinetics, so the constraint ka > ke is a modelling decision: make it explicitly and say so.
 :::
 
 ## Near the optimum the SSE is a bowl {.smaller}

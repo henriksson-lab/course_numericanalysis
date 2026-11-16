@@ -231,7 +231,7 @@ function mount(host: HTMLElement): void {
     let kpk = 1;
     for (let k = 1; k <= half; k++) if (amp[k] > amp[kpk]) kpk = k;
     svgEl("text", { x: 8, y: sTop - 34, class: "ttl" }, svg).textContent =
-      `Spectrum${st.win ? " (Hann window)" : ""}: Nyquist period 2Δt = ${fmtP(2 * dt)} h; bins at periods ${fmtP(T)}/k h`;
+      `Spectrum${st.win ? " (Hann)" : ""}: Nyquist period 2Δt = ${fmtP(2 * dt)} h; bins at ${fmtP(T)}/k h`;
     const amax = Math.max(...amp.slice(1), 0.1);
     const yTopLin = amax > 2 ? Math.ceil(amax * 1.1 / 0.5) * 0.5 : amax > 1 ? 2 : 1;
     const LY0 = -4, LY1 = 1;
@@ -283,11 +283,11 @@ function mount(host: HTMLElement): void {
       if (fu > fN + 1e-9) {
         const fs = 24 / dt;
         const fa = Math.abs(fu - Math.round(fu / fs) * fs);
-        const x1 = fx(fu), x2 = fx(fa), yA = sTop + 40;
+        const x1 = fx(fu), x2 = fx(fa), yA = sBot - 50;
         const mid = (x1 + x2) / 2;
-        svgEl("path", { d: `M ${x1} ${yA} Q ${mid} ${yA - 30} ${x2} ${yA}`, fill: "none", stroke: OI.red, "stroke-width": 2.5 }, svg);
-        svgEl("path", { d: `M ${x2} ${yA} l ${x1 > x2 ? 10 : -10} -9 m 0 9 l ${x1 > x2 ? 2 : -2} -13`, fill: "none", stroke: OI.red, "stroke-width": 2.5 }, svg);
-        svgEl("text", { x: mid, y: yA - 22, "text-anchor": "middle", style: `fill:${OI.red}`, "font-weight": 600 }, svg)
+        svgEl("path", { d: `M ${x1} ${yA} Q ${mid} ${yA - 30} ${x2} ${yA}`, fill: "none", stroke: OI.purple, "stroke-width": 3 }, svg);
+        svgEl("path", { d: `M ${x2} ${yA} l ${x1 > x2 ? 10 : -10} -9 m 0 9 l ${x1 > x2 ? 2 : -2} -13`, fill: "none", stroke: OI.purple, "stroke-width": 2.5 }, svg);
+        svgEl("text", { x: mid, y: yA - 24, "text-anchor": "middle", style: `fill:${OI.purple}`, "font-weight": 600 }, svg)
           .textContent = fa < 1e-9 ? "alias: looks constant" : `alias: ${fmtP(24 / fa)} h`;
       }
     }
@@ -296,7 +296,7 @@ function mount(host: HTMLElement): void {
       svgEl("line", { x1: fx(fN), x2: fx(fN), y1: sTop, y2: sBot, stroke: OI.ink, "stroke-width": 2.5 }, svg);
       svgEl("text", { x: fx(fN) - 5, y: sTop + 44, "text-anchor": "end", "font-weight": 600 }, svg).textContent = "Nyquist";
     } else {
-      svgEl("text", { x: R - 4, y: sTop + 44, "text-anchor": "end", "font-weight": 600 }, svg).textContent = `Nyquist ${fmtP(fN)} →`;
+      svgEl("text", { x: R - 4, y: sTop + 44, "text-anchor": "end", "font-weight": 600 }, svg).textContent = `Nyquist at ${fmtP(fN)}/day →`;
     }
     // stems (k >= 1)
     const col = st.win ? OI.blue : OI.red;

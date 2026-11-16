@@ -24,11 +24,11 @@ fn main() {
     for e0 in [0.1, 1.0, 5.0] {
         let tend = 20.0 / e0;                             // long enough to use up S0 = 10
         let mut full = ContinuousOutputModel::default();
-        Dopri5::from_param(Enzyme, 0.0, tend, 0.0, Vector4::new(10.0, e0, 0.0, 0.0), 1e-10, 1e-12,
+        Dopri5::from_param(Enzyme, 0.0, tend, tend, Vector4::new(10.0, e0, 0.0, 0.0), 1e-10, 1e-12,
                            0.9, 0.04, 0.2, 10.0, tend, 0.0, 10_000_000, u32::MAX, OutputType::Dense)
             .integrate_with_continuous_output_model(&mut full).unwrap();
         let mut qssa = ContinuousOutputModel::default();
-        Dopri5::new(Qssa { e0 }, 0.0, tend, 0.0, Vector1::new(10.0), 1e-10, 1e-12)
+        Dopri5::new(Qssa { e0 }, 0.0, tend, tend, Vector1::new(10.0), 1e-10, 1e-12)
             .integrate_with_continuous_output_model(&mut qssa).unwrap();
         let err = (0..=400).map(|k| {
             let t = tend * k as f64 / 400.0;

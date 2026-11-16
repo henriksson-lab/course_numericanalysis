@@ -51,7 +51,7 @@ impl System<f64, Vector4<f64>> for Enzyme {
     }
 }
 fn reference(t: f64) -> DVector<f64> {
-    let mut s = Dopri5::from_param(Enzyme, 0.0, t, 0.0, Vector4::new(10.0, 1.0, 0.0, 0.0),
+    let mut s = Dopri5::from_param(Enzyme, 0.0, t, t, Vector4::new(10.0, 1.0, 0.0, 0.0),
                                    1e-12, 1e-14, 0.9, 0.04, 0.2, 10.0, t, 0.0, 10_000_000,
                                    u32::MAX, OutputType::Sparse);
     s.integrate().unwrap();

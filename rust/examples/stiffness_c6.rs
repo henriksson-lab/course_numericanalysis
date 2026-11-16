@@ -26,10 +26,10 @@ fn jac(y: &DVector<f64>) -> DMatrix<f64> {
 fn main() {
     let y0 = Vector3::new(1.0, 0.0, 0.0);
     // (a) explicit Dopri5
-    let mut s = Dopri5::new(Rober, 0.0, 40.0, 0.0, y0, 1e-6, 1e-10);
+    let mut s = Dopri5::new(Rober, 0.0, 40.0, 40.0, y0, 1e-6, 1e-10);
     if let Err(e) = s.integrate() { println!("Dopri5 (default): {}", e); }
     let t = Instant::now();
-    let mut s = Dopri5::from_param(Rober, 0.0, 40.0, 0.0, y0, 1e-6, 1e-10, 0.9, 0.04, 0.2,
+    let mut s = Dopri5::from_param(Rober, 0.0, 40.0, 40.0, y0, 1e-6, 1e-10, 0.9, 0.04, 0.2,
                                    10.0, 40.0, 0.0, 10_000_000, u32::MAX, OutputType::Sparse);
     let st = s.integrate().unwrap();
     println!("Dopri5 (test off): steps {}  f-evals {}  time {:.3} s  y2(40) = {:.6e}",

@@ -79,6 +79,9 @@ fn run(name: &str, prob: Fd, q0: Vec<f64>, method: &str) {
 }
 
 fn main() {
+    let only: Option<String> = std::env::args().nth(1);
+    let run = |name: &str, prob: Fd, q0: Vec<f64>, m: &str| {
+        if only.as_deref().map_or(true, |o| o == m) { run(name, prob, q0, m) } };
     let um = Fd { unit: 1.0, scale: [1.0; 4], log_ec50: false };
     for m in ["NM", "BFGS", "LBFGS", "CG"] { run("µM", um.clone(), P0.to_vec(), m); }
     let nm = Fd { unit: 1000.0, scale: [1.0; 4], log_ec50: false };

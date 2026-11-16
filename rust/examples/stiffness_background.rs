@@ -18,14 +18,14 @@ impl System<f64, Vector4<f64>> for Enzyme {
 fn main() {
     let y0 = Vector4::new(10.0, 1.0, 0.0, 0.0); // uM: S, E, C, P
     // default settings: stiffness test every 1000 accepted steps
-    let mut s = Dopri5::new(Enzyme, 0.0, 30.0, 0.0, y0, 1e-8, 1e-10);
+    let mut s = Dopri5::new(Enzyme, 0.0, 30.0, 30.0, y0, 1e-8, 1e-10);
     match s.integrate() {
         Ok(st) => println!("finished, {} steps", st.accepted_steps),
         Err(e) => println!("Dopri5 error: {}", e),
     }
     // from_param(f, t0, t_end, dx, y0, rtol, atol, safety, beta, fac_min, fac_max,
     //            h_max, h, n_max, n_stiff, output): n_stiff = u32::MAX switches the test off
-    let mut s = Dopri5::from_param(Enzyme, 0.0, 30.0, 0.0, y0, 1e-8, 1e-10, 0.9, 0.04,
+    let mut s = Dopri5::from_param(Enzyme, 0.0, 30.0, 30.0, y0, 1e-8, 1e-10, 0.9, 0.04,
                                    0.2, 10.0, 30.0, 0.0, 1_000_000, u32::MAX, OutputType::Dense);
     let mut dense = ContinuousOutputModel::default();
     let st = s.integrate_with_continuous_output_model(&mut dense).unwrap();

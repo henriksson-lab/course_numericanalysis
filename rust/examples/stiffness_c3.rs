@@ -45,7 +45,7 @@ fn main() {
     let y0 = Vector4::new(10.0, 1.0, 0.0, 0.0);
     // Dopri5 with the stiffness test switched off (n_stiff = u32::MAX)
     let t = Instant::now();
-    let mut s = Dopri5::from_param(Enzyme, 0.0, 30.0, 0.0, y0, 1e-6, 1e-9, 0.9, 0.04,
+    let mut s = Dopri5::from_param(Enzyme, 0.0, 30.0, 30.0, y0, 1e-6, 1e-9, 0.9, 0.04,
                                    0.2, 10.0, 30.0, 0.0, 1_000_000, u32::MAX, OutputType::Sparse);
     let st = s.integrate().unwrap();
     println!("Dopri5  steps {:5}  f-evals {:6}  time {:.4} s  P(30) = {:.6}", st.accepted_steps,

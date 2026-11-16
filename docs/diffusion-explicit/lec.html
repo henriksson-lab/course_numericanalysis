@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-html/tabby.min.js"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/light-border.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-662ae1889177880cb371f83234c0a158.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
+  <meta name="generator" content="quarto-1.7.30">
+
+  <meta name="author" content="Numerical analysis for biologists">
+  <title>Numerical analysis for biologists – The diffusion (heat) equation by finite differences</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reset.css">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reveal.css">
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+      }
+    pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+    div.sourceCode
+      { color: #24292e;  }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span { color: #24292e; } /* Normal */
+    code span.al { color: #ff5555; font-weight: bold; } /* Alert */
+    code span.an { color: #6a737d; } /* Annotation */
+    code span.at { color: #d73a49; } /* Attribute */
+    code span.bn { color: #005cc5; } /* BaseN */
+    code span.bu { color: #d73a49; } /* BuiltIn */
+    code span.cf { color: #d73a49; } /* ControlFlow */
+    code span.ch { color: #032f62; } /* Char */
+    code span.cn { color: #005cc5; } /* Constant */
+    code span.co { color: #6a737d; } /* Comment */
+    code span.cv { color: #6a737d; } /* CommentVar */
+    code span.do { color: #6a737d; } /* Documentation */
+    code span.dt { color: #d73a49; } /* DataType */
+    code span.dv { color: #005cc5; } /* DecVal */
+    code span.er { color: #ff5555; text-decoration: underline; } /* Error */
+    code span.ex { color: #d73a49; font-weight: bold; } /* Extension */
+    code span.fl { color: #005cc5; } /* Float */
+    code span.fu { color: #6f42c1; } /* Function */
+    code span.im { color: #032f62; } /* Import */
+    code span.in { color: #6a737d; } /* Information */
+    code span.kw { color: #d73a49; } /* Keyword */
+    code span.op { color: #24292e; } /* Operator */
+    code span.ot { color: #6f42c1; } /* Other */
+    code span.pp { color: #d73a49; } /* Preprocessor */
+    code span.re { color: #6a737d; } /* RegionMarker */
+    code span.sc { color: #005cc5; } /* SpecialChar */
+    code span.ss { color: #032f62; } /* SpecialString */
+    code span.st { color: #032f62; } /* String */
+    code span.va { color: #e36209; } /* Variable */
+    code span.vs { color: #032f62; } /* VerbatimString */
+    code span.wa { color: #ff5555; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/theme/quarto-bf56578b9c06c165c166475cd19dbcd1.css">
+  <script>window.backupDefine = window.define; window.define = undefined;</script><script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css">
+  <link href="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/quarto-support/footer.css" rel="stylesheet">
+  <style type="text/css">
+    .reveal div.sourceCode {
+      margin: 0;
+      overflow: auto;
+    }
+    .reveal div.hanging-indent {
+      margin-left: 1em;
+      text-indent: -1em;
+    }
+    .reveal .slide:not(.center) {
+      height: 100%;
+    }
+    .reveal .slide.scrollable {
+      overflow-y: auto;
+    }
+    .reveal .footnotes {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .reveal .slide .absolute {
+      position: absolute;
+      display: block;
+    }
+    .reveal .footnotes ol {
+      counter-reset: ol;
+      list-style-type: none; 
+      margin-left: 0;
+    }
+    .reveal .footnotes ol li:before {
+      counter-increment: ol;
+      content: counter(ol) ". "; 
+    }
+    .reveal .footnotes ol li > p:first-child {
+      display: inline-block;
+    }
+    .reveal .slide ul,
+    .reveal .slide ol {
+      margin-bottom: 0.5em;
+    }
+    .reveal .slide ul li,
+    .reveal .slide ol li {
+      margin-top: 0.4em;
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide ul[role="tablist"] li {
+      margin-bottom: 0;
+    }
+    .reveal .slide ul li > *:first-child,
+    .reveal .slide ol li > *:first-child {
+      margin-block-start: 0;
+    }
+    .reveal .slide ul li > *:last-child,
+    .reveal .slide ol li > *:last-child {
+      margin-block-end: 0;
+    }
+    .reveal .slide .columns:nth-child(3) {
+      margin-block-start: 0.8em;
+    }
+    .reveal blockquote {
+      box-shadow: none;
+    }
+    .reveal .tippy-content>* {
+      margin-top: 0.2em;
+      margin-bottom: 0.7em;
+    }
+    .reveal .tippy-content>*:last-child {
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide > img.stretch.quarto-figure-center,
+    .reveal .slide > img.r-stretch.quarto-figure-center {
+      display: block;
+      margin-left: auto;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-left,
+    .reveal .slide > img.r-stretch.quarto-figure-left  {
+      display: block;
+      margin-left: 0;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-right,
+    .reveal .slide > img.r-stretch.quarto-figure-right  {
+      display: block;
+      margin-left: auto;
+      margin-right: 0; 
+    }
+  </style>
+</head>
+<body class="quarto-light">
+  <div class="reveal">
+    <div class="slides">
+
+<section id="title-slide" class="quarto-title-block center">
+  <h1 class="title">The diffusion (heat) equation by finite differences</h1>
+  <p class="subtitle">Part 10 — Diffusion and heat: finite-difference PDEs</p>
+
+<div class="quarto-title-authors">
+<div class="quarto-title-author">
+<div class="quarto-title-author-name">
+Numerical analysis for biologists 
+</div>
+</div>
+</div>
+
+</section>
+<section id="about-this-lecture" class="slide level2 smaller">
+<h2>About this lecture</h2>
+<p>So far every unknown was a number or a list of numbers that changed in <strong>time</strong>. Inside a microfluidic chip, a concentration also changes from place to place: it is a function of <strong>space and time</strong>, <span class="math inline">c(x, t)</span>. Its model is a <strong>partial differential equation</strong> (PDE).</p>
+<ul>
+<li><strong>Fick’s law</strong> and a mass balance give the <strong>diffusion equation</strong> <span class="math inline">\partial c/\partial t = D\,\partial^2 c/\partial x^2</span>. Heat conduction obeys the same equation.</li>
+<li>Put <span class="math inline">x</span> and <span class="math inline">t</span> on a <strong>grid</strong>: the <span class="math inline">(1, -2, 1)/\Delta x^2</span> stencil in space, an <strong>Euler</strong> step in time. This is the <strong>FTCS</strong> scheme, five lines of code.</li>
+<li><strong>Stability limit</strong> <span class="math inline">D\,\Delta t/\Delta x^2 \le 1/2</span>: break it and a zigzag explodes. It is Euler’s <span class="math inline">|1 - kh| \le 1</span> again, with <span class="math inline">k</span> from the <strong>eigenvalues</strong> of the grid.</li>
+<li><strong>Boundary conditions</strong>: fixed concentration (a reservoir) or no flux (a wall). They change the answer completely.</li>
+<li>Biology: a <strong>chemotaxis chamber</strong> between a source and a sink. How long until cells see a linear gradient? Why does doubling the channel length quadruple the wait?</li>
+</ul>
+<aside class="notes">
+<p>This opens Part 10, the first PDE of the course. Almost nothing here is new mathematics: the second-difference stencil comes from Numerical differentiation (Part 7), the time step is Euler’s method from Initial value problems and Euler’s method (Part 8), the stability analysis uses eigenvalues (Part 5) and the partial derivative was introduced in Newton for systems of equations (Part 2). The new thing is putting them together on a grid in space and time. Units 32 to 35 reuse the chamber and the grid set up today.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="biology-a-flow-free-chemotaxis-chamber" class="slide level2 smaller">
+<h2>Biology: a flow-free chemotaxis chamber</h2>
+
+<img data-src="fig01-chamber.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:62.0%"><ul>
+<li>A channel joins a <strong>source</strong> reservoir (chemoattractant) to a <strong>sink</strong> reservoir (plain medium). No flow, so the molecules move only by <strong>diffusion</strong> [G1, G3].</li>
+<li>At steady state the profile is a <strong>straight line</strong>: every cell in the channel sees the same gradient. How long until then?</li>
+</ul>
+<aside class="notes">
+<p>Diffusion-based gradient generators are one of the two families described in the reviews [G1] (Kim, Kim and Jeon 2010) and [G3] (Frontiers in Bioengineering and Biotechnology 2015); the other family uses flow, which we meet in Flow plus diffusion. The advantage of a flow-free chamber is that cells, especially non-adherent ones such as neutrophils, are not pushed by shear and secreted signals are not washed away. The price is time: one waits for diffusion to set up the gradient. Our version is simplified: a single straight channel, L = 500 µm, reservoirs large enough that their concentrations stay fixed. These numbers are typical values, not taken from one specific device; the reviews were only skimmed, so treat them as order-of-magnitude. The profiles at the bottom are computed with today’s method. The orange dots are cells.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="recap-two-tools-you-already-have" class="slide level2 smaller">
+<h2>Recap: two tools you already have</h2>
+<div class="columns">
+<div class="column" style="width:50%;">
+<p><strong>Second difference</strong> (<em>Numerical differentiation</em>): <span class="math display">\frac{u(x+h) - 2u(x) + u(x-h)}{h^2} = u''(x) + \tfrac{h^2}{12}u''''(x) + \dots</span></p>
+<ul>
+<li>Weights <span class="math inline">(1, -2, 1)/h^2</span>, error <span class="math inline">O(h^2)</span>.</li>
+<li>A straight line has second difference <strong>0</strong>.</li>
+</ul>
+</div><div class="column" style="width:50%;">
+<p><strong>Euler</strong> (<em>Initial value problems and Euler’s method</em>): <span class="math display">y_{n+1} = y_n + h\,f(t_n, y_n)</span></p>
+<ul>
+<li>On <span class="math inline">y' = -ky</span>: each step multiplies by <span class="math inline">1 - kh</span>.</li>
+<li>Stable only if <span class="math inline">|1 - kh| \le 1</span>, i.e.&nbsp;<span class="math inline">h \le 2/k</span>.</li>
+</ul>
+</div></div>
+<p>Today: the stencil handles <strong>space</strong>, Euler handles <strong>time</strong>, and the stability rule comes back with <span class="math inline">k</span> = the fastest rate on the grid.</p>
+<aside class="notes">
+<p>One slide only. Both results were derived and tested in their own units; students who skipped them should go back. In Numerical differentiation the variable was time t and the function was an OD growth curve; today the variable is position x and the function is a concentration profile. The stencil does not care. From the Euler unit, the key fact is the amplification factor 1 - kh for the decay equation, and the systems version from Stiffness and implicit methods: for y’ = Jy the rule must hold for every eigenvalue of J.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-function-of-space-and-time" class="slide level2">
+<h2>A function of space and time</h2>
+
+<img data-src="fig02-space-time.svg" style="width:100.0%" class="r-stretch"><ul>
+<li><span class="math inline">c(x, t)</span>: one number for each position <strong>and</strong> time. Hold <span class="math inline">t</span> fixed: a <strong>profile</strong> with slope <span class="math inline">\partial c/\partial x</span>. Hold <span class="math inline">x</span> fixed: a <strong>time course</strong> with slope <span class="math inline">\partial c/\partial t</span>.</li>
+<li>The curly <span class="math inline">\partial</span> means “the other variable held fixed”, exactly as in <em>Newton for systems of equations</em>.</li>
+</ul>
+<aside class="notes">
+<p>Left: the concentration in the channel as a heat map, position across, time up; dark is high. The orange line is a slice at t = 30 s: the profile across the channel, whose slope at x = 100 µm is the partial derivative with respect to x (about -0.003 per µm: the gradient the cells feel). The red line is a slice at x = 100 µm: the concentration seen by one cell over time, whose slope is the partial derivative with respect to t. Nothing new beyond Newton for systems of equations, where partial derivatives were slopes of slices of F(u, v). A PDE is an equation that links these partial derivatives to each other.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="ficks-law-flux-goes-downhill" class="slide level2 smaller">
+<h2>Fick’s law: flux goes downhill</h2>
+<p>Molecules spread from high to low concentration. The <strong>flux</strong> <span class="math inline">J</span> (amount crossing unit area per second) is proportional to the slope:</p>
+<p><span class="math display">J = -D\,\frac{\partial c}{\partial x}</span></p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>molecule</th>
+<th><span class="math inline">D</span> in water (typical)</th>
+<th>in µm²/s</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>small molecule (sugar, dye, fMLP)</td>
+<td><span class="math inline">\approx 10^{-9}</span> m²/s</td>
+<td>1000</td>
+</tr>
+<tr class="even">
+<td>protein chemokine (≈ 10 kDa)</td>
+<td><span class="math inline">\approx 10^{-10}</span> m²/s</td>
+<td>100</td>
+</tr>
+<tr class="odd">
+<td>O₂</td>
+<td><span class="math inline">\approx 2\cdot10^{-9}</span> m²/s</td>
+<td>2000</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Steady linear profile, source <span class="math inline">c_0</span>, <span class="math inline">L = 500</span> µm: <span class="math inline">J = D\,c_0/L = 1000/500 = 2\,c_0</span> µm/s.</li>
+<li>Convert once: <span class="math inline">1\ \text{m}^2/\text{s} = 10^{12}\ \mu\text{m}^2/\text{s}</span>. We work in <strong>µm</strong> and <strong>s</strong>.</li>
+</ul>
+<aside class="notes">
+<p>The minus sign says flux runs from high to low concentration. D has units of length squared per time. The values are the standard textbook orders of magnitude listed in the plan for this part; a specific chemokine such as IL-8 (about 8 kDa) is somewhere around 1e-10 m^2/s, and larger proteins (antibodies, 150 kDa) are nearer 4e-11. Do not quote these to two digits; the exercise uses D = 1000 and 100 µm^2/s as round numbers. Working in µm and seconds keeps numbers near 1: a 10 µm grid spacing and D = 1000 µm^2/s give D/dx^2 = 10 per second.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="from-fick-to-the-diffusion-equation" class="slide level2 smaller">
+<h2>From Fick to the diffusion equation</h2>
+<p>Mass balance in a thin slice <span class="math inline">[x, x + \Delta x]</span>: what flows in on the left minus what flows out on the right.</p>
+<p><span class="math display">\frac{\partial c}{\partial t}\,\Delta x = J(x) - J(x + \Delta x) \;\;\Longrightarrow\;\; \frac{\partial c}{\partial t} = -\frac{\partial J}{\partial x} = D\,\frac{\partial^2 c}{\partial x^2}</span></p>
+<ul>
+<li>Rate in − rate out, as for every ODE model, now per slice.</li>
+<li>Concentration rises where the profile <strong>curves upward</strong> (<span class="math inline">\partial^2 c/\partial x^2 &gt; 0</span>) and falls where it bends down. A straight line does not change.</li>
+<li><strong>Heat</strong> obeys the same equation: <span class="math inline">\partial T/\partial t = \alpha\,\partial^2 T/\partial x^2</span>, thermal diffusivity <span class="math inline">\alpha \approx 1.4\cdot10^{-7}</span> m²/s for water. Hence “the heat equation”.</li>
+</ul>
+<aside class="notes">
+<p>The derivation is the ODE principle from the Euler unit applied to each slice: rate in minus rate out. Divide by dx and let it shrink: the difference of the fluxes becomes a derivative. Substitute Fick’s law (D constant) to get the second derivative. The curvature rule is the intuition to keep: a bump (curving down at the top) flattens, a dip fills in, a straight line stays. That is why the steady state between two reservoirs is a straight line. The heat equation is the same equation with temperature for concentration; Implicit schemes and the method of lines uses it for a Drosophila embryo held between two temperatures.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-pde-needs-initial-and-boundary-conditions" class="slide level2 smaller">
+<h2>A PDE needs initial and boundary conditions</h2>
+<p><span class="math display">\frac{\partial c}{\partial t} = D\,\frac{\partial^2 c}{\partial x^2}, \quad 0 &lt; x &lt; L,\ t &gt; 0</span></p>
+<ul>
+<li><strong>Initial condition</strong>: the channel is empty, <span class="math inline">c(x, 0) = 0</span>.</li>
+<li><strong>Boundary conditions</strong>, one at each end:
+<ul>
+<li><strong>Dirichlet</strong> (fixed value): a large reservoir holds the concentration. Source <span class="math inline">c(0, t) = 1</span>, sink <span class="math inline">c(L, t) = 0</span>.</li>
+<li><strong>No flux</strong> (Neumann): a wall, nothing crosses. <span class="math inline">J = 0</span>, so <span class="math inline">\partial c/\partial x = 0</span> at the wall.</li>
+</ul></li>
+<li>Steady state with two reservoirs: <span class="math inline">\partial^2 c/\partial x^2 = 0</span>, so <span class="math inline">c = 1 - x/L</span>. With a wall at <span class="math inline">x = L</span> instead: <span class="math inline">c = 1</span> everywhere, <strong>no gradient at all</strong>.</li>
+</ul>
+<aside class="notes">
+<p>An ODE needed one start value. A PDE needs a whole start profile (initial condition) and, for all time, something at each end of the domain (boundary conditions). Concentrations are scaled by the source concentration, so c runs from 0 to 1. The two boundary types are the two physical situations at the end of a channel: open to a reservoir, or closed by a wall. The last bullet is the whole reason a chemotaxis chamber has a sink: without it, the attractant fills the channel and the gradient disappears. We simulate both cases later.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-diffusion-time-scale-l2d" class="slide level2 smaller">
+<h2>The diffusion time scale <span class="math inline">L^2/D</span></h2>
+<p>The only time you can make from a length <span class="math inline">L</span> and <span class="math inline">D</span> is <span class="math inline">L^2/D</span>:</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th></th>
+<th><span class="math inline">L = 500</span> µm</th>
+<th><span class="math inline">L = 1</span> mm</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>small molecule, <span class="math inline">D = 1000</span> µm²/s</td>
+<td>250 s</td>
+<td>1000 s</td>
+</tr>
+<tr class="even">
+<td>protein, <span class="math inline">D = 100</span> µm²/s</td>
+<td>2500 s (42 min)</td>
+<td>10 000 s (2.8 h)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Doubling <span class="math inline">L</span> quadruples the time</strong>; a ten times smaller <span class="math inline">D</span> means ten times longer.</li>
+<li>Random-walk view: after time <span class="math inline">t</span> a molecule has moved about <span class="math inline">\sqrt{2Dt}</span>. Over 10 µm (a cell): 0.05 s. Over 1 mm: minutes to hours.</li>
+<li>So far this is a guess at the <strong>scale</strong>. The simulation will give the factor in front.</li>
+</ul>
+<aside class="notes">
+<p>Dimensional analysis: D is in µm^2/s, so L^2/D is in seconds, and any time the equation produces must be a multiple of it. The square is the point: diffusion is fast over short distances and slow over long ones, which is why cells do not need pumps internally but organisms need blood vessels. For chamber design it means that halving the channel length gives a gradient four times sooner, but also a four times steeper one with the same reservoirs. The protein numbers explain why diffusion chambers are pre-equilibrated for tens of minutes to hours before imaging.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="space-and-time-on-a-grid" class="slide level2">
+<h2>Space and time on a grid</h2>
+
+<img data-src="fig03-grid.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:62.0%"><ul>
+<li>Grid points <span class="math inline">x_i = i\,\Delta x</span> (<span class="math inline">i = 0, \dots, N</span>) and times <span class="math inline">t_n = n\,\Delta t</span>. Unknowns <span class="math inline">c_i^n \approx c(x_i, t_n)</span>.</li>
+<li>Blue/grey squares: boundary values (given). Yellow: initial values (given). White: to compute.</li>
+</ul>
+<aside class="notes">
+<p>Superscript n is the time level, subscript i the position; the superscript is a label, not a power. For our chamber N = 50 intervals of dx = 10 µm, so 51 points, of which 49 interior unknowns. The edges of the grid are known: the bottom row from the initial condition, the left and right columns from the boundary conditions. The scheme on the next two slides fills in the white points row by row, each from the row below: the red point from the three orange ones.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="step-1-space-the-second-difference" class="slide level2 smaller">
+<h2>Step 1, space: the second difference</h2>
+<p>At each interior point replace <span class="math inline">\partial^2 c/\partial x^2</span> by the stencil:</p>
+<p><span class="math display">\frac{d c_i}{dt} = \frac{D}{\Delta x^2}\,\bigl(c_{i-1} - 2c_i + c_{i+1}\bigr), \qquad i = 1, \dots, N-1</span></p>
+<ul>
+<li>One ODE per grid point: <strong>49 coupled ODEs</strong>, each linked to its two neighbours.</li>
+<li>In matrix form <span class="math inline">\mathbf c' = \frac{D}{\Delta x^2}A\,\mathbf c + \mathbf b</span>, with <span class="math inline">A</span> <strong>tridiagonal</strong>: <span class="math inline">-2</span> on the diagonal, <span class="math inline">1</span> beside it. <span class="math inline">\mathbf b</span> holds the boundary values.</li>
+<li>Spatial error <span class="math inline">\tfrac{\Delta x^2}{12}\,\partial^4 c/\partial x^4</span>: second order in <span class="math inline">\Delta x</span>.</li>
+</ul>
+<aside class="notes">
+<p>This is the “method of lines”: discretise space only, and you are left with a system of ODEs in time, one per grid line. Implicit schemes and the method of lines takes this literally and hands the system to an ODE solver from Part 8. Read the ODE as a compartment model: each grid cell exchanges with its neighbours at rate D/dx^2 = 10 per second. It is the same tridiagonal matrix as the morphogen in a row of cells in Structure: symmetric, banded, sparse, there with rate 1 per minute. The vector b has D/dx^2 times c_0 = 1 in its first entry (the source) and zeros elsewhere (the sink holds 0).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="step-2-time-one-euler-step-ftcs" class="slide level2 smaller">
+<h2>Step 2, time: one Euler step = FTCS</h2>
+<p>Euler on these ODEs with step <span class="math inline">\Delta t</span> gives <strong>F</strong>orward <strong>T</strong>ime, <strong>C</strong>entred <strong>S</strong>pace:</p>
+<p><span class="math display">c_i^{n+1} = c_i^n + r\,\bigl(c_{i-1}^n - 2c_i^n + c_{i+1}^n\bigr), \qquad r = \frac{D\,\Delta t}{\Delta x^2}</span></p>
+<p>By hand: <span class="math inline">L = 500</span> µm, <span class="math inline">N = 4</span> (<span class="math inline">\Delta x = 125</span> µm), <span class="math inline">r = 0.25</span>; start <span class="math inline">(1, 0, 0, 0, 0)</span>:</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th><span class="math inline">n</span></th>
+<th><span class="math inline">c_0</span></th>
+<th><span class="math inline">c_1</span></th>
+<th><span class="math inline">c_2</span></th>
+<th><span class="math inline">c_3</span></th>
+<th><span class="math inline">c_4</span></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td>1</td>
+<td><span class="math inline">0 + 0.25(1 - 0 + 0) = 0.25</span></td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td>2</td>
+<td>1</td>
+<td><span class="math inline">0.25 + 0.25(1 - 0.5 + 0) = 0.375</span></td>
+<td><span class="math inline">0.0625</span></td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Explicit</strong>: each new value comes straight from three old ones. Ends stay at 1 and 0. <span class="math inline">\Delta t = 0.25 \cdot 125^2/1000 = 3.9</span> s per step.</li>
+</ul>
+<aside class="notes">
+<p>r, the “mesh ratio”, is the only number the scheme sees: it combines D, the time step and the grid spacing. Work the first row on the board. The attractant creeps one grid point per step: after n steps only the first n interior points are non-zero, the numerical version of “it takes time to diffuse”. The steady state on this grid is 0.75, 0.5, 0.25: the straight line, which FTCS leaves unchanged because its second difference is zero. The exercise continues the table and repeats it with r = 0.5 and r = 1.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="ftcs-in-r" class="slide level2">
+<h2>FTCS in R</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a aria-hidden="true" tabindex="-1"></a>D <span class="ot">&lt;-</span> <span class="dv">1000</span>                        <span class="co"># µm^2/s  (1e-9 m^2/s)</span></span>
+<span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a>L <span class="ot">&lt;-</span> <span class="dv">500</span>; N <span class="ot">&lt;-</span> <span class="dv">50</span>; dx <span class="ot">&lt;-</span> L <span class="sc">/</span> N   <span class="co"># 51 points, 10 µm apart</span></span>
+<span id="cb1-3"><a aria-hidden="true" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">0</span>, L, <span class="at">by =</span> dx)</span>
+<span id="cb1-4"><a aria-hidden="true" tabindex="-1"></a>r <span class="ot">&lt;-</span> <span class="fl">0.4</span>; dt <span class="ot">&lt;-</span> r <span class="sc">*</span> dx<span class="sc">^</span><span class="dv">2</span> <span class="sc">/</span> D     <span class="co"># 0.04 s</span></span>
+<span id="cb1-5"><a aria-hidden="true" tabindex="-1"></a>ftcs <span class="ot">&lt;-</span> <span class="cf">function</span>(c, r, nsteps) {</span>
+<span id="cb1-6"><a aria-hidden="true" tabindex="-1"></a>  i <span class="ot">&lt;-</span> <span class="dv">2</span><span class="sc">:</span>(<span class="fu">length</span>(c) <span class="sc">-</span> <span class="dv">1</span>)                       <span class="co"># interior points</span></span>
+<span id="cb1-7"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (k <span class="cf">in</span> <span class="fu">seq_len</span>(nsteps))</span>
+<span id="cb1-8"><a aria-hidden="true" tabindex="-1"></a>    c[i] <span class="ot">&lt;-</span> c[i] <span class="sc">+</span> r <span class="sc">*</span> (c[i <span class="sc">-</span> <span class="dv">1</span>] <span class="sc">-</span> <span class="dv">2</span> <span class="sc">*</span> c[i] <span class="sc">+</span> c[i <span class="sc">+</span> <span class="dv">1</span>])</span>
+<span id="cb1-9"><a aria-hidden="true" tabindex="-1"></a>  c</span>
+<span id="cb1-10"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-11"><a aria-hidden="true" tabindex="-1"></a>c60 <span class="ot">&lt;-</span> <span class="fu">ftcs</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="fu">rep</span>(<span class="dv">0</span>, N)), r, <span class="dv">60</span> <span class="sc">/</span> dt)       <span class="co"># 1500 steps to 60 s</span></span>
+<span id="cb1-12"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(c60[<span class="fu">seq</span>(<span class="dv">1</span>, <span class="dv">51</span>, <span class="at">by =</span> <span class="dv">10</span>)], <span class="dv">3</span>)             <span class="co"># x = 0, 100, ..., 500</span></span>
+<span id="cb1-13"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.000 0.765 0.543 0.343 0.165 0.000</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><strong>Vectorised</strong> over space: <code>c[i - 1]</code>, <code>c[i]</code>, <code>c[i + 1]</code> are shifted copies. The loop over time stays.</li>
+</ul>
+<aside class="notes">
+<p>Point out the R detail that makes this correct: the whole right-hand side is evaluated with the old vector before anything is assigned, so every point is updated from time level n.&nbsp;A loop over i that overwrites c[i] in place would use the already-updated c[i - 1]: a different (and here not intended) method. In Rust or C you therefore keep a copy of the old level; the exercise shows it. The time loop cannot be vectorised: each level needs the previous one. Boundary values are simply never touched, which is how the Dirichlet conditions are imposed. After one minute the profile is already close to the line 1, 0.8, 0.6, 0.4, 0.2, 0.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-gradient-forms" class="slide level2">
+<h2>The gradient forms</h2>
+
+<img data-src="fig04-profiles.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:62.0%"><ul>
+<li>FTCS (dots) on top of the exact solution (lines). After about a minute the profile is close to the straight line.</li>
+</ul>
+<aside class="notes">
+<p>Each colour is one time. Early on the attractant has entered only the first 100 µm; the profile is curved, steepest at the source, and the cells at the far end see nothing. Over the next minute it straightens. The exact solution is a Fourier series (two slides on). The FTCS dots sit on the lines to the eye; the largest difference is 5e-4 at 10 s and falls from there.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="when-is-the-gradient-established" class="slide level2 smaller">
+<h2>When is the gradient established?</h2>
+<p>Criterion: the profile is within 5 % (of the source concentration) of the line <span class="math inline">1 - x/L</span>.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a aria-hidden="true" tabindex="-1"></a>t_grad <span class="ot">&lt;-</span> <span class="cf">function</span>(D, L, <span class="at">N =</span> <span class="dv">50</span>, <span class="at">r =</span> <span class="fl">0.4</span>) {</span>
+<span id="cb2-2"><a aria-hidden="true" tabindex="-1"></a>  dx <span class="ot">&lt;-</span> L <span class="sc">/</span> N; dt <span class="ot">&lt;-</span> r <span class="sc">*</span> dx<span class="sc">^</span><span class="dv">2</span> <span class="sc">/</span> D; x <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">0</span>, L, <span class="at">by =</span> dx)</span>
+<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a>  c <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="fu">rep</span>(<span class="dv">0</span>, N)); n <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">while</span> (<span class="fu">max</span>(<span class="fu">abs</span>(c <span class="sc">-</span> (<span class="dv">1</span> <span class="sc">-</span> x <span class="sc">/</span> L))) <span class="sc">&gt;</span> <span class="fl">0.05</span>) { c <span class="ot">&lt;-</span> <span class="fu">ftcs</span>(c, r, <span class="dv">1</span>); n <span class="ot">&lt;-</span> n <span class="sc">+</span> <span class="dv">1</span> }</span>
+<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">c</span>(<span class="at">D =</span> D, <span class="at">L =</span> L, <span class="at">steps =</span> n, <span class="at">t =</span> n <span class="sc">*</span> dt, <span class="at">L2_D =</span> L<span class="sc">^</span><span class="dv">2</span> <span class="sc">/</span> D)</span>
+<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(<span class="fu">t_grad</span>(<span class="dv">1000</span>, <span class="dv">500</span>), <span class="fu">t_grad</span>(<span class="dv">1000</span>, <span class="dv">1000</span>), <span class="fu">t_grad</span>(<span class="dv">100</span>, <span class="dv">500</span>), <span class="fu">t_grad</span>(<span class="dv">100</span>, <span class="dv">1000</span>))</span>
+<span id="cb2-8"><a aria-hidden="true" tabindex="-1"></a><span class="co">#         D    L steps       t  L2_D</span></span>
+<span id="cb2-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,] 1000  500  1611   64.44   250</span></span>
+<span id="cb2-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,] 1000 1000  1611  257.76  1000</span></span>
+<span id="cb2-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [3,]  100  500  1611  644.40  2500</span></span>
+<span id="cb2-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [4,]  100 1000  1611 2577.60 10000</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Small molecule, 500 µm: <strong>1 minute</strong>. Protein chemokine, 1 mm: <strong>43 minutes</strong>. Doubling <span class="math inline">L</span>: exactly ×4.</li>
+</ul>
+<aside class="notes">
+<p>The 5 % criterion is a choice; 1 % takes about 1.6 times longer (exercise). The striking line is the steps column: 1611 every time. With N and r fixed, all four runs do exactly the same arithmetic; only the meaning of one time step changes, dt = r dx^2 / D. The next slide says why. For the experimentalist: a protein gradient over a millimetre needs most of an hour, and cells that start migrating before then see a gradient that is still changing.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="one-simulation-fits-all-chambers" class="slide level2">
+<h2>One simulation fits all chambers</h2>
+
+<img data-src="fig05-scaling.svg" style="width:100.0%" class="r-stretch"><ul>
+<li>Plotted against <span class="math inline">t\,D/L^2</span> the four curves are <strong>one curve</strong>. The gradient is established at <span class="math inline">t \approx 0.26\,L^2/D</span>.</li>
+<li>Rescale <span class="math inline">\tilde x = x/L</span>, <span class="math inline">\tilde t = tD/L^2</span>: the equation becomes <span class="math inline">\partial c/\partial \tilde t = \partial^2 c/\partial \tilde x^2</span>, with no parameters left.</li>
+</ul>
+<aside class="notes">
+<p>This is nondimensionalisation. With x = L x~ and t = (L^2/D) t~, the chain rule gives dc/dt = (D/L^2) dc/dt~ and d2c/dx2 = (1/L^2) d2c/dx~2, and D and L cancel. So there is only one problem: the chamber of length 1 with D = 1. Every chamber and every molecule is a rescaled copy. Practical value: one simulation (or one exact solution) answers the design question for all of them, and the answer to “why does doubling L quadruple the wait?” is: because time only appears as t D / L^2. The factor 0.258 is what the L^2/D slide could not give.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="check-against-the-exact-solution" class="slide level2 smaller">
+<h2>Check against the exact solution</h2>
+<p>For this initial and boundary data there is a Fourier-series solution:</p>
+<p><span class="math display">c(x, t) = 1 - \frac{x}{L} - \sum_{n=1}^{\infty} \frac{2}{n\pi}\,\sin\frac{n\pi x}{L}\;e^{-n^2\pi^2 D t/L^2}</span></p>
+<div class="columns">
+<div class="column" style="width:50%;">
+<p><img data-src="fig06-convergence.svg" style="width:100.0%"></p>
+</div><div class="column" style="width:50%;">
+<ul>
+<li>Halve <span class="math inline">\Delta x</span> with <span class="math inline">r = 0.4</span> fixed: the error falls <strong>4×</strong>. Slope 2.</li>
+<li><span class="math inline">\Delta t \propto \Delta x^2</span>, so the <span class="math inline">O(\Delta t)</span> of Euler and the <span class="math inline">O(\Delta x^2)</span> of the stencil shrink together.</li>
+<li>Each halving costs <strong>8×</strong> the work: 2× the points, 4× the steps.</li>
+</ul>
+</div></div>
+<aside class="notes">
+<p>The series: a straight line (steady state) minus a sum of sine modes that each decay at their own rate n^2 pi^2 D / L^2. At t = 0 the sum reproduces 1 - x/L, so c = 0 inside. The slowest mode, n = 1, decays with time constant L<sup>2/(pi</sup>2 D) = 25.3 s for our chamber; that mode alone explains the factor 0.258: (2/pi) exp(-pi^2 t~) = 0.05 gives t~ = 0.258. The error plot is the order check of Part 8 in a new setting: error at t = 30 s against dx on log-log axes, slope 2. The step counts are printed under the points: 120 steps for dx = 25 µm, 30 720 steps for dx = 1.56 µm. The cost is what Implicit schemes and the method of lines attacks.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="failure-a-slightly-larger-time-step" class="slide level2">
+<h2>Failure: a slightly larger time step</h2>
+
+<img data-src="fig07-unstable.svg" style="width:100.0%" class="r-stretch"><ul>
+<li><span class="math inline">r = 0.50</span>: smooth. <span class="math inline">r = 0.52</span> (4 % larger <span class="math inline">\Delta t</span>): a <strong>zigzag</strong> starts at the steep front and grows. After 30 s values reach <span class="math inline">\pm 4\cdot10^{15}</span>.</li>
+<li>Symptoms: values <strong>outside</strong> <span class="math inline">[0, 1]</span>, sign alternating from point to point.</li>
+</ul>
+<aside class="notes">
+<p>The two runs differ only in dt: 0.050 s versus 0.052 s. At r = 0.52 the profile looks fine for the first 30 steps, then a point-to-point oscillation appears where the profile is steepest and grows by about 8 % per step. By 30 s (577 steps) the values are of order 1e15, by 60 s they overflow. The check is cheap and physical: diffusion can never create a concentration above the highest or below the lowest value present (maximum principle), so any value outside [0, 1] here is a numerical failure. Run this check in every diffusion simulation.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="why-exactly-12-the-zigzag-by-hand" class="slide level2 smaller">
+<h2>Why exactly 1/2: the zigzag by hand</h2>
+<p>Put a zigzag <span class="math inline">c_i = \varepsilon\,(-1)^i</span> into one FTCS step:</p>
+<p><span class="math display">c_{i-1} - 2c_i + c_{i+1} = \varepsilon(-1)^i\,(-1 - 2 - 1) = -4\,c_i \;\;\Longrightarrow\;\; c_i^{n+1} = (1 - 4r)\,c_i^n</span></p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th><span class="math inline">r</span></th>
+<th>0.25</th>
+<th>0.4</th>
+<th>0.5</th>
+<th>0.52</th>
+<th>0.6</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>factor <span class="math inline">1 - 4r</span></td>
+<td>0</td>
+<td>−0.6</td>
+<td>−1</td>
+<td><strong>−1.08</strong></td>
+<td><strong>−1.4</strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Stable only if <span class="math inline">|1 - 4r| \le 1</span>, i.e.&nbsp;<span class="math inline">\boxed{r = D\Delta t/\Delta x^2 \le 1/2}</span>, i.e.&nbsp;<span class="math inline">\Delta t \le \Delta x^2/(2D)</span>.</li>
+<li>Same as Euler’s <span class="math inline">|1 - kh| \le 1</span> with <span class="math inline">k = 4D/\Delta x^2</span>: the <strong>zigzag decays fastest</strong>, and the step must resolve it.</li>
+<li>Another view: for <span class="math inline">r \le 1/2</span> the new value <span class="math inline">(1 - 2r)c_i + r\,c_{i-1} + r\,c_{i+1}</span> is an <strong>average</strong> with weights <span class="math inline">\ge 0</span>, so it stays inside <span class="math inline">[0, 1]</span>.</li>
+</ul>
+<aside class="notes">
+<p>The zigzag is the shortest wave the grid can hold (the Nyquist mode from Fourier series and the FFT). Its second difference is -4 times itself, the most negative possible, so it is the fastest-decaying mode of the true dynamics: rate 4D/dx^2 = 40 per second here, a lifetime of 0.025 s. Euler with step dt multiplies it by 1 - 40 dt, the drug clearance example with k = 40 per second. For r between 1/4 and 1/2 the factor is negative but smaller than 1 in size: the zigzag flips sign each step but decays, exactly like Euler with 1/k &lt; h &lt; 2/k. The averaging argument is the cleanest stability proof: weights 1 - 2r, r, r add to 1 and are non-negative only if r &lt;= 1/2. With r = 1/2 the update is c_i = (c_{i-1} + c_{i+1})/2, the plain average of the neighbours.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-eigenvalue-view" class="slide level2 smaller">
+<h2>The eigenvalue view</h2>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="dv">49</span>                                          <span class="co"># interior points</span></span>
+<span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a>A <span class="ot">&lt;-</span> <span class="fu">diag</span>(<span class="sc">-</span><span class="dv">2</span>, n)</span>
+<span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a>A[<span class="fu">cbind</span>(<span class="dv">1</span><span class="sc">:</span>(n <span class="sc">-</span> <span class="dv">1</span>), <span class="dv">2</span><span class="sc">:</span>n)] <span class="ot">&lt;-</span> <span class="dv">1</span>; A[<span class="fu">cbind</span>(<span class="dv">2</span><span class="sc">:</span>n, <span class="dv">1</span><span class="sc">:</span>(n <span class="sc">-</span> <span class="dv">1</span>))] <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb3-4"><a aria-hidden="true" tabindex="-1"></a>lam <span class="ot">&lt;-</span> D <span class="sc">/</span> dx<span class="sc">^</span><span class="dv">2</span> <span class="sc">*</span> <span class="fu">eigen</span>(A, <span class="at">symmetric =</span> <span class="cn">TRUE</span>)<span class="sc">$</span>values   <span class="co"># per second</span></span>
+<span id="cb3-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">range</span>(lam)</span>
+<span id="cb3-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -39.96053457  -0.03946543</span></span>
+<span id="cb3-7"><a aria-hidden="true" tabindex="-1"></a><span class="dv">2</span> <span class="sc">/</span> <span class="fu">max</span>(<span class="fu">abs</span>(lam))                                <span class="co"># Euler: dt &lt;= 2 / |lambda|</span></span>
+<span id="cb3-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.05004938</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Formula: eigenvalues of <span class="math inline">A</span> are <span class="math inline">-4\sin^2\!\bigl(\tfrac{k\pi}{2N}\bigr)</span>, <span class="math inline">k = 1, \dots, N - 1</span>. All negative, all real.</li>
+<li>Euler on <span class="math inline">\mathbf c' = \frac{D}{\Delta x^2}A\mathbf c</span> needs <span class="math inline">\Delta t\,|\lambda| \le 2</span> for <strong>every</strong> eigenvalue (Part 5, <em>Stiffness and implicit methods</em>). The largest, <span class="math inline">\approx 4D/\Delta x^2</span>, gives <span class="math inline">r \le 1/2</span>.</li>
+</ul>
+<aside class="notes">
+<p>This connects the zigzag argument to the general theory from Part 8: a linear ODE system decouples into one scalar equation per eigenvalue, and Euler must be stable on each. eigen() from How eigen() works, and big problems; the matrix is symmetric, so all eigenvalues are real. The formula can be checked against eigen() in the exercise. The largest magnitude is 4 sin^2(49 pi / 100) = 3.996, slightly less than 4, which is why the exact limit here is r &lt;= 0.5005 rather than 0.5. Python: numpy.linalg.eigvalsh.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="slow-modes-fast-modes-and-the-cost" class="slide level2 smaller">
+<h2>Slow modes, fast modes, and the cost</h2>
+
+<img data-src="fig08-modes.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:88.0%"><ul>
+<li>Slowest mode: half a sine, rate <span class="math inline">\approx \pi^2D/L^2 = 0.039</span> per s. <strong>This is the biology</strong> (25 s time constant).</li>
+<li>Fastest mode: the zigzag, 40 per s. It is gone in a few hundredths of a second, yet it <strong>sets the step</strong>. Ratio ≈ 1000: a <strong>stiff</strong> system.</li>
+<li>Refine to <span class="math inline">\Delta x = 1</span> µm: ratio ≈ 100 000 and <span class="math inline">\Delta t \le 0.5</span> ms. Fix: <em>Implicit schemes and the method of lines</em>.</li>
+</ul>
+<aside class="notes">
+<p>The eigenvectors are sine waves, the same modes as in the exact Fourier series: the grid has a discrete version of each. The slowest one carries the physics (how fast the gradient settles); the fastest ones are grid artefacts that a sensible method should simply damp. This is exactly the definition of stiffness from Stiffness and implicit methods: the step is set by stability, not by accuracy. The ratio of fastest to slowest rate grows like (2N/pi)^2, so it gets worse with every refinement. The next unit uses backward Euler and Crank–Nicolson, with one tridiagonal (Thomas) solve per step, and no step limit.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="no-flux-boundary-the-ghost-point" class="slide level2 smaller">
+<h2>No-flux boundary: the ghost point</h2>
+<p>A wall at <span class="math inline">x_N = L</span>: <span class="math inline">\partial c/\partial x = 0</span>. Invent a <strong>ghost point</strong> <span class="math inline">c_{N+1}</span> outside and set <span class="math inline">c_{N+1} = c_{N-1}</span> (central difference of the slope <span class="math inline">= 0</span>). The FTCS update at the wall becomes</p>
+<p><span class="math display">c_N^{n+1} = c_N^n + r\,\bigl(c_{N-1}^n - 2c_N^n + c_{N+1}^n\bigr) = c_N^n + 2r\,\bigl(c_{N-1}^n - c_N^n\bigr).</span></p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a>ftcs_closed <span class="ot">&lt;-</span> <span class="cf">function</span>(c, r, nsteps) {         <span class="co"># wall at x = L</span></span>
+<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a>  n <span class="ot">&lt;-</span> <span class="fu">length</span>(c); i <span class="ot">&lt;-</span> <span class="dv">2</span><span class="sc">:</span>(n <span class="sc">-</span> <span class="dv">1</span>)</span>
+<span id="cb4-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (k <span class="cf">in</span> <span class="fu">seq_len</span>(nsteps)) {</span>
+<span id="cb4-4"><a aria-hidden="true" tabindex="-1"></a>    cn <span class="ot">&lt;-</span> c[n] <span class="sc">+</span> <span class="dv">2</span> <span class="sc">*</span> r <span class="sc">*</span> (c[n <span class="sc">-</span> <span class="dv">1</span>] <span class="sc">-</span> c[n])       <span class="co"># uses old values</span></span>
+<span id="cb4-5"><a aria-hidden="true" tabindex="-1"></a>    c[i] <span class="ot">&lt;-</span> c[i] <span class="sc">+</span> r <span class="sc">*</span> (c[i <span class="sc">-</span> <span class="dv">1</span>] <span class="sc">-</span> <span class="dv">2</span> <span class="sc">*</span> c[i] <span class="sc">+</span> c[i <span class="sc">+</span> <span class="dv">1</span>])</span>
+<span id="cb4-6"><a aria-hidden="true" tabindex="-1"></a>    c[n] <span class="ot">&lt;-</span> cn</span>
+<span id="cb4-7"><a aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb4-8"><a aria-hidden="true" tabindex="-1"></a>  c</span>
+<span id="cb4-9"><a aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<aside class="notes">
+<p>The wall point is now an unknown, not a given value. The ghost point is a device to reuse the central stencil at the boundary; it keeps the boundary condition second-order accurate. The simpler choice c_N = c_{N-1} also says “zero slope”, but only to first order. Note the order of operations: the new wall value is computed from old values before the interior update overwrites c[n - 1]. The stability limit is unchanged (r &lt;= 1/2; the weights 1 - 2r and 2r are still non-negative).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="sink-or-wall-a-gradient-or-none" class="slide level2">
+<h2>Sink or wall: a gradient or none</h2>
+
+<img data-src="fig09-noflux.svg" style="width:100.0%" class="r-stretch"><ul>
+<li>Sink at <span class="math inline">x = L</span>: the straight line after ~1 minute, kept for as long as the reservoirs last.</li>
+<li>Wall at <span class="math inline">x = L</span> (a dead-end channel): the attractant <strong>piles up</strong> and the channel fills to <span class="math inline">c = 1</span>. The far end reaches 0.95 only after <strong>328 s</strong>, 5× longer, and then there is no gradient.</li>
+</ul>
+<aside class="notes">
+<p>Same channel, same molecule, only the right boundary condition differs. With the wall, the slowest mode is a quarter sine instead of a half sine, with rate pi^2 D / (4 L^2): four times slower, as if the channel were twice as long (the wall acts as a mirror). Two practical points. First, a dead-end side channel in a device is not a gradient generator: any gradient in it is transient. Second, real reservoirs are finite, so in real diffusion chambers source and sink slowly equilibrate and the gradient decays over hours to days; the reviews [G1, G3] list this as a limitation of flow-free devices (stated cautiously: we skimmed them). Our model with fixed boundary values assumes reservoirs that are much larger than the channel.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="before-you-trust-a-diffusion-simulation" class="slide level2 smaller">
+<h2>Before you trust a diffusion simulation</h2>
+<ul>
+<li><strong>Stability</strong>: compute <span class="math inline">r = D\Delta t/\Delta x^2</span> before running. FTCS needs <span class="math inline">r \le 1/2</span>, for <strong>every</strong> species (the fastest <span class="math inline">D</span> decides).</li>
+<li><strong>Maximum principle</strong>: no value above the largest or below the smallest boundary/initial value. Zigzags or negative concentrations mean <span class="math inline">r</span> is too large or there is a bug.</li>
+<li><strong>Steady state</strong>: the run should settle to the solution of <span class="math inline">D\,\partial^2 c/\partial x^2 = 0</span> (a line between two reservoirs).</li>
+<li><strong>Conservation</strong>: with walls at both ends the total amount must stay constant (exercise).</li>
+<li><strong>Grid refinement</strong>: halve <span class="math inline">\Delta x</span> (and quarter <span class="math inline">\Delta t</span>). Changes should shrink about 4× per halving.</li>
+<li><strong>Units</strong>: D in µm²/s with x in µm; <span class="math inline">10^{-9}</span> m²/s is 1000 µm²/s, not 1000 m²/s.</li>
+</ul>
+<aside class="notes">
+<p>The six checks of this unit. The second and fourth are physical invariants and need no exact solution; the fifth is the step-halving check of Part 8 in two variables. A unit error in D (m^2/s used with a grid in µm) changes r by 1e12 and blows up at once; the reverse mistake gives a simulation in which nothing seems to happen. When a model has several species, for example a small drug and a protein, the small one with the larger D sets the time step for all.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="summary" class="slide level2 smaller">
+<h2>Summary</h2>
+<ul>
+<li>A concentration in a channel is a function of <strong>space and time</strong>, <span class="math inline">c(x, t)</span>. Fick’s law <span class="math inline">J = -D\,\partial c/\partial x</span> plus a mass balance gives the <strong>diffusion (heat) equation</strong> <span class="math inline">\partial c/\partial t = D\,\partial^2 c/\partial x^2</span>.</li>
+<li>It needs an <strong>initial profile</strong> and a <strong>boundary condition</strong> at each end: fixed value (reservoir) or <strong>no flux</strong> (wall, ghost point).</li>
+<li><strong>FTCS</strong>: <span class="math inline">(1, -2, 1)</span> stencil in space, Euler in time: <span class="math inline">c_i^{n+1} = c_i^n + r(c_{i-1}^n - 2c_i^n + c_{i+1}^n)</span>, <span class="math inline">r = D\Delta t/\Delta x^2</span>. Error <span class="math inline">O(\Delta x^2)</span> with <span class="math inline">r</span> fixed.</li>
+<li><strong>Stable only for <span class="math inline">r \le 1/2</span></strong>: the zigzag mode has the largest eigenvalue <span class="math inline">\approx 4D/\Delta x^2</span>; Euler’s <span class="math inline">|1 - kh| \le 1</span> again. Violated: an exploding zigzag; check that values stay within bounds.</li>
+<li><strong>Time scale <span class="math inline">L^2/D</span></strong>: a linear gradient takes <span class="math inline">\approx 0.26\,L^2/D</span>: 1 minute for a small molecule over 500 µm, 43 minutes for a protein over 1 mm. Doubling <span class="math inline">L</span> quadruples the wait. Without a sink there is no lasting gradient.</li>
+</ul>
+<p><strong>Next:</strong> <em>Implicit schemes and the method of lines</em>: no step limit, one tridiagonal solve per step.</p>
+<aside class="notes">
+<p>Recap the modelling step, the scheme, its accuracy, its failure and the checks. The step limit dt &lt;= dx^2 / (2D) is the price of an explicit method: fine resolution is paid for twice. The next unit removes the limit with implicit time stepping, using the Thomas algorithm from Structure: symmetric, banded, sparse, and hands the method-of-lines system to the stiff solvers of Part 8. Steady state in two dimensions takes the chamber to 2D, Flow plus diffusion adds flow, Reaction–diffusion and pattern formation adds uptake and production.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+
+
+</section>
+    </div>
+  <div class="quarto-auto-generated-content" style="display: none;">
+<div class="footer footer-default">
+
+</div>
+</div></div>
+
+  <script>window.backupDefine = window.define; window.define = undefined;</script>
+  <script src="../site_libs/revealjs/dist/reveal.js"></script>
+  <!-- reveal.js plugins -->
+  <script src="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.js"></script>
+  <script src="../site_libs/revealjs/plugin/pdf-export/pdfexport.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/quarto-support/support.js"></script>
+  
+
+  <script src="../site_libs/revealjs/plugin/notes/notes.js"></script>
+  <script src="../site_libs/revealjs/plugin/search/search.js"></script>
+  <script src="../site_libs/revealjs/plugin/zoom/zoom.js"></script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://revealjs.com/config/
+      Reveal.initialize({
+'controlsAuto': false,
+'previewLinksAuto': false,
+'pdfSeparateFragments': false,
+'autoAnimateEasing': "ease",
+'autoAnimateDuration': 1,
+'autoAnimateUnmatched': true,
+'jumpToSlide': true,
+'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
+'smaller': false,
+ 
+        // Display controls in the bottom right corner
+        controls: true,
+
+        // Help the user learn the controls by providing hints, for example by
+        // bouncing the down arrow when they first encounter a vertical slide
+        controlsTutorial: false,
+
+        // Determines where controls appear, "edges" or "bottom-right"
+        controlsLayout: 'edges',
+
+        // Visibility rule for backwards navigation arrows; "faded", "hidden"
+        // or "visible"
+        controlsBackArrows: 'visible',
+
+        // Display a presentation progress bar
+        progress: true,
+
+        // Display the page number of the current slide
+        slideNumber: 'c/t',
+
+        // 'all', 'print', or 'speaker'
+        showSlideNumber: 'all',
+
+        // Add the current slide number to the URL hash so that reloading the
+        // page/copying the URL will return you to the same slide
+        hash: true,
+
+        // Start with 1 for the hash rather than 0
+        hashOneBasedIndex: false,
+
+        // Flags if we should monitor the hash and change slides accordingly
+        respondToHashChanges: true,
+
+        // Push each slide change to the browser history
+        history: false,
+
+        // Enable keyboard shortcuts for navigation
+        keyboard: true,
+
+        // Enable the slide overview mode
+        overview: true,
+
+        // Disables the default reveal.js slide layout (scaling and centering)
+        // so that you can use custom CSS layout
+        disableLayout: false,
+
+        // Vertical centering of slides
+        center: false,
+
+        // Enables touch navigation on devices with touch input
+        touch: true,
+
+        // Loop the presentation
+        loop: false,
+
+        // Change the presentation direction to be RTL
+        rtl: false,
+
+        // see https://revealjs.com/vertical-slides/#navigation-mode
+        navigationMode: 'linear',
+
+        // Randomizes the order of slides each time the presentation loads
+        shuffle: false,
+
+        // Turns fragments on and off globally
+        fragments: true,
+
+        // Flags whether to include the current fragment in the URL,
+        // so that reloading brings you to the same fragment position
+        fragmentInURL: false,
+
+        // Flags if the presentation is running in an embedded mode,
+        // i.e. contained within a limited portion of the screen
+        embedded: false,
+
+        // Flags if we should show a help overlay when the questionmark
+        // key is pressed
+        help: true,
+
+        // Flags if it should be possible to pause the presentation (blackout)
+        pause: true,
+
+        // Flags if speaker notes should be visible to all viewers
+        showNotes: false,
+
+        // Global override for autoplaying embedded media (null/true/false)
+        autoPlayMedia: null,
+
+        // Global override for preloading lazy-loaded iframes (null/true/false)
+        preloadIframes: null,
+
+        // Number of milliseconds between automatically proceeding to the
+        // next slide, disabled when set to 0, this value can be overwritten
+        // by using a data-autoslide attribute on your slides
+        autoSlide: 0,
+
+        // Stop auto-sliding after user input
+        autoSlideStoppable: true,
+
+        // Use this method for navigation when auto-sliding
+        autoSlideMethod: null,
+
+        // Specify the average time in seconds that you think you will spend
+        // presenting each slide. This is used to show a pacing timer in the
+        // speaker view
+        defaultTiming: null,
+
+        // Enable slide navigation via mouse wheel
+        mouseWheel: false,
+
+        // The display mode that will be used to show slides
+        display: 'block',
+
+        // Hide cursor if inactive
+        hideInactiveCursor: true,
+
+        // Time before the cursor is hidden (in ms)
+        hideCursorTime: 5000,
+
+        // Opens links in an iframe preview overlay
+        previewLinks: false,
+
+        // Transition style (none/fade/slide/convex/concave/zoom)
+        transition: 'none',
+
+        // Transition speed (default/fast/slow)
+        transitionSpeed: 'default',
+
+        // Transition style for full page slide backgrounds
+        // (none/fade/slide/convex/concave/zoom)
+        backgroundTransition: 'none',
+
+        // Number of slides away from the current that are visible
+        viewDistance: 3,
+
+        // Number of slides away from the current that are visible on mobile
+        // devices. It is advisable to set this to a lower number than
+        // viewDistance in order to save resources.
+        mobileViewDistance: 2,
+
+        // The "normal" size of the presentation, aspect ratio will be preserved
+        // when the presentation is scaled to fit different resolutions. Can be
+        // specified using percentage units.
+        width: 1280,
+
+        height: 720,
+
+        // Factor of the display size that should remain empty around the content
+        margin: 0.1,
+
+        // reveal.js plugins
+        plugins: [QuartoLineHighlight, PdfExport, RevealMenu, QuartoSupport,
+
+          RevealNotes,
+          RevealSearch,
+          RevealZoom
+        ]
+      });
+    </script>
+    <script id="quarto-html-after-body" type="application/javascript">
+      window.document.addEventListener("DOMContentLoaded", function (event) {
+        const tabsets =  window.document.querySelectorAll(".panel-tabset-tabby")
+        tabsets.forEach(function(tabset) {
+          const tabby = new Tabby('#' + tabset.id);
+        });
+        const isCodeAnnotation = (el) => {
+          for (const clz of el.classList) {
+            if (clz.startsWith('code-annotation-')) {                     
+              return true;
+            }
+          }
+          return false;
+        }
+        const onCopySuccess = function(e) {
+          // button target
+          const button = e.trigger;
+          // don't keep focus
+          button.blur();
+          // flash "checked"
+          button.classList.add('code-copy-button-checked');
+          var currentTitle = button.getAttribute("title");
+          button.setAttribute("title", "Copied!");
+          let tooltip;
+          if (window.bootstrap) {
+            button.setAttribute("data-bs-toggle", "tooltip");
+            button.setAttribute("data-bs-placement", "left");
+            button.setAttribute("data-bs-title", "Copied!");
+            tooltip = new bootstrap.Tooltip(button, 
+              { trigger: "manual", 
+                customClass: "code-copy-button-tooltip",
+                offset: [0, -8]});
+            tooltip.show();    
+          }
+          setTimeout(function() {
+            if (tooltip) {
+              tooltip.hide();
+              button.removeAttribute("data-bs-title");
+              button.removeAttribute("data-bs-toggle");
+              button.removeAttribute("data-bs-placement");
+            }
+            button.setAttribute("title", currentTitle);
+            button.classList.remove('code-copy-button-checked');
+          }, 1000);
+          // clear code selection
+          e.clearSelection();
+        }
+        const getTextToCopy = function(trigger) {
+            const codeEl = trigger.previousElementSibling.cloneNode(true);
+            for (const childEl of codeEl.children) {
+              if (isCodeAnnotation(childEl)) {
+                childEl.remove();
+              }
+            }
+            return codeEl.innerText;
+        }
+        const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+          text: getTextToCopy
+        });
+        clipboard.on('success', onCopySuccess);
+        if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+          const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+            text: getTextToCopy,
+            container: window.document.getElementById('quarto-embedded-source-code-modal')
+          });
+          clipboardModal.on('success', onCopySuccess);
+        }
+          var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+          var mailtoRegex = new RegExp(/^mailto:/);
+            var filterRegex = new RegExp('/' + window.location.host + '/');
+          var isInternal = (href) => {
+              return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+          }
+          // Inspect non-navigation links and adorn them if external
+         var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+          for (var i=0; i<links.length; i++) {
+            const link = links[i];
+            if (!isInternal(link.href)) {
+              // undo the damage that might have been done by quarto-nav.js in the case of
+              // links that we want to consider external
+              if (link.dataset.originalHref !== undefined) {
+                link.href = link.dataset.originalHref;
+              }
+            }
+          }
+        function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+          const config = {
+            allowHTML: true,
+            maxWidth: 500,
+            delay: 100,
+            arrow: false,
+            appendTo: function(el) {
+                return el.closest('section.slide') || el.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'light-border',
+            placement: 'bottom-start',
+          };
+          if (contentFn) {
+            config.content = contentFn;
+          }
+          if (onTriggerFn) {
+            config.onTrigger = onTriggerFn;
+          }
+          if (onUntriggerFn) {
+            config.onUntrigger = onUntriggerFn;
+          }
+            config['offset'] = [0,0];
+            config['maxWidth'] = 700;
+          window.tippy(el, config); 
+        }
+        const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+        for (var i=0; i<noterefs.length; i++) {
+          const ref = noterefs[i];
+          tippyHover(ref, function() {
+            // use id or data attribute instead here
+            let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+            try { href = new URL(href).hash; } catch {}
+            const id = href.replace(/^#\/?/, "");
+            const note = window.document.getElementById(id);
+            if (note) {
+              return note.innerHTML;
+            } else {
+              return "";
+            }
+          });
+        }
+        const findCites = (el) => {
+          const parentEl = el.parentElement;
+          if (parentEl) {
+            const cites = parentEl.dataset.cites;
+            if (cites) {
+              return {
+                el,
+                cites: cites.split(' ')
+              };
+            } else {
+              return findCites(el.parentElement)
+            }
+          } else {
+            return undefined;
+          }
+        };
+        var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+        for (var i=0; i<bibliorefs.length; i++) {
+          const ref = bibliorefs[i];
+          const citeInfo = findCites(ref);
+          if (citeInfo) {
+            tippyHover(citeInfo.el, function() {
+              var popup = window.document.createElement('div');
+              citeInfo.cites.forEach(function(cite) {
+                var citeDiv = window.document.createElement('div');
+                citeDiv.classList.add('hanging-indent');
+                citeDiv.classList.add('csl-entry');
+                var biblioDiv = window.document.getElementById('ref-' + cite);
+                if (biblioDiv) {
+                  citeDiv.innerHTML = biblioDiv.innerHTML;
+                }
+                popup.appendChild(citeDiv);
+              });
+              return popup.innerHTML;
+            });
+          }
+        }
+      });
+      </script>
+    
+
+</body></html>
