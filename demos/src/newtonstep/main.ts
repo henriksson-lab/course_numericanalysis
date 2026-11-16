@@ -43,9 +43,9 @@ const STYLE = `
 [data-demo="${NAME}"] .qb-btn.go { font-weight: 600; }
 .reveal [data-demo="${NAME}"].qb-demo { font-size: 19px; gap: .3em; }
 .reveal [data-demo="${NAME}"] .ns-main { flex-wrap: nowrap; }
-.reveal [data-demo="${NAME}"] .ns-main svg { flex: 0 0 600px; max-width: 600px; }
+.reveal [data-demo="${NAME}"] .ns-main svg { flex: 0 0 670px; max-width: 670px; }
 .reveal [data-demo="${NAME}"] .ns-side { flex: 1 1 auto; }
-.reveal [data-demo="${NAME}"] .ns-tab { max-height: 300px; }
+.reveal [data-demo="${NAME}"] .ns-tab { max-height: 340px; }
 .reveal [data-demo="${NAME}"] table { font-size: 18px; }
 .reveal [data-demo="${NAME}"] th, .reveal [data-demo="${NAME}"] td { padding: 1px 5px; }
 .reveal [data-demo="${NAME}"] .qb-readout { font-size: 18px; }

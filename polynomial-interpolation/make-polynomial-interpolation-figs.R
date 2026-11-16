@@ -7,7 +7,7 @@
 # Ground truth is the course's logistic OD curve (K = 1.2, N0 = 0.05,
 # r = 0.8 per hour); every interpolant is evaluated with the barycentric
 # formula (stable), except the monomial curves in fig08, which show the
-# failure of solving the Vandermonde system.
+# failure of solving the Vandermonde system (forced with solve(..., tol = 0)).
 
 ## ---- the running example (same code as on the slides) ----------------------
 
@@ -186,6 +186,7 @@ fig("fig07-fit-vs-interp.svg", expr = {
 ns8 <- c(2:20, seq(22, 100, by = 2))
 xx <- seq(0, 48, length.out = 2001)
 e_bar <- e_mon <- e_raw <- rep(NA, length(ns8))
+r_refuse <- NA                                        # first n where solve() refuses
 for (j in seq_along(ns8)) {
   n <- ns8[j]; k <- 0:n
   tc <- cheb(n, 0, 48); y <- od(tc)
@@ -194,8 +195,10 @@ for (j in seq_along(ns8)) {
   s <- (tc - 24) / 24; ss <- (xx - 24) / 24             # rescaled to [-1, 1]
   cf <- solve(outer(s, 0:n, "^"), y, tol = 0)
   e_mon[j] <- max(abs(outer(ss, 0:n, "^") %*% cf - od(xx)))
-  cf2 <- tryCatch(solve(outer(tc, 0:n, "^"), y), error = function(e) NULL)
-  if (!is.null(cf2)) e_raw[j] <- max(abs(outer(xx, 0:n, "^") %*% cf2 - od(xx)))
+  cf2 <- solve(outer(tc, 0:n, "^"), y, tol = 0)       # t in hours, forced
+  e_raw[j] <- max(abs(outer(xx, 0:n, "^") %*% cf2 - od(xx)))
+  if (is.na(r_refuse) && inherits(try(solve(outer(tc, 0:n, "^"), y), silent = TRUE),
+                                  "try-error")) r_refuse <- n
 }
 
 fig("fig08-monomial-vs-bary.svg", expr = {
@@ -207,7 +210,7 @@ fig("fig08-monomial-vs-bary.svg", expr = {
   lines(ns8, e_raw, type = "b", pch = 15, col = col_org, lwd = 2, cex = 1.3)
   legend("bottomleft", c("barycentric formula",
                          "solve(Vandermonde), t rescaled to [-1, 1]",
-                         "solve(Vandermonde), t in hours (fails from n = 9)"),
+                         "solve(Vandermonde), t in hours"),
          col = c(col_blu, col_ver, col_org), pch = c(17, 19, 15), lwd = 2,
          bty = "n", cex = 1.25)
 })
@@ -215,4 +218,5 @@ fig("fig08-monomial-vs-bary.svg", expr = {
 cat("e48 (equispaced 0-48):", signif(e48, 2), "\n")
 cat("c48 (Chebyshev 0-48):", signif(c48, 2), "\n")
 cat("e8  (equispaced 0-8):", signif(e8, 2), "\n")
-cat("raw Vandermonde works up to n =", max(ns8[!is.na(e_raw)]), "\n")
+cat("solve() on raw Vandermonde refuses from n =", r_refuse, "\n")
+cat("raw:", signif(e_raw, 2), "\n")

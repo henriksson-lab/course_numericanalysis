@@ -16,7 +16,7 @@ import { Par, Vec, F, step, newton, roots, basinOf, norm, Root, Path, MAXIT } fr
 const NAME = "newton2d";
 // Okabe-Ito, as in make-newton-systems-figs.R
 const COL = {
-  f1: "#0072B2", f2: "#D55E00", start: "#E69F00", ink: "#111111",
+  f1: "#0072B2", f2: "#D55E00", start: "#E69F00", next: "#F0E442", ink: "#111111",
   hi: "#009E73", mid: "#d9d9d9", lo: "#CC79A7", fail: "#222222",
 };
 const RGB: Record<string, [number, number, number]> = {
@@ -278,7 +278,7 @@ function mount(host: HTMLElement): void {
 
   function detCurve(): void {
     // marching squares on det J(u, v) = 1 - b(v) c(u)
-    const p = par(), Nn = 160, h = (XMAX - XMIN) / Nn;
+    const p = par(), Nn = 90, h = (XMAX - XMIN) / Nn;
     const a = p.alpha, n = p.n;
     const bf = (v: number) => -a * n * v ** (n - 1) / (1 + v ** n) ** 2;
     const B_ = Array.from({ length: Nn + 1 }, (_, i) => bf(XMIN + i * h));
@@ -299,7 +299,7 @@ function mount(host: HTMLElement): void {
       for (let q = 0; q + 1 < cr.length; q += 2)
         dstr += `M${sx(cr[q][0]).toFixed(1)},${sy(cr[q][1]).toFixed(1)}L${sx(cr[q + 1][0]).toFixed(1)},${sy(cr[q + 1][1]).toFixed(1)}`;
     }
-    if (dstr) svgEl("path", { d: dstr, fill: "none", stroke: "#000", "stroke-width": 2, "stroke-dasharray": "2 4", "stroke-linecap": "round" }, layer);
+    if (dstr) svgEl("path", { d: dstr, fill: "none", stroke: "#000", "stroke-width": 4, "stroke-dasharray": "0.1 5", "stroke-linecap": "round" }, layer);
   }
 
   function draw(): void {
@@ -344,7 +344,7 @@ function mount(host: HTMLElement): void {
       const x = xs[i];
       if (!x.every(Number.isFinite)) break;
       const cx = sx(x[0]), cy = sy(x[1]);
-      if (i > 0) svgEl("circle", { cx, cy, r: i === kk && kk > k ? 7 : 5, fill: i === kk && kk > k ? "#fff" : COL.ink, stroke: COL.ink, "stroke-width": 2 }, layer);
+      if (i > 0) svgEl("circle", { cx, cy, r: i === kk && kk > k ? 7 : 5, fill: i === kk && kk > k ? COL.next : COL.ink, stroke: COL.ink, "stroke-width": 2 }, layer);
       if (i > 0 && (!lastLab || Math.hypot(cx - lastLab[0], cy - lastLab[1]) > 26)) {
         const t = svgEl("text", { x: cx + 10, y: cy - 10, "font-weight": 700, stroke: "#fff", "stroke-width": 4, "paint-order": "stroke" }, layer);
         t.textContent = "x" + sub(i);

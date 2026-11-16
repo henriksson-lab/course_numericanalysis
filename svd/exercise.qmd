@@ -271,6 +271,58 @@ fn main() {
 
 **C7. The check: refit with new noise.** Generate 500 bulk samples from the **same** proportions, each with fresh noise: `b0 * (1 + 0.05 * rnorm(40))` (Python: `rng.standard_normal(40)`). For each, estimate $p$ with least squares, TSVD ($k = 4$), ridge ($\lambda = 10$) and NNLS. Report the mean and standard deviation of the CD4, CD8 and CD4 + CD8 estimates, and how often NNLS sets CD8 or CD4 to exactly 0. Compare the standard deviation of the least-squares CD4 estimate with your prediction in B6(c).
 
+## Explore {#explore}
+
+The demo below solves the deconvolution of the lecture in your browser: the same signature $S$ (CD4T and CD8T differ by 2 % on genes 1 and 2), true proportions $p = (0.30, 0.15, 0.15, 0.10, 0.30)$, and a bulk sample $b = b_0\,(1 + s \cdot \text{noise})$. With **lecture pattern** the noise is the fixed $\sin(37g)$ of the slides, so at $s = 5\%$ you get the slide numbers; **random** draws $N(0,1)$ noise instead, and **new random sample** draws another one. The SVD is computed by one-sided Jacobi (rotations of pairs of columns of $S$, never $S^TS$).
+
+- Panel (a): the estimate for this sample (bars), the truth (dashed) and the estimates from 100 further samples with fresh random noise of the same size (dots; arrows count dots off the scale). The last group is CD4 + CD8.
+- Panel (b): the filter factors $f_i$ of the chosen method against $\sigma$, with the five singular values as circles.
+- Panel (c): the error to expect over the noise, split into **bias** $\|E[x] - p\|$ (what the method gets wrong without noise) and **noise** $\sqrt{E\|x - E[x]\|^2}$ (the spread of the dots), against $\lambda$ or $k$; total $= \sqrt{\text{bias}^2 + \text{noise}^2}$. Both use the truth, which only a simulation knows.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="deconv" data-method="ls" data-noise="0.05" data-diff="0.02" data-k="4" data-lambda="10"></div>
+<script src="../demos/dist/deconv.js"></script>
+```
+
+**E1. (noise is divided by $\sigma_i$)** Start with **least squares** at 5 % noise. Read the estimate, the expected noise and how many dots fall off the scale for CD4T and CD8T. Then set the noise to 1 % and to 0. How does the expected noise depend on $s$? Which estimates do the dots leave alone, and what does the readout give as the multiplier $f_5/\sigma_5$ of $u_5^Tb$?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+At 5 %: $x = (0.543, -0.092, 0.149, 0.099, 0.299)$, as on the slides; expected noise 1.202, and 32 of 100 dots fall off the scale ($-0.6$ to $1.2$) for CD4T and for CD8T. At 1 % the noise is 0.240 and the estimate $(0.349, 0.102, \dots)$; at 0 the estimate is exactly $p$. The noise is proportional to $s$ (1.202 / 5 = 0.240): least squares has no bias, only noise. The dots for B, NK, Mono and **CD4 + CD8** stay in a tight band (CD4 + CD8 = 0.451 at 5 %): the noise lands only along $v_5 \approx (1, -1, 0, 0, 0)/\sqrt2$, which changes the split but not the total. The multiplier is $1/\sigma_5 = 1/2.87 = 0.348$, against at most $1/269 = 0.0037$ for the other components: component 5 amplifies noise about 90 times more.
+:::
+
+**E2. (truncation: bias against noise)** Back at 5 % noise, choose **truncated SVD** and move $k$ from 5 down to 1. Note $\|x - p\|$, $\|Sx - b\|$, and the expected bias and noise for each $k$. Where does the step in panel (b) sit for $k = 4$? Which $k$ gives the smallest expected error, and which $k$ would the residual alone point to?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+| $k$ | $\|x-p\|$ | $\|Sx-b\|$ | bias | noise |
+|---|---|---|---|---|
+| 5 | 0.343 | 9.62 | 0.000 | 1.202 |
+| 4 | 0.106 | 9.71 | 0.106 | 0.011 |
+| 3 | 0.108 | 11.07 | 0.108 | 0.010 |
+| 2 | 0.165 | 36.46 | 0.165 | 0.007 |
+| 1 | 0.298 | 91.33 | 0.298 | 0.005 |
+
+These are the lecture's table. For $k = 4$ the step lies between $\sigma_5 = 2.87$ and $\sigma_4 = 269$, so only $\sigma_5$ gets $f = 0$. Dropping component 5 cuts the noise from 1.202 to 0.011 at the price of a bias of 0.106: that bias is the equal split $0.226/0.226$ instead of $0.30/0.15$, the part of $p$ along $v_5$ that TSVD sets to 0. Fewer components only add bias. The smallest expected error is at $k = 4$ (0.107), and the residual says the same without the truth: it drops steeply until $k = 4$ and then barely moves (9.71 to 9.62). All dots for CD4T and CD8T now sit on top of each other: very stable, and wrong in the same way every time.
+:::
+
+**E3. (ridge: a smooth filter)** Choose **ridge** and move $\lambda$ from 0.1 to 1000. Read $f_5$ and the expected bias and noise at $\lambda = 1$, 10, 31.6 and 316. Where do the bias and noise curves cross, and where is the total smallest? At $\lambda = 10$, compare the error of the lecture sample with the expected error, then click **random** and **new random sample** a few times. What happens to all five proportions at $\lambda = 316$ and 1000?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+$\lambda = 1$: $f_5 = 0.892$, bias 0.011, noise 1.072. $\lambda = 10$: $f_5 = 0.076$, bias 0.098, noise 0.092, total 0.135: the curves cross close to $\lambda = 10$. $\lambda = 31.6$: $f_5 = 0.008$, bias 0.105, noise 0.015, total 0.106, the smallest (the readout's "smallest total"), as good as TSVD with $k = 4$. $\lambda = 316$: total 0.187, now all bias. The lecture sample at $\lambda = 10$ has $\|x - p\| = 0.072$, better than the expected 0.135: its noise pattern happens to push the split towards the truth (the lecture called this luck). Random samples (seeds 1–3) give 0.091, 0.092 and 0.067: the dots show the spread of about $\pm0.07$ around 0.225. At $\lambda = 316$ ($f_1 \ldots f_4$ are no longer near 1) **every** proportion shrinks, CD4 + CD8 = 0.384 and Mono 0.165; at 1000 the estimate is $(0.073, 0.073, 0.026, 0.022, 0.038)$ and the residual 193. Too much ridge is bias in everything, not just the split.
+:::
+
+**E4. (how much regularisation depends on the noise)** Keep **ridge** and read the readout's "smallest total" at noise 0.5 %, 1 %, 5 %, 10 % and 20 %. How does the best $\lambda$ move, and why?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+The best $\lambda$ is about 3.2 at 0.5 %, 6.3 at 1 %, 32 at 5 %, 50 at 10 % and 63 at 20 % (total errors 0.080, 0.097, 0.106, 0.108, 0.115). More noise means component 5 must be damped harder, so the step $\sigma = \lambda$ in panel (b) moves right, away from $\sigma_5 = 2.87$. It can never pass $\sigma_4 = 269$ without destroying the well-determined proportions, so even at 20 % noise the best $\lambda$ stays far below it. With less noise, a smaller $\lambda$ lets part of the true split through ($f_5 = 0.45$ at $\lambda = 3.2$), and the best error drops below the 0.106 of TSVD. Regularisation must be matched to the noise level, which is why $\lambda$ is chosen from the data (residual, L-curve) rather than fixed once.
+:::
+
+**E5. (better data, not better maths)** Press **reset**. Move the **CD4−CD8 difference** to 0 (identical columns), then to 10 % and 30 %. Read $\sigma_5$, $\kappa$, the least-squares estimate and its expected noise. At 30 %, which method has the smallest expected error now?
+
+::: {.callout-note collapse="true" title="Answer E5"}
+At 0: $\sigma_5 = 0$ and $\kappa = \infty$. The demo, like `pinv`, drops singular values below the rounding tolerance, so "least squares" returns the minimum-norm answer $(0.226, 0.226, 0.149, 0.099, 0.299)$, identical to TSVD $k = 4$. At 10 %: $\sigma_5 = 14.4$, $\kappa = 44.8$, $x = (0.355, 0.097, \dots)$, expected noise 0.241. At 30 %: $\sigma_5 = 43.0$, $\kappa = 15.0$, $x = (0.323, 0.128, \dots)$, noise 0.081, so least squares now beats TSVD $k = 4$ (0.108), which still throws away the split. Ridge with $\lambda \approx 32$ is best (0.065), and at $\lambda = 10$ the estimate $(0.318, 0.133)$ is within 0.02 of the truth. $\sigma_5$ grows in proportion to the difference (2.87 per 2 %), and the noise along $v_5$ falls as $1/\sigma_5$. A signature with genes that really separate the two cell types does what no choice of $k$ or $\lambda$ can.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — SVD by hand (B1, B2)"}

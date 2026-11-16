@@ -9,7 +9,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 1–4 | Part 1 | done | done | done |
 | 5 | bisection-fixedpoint | done | done | done |
 | 6 | newton | done | running | |
-| 7 | newton-systems | done | running | |
+| 7 | newton-systems | done | done | done |
 | 8 | lu | done | running | |
 | 9 | pivoting-conditioning | done | done | done |
 | 10 | structured-sparse | done | running | |
@@ -23,7 +23,8 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 18 | finite-differences | running | | |
 | 19 | quadrature | running | | |
 | 20 | monte-carlo | running | | |
-| 21–37 | | queued | | |
+| 21 | euler | running | | |
+| 22–37 | | queued | | |
 
 ## Audit notes (pass 3)
 

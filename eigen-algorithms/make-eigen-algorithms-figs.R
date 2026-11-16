@@ -27,7 +27,7 @@ fig <- function(file, w = 9, h = 5.2, expr) {
   par(mar = c(4.8, 5.6, 1.5, 1), las = 1, mgp = c(3.6, 0.8, 0),
       cex.lab = 1.4, cex.axis = 1.3)
   expr
-  dev.off()
+  invisible(dev.off())
 }
 logaxis <- function(side, pw) axis(side, at = 10^pw, labels = parse(text = paste0("10^", pw)))
 
@@ -100,17 +100,17 @@ last_sub <- function(A, shift, K) {
   out
 }
 u <- last_sub(A, FALSE, 40)
-s <- last_sub(A, TRUE, 4)
+s <- last_sub(A, TRUE, 5)
 fig("fig03-shifts.svg", expr = {
   plot(0:40, u, log = "y", type = "o", pch = 19, col = oi["blue"], lwd = 2,
-       ylim = c(1e-17, 2), yaxt = "n", xlab = "QR step k",
+       ylim = c(1e-22, 2), yaxt = "n", xlab = "QR step k",
        ylab = expression("|" * a[32] * "|"))
-  logaxis(2, seq(-16, 0, 4))
-  s_plot <- pmax(s, 1e-17)
-  lines(0:4, s_plot, type = "o", pch = 17, col = oi["red"], lwd = 2.5)
-  text(4.5, 3e-17, "exactly 0", col = oi["red"], adj = 0, cex = 1.2)
-  legend("topright", c("no shift: factor 0.42 per step",
-                       expression("shift " * mu == a[33] * ": digits triple per step")),
+  logaxis(2, seq(-20, 0, 5))
+  lines(0:5, s, type = "o", pch = 17, col = oi["red"], lwd = 2.5)
+  abline(h = 1e-12, lty = 3, col = "grey40")
+  text(40, 1e-11, "deflate below 1e-12", adj = 1, cex = 1.1, col = "grey30")
+  legend("bottomleft", c("no shift: factor 0.42 per step",
+                         expression("shift " * mu == a[33] * ": digits triple per step")),
          col = oi[c("blue", "red")], pch = c(19, 17), lwd = 2, bty = "n", cex = 1.25)
 })
 
@@ -146,7 +146,7 @@ for (y in c(-1.1, -4.4)) {
   text(3.4, y - 0.35, "once, O(n^3)", cex = 1.1)
   text(7.6, y - 0.35, "QR steps", cex = 1.1)
 }
-dev.off()
+invisible(dev.off())
 
 ## ---- fig05: sensitivity of the transit-compartment chain --------------------------
 
@@ -211,17 +211,23 @@ panel <- function(L, title) {
   }
   mtext(title, 3, 0.3, cex = 1.25)
 }
+count_top <- function(L) sapply(1:M, function(m) sum(ritz(L, m) > 7.5))
 svg("fig06-lanczos.svg", width = 12, height = 5.2)
 par(mfrow = c(1, 2), mar = c(4.8, 5.2, 2.4, 1), las = 1, mgp = c(3.2, 0.8, 0),
     cex.lab = 1.4, cex.axis = 1.3)
-panel(Lr, "with reorthogonalisation")
-panel(Lp, "plain Lanczos: ghost copies")
-dev.off()
+panel(Lr, "Ritz values (with reorthogonalisation)")
+plot(1:M, count_top(Lp), type = "s", lwd = 3, col = oi["red"], ylim = c(0, 8),
+     xlab = "Lanczos step m", ylab = "Ritz values above 7.5")
+lines(1:M, count_top(Lr), type = "s", lwd = 3, col = oi["blue"], lty = 2)
+abline(h = 3, col = "grey80")
+legend("topleft", c("plain Lanczos: ghost copies", "with reorthogonalisation"),
+       col = oi[c("red", "blue")], lty = c(1, 2), lwd = 3, bty = "n", cex = 1.2)
+mtext("true count: 3 (10, 9, 8)", 3, 0.3, cex = 1.25)
+invisible(dev.off())
 
 ## ---- fig07: cost of full vs truncated PCA (measured, see header) -------------------
 
-meth <- c("prcomp\n(dense)", "svd\n(dense)", "eigen\n(covariance)",
-          "irlba", "RSpectra\nsvds", "RSpectra\neigs_sym")
+meth <- c("prcomp", "svd", "eigen\n(cov)", "irlba", "svds", "eigs_\nsym")
 secs <- c(21.7, 21.2, 4.7, 0.84, 0.46, 0.42)
 mb   <- c(1390, 1125, 1083, 54, 2, 11)   # peak RSS minus 230 MB baseline (R + data)
 bcol <- oi[c("red", "red", "orange", "blue", "blue", "blue")]
@@ -229,11 +235,11 @@ svg("fig07-pca-cost.svg", width = 12, height = 5)
 par(mfrow = c(1, 2), mar = c(6.2, 5.6, 2.2, 1), las = 1, mgp = c(3.6, 0.8, 0),
     cex.lab = 1.3, cex.axis = 1.1)
 bp <- barplot(secs, col = bcol, ylab = "seconds", names.arg = rep("", 6), ylim = c(0, 25))
-text(bp, -1.2, meth, xpd = TRUE, adj = c(0.5, 1), cex = 1.0)
-text(bp, secs + 1, format(secs), cex = 1.1)
+text(bp, -1.2, meth, xpd = TRUE, adj = c(0.5, 1), cex = 1.15)
+text(bp, secs + 1, formatC(secs, format = "fg"), cex = 1.1)
 mtext("time, top 10 PCs", 3, 0.5, cex = 1.3)
 bp <- barplot(mb, col = bcol, ylab = "extra memory (MB)", names.arg = rep("", 6), ylim = c(0, 1600))
-text(bp, -60, meth, xpd = TRUE, adj = c(0.5, 1), cex = 1.0)
+text(bp, -60, meth, xpd = TRUE, adj = c(0.5, 1), cex = 1.15)
 text(bp, mb + 60, format(mb), cex = 1.1)
 mtext("peak extra memory", 3, 0.5, cex = 1.3)
-dev.off()
+invisible(dev.off())

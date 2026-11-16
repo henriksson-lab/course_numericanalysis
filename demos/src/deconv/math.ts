@@ -35,7 +35,7 @@ export interface SVD { d: number[]; U: number[][]; V: number[][] }   // U: n col
 export function svd(A: number[][]): SVD {
   const m = A.length, n = A[0].length;
   const C = Array.from({ length: n }, (_, j) => A.map(r => r[j]));            // columns of A
-  const V = Array.from({ length: n }, (_, j) => Array.from({ length: n }, (_, i) => (i === j ? 1 : 0)));
+  const V = Array.from({ length: n }, (_, j) => Array.from({ length: n }, (_, i): number => (i === j ? 1 : 0)));
   for (let sweep = 0; sweep < 60; sweep++) {
     let rotated = false;
     for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {

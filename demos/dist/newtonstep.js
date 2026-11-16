@@ -21,9 +21,9 @@
 [data-demo="${f}"] .qb-btn.go { font-weight: 600; }
 .reveal [data-demo="${f}"].qb-demo { font-size: 19px; gap: .3em; }
 .reveal [data-demo="${f}"] .ns-main { flex-wrap: nowrap; }
-.reveal [data-demo="${f}"] .ns-main svg { flex: 0 0 600px; max-width: 600px; }
+.reveal [data-demo="${f}"] .ns-main svg { flex: 0 0 670px; max-width: 670px; }
 .reveal [data-demo="${f}"] .ns-side { flex: 1 1 auto; }
-.reveal [data-demo="${f}"] .ns-tab { max-height: 300px; }
+.reveal [data-demo="${f}"] .ns-tab { max-height: 340px; }
 .reveal [data-demo="${f}"] table { font-size: 18px; }
 .reveal [data-demo="${f}"] th, .reveal [data-demo="${f}"] td { padding: 1px 5px; }
 .reveal [data-demo="${f}"] .qb-readout { font-size: 18px; }
