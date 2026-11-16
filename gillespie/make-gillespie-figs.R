@@ -15,7 +15,9 @@ col_pur <- "#CC79A7"   # reddish purple
 col_run <- adjustcolor("grey30", 0.55)
 
 fig <- function(file, w = 9, h = 5.2, expr, mfrow = c(1, 1)) {
-  svg(file, width = w, height = h)
+  # PNG for figures with many points (keeps files small), SVG otherwise
+  if (grepl("\\.png$", file)) png(file, width = w, height = h, units = "in", res = 150)
+  else svg(file, width = w, height = h)
   par(mfrow = mfrow, mar = c(4.8, 5.6, 2.6, 1), las = 1, mgp = c(3.6, 0.8, 0),
       cex.lab = 1.4, cex.axis = 1.3, cex.main = 1.4)
   expr
@@ -89,7 +91,7 @@ fig("fig01-two-genes.svg", w = 11, h = 5.0, mfrow = c(1, 2), {
 ## ---- fig02: small and large copy numbers -------------------------------------
 
 set.seed(2)
-fig("fig02-small-numbers.svg", w = 11, h = 5.0, mfrow = c(1, 2), {
+fig("fig02-small-numbers.png", w = 11, h = 5.0, mfrow = c(1, 2), {
   for (k in c(10, 1000)) {
     plot(NA, xlim = c(0, 10), ylim = c(0, 1.8), xlab = "time (h)",
          ylab = "molecules / steady state",
@@ -226,7 +228,7 @@ sir_ode <- function(I0, h = 0.01) {
 set.seed(7)
 runs <- lapply(1:30, function(r) sir_path(1))
 ode <- sir_ode(1)
-fig("fig07-sir.svg", w = 10, h = 5.2, {
+fig("fig07-sir.png", w = 10, h = 5.2, {
   plot(NA, xlim = c(0, 160), ylim = c(0, 3500), xlab = "time (days)", ylab = "infected I(t)",
        main = "30 simulated outbreaks from I(0) = 1, and the ODE")
   for (r in runs) lines(r$t, r$I, type = "s", col = col_run)

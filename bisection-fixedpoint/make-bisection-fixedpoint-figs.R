@@ -186,7 +186,7 @@ dev.off()
 
 ## ---- fig07: bifurcation diagram ----------------------------------------------
 
-svg("fig07-bifurcation.svg", width = 10, height = 5.4)
+png("fig07-bifurcation.png", width = 10, height = 5.4, units = "in", res = 150)  # PNG: many points
 setup()
 rgrid <- seq(0.05, 3.4, length.out = 1200)
 plot(NA, xlim = range(rgrid), ylim = c(0, 420), xlab = "growth rate r",

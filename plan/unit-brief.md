@@ -84,6 +84,10 @@ Use this when writing a new unit. Read first:
   Header comment like the reference: what it makes, how to run
   (`cd <slug> && Rscript make-<slug>-figs.R`). Labels large enough for slides
   (cex ≥ 1.3), colour-blind-safe colours.
+  **Use PNG for figures with many points or dense images** (scatter of
+  thousands of points, bifurcation diagrams, many trajectories, image/heat
+  maps): `png(file, width = w, height = h, units = "in", res = 150)`. SVG
+  only for line art. No figure file over ~1 MB.
 
 ## Code correctness
 

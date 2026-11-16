@@ -134,6 +134,13 @@ material. Cut or merge only slides that genuinely repeat a point.
 
 **Hard ceiling: 30 slides** per deck, title slide included. Aim for 20–25; the ceiling is not a target.
 
+## 7b. Figures stay small
+
+Line art is SVG; figures with many points or dense images (big scatters,
+bifurcation diagrams, ensembles of trajectories, heat maps) are PNG at
+150 dpi. No figure file over about 1 MB (GitHub rejects files over 100 MB,
+and big SVGs make pages slow).
+
 ## 8. Slide and exercise format
 
 Follow the conventions of the sister course (quantbio-3MB00A): every deck opens

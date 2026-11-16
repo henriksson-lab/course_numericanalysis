@@ -88,7 +88,7 @@ dev.off()
 
 ## ---- fig02: function of space and time, two slices ---------------------------
 
-svg("fig02-space-time.svg", width = 13, height = 4.8)
+png("fig02-space-time.png", width = 13, height = 4.8, units = "in", res = 150)  # PNG: dense image
 par_big(mfrow = c(1, 3), mar = c(4.8, 5, 3, 1))
 tt <- seq(0, 120, length.out = 241); xx <- seq(0, L, length.out = 201)
 Z <- outer(xx, tt, function(a, b) exact(a, pmax(b, 1e-3), L, D))
