@@ -45,7 +45,7 @@ const STYLE = `
 .reveal [data-demo="${NAME}"].qb-demo { flex-wrap: nowrap; font-size: 18px; gap: .8em; margin: 0; }
 .reveal [data-demo="${NAME}"].qb-demo .qb-plot { flex: 0 0 545px; max-width: 545px; }
 .reveal [data-demo="${NAME}"].qb-demo .qb-panel { flex: 1 1 560px; max-width: none; gap: .25em; }
-.reveal [data-demo="${NAME}"].qb-demo .qb-readout { font-size: 17px; padding: .25em .5em; line-height: 1.3; }
+.reveal [data-demo="${NAME}"].qb-demo .qb-readout { font-size: 18px; padding: .25em .5em; line-height: 1.3; }
 .reveal [data-demo="${NAME}"].qb-demo .qb-btn { font-size: 17px; padding: .12em .5em; }
 `;
 

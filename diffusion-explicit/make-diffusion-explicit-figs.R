@@ -74,9 +74,10 @@ text(250, 0.16, paste0("channel, L = 500 ", um, ", no flow"), cex = 1.4)
 arrows(150, 0.78, 350, 0.78, length = 0.12, lwd = 2, col = oi["blue"])
 text(250, 0.87, "diffusive flux", col = oi["blue"], cex = 1.35)
 par(mar = c(4.8, 5, 0.5, 1))
-plot(NA, xlim = c(-260, 760), ylim = c(0, 1.05), xaxt = "n",
-     xlab = paste0("position x (", um, ")"), ylab = "c / c(source)", bty = "n")
-axis(1, at = seq(0, 500, 100))
+plot(NA, xlim = c(-260, 760), ylim = c(0, 1.05), axes = FALSE,
+     xlab = paste0("position x (", um, ")"), ylab = "")
+axis(1, at = seq(0, 500, 100)); axis(2, pos = -20, las = 1)
+text(-185, 0.5, "c / c(source)", cex = 1.4)
 cols <- c(oi["sky"], oi["green"], oi["orange"], oi["red"])
 ts <- c(5, 20, 64, 1000)
 for (j in seq_along(ts)) lines(xs, exact(xs, ts[j], L, D), lwd = 3, col = cols[j],
@@ -99,13 +100,13 @@ plot(xx, exact(xx, 30, L, D), type = "l", lwd = 3, col = oi["orange"],
 x1 <- 100; c1 <- exact(x1, 30, L, D); s1 <- (exact(x1 + 1e-3, 30, L, D) - exact(x1 - 1e-3, 30, L, D)) / 2e-3
 segments(x1 - 80, c1 - 80 * s1, x1 + 80, c1 + 80 * s1, lty = 2, lwd = 2)
 points(x1, c1, pch = 19, cex = 1.6)
-text(x1 + 60, c1 + 0.12, expression(partialdiff * c / partialdiff * x), cex = 1.6, pos = 4)
+text(x1 + 60, c1 + 0.12, expression(partialdiff * c / partialdiff * x), cex = 2.3, pos = 4)
 plot(tt, exact(100, pmax(tt, 1e-3), L, D), type = "l", lwd = 3, col = oi["red"],
      xlab = "t (s)", ylab = "c", main = paste0("slice x = 100 ", um, ": c(100, t)"))
 t1 <- 30; s2 <- (exact(100, t1 + 1e-3, L, D) - exact(100, t1 - 1e-3, L, D)) / 2e-3
 segments(t1 - 20, c1 - 20 * s2, t1 + 20, c1 + 20 * s2, lty = 2, lwd = 2)
 points(t1, c1, pch = 19, cex = 1.6)
-text(t1 + 5, c1 - 0.12, expression(partialdiff * c / partialdiff * t), cex = 1.6, pos = 4)
+text(t1 + 5, c1 - 0.12, expression(partialdiff * c / partialdiff * t), cex = 2.3, pos = 4)
 dev.off()
 
 ## ---- fig03: the grid and the stencil ------------------------------------------
@@ -196,11 +197,11 @@ svg("fig06-convergence.svg", width = 8, height = 5.4)
 par_big(mar = c(4.8, 5.5, 1, 1))
 plot(L / Ns, err, log = "xy", pch = 19, cex = 1.6, col = oi["blue"],
      xlab = paste0("\u0394x (", um, "),  with r = 0.4 fixed"),
-     ylab = "max error at t = 30 s", xlim = c(1.2, 30), ylim = c(2e-6, 2e-3))
+     ylab = "max error at t = 30 s", xlim = c(0.7, 30), ylim = c(2e-6, 2e-3))
 lines(L / Ns, err, lwd = 2, col = oi["blue"])
 lines(L / Ns, err[1] * (Ns[1] / Ns)^2, lty = 2, lwd = 2)
-text(4, 4e-5, "slope 2", cex = 1.4, pos = 4)
-text(L / Ns, err, paste(round(30 / (0.4 * (L / Ns)^2 / D)), "steps"), pos = 1, cex = 1.05, offset = 0.9)
+text(1.4, 2e-4, "dashed: slope 2", cex = 1.4, pos = 4)
+text(L / Ns, err, paste(round(30 / (0.4 * (L / Ns)^2 / D)), "steps"), pos = 2, cex = 1.1, offset = 0.8)
 dev.off()
 
 ## ---- fig07: instability -------------------------------------------------------------
@@ -234,19 +235,20 @@ e <- eigen(A, symmetric = TRUE)
 lam <- D / dx^2 * e$values
 svg("fig08-modes.svg", width = 13, height = 5)
 par_big(mfrow = c(1, 2), mar = c(4.8, 5.5, 2.5, 1))
-plot(n:1, lam, pch = 19, col = oi["blue"], xlab = "mode k", ylab = expression(lambda[k] ~ "(per s)"),
+plot(1:n, lam, pch = 19, col = oi["blue"], xlab = "mode k", ylab = expression(lambda[k] ~ "(per s)"),
      main = "eigenvalues of (D / dx²) A", ylim = c(-42, 0))
 abline(h = -2 / 0.05, lty = 2, col = oi["red"], lwd = 2)
-text(1, -37.2, "Euler limit -2/dt for dt = 0.05 s (r = 1/2)", pos = 4, col = oi["red"], cex = 1.2)
-text(3, -3, "slowest: -0.039 per s", pos = 4, cex = 1.2)
-text(30, -39.5, "fastest: -39.96", pos = 2, cex = 1.2)
+text(1, -35.5, "Euler limit -2/dt for dt = 0.05 s (r = 1/2)", pos = 4, col = oi["red"], cex = 1.2)
+text(1, -22, "slowest (k = 1): -0.039 per s", pos = 4, cex = 1.2)
+text(49, -30, "fastest: -39.96", pos = 2, cex = 1.2)
 xi <- x[2:N]
-v1 <- e$vectors[, n]; v1 <- v1 / max(abs(v1)) * sign(v1[25])
-vn <- e$vectors[, 1]; vn <- vn / max(abs(vn)) * sign(vn[1])
-plot(xi, v1, type = "l", lwd = 3, col = oi["blue"], ylim = c(-1.1, 1.1),
+v1 <- e$vectors[, 1]; v1 <- v1 / max(abs(v1)) * sign(v1[25])
+vn <- e$vectors[, n]; vn <- vn / max(abs(vn)) * sign(vn[1])
+plot(xi, v1, type = "l", lwd = 3, col = oi["blue"], ylim = c(-1.1, 1.7),
      xlab = paste0("x (", um, ")"), ylab = "mode shape", main = "slowest (k = 1) and fastest (k = 49) mode")
 lines(xi, vn, type = "o", pch = 19, cex = 0.7, lwd = 1.5, col = oi["red"])
-legend("bottomleft", c("k = 1: half a sine, decays in 25 s", "k = 49: zigzag, decays in 0.025 s"),
+lines(xi, v1, lwd = 4, col = oi["blue"])
+legend("top", c("k = 1: half a sine, decays in 25 s", "k = 49: zigzag, decays in 0.025 s"),
        col = oi[c("blue", "red")], lwd = 2.5, bty = "n", cex = 1.15, bg = "white")
 dev.off()
 

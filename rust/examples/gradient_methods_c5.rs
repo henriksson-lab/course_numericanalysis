@@ -4,7 +4,23 @@ use argmin::core::{Executor, State};
 use argmin::solver::linesearch::MoreThuenteLineSearch;
 use argmin::solver::quasinewton::BFGS;
 use std::cell::Cell;
+use std::sync::atomic::{AtomicU64, Ordering};
 include!("gradient_methods_shared/defs.rs");
+
+// argmin owns the problem, so count its calls with global counters
+static NF: AtomicU64 = AtomicU64::new(0);
+static NG: AtomicU64 = AtomicU64::new(0);
+struct Counted;
+impl CostFunction for Counted {
+    type Param = Vec<f64>;
+    type Output = f64;
+    fn cost(&self, p: &Vec<f64>) -> Result<f64, Error> { NF.fetch_add(1, Ordering::Relaxed); Ok(sse(p)) }
+}
+impl Gradient for Counted {
+    type Param = Vec<f64>;
+    type Gradient = Vec<f64>;
+    fn gradient(&self, p: &Vec<f64>) -> Result<Vec<f64>, Error> { NG.fetch_add(1, Ordering::Relaxed); Ok(grad_sse(p)) }
+}
 
 fn bfgs(f: &dyn Fn(&[f64]) -> f64, g: &dyn Fn(&[f64]) -> Vec<f64>,
         mut x: Vec<f64>, tol: f64, maxit: usize) -> (Vec<f64>, usize) {
@@ -44,13 +60,12 @@ fn main() -> Result<(), Error> {
     let (x, steps) = bfgs(&fc, &gc, P0.to_vec(), 1e-4, 200);
     println!("own BFGS: steps {}  sse calls {}  gradient calls {}  SSE {:.6}", steps, nf.get(), ng.get(), sse(&x));
     let eye: Vec<Vec<f64>> = (0..4).map(|i| (0..4).map(|j| (i == j) as i32 as f64).collect()).collect();
-    let res = Executor::new(Fit, BFGS::new(MoreThuenteLineSearch::new()))
+    let res = Executor::new(Counted, BFGS::new(MoreThuenteLineSearch::new()))
         .configure(|s| s.param(P0.to_vec()).inv_hessian(eye).max_iters(200))
         .run()?;
     let s = res.state();
-    let c = s.get_func_counts();
     println!("argmin:   iterations {}  sse calls {}  gradient calls {}  SSE {:.6}  |g| {:.1e}",
-             s.get_iter(), c["cost_count"], c["gradient_count"], s.get_best_cost(),
+             s.get_iter(), NF.load(Ordering::Relaxed), NG.load(Ordering::Relaxed), s.get_best_cost(),
              norm(&grad_sse(s.get_best_param().unwrap())));
     Ok(())
 }

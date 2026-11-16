@@ -6560,168 +6560,312 @@
     "href": "fourier-fft/lec.html#about-this-lecture",
     "title": "Fourier series and the FFT",
     "section": "About this lecture",
-    "text": "About this lecture\nThe last two units interpolated data with polynomials and splines. For periodic data (daily rhythms, cell cycles, a row of pixels) a better basis is sines and cosines.\n\nTrigonometric interpolation: n samples, n Fourier coefficients. Computing them is the discrete Fourier transform (DFT), a matrix–vector product, O(n^2).\nThe fast Fourier transform (FFT) gets the same numbers in O(n\\log n) by splitting even and odd samples. That is what fft() does.\nSampling limits what you can see: rhythms faster than the Nyquist frequency are not lost, they are aliased onto slower ones.\nFiltering = multiplying the coefficients; the convolution theorem makes smoothing and image blur a product in frequency space.\nBiology: is a gene circadian? What is its amplitude and peak time? Smoothing a noisy trace; blur in a microscope.\n\n\nThe sister course (Quantitative biology, Fourier lecture) gave the picture: a signal is a sum of waves, the transform is a change of basis, and filtering works by masking the spectrum. Here we look at the machinery: what fft() computes exactly (and its conventions), why it is fast, and the three ways it misleads you: aliasing, leakage and wrap-around. The biology thread is a circadian time course, the kind of data from a liver or Arabidopsis experiment sampled every few hours over two days."
+    "text": "About this lecture\nThe last two units, Polynomial interpolation and Splines, interpolated data with polynomials and splines. For periodic data (daily rhythms, cell cycles, a row of pixels) a better basis is sines and cosines.\n\nTrigonometric interpolation: n samples, n Fourier coefficients. Computing them is the discrete Fourier transform (DFT), a matrix–vector product, O(n^2).\nThe fast Fourier transform (FFT) gets the same numbers in O(n\\log n) by splitting even and odd samples. That is what fft() does.\nSampling limits what you can see: rhythms faster than the Nyquist frequency are not lost, they are aliased onto slower ones.\nFiltering = multiplying the coefficients; the convolution theorem makes smoothing and image blur a product in frequency space.\nBiology: is a gene circadian? What is its amplitude and peak time? Smoothing a noisy trace; blur in a microscope.\n\n\nThe sister course (Quantitative biology, Fourier lecture) gave the picture: a signal is a sum of waves, the transform is a change of basis, and filtering works by masking the spectrum. Here we look at the machinery: what fft() computes exactly (and its conventions), why it is fast, and the three ways it misleads you: aliasing, leakage and wrap-around. The biology thread is a circadian time course, the kind of data from a liver or Arabidopsis experiment sampled every few hours over two days.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#a-biology-problem-first",
     "href": "fourier-fft/lec.html#a-biology-problem-first",
     "title": "Fourier series and the FFT",
     "section": "A biology problem first",
-    "text": "A biology problem first\nA clock-controlled gene (think Dbp in mouse liver), log2 expression, measured every 2 h for 48 h (simulated).\n\n\nIs it rhythmic? With what period, amplitude and peak time?\nThousands of genes per experiment: we need a fast, automatic answer.\nAnd would sampling every 4 h (half the mice, half the cost) have been enough?\n\n\nThis is the running example of the unit: 24 numbers, given as a literal vector in the code so that every language uses the same data. It was simulated as 8 + 1.5 cos(2 pi (t - 6)/24) plus noise with sd 0.3, so the true answers are amplitude 1.5, period 24 h, peak at 6 h after lights on. Circadian studies really do face this design question: published guidelines for genome-scale rhythm studies recommend sampling every 2 h or more often over at least two cycles. We will see at the end why sparser sampling is risky."
+    "text": "A biology problem first\nA clock-controlled gene (think Dbp in mouse liver), log2 expression, measured every 2 h for 48 h (simulated).\n\n\nIs it rhythmic? With what period, amplitude and peak time?\nThousands of genes per experiment: we need a fast, automatic answer.\nAnd would sampling every 4 h (half the mice, half the cost) have been enough?\n\n\nThis is the running example of the unit: 24 numbers, given as a literal vector in the code so that every language uses the same data. It was simulated as 8 + 1.5 cos(2 pi (t - 6)/24) plus noise with sd 0.3, so the true answers are amplitude 1.5, period 24 h, peak at 6 h after lights on. Circadian studies really do face this design question: published guidelines for genome-scale rhythm studies recommend sampling every 2 h or more often over at least two cycles. We will see at the end why sparser sampling is risky.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#recap-interpolation-in-a-basis",
     "href": "fourier-fft/lec.html#recap-interpolation-in-a-basis",
     "title": "Fourier series and the FFT",
     "section": "Recap: interpolation in a basis",
-    "text": "Recap: interpolation in a basis\nIn Polynomial interpolation we wrote the interpolant as a combination of basis functions and solved for the coefficients:\np(t) = \\sum_k c_k\\,\\phi_k(t), \\qquad p(t_j) = x_j \\text{ for every sample } j.\n\nPolynomials (\\phi_k = t^k): fine for a few points, Runge wiggles for many equispaced points.\nFor periodic data on equispaced times, use \\phi_k = \\cos and \\sin of whole numbers of cycles per record:\n\np(t) = a_0 + \\sum_{k=1}^{n/2-1}\\Big[a_k\\cos\\frac{2\\pi k t}{T} + b_k\\sin\\frac{2\\pi k t}{T}\\Big] + a_{n/2}\\cos\\frac{\\pi n t}{T}\n\nT = record length (48 h), n = number of samples (24). k = cycles per record: k = 2 is a period of 48/2 = 24 h.\n1 + 2(n/2 - 1) + 1 = n coefficients for n samples: a square system, as before.\n\n\nOne-slide recap of the interpolation idea, only to frame the Fourier basis as “one more basis”. Counting coefficients: the constant, a cosine and a sine for each k from 1 to n/2 - 1, and only a cosine at k = n/2 (the sine at k = n/2 is zero at every sample, since sin(pi j) = 0). Total n. The last term, the fastest wave on the grid, alternates +1, -1 from sample to sample; it will be the Nyquist frequency later. Solving this n x n system by Gaussian elimination would cost n^3; the next slides show that the matrix is so special that we never need to."
+    "text": "Recap: interpolation in a basis\nIn Polynomial interpolation we wrote the interpolant as a combination of basis functions and solved for the coefficients:\np(t) = \\sum_k c_k\\,\\phi_k(t), \\qquad p(t_j) = x_j \\text{ for every sample } j.\n\nPolynomials (\\phi_k = t^k): fine for a few points, Runge wiggles for many equispaced points.\nFor periodic data on equispaced times, use \\phi_k = \\cos and \\sin of whole numbers of cycles per record:\n\np(t) = a_0 + \\sum_{k=1}^{n/2-1}\\Big[a_k\\cos\\frac{2\\pi k t}{T} + b_k\\sin\\frac{2\\pi k t}{T}\\Big] + a_{n/2}\\cos\\frac{\\pi n t}{T}\n\nT = record length (48 h), n = number of samples (24). k = cycles per record: k = 2 is a period of 48/2 = 24 h.\n1 + 2(n/2 - 1) + 1 = n coefficients for n samples: a square system, as before.\n\n\nOne-slide recap of the interpolation idea, only to frame the Fourier basis as “one more basis”. Counting coefficients: the constant, a cosine and a sine for each k from 1 to n/2 - 1, and only a cosine at k = n/2 (the sine at k = n/2 is zero at every sample, since sin(pi j) = 0). Total n. The last term, the fastest wave on the grid, alternates +1, -1 from sample to sample; it will be the Nyquist frequency later. Solving this n x n system by Gaussian elimination would cost n^3; the next slides show that the matrix is so special that we never need to.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#the-dft-gives-the-coefficients",
     "href": "fourier-fft/lec.html#the-dft-gives-the-coefficients",
     "title": "Fourier series and the FFT",
     "section": "The DFT gives the coefficients",
-    "text": "The DFT gives the coefficients\nBecause sines and cosines on an equispaced grid are orthogonal, each coefficient is a plain sum (no system to solve). In complex form, with e^{i\\theta} = \\cos\\theta + i\\sin\\theta:\nX_k = \\sum_{j=0}^{n-1} x_j\\, e^{-2\\pi i jk/n}, \\qquad k = 0, \\dots, n-1 \\qquad \\text{(the DFT)}\na_0 = \\frac{X_0}{n}, \\qquad a_k = \\frac{2\\,\\mathrm{Re}\\,X_k}{n}, \\qquad b_k = -\\frac{2\\,\\mathrm{Im}\\,X_k}{n}, \\qquad a_{n/2} = \\frac{X_{n/2}}{n}\nSmall example, x = (1, 2, 0, 1), n = 4: e^{-2\\pi i/4} = -i, so\n\nX_0 = 1 + 2 + 0 + 1 = 4, \\quad X_1 = 1 + 2(-i) + 0(-1) + 1(i) = 1 - i\nX_2 = 1 - 2 + 0 - 1 = -2, \\quad X_3 = 1 + 2i + 0 - i = 1 + i\np(t) = 1 + \\tfrac12\\cos\\tfrac{2\\pi t}{T} + \\tfrac12\\sin\\tfrac{2\\pi t}{T} - \\tfrac12\\cos\\tfrac{4\\pi t}{T}. Check at t = 0: 1 + 0.5 - 0.5 = 1. ✓\n\n\nThe complex exponential is only bookkeeping: it packs the cosine sum (real part) and the sine sum (imaginary part) into one number. Students who are not at ease with complex numbers only need e^{i theta} = cos + i sin, and that Mod gives the length and Arg the angle of a complex number. Do the n = 4 example on the board. Note X_3 is the complex conjugate of X_1: for real data the second half of the DFT mirrors the first and carries no new information. The exercise has more of these by hand."
+    "text": "The DFT gives the coefficients\nBecause sines and cosines on an equispaced grid are orthogonal, each coefficient is a plain sum (no system to solve). In complex form, with e^{i\\theta} = \\cos\\theta + i\\sin\\theta:\nX_k = \\sum_{j=0}^{n-1} x_j\\, e^{-2\\pi i jk/n}, \\qquad k = 0, \\dots, n-1 \\qquad \\text{(the DFT)}\na_0 = \\frac{X_0}{n}, \\qquad a_k = \\frac{2\\,\\mathrm{Re}\\,X_k}{n}, \\qquad b_k = -\\frac{2\\,\\mathrm{Im}\\,X_k}{n}, \\qquad a_{n/2} = \\frac{X_{n/2}}{n}\nSmall example, x = (1, 2, 0, 1), n = 4: e^{-2\\pi i/4} = -i, so\n\nX_0 = 1 + 2 + 0 + 1 = 4, \\quad X_1 = 1 + 2(-i) + 0(-1) + 1(i) = 1 - i\nX_2 = 1 - 2 + 0 - 1 = -2, \\quad X_3 = 1 + 2i + 0 - i = 1 + i\np(t) = 1 + \\tfrac12\\cos\\tfrac{2\\pi t}{T} + \\tfrac12\\sin\\tfrac{2\\pi t}{T} - \\tfrac12\\cos\\tfrac{4\\pi t}{T}. Check at t = 0: 1 + 0.5 - 0.5 = 1. ✓\n\n\nThe complex exponential is only bookkeeping: it packs the cosine sum (real part) and the sine sum (imaginary part) into one number. Students who are not at ease with complex numbers only need e^{i theta} = cos + i sin, and that Mod gives the length and Arg the angle of a complex number. Do the n = 4 example on the board. Note X_3 is the complex conjugate of X_1: for real data the second half of the DFT mirrors the first and carries no new information. The exercise has more of these by hand.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#fft-in-r-the-conventions",
     "href": "fourier-fft/lec.html#fft-in-r-the-conventions",
     "title": "Fourier series and the FFT",
     "section": "fft() in R: the conventions",
-    "text": "fft() in R: the conventions\nx &lt;- c(7.81, 8.81, 9.05, 9.98, 9.40, 8.50, 8.15, 7.47, 6.87, 6.41, 7.15, 7.37,\n       7.81, 8.09, 9.64, 9.49, 9.29, 9.03, 8.25, 7.43, 6.98, 6.73, 6.72, 6.65)\nX &lt;- fft(x)\nround(X[1:4], 2)\n# [1] 193.08+ 0.00i  -0.35+ 0.16i  -2.08-17.45i  -0.39- 1.42i\nround(X[22:24], 2)\n# [1] -0.39+ 1.42i -2.08+17.45i -0.35- 0.16i\nsum(x)\n# [1] 193.08\n\nfft is unnormalised: X[1] is the sum, not the mean. Divide by n yourself.\n1-indexed: X[k + 1] holds frequency k. X[3] is k = 2: 2 cycles in 48 h = 24 h.\nReal data: X[n + 2 - m] = Conj(X[m]). Only X[1:(n/2 + 1)] is informative.\n\n\nThese three conventions cause most fft bugs. R and numpy both put no factor in front of the forward transform; some textbooks and other software use 1/n or 1/sqrt(n). R’s indices start at 1, so frequency k lives at index k + 1; numpy’s start at 0, so frequency k is X[k] directly, which is one reason to be careful when translating code. The mirror: index 24 is the conjugate of index 2, index 23 of index 3, and so on. Negative frequencies are just the other half of the cosine: cos = (e^{i theta} + e^{-i theta})/2."
+    "text": "fft() in R: the conventions\nx &lt;- c(7.81, 8.81, 9.05, 9.98, 9.40, 8.50, 8.15, 7.47, 6.87, 6.41, 7.15, 7.37,\n       7.81, 8.09, 9.64, 9.49, 9.29, 9.03, 8.25, 7.43, 6.98, 6.73, 6.72, 6.65)\nX &lt;- fft(x)\nround(X[1:4], 2)\n# [1] 193.08+ 0.00i  -0.35+ 0.16i  -2.08-17.45i  -0.39- 1.42i\nround(X[22:24], 2)\n# [1] -0.39+ 1.42i -2.08+17.45i -0.35- 0.16i\nsum(x)\n# [1] 193.08\n\nfft is unnormalised: X[1] is the sum, not the mean. Divide by n yourself.\n1-indexed: X[k + 1] holds frequency k. X[3] is k = 2: 2 cycles in 48 h = 24 h.\nReal data: X[n + 2 - m] = Conj(X[m]). Only X[1:(n/2 + 1)] is informative.\n\n\nThese three conventions cause most fft bugs. R and numpy both put no factor in front of the forward transform; some textbooks and other software use 1/n or 1/sqrt(n). R’s indices start at 1, so frequency k lives at index k + 1; numpy’s start at 0, so frequency k is X[k] directly, which is one reason to be careful when translating code. The mirror: index 24 is the conjugate of index 2, index 23 of index 3, and so on. Negative frequencies are just the other half of the cosine: cos = (e^{i theta} + e^{-i theta})/2.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#reading-off-amplitude-period-and-phase",
     "href": "fourier-fft/lec.html#reading-off-amplitude-period-and-phase",
     "title": "Fourier series and the FFT",
     "section": "Reading off amplitude, period and phase",
-    "text": "Reading off amplitude, period and phase\nFor x_j = A\\cos(2\\pi k t_j/T - \\theta) the DFT gives X_k = \\tfrac{nA}{2}e^{-i\\theta}. So amplitude = 2|X_k|/n and phase \\theta = -\\arg X_k.\nn &lt;- length(x)\namp &lt;- 2 * Mod(X) / n                  # amplitude of each cosine\nround(amp[1:7], 2)                     # amp[1] is 2 x mean: ignore\n# [1] 16.09  0.03  1.46  0.12  0.12  0.08  0.10\nk &lt;- which.max(amp[2:(n / 2)])         # strongest k &gt;= 1\nk; 48 / k                              # cycles per 48 h -&gt; period (h)\n# [1] 2\n# [1] 24\n(-Arg(X[k + 1]) / (2 * pi) * 24) %% 24 # peak time (h)\n# [1] 6.452646\n\nTrue values (simulation): amplitude 1.5, period 24 h, peak at 6 h. Noise of sd 0.3 moves them a little.\nMod = length, Arg = angle of a complex number. Re, Im give a_k, b_k.\n\n\nThis is the whole “rhythm detection” computation for one gene: one fft, one Mod, one Arg. The peak time comes from the phase: the cosine peaks when 2 pi k t / T = theta, i.e. t = theta/(2 pi) x period. The %% 24 brings it into [0, 24). Two cautions: the amplitude formula 2|X_k|/n holds for 0 &lt; k &lt; n/2; for k = 0 and k = n/2 it is |X_k|/n. And the frequencies are only those with a whole number of cycles in the record: 48, 24, 16, 12, … hours. A 22-h rhythm falls between bins (leakage, later)."
+    "text": "Reading off amplitude, period and phase\nFor x_j = A\\cos(2\\pi k t_j/T - \\theta) the DFT gives X_k = \\tfrac{nA}{2}e^{-i\\theta}. So amplitude = 2|X_k|/n and phase \\theta = -\\arg X_k.\nn &lt;- length(x)\namp &lt;- 2 * Mod(X) / n                  # amplitude of each cosine\nround(amp[1:7], 2)                     # amp[1] is 2 x mean: ignore\n# [1] 16.09  0.03  1.46  0.12  0.12  0.08  0.10\nk &lt;- which.max(amp[2:(n / 2)])         # strongest k &gt;= 1\nk; 48 / k                              # cycles per 48 h -&gt; period (h)\n# [1] 2\n# [1] 24\n(-Arg(X[k + 1]) / (2 * pi) * 24) %% 24 # peak time (h)\n# [1] 6.452646\n\nTrue values (simulation): amplitude 1.5, period 24 h, peak at 6 h. Noise of sd 0.3 moves them a little.\nMod = length, Arg = angle of a complex number. Re, Im give a_k, b_k.\n\n\nThis is the whole “rhythm detection” computation for one gene: one fft, one Mod, one Arg. The peak time comes from the phase: the cosine peaks when 2 pi k t / T = theta, i.e. t = theta/(2 pi) x period. The %% 24 brings it into [0, 24). Two cautions: the amplitude formula 2|X_k|/n holds for 0 &lt; k &lt; n/2; for k = 0 and k = n/2 it is |X_k|/n. And the frequencies are only those with a whole number of cycles in the record: 48, 24, 16, 12, … hours. A 22-h rhythm falls between bins (leakage, later).",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#trigonometric-interpolation-in-code",
     "href": "fourier-fft/lec.html#trigonometric-interpolation-in-code",
     "title": "Fourier series and the FFT",
     "section": "Trigonometric interpolation in code",
-    "text": "Trigonometric interpolation in code\ntrig_interp &lt;- function(x, T, tt) {    # evaluate p(t) at times tt\n  n &lt;- length(x); X &lt;- fft(x) / n\n  p &lt;- Re(X[1]) + Re(X[n/2 + 1]) * cos(pi * n * tt / T)\n  for (k in 1:(n/2 - 1))\n    p &lt;- p + 2 * Re(X[k + 1]) * cos(2 * pi * k * tt / T) -\n             2 * Im(X[k + 1]) * sin(2 * pi * k * tt / T)\n  p\n}\nmax(abs(trig_interp(x, 48, seq(0, 46, by = 2)) - x))\n# [1] 5.329071e-15                     # passes through every sample\nround(trig_interp(x, 48, c(1, 3, 5)), 2)\n# [1] 8.51 8.86 9.53                   # values between the samples\n\n24 coefficients through 24 noisy points: the curve follows the noise too.\nKeeping only k = 0 and k = 2 gives the least-squares fit of mean + 24-h cosine: orthogonality again, no system to solve (next slide).\n\n\nThe interpolant is exact at the samples up to rounding. Between samples it is the unique trigonometric polynomial of this form through the data. For noisy data, interpolation is the wrong goal (as with polynomials and splines): we want to keep the few coefficients that carry signal. Because the columns of the Fourier basis are orthogonal on the grid, dropping coefficients gives exactly the least-squares fit with the remaining basis functions; this is the normal-equations matrix being diagonal. That is how the cosinor method, a standard circadian analysis, can be done with one fft."
+    "text": "Trigonometric interpolation in code\ntrig_interp &lt;- function(x, T, tt) {    # evaluate p(t) at times tt\n  n &lt;- length(x); X &lt;- fft(x) / n\n  p &lt;- Re(X[1]) + Re(X[n/2 + 1]) * cos(pi * n * tt / T)\n  for (k in 1:(n/2 - 1))\n    p &lt;- p + 2 * Re(X[k + 1]) * cos(2 * pi * k * tt / T) -\n             2 * Im(X[k + 1]) * sin(2 * pi * k * tt / T)\n  p\n}\nmax(abs(trig_interp(x, 48, seq(0, 46, by = 2)) - x))\n# [1] 5.329071e-15                     # passes through every sample\nround(trig_interp(x, 48, c(1, 3, 5)), 2)\n# [1] 8.51 8.86 9.53                   # values between the samples\n\n24 coefficients through 24 noisy points: the curve follows the noise too.\nKeeping only k = 0 and k = 2 gives the least-squares fit of mean + 24-h cosine: orthogonality again, no system to solve (next slide).\n\n\nThe interpolant is exact at the samples up to rounding. Between samples it is the unique trigonometric polynomial of this form through the data. For noisy data, interpolation is the wrong goal (as with polynomials and splines): we want to keep the few coefficients that carry signal. Because the columns of the Fourier basis are orthogonal on the grid, dropping coefficients gives exactly the least-squares fit with the remaining basis functions; this is the normal-equations matrix being diagonal. That is how the cosinor method, a standard circadian analysis, can be done with one fft.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#when-the-data-are-not-periodic",
     "href": "fourier-fft/lec.html#when-the-data-are-not-periodic",
     "title": "Fourier series and the FFT",
     "section": "When the data are not periodic",
-    "text": "When the data are not periodic\n\n\nLeft: dashed = mean + 24-h cosine only (least squares). Solid = all 24 terms (interpolation).\nRight: an OD growth curve is not periodic. The interpolant joins the end (1.2) back to the start (0.05): wiggles everywhere, a dive at the end.\nCheck: does x[n] lead smoothly into x[1]? If not, remove the trend first, or use splines.\n\n\nThe right panel uses the course’s logistic growth curve (K = 1.2, N0 = 0.05, r = 0.8 per hour) sampled every hour for 16 h. The trigonometric interpolant is periodic with period 16 h by construction, so between t = 15 and t = 16 it must come back down to 0.05. Fitting a jump with smooth waves gives Gibbs-type ringing that spreads over the whole record. The same problem returns as leakage and as edge effects in filtering. The rule: Fourier methods assume that the record wraps around."
+    "text": "When the data are not periodic\n\n\nLeft: dashed = mean + 24-h cosine only (least squares). Solid = all 24 terms (interpolation).\nRight: an OD growth curve is not periodic. The interpolant joins the end (1.2) back to the start (0.05): wiggles everywhere, a dive at the end.\nCheck: does x[n] lead smoothly into x[1]? If not, remove the trend first, or use splines.\n\n\nThe right panel uses the course’s logistic growth curve (K = 1.2, N0 = 0.05, r = 0.8 per hour) sampled every hour for 16 h. The trigonometric interpolant is periodic with period 16 h by construction, so between t = 15 and t = 16 it must come back down to 0.05. Fitting a jump with smooth waves gives Gibbs-type ringing that spreads over the whole record. The same problem returns as leakage and as edge effects in filtering. The rule: Fourier methods assume that the record wraps around.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#the-dft-is-a-matrix",
     "href": "fourier-fft/lec.html#the-dft-is-a-matrix",
     "title": "Fourier series and the FFT",
     "section": "The DFT is a matrix",
-    "text": "The DFT is a matrix\nX = F x with F_{jk} = w^{jk}, w = e^{-2\\pi i/n}. For n = 4, w = -i:\n\n\nF_4 = \\begin{pmatrix} 1 & 1 & 1 & 1\\\\ 1 & -i & -1 & i\\\\ 1 & -1 & 1 & -1 \\\\ 1 & i & -1 & -i\\end{pmatrix}\n\nColumns are orthogonal: \\bar F^T F = nI.\nSo F^{-1} = \\bar F^T / n: the inverse DFT is the same sum with +i, divided by n.\n\n\nn &lt;- 24; j &lt;- 0:(n - 1)\nF &lt;- exp(-2i * pi * outer(j, j) / n)\nmax(Mod(F %*% x - fft(x)))\n# [1] 2.419928e-13\nmax(Mod(Conj(F) %*% X / n - x))\n# [1] 9.019499e-15\nmax(Mod(fft(X, inverse = TRUE) / n - x))\n# [1] 3.619753e-15\n\n\nA matrix–vector product: n^2 complex multiplications. n = 10^6: 10^{12}, and F alone needs 16 TB.\nfft(X, inverse = TRUE) is also unnormalised: divide by n to get x back.\n\n\nF is symmetric (not Hermitian), and F/sqrt(n) is unitary: it is a rotation in complex n-dimensional space, which is why the sister course called the transform a change of basis. The orthogonality means solving Fx = … costs no elimination at all. But even the product F x costs n^2, and storing F costs n^2 complex numbers (16 bytes each). Note also that the matrix product is a little less accurate than fft (2e-13 against about 1e-14): the FFT does fewer operations, so it also makes fewer rounding errors."
+    "text": "The DFT is a matrix\nX = F x with F_{jk} = w^{jk}, w = e^{-2\\pi i/n}. For n = 4, w = -i:\n\n\nF_4 = \\begin{pmatrix} 1 & 1 & 1 & 1\\\\ 1 & -i & -1 & i\\\\ 1 & -1 & 1 & -1 \\\\ 1 & i & -1 & -i\\end{pmatrix}\n\nColumns are orthogonal: \\bar F^T F = nI.\nSo F^{-1} = \\bar F^T / n: the inverse DFT is the same sum with +i, divided by n.\n\n\nn &lt;- 24; j &lt;- 0:(n - 1)\nF &lt;- exp(-2i * pi * outer(j, j) / n)\nmax(Mod(F %*% x - fft(x)))\n# [1] 2.419928e-13\nmax(Mod(Conj(F) %*% X / n - x))\n# [1] 9.019499e-15\nmax(Mod(fft(X, inverse = TRUE) / n - x))\n# [1] 3.619753e-15\n\n\nA matrix–vector product: n^2 complex multiplications. n = 10^6: 10^{12}, and F alone needs 16 TB.\nfft(X, inverse = TRUE) is also unnormalised: divide by n to get x back.\n\n\nF is symmetric (not Hermitian), and F/sqrt(n) is unitary: it is a rotation in complex n-dimensional space, which is why the sister course called the transform a change of basis. The orthogonality means solving Fx = … costs no elimination at all. But even the product F x costs n^2, and storing F costs n^2 complex numbers (16 bytes each). Note also that the matrix product is a little less accurate than fft (2e-13 against about 1e-14): the FFT does fewer operations, so it also makes fewer rounding errors.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#the-fft-idea-split-even-and-odd",
     "href": "fourier-fft/lec.html#the-fft-idea-split-even-and-odd",
     "title": "Fourier series and the FFT",
     "section": "The FFT idea: split even and odd",
-    "text": "The FFT idea: split even and odd\nSplit the sum into even samples j = 2m and odd samples j = 2m+1:\nX_k = \\underbrace{\\sum_{m} x_{2m}\\, e^{-2\\pi i mk/(n/2)}}_{E_k:\\ \\text{DFT of the even samples}} + w^k \\underbrace{\\sum_m x_{2m+1}\\, e^{-2\\pi i mk/(n/2)}}_{O_k:\\ \\text{DFT of the odd samples}}\n\n\nE and O have period n/2 in k, and w^{k+n/2} = -w^k: two half-size DFTs give all n outputs.\nRepeat until size 1: \\log_2 n levels, n operations each: O(n \\log n).\n\n\nThis is the Cooley–Tukey algorithm (1965; Gauss had it around 1805 for asteroid orbits). Walk through the recursion: a DFT of size n is two DFTs of size n/2 plus n/2 multiplications by the twiddle factors w^k and n additions. The cost satisfies C(n) = 2 C(n/2) + n, so C(n) = n log2 n. For n = 8: 3 levels; the bottom row is the input in bit-reversed order (0, 4, 2, 6, 1, 5, 3, 7), which is how in-place FFT codes arrange the data. The exercise does one n = 4 FFT by hand."
+    "text": "The FFT idea: split even and odd\nSplit the sum into even samples j = 2m and odd samples j = 2m+1:\nX_k = \\underbrace{\\sum_{m} x_{2m}\\, e^{-2\\pi i mk/(n/2)}}_{E_k:\\ \\text{DFT of the even samples}} + w^k \\underbrace{\\sum_m x_{2m+1}\\, e^{-2\\pi i mk/(n/2)}}_{O_k:\\ \\text{DFT of the odd samples}}\n\n\nE and O have period n/2 in k, and w^{k+n/2} = -w^k: two half-size DFTs give all n outputs.\nRepeat until size 1: \\log_2 n levels, n operations each: O(n \\log n).\n\n\nThis is the Cooley–Tukey algorithm (1965; Gauss had it around 1805 for asteroid orbits). Walk through the recursion: a DFT of size n is two DFTs of size n/2 plus n/2 multiplications by the twiddle factors w^k and n additions. The cost satisfies C(n) = 2 C(n/2) + n, so C(n) = n log2 n. For n = 8: 3 levels; the bottom row is the input in bit-reversed order (0, 4, 2, 6, 1, 5, 3, 7), which is how in-place FFT codes arrange the data. The exercise does one n = 4 FFT by hand.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#a-hand-written-fft-in-8-lines",
     "href": "fourier-fft/lec.html#a-hand-written-fft-in-8-lines",
     "title": "Fourier series and the FFT",
     "section": "A hand-written FFT in 8 lines",
-    "text": "A hand-written FFT in 8 lines\nmy_fft &lt;- function(x) {\n  n &lt;- length(x)                        # n must be a power of 2\n  if (n == 1) return(x)\n  E &lt;- my_fft(x[seq(1, n, by = 2)])     # samples 0, 2, 4, ...\n  O &lt;- my_fft(x[seq(2, n, by = 2)])     # samples 1, 3, 5, ...\n  w &lt;- exp(-2i * pi * (0:(n/2 - 1)) / n)\n  c(E + w * O, E - w * O)               # X_k and X_(k + n/2)\n}\nset.seed(1); y &lt;- rnorm(1024)\nmax(Mod(my_fft(y) - fft(y)))\n# [1] 5.904884e-14\n\nSame answer as fft(). Only powers of 2; the library handles every n.\nR’s seq(1, n, by = 2) picks the even samples x_0, x_2, \\ldots because of 1-indexing.\n\n\nWrite it yourself first, then use the library. This recursive version is correct but slow in R: every call allocates new vectors. The production code (R uses Singleton’s mixed-radix FFT in C; numpy and scipy use pocketfft; Rust has rustfft; FFTW is the classic C library) works in place, avoids recursion, and handles factors 2, 3, 4, 5 and more. Its cost is still n log n. Note the 1-indexing trap: x[seq(1, n, by = 2)] is x_0, x_2, … in the 0-based maths."
+    "text": "A hand-written FFT in 8 lines\nmy_fft &lt;- function(x) {\n  n &lt;- length(x)                        # n must be a power of 2\n  if (n == 1) return(x)\n  E &lt;- my_fft(x[seq(1, n, by = 2)])     # samples 0, 2, 4, ...\n  O &lt;- my_fft(x[seq(2, n, by = 2)])     # samples 1, 3, 5, ...\n  w &lt;- exp(-2i * pi * (0:(n/2 - 1)) / n)\n  c(E + w * O, E - w * O)               # X_k and X_(k + n/2)\n}\nset.seed(1); y &lt;- rnorm(1024)\nmax(Mod(my_fft(y) - fft(y)))\n# [1] 5.904884e-14\n\nSame answer as fft(). Only powers of 2; the library handles every n.\nR’s seq(1, n, by = 2) picks the even samples x_0, x_2, \\ldots because of 1-indexing.\n\n\nWrite it yourself first, then use the library. This recursive version is correct but slow in R: every call allocates new vectors. The production code (R uses Singleton’s mixed-radix FFT in C; numpy and scipy use pocketfft; Rust has rustfft; FFTW is the classic C library) works in place, avoids recursion, and handles factors 2, 3, 4, 5 and more. Its cost is still n log n. Note the 1-indexing trap: x[seq(1, n, by = 2)] is x_0, x_2, … in the 0-based maths.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#on2-against-onlog-n",
     "href": "fourier-fft/lec.html#on2-against-onlog-n",
     "title": "Fourier series and the FFT",
     "section": "O(n^2) against O(n\\log n)",
-    "text": "O(n^2) against O(n\\log n)\n\n\nThe matrix (including building F) grows like n^2; both FFTs like n\\log n.\nThe hand-written R FFT is ~1000× slower than fft() (interpreted, recursive) but has the same slope.\nfft() does n = 4\\times10^6 in about a second. The matrix would take hours (and 256 TB).\n\n\nTimings on our laptop; yours will differ by a constant factor, not in the slopes. Read off the slopes as in Convergence and cost: a factor 10 in n gives a factor 100 in time for the matrix, about 13 for the FFT. The crossover between matrix and hand-written FFT is around n = 256, because the R recursion has a large constant overhead. The lesson about constants: an O(n log n) algorithm in a slow language can lose to an O(n^2) one in compiled code for small n, but never for large n."
+    "text": "O(n^2) against O(n\\log n)\n\n\nThe matrix (including building F) grows like n^2; both FFTs like n\\log n.\nThe hand-written R FFT is ~1000× slower than fft() (interpreted, recursive) but has the same slope.\nfft() does n = 4\\times10^6 in about a second. The matrix would take hours (and 256 TB).\n\n\nTimings on our laptop; yours will differ by a constant factor, not in the slopes. Read off the slopes as in Convergence and cost: a factor 10 in n gives a factor 100 in time for the matrix, about 13 for the FFT. The crossover between matrix and hand-written FFT is around n = 256, because the R recursion has a large constant overhead. The lesson about constants: an O(n log n) algorithm in a slow language can lose to an O(n^2) one in compiled code for small n, but never for large n.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#when-fft-is-slow-awkward-n",
     "href": "fourier-fft/lec.html#when-fft-is-slow-awkward-n",
     "title": "Fourier series and the FFT",
     "section": "When fft() is slow: awkward n",
-    "text": "When fft() is slow: awkward n\nset.seed(1)\nsystem.time(fft(rnorm(65536)))[[\"elapsed\"]]    # 2^16\n# [1] 0.007\nsystem.time(fft(rnorm(65537)))[[\"elapsed\"]]    # 65537 is prime\n# [1] 4.677\nnextn(65537)                                   # next 2^a 3^b 5^c\n# [1] 65610\n\nR’s fft splits n into its prime factors. A large prime factor p costs O(np); for prime n that is O(n^2).\nCheck: nextn(n) == n is TRUE only if n has no prime factors above 5. If not, pad with zeros to nextn(n), or trim a few samples.\nnumpy/scipy and rustfft use Bluestein’s algorithm for primes: still O(n\\log n), a few times slower.\n\n\nAbout a factor 700 for adding one sample. It bites in practice when n is the number of frames of a movie or the length of a recording, which nobody chose to be a power of 2. Padding changes the frequency grid (k now counts cycles per padded length) and adds an edge, so for spectra it is often better to trim to a nice length. scipy.fft.next_fast_len is the Python equivalent of nextn. (R’s factor() is something else entirely: it makes categorical variables.)"
+    "text": "When fft() is slow: awkward n\nset.seed(1)\nsystem.time(fft(rnorm(65536)))[[\"elapsed\"]]    # 2^16\n# [1] 0.007\nsystem.time(fft(rnorm(65537)))[[\"elapsed\"]]    # 65537 is prime\n# [1] 4.677\nnextn(65537)                                   # next 2^a 3^b 5^c\n# [1] 65610\n\nR’s fft splits n into its prime factors. A large prime factor p costs O(np); for prime n that is O(n^2).\nCheck: nextn(n) == n is TRUE only if n has no prime factors above 5. If not, pad with zeros to nextn(n), or trim a few samples.\nnumpy/scipy and rustfft use Bluestein’s algorithm for primes: still O(n\\log n), a few times slower.\n\n\nAbout a factor 700 for adding one sample. It bites in practice when n is the number of frames of a movie or the length of a recording, which nobody chose to be a power of 2. Padding changes the frequency grid (k now counts cycles per padded length) and adds an edge, so for spectra it is often better to trim to a nice length. scipy.fft.next_fast_len is the Python equivalent of nextn. (R’s factor() is something else entirely: it makes categorical variables.)",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#sampling-and-the-nyquist-frequency",
     "href": "fourier-fft/lec.html#sampling-and-the-nyquist-frequency",
     "title": "Fourier series and the FFT",
     "section": "Sampling and the Nyquist frequency",
-    "text": "Sampling and the Nyquist frequency\nSamples every \\Delta t hours, n samples, record length T = n\\Delta t.\n\n\n\n\n\n\n\n\n\nevery 2 h (n = 24)\nevery 4 h (n = 12)\n\n\n\n\nfrequency step 1/T\n1 cycle / 48 h\n1 cycle / 48 h\n\n\nNyquist f_N = 1/(2\\Delta t)\n1 cycle / 4 h\n1 cycle / 8 h\n\n\nperiods on the grid\n48, 24, 16, 12, …, 4 h\n48, 24, 16, 12, 9.6, 8 h\n\n\n\n\nThe fastest wave on the grid goes up–down–up in two samples: f_N = 1/(2\\Delta t).\nThe record length sets the resolution: 24 h and 22 h are not separable in 48 h (both are near k = 2).\nFaster sampling buys a higher Nyquist frequency; a longer record buys finer resolution.\n\n\nTwo different numbers students mix up. Delta t (sampling interval) decides the highest frequency you can see; T (record length) decides how finely you can tell frequencies apart. Both 2-h and 4-h designs over 48 h have the same frequency grid up to their Nyquist frequency. For a circadian question, both look adequate on paper. The danger is what happens to rhythms faster than the Nyquist frequency: they do not disappear."
+    "text": "Sampling and the Nyquist frequency\nSamples every \\Delta t hours, n samples, record length T = n\\Delta t.\n\n\n\n\n\n\n\n\n\nevery 2 h (n = 24)\nevery 4 h (n = 12)\n\n\n\n\nfrequency step 1/T\n1 cycle / 48 h\n1 cycle / 48 h\n\n\nNyquist f_N = 1/(2\\Delta t)\n1 cycle / 4 h\n1 cycle / 8 h\n\n\nperiods on the grid\n48, 24, 16, 12, …, 4 h\n48, 24, 16, 12, 9.6, 8 h\n\n\n\n\nThe fastest wave on the grid goes up–down–up in two samples: f_N = 1/(2\\Delta t).\nThe record length sets the resolution: 24 h and 22 h are not separable in 48 h (both are near k = 2).\nFaster sampling buys a higher Nyquist frequency; a longer record buys finer resolution.\n\n\nTwo different numbers students mix up. Delta t (sampling interval) decides the highest frequency you can see; T (record length) decides how finely you can tell frequencies apart. Both 2-h and 4-h designs over 48 h have the same frequency grid up to their Nyquist frequency. For a circadian question, both look adequate on paper. The danger is what happens to rhythms faster than the Nyquist frequency: they do not disappear.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#aliasing-a-fast-rhythm-in-disguise",
     "href": "fourier-fft/lec.html#aliasing-a-fast-rhythm-in-disguise",
     "title": "Fourier series and the FFT",
     "section": "Aliasing: a fast rhythm in disguise",
-    "text": "Aliasing: a fast rhythm in disguise\n\nA rhythm with period 4.8 h (an ultradian oscillator). Sampled every 4 h, its samples are exactly those of a 24-h cosine:\n\\cos(2\\pi\\cdot 4j/4.8) = \\cos(2\\pi j\\cdot\\tfrac56) = \\cos(2\\pi j\\cdot\\tfrac16) = \\cos(2\\pi\\cdot 4j/24).\n\nFrequencies above Nyquist fold back: f and f_s - f (and f + any multiple of f_s) give the same samples. Here f = 1/4.8 = 0.2083 per hour, f_s = 1/4 = 0.25 per hour, so the alias is 0.25 - 0.2083 = 0.0417 per hour = 1/24. The 2-h samples (blue) still follow the fast rhythm: Nyquist is 1/4 per hour, above 1/4.8. Ultradian rhythms of a few hours exist (p53 pulses, about 5.5 h; Hes1, about 2 h; 12-h and 8-h harmonics of the clock), so this is not only a textbook trick. The same effect makes wagon wheels turn backwards in films."
+    "text": "Aliasing: a fast rhythm in disguise\n\nA rhythm with period 4.8 h (an ultradian oscillator). Sampled every 4 h, its samples are exactly those of a 24-h cosine:\n\\cos(2\\pi\\cdot 4j/4.8) = \\cos(2\\pi j\\cdot\\tfrac56) = \\cos(2\\pi j\\cdot\\tfrac16) = \\cos(2\\pi\\cdot 4j/24).\n\nFrequencies above Nyquist fold back: f and f_s - f (and f + any multiple of f_s) give the same samples. Here f = 1/4.8 = 0.2083 per hour, f_s = 1/4 = 0.25 per hour, so the alias is 0.25 - 0.2083 = 0.0417 per hour = 1/24. The 2-h samples (blue) still follow the fast rhythm: Nyquist is 1/4 per hour, above 1/4.8. Ultradian rhythms of a few hours exist (p53 pulses, about 5.5 h; Hes1, about 2 h; 12-h and 8-h harmonics of the clock), so this is not only a textbook trick. The same effect makes wagon wheels turn backwards in films.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#aliasing-in-the-spectrum",
     "href": "fourier-fft/lec.html#aliasing-in-the-spectrum",
     "title": "Fourier series and the FFT",
     "section": "Aliasing in the spectrum",
-    "text": "Aliasing in the spectrum\nf &lt;- function(t) cos(2 * pi * t / 4.8)      # true period 4.8 h\nx2 &lt;- f(seq(0, 46, by = 2)); x4 &lt;- f(seq(0, 44, by = 4))\nwhich.max(Mod(fft(x2))[2:12])               # k, cycles per 48 h\n# [1] 10                                    # 48/10 = 4.8 h: correct\nwhich.max(Mod(fft(x4))[2:6])\n# [1] 2                                     # 48/2 = 24 h: \"circadian\"!\ng &lt;- function(t) cos(2 * pi * (t - 2) / 8)  # 8-h rhythm, exactly at Nyquist\nround(g(seq(0, 44, by = 4)), 12)\n#  [1] 0 0 0 0 0 0 0 0 0 0 0 0              # invisible\n\nNo warning: the sparse design reports a confident, wrong period.\nChecks: sample faster than twice the fastest rhythm you expect; compare designs (or subsample your own data); stagger sample times; in instruments, filter before sampling (anti-aliasing).\n\n\nThe fft cannot know that the samples came from a fast rhythm; any frequency analysis of these 12 numbers gives 24 h. The second example is a rhythm sitting exactly at the Nyquist frequency: whether you see it depends on its phase. Here it happens to be sampled at its zero crossings and vanishes completely. Uneven or staggered sampling breaks the symmetry that creates the alias (the Lomb–Scargle periodogram handles uneven sampling). Microscopes, ADCs and audio hardware apply a low-pass filter before sampling for exactly this reason; with mice and RNA-seq the only defence is the design."
+    "text": "Aliasing in the spectrum\nf &lt;- function(t) cos(2 * pi * t / 4.8)      # true period 4.8 h\nx2 &lt;- f(seq(0, 46, by = 2)); x4 &lt;- f(seq(0, 44, by = 4))\nwhich.max(Mod(fft(x2))[2:12])               # k, cycles per 48 h\n# [1] 10                                    # 48/10 = 4.8 h: correct\nwhich.max(Mod(fft(x4))[2:6])\n# [1] 2                                     # 48/2 = 24 h: \"circadian\"!\ng &lt;- function(t) cos(2 * pi * (t - 2) / 8)  # 8-h rhythm, exactly at Nyquist\nround(g(seq(0, 44, by = 4)), 12)\n#  [1] 0 0 0 0 0 0 0 0 0 0 0 0              # invisible\n\nNo warning: the sparse design reports a confident, wrong period.\nChecks: sample faster than twice the fastest rhythm you expect; compare designs (or subsample your own data); stagger sample times; in instruments, filter before sampling (anti-aliasing).\n\n\nThe fft cannot know that the samples came from a fast rhythm; any frequency analysis of these 12 numbers gives 24 h. The second example is a rhythm sitting exactly at the Nyquist frequency: whether you see it depends on its phase. Here it happens to be sampled at its zero crossings and vanishes completely. Uneven or staggered sampling breaks the symmetry that creates the alias (the Lomb–Scargle periodogram handles uneven sampling). Microscopes, ADCs and audio hardware apply a low-pass filter before sampling for exactly this reason; with mice and RNA-seq the only defence is the design.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#leakage-and-windowing",
     "href": "fourier-fft/lec.html#leakage-and-windowing",
     "title": "Fourier series and the FFT",
     "section": "Leakage and windowing",
-    "text": "Leakage and windowing\n\n\nA 25.5-h free-running rhythm over 120 h is not a whole number of cycles: its energy leaks to all k (red), slowly decaying.\nA Hann window w_j = \\tfrac12 - \\tfrac12\\cos(2\\pi j/n) tapers both ends to 0: leakage drops by orders of magnitude, the peak gets slightly wider (blue). Weak rhythms next to strong ones become visible.\n\n\nLeakage is the spectral version of the growth-curve wiggles: the periodic extension of 4.7 cycles has a jump at the wrap-around point, and a jump needs all frequencies. The window removes the jump by forcing both ends to zero. Divide by sum(w) instead of n to keep the amplitude scale. Zero-padding (appending zeros) samples the same spectrum on a finer grid, which helps to locate the peak between bins; it does not improve the true resolution 1/T. One slide only: windows are a large topic in signal processing (Hamming, Blackman, Welch’s method), and Hann is a good default."
+    "text": "Leakage and windowing\n\n\nA 25.5-h free-running rhythm over 120 h is not a whole number of cycles: its energy leaks to all k (red), slowly decaying.\nA Hann window w_j = \\tfrac12 - \\tfrac12\\cos(2\\pi j/n) tapers both ends to 0: leakage drops by orders of magnitude, the peak gets slightly wider (blue). Weak rhythms next to strong ones become visible.\n\n\nLeakage is the spectral version of the growth-curve wiggles: the periodic extension of 4.7 cycles has a jump at the wrap-around point, and a jump needs all frequencies. The window removes the jump by forcing both ends to zero. Divide by sum(w) instead of n to keep the amplitude scale. Zero-padding (appending zeros) samples the same spectrum on a finer grid, which helps to locate the peak between bins; it does not improve the true resolution 1/T. One slide only: windows are a large topic in signal processing (Hamming, Blackman, Welch’s method), and Hann is a good default.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#screening-many-genes",
     "href": "fourier-fft/lec.html#screening-many-genes",
     "title": "Fourier series and the FFT",
     "section": "Screening many genes",
-    "text": "Screening many genes\nset.seed(4)\nt &lt;- seq(0, 46, by = 2); G &lt;- 1000\nE &lt;- matrix(rnorm(24 * G, sd = 0.5), 24, G)          # 24 times x 1000 genes\npeak &lt;- runif(100, 0, 24)                            # genes 1-100 cycle\nE[, 1:100] &lt;- E[, 1:100] + 0.5 * cos(2 * pi * outer(t, peak, \"-\") / 24)\namp24 &lt;- 2 * Mod(mvfft(E)[3, ]) / 24                 # 24-h bin, all genes\nnull  &lt;- 2 * Mod(mvfft(apply(E, 2, sample))[3, ]) / 24   # shuffled times\nthr &lt;- quantile(null, 0.99); round(thr, 3)\n#   99%\n# 0.462\nc(cycling = sum(amp24[1:100] &gt; thr), flat = sum(amp24[-(1:100)] &gt; thr))\n# cycling    flat\n#      63       3\n\nmvfft transforms every column: 1000 genes in one call.\nCheck: noise alone gives a non-zero amplitude. Compare with a null (shuffled time order) before calling a gene rhythmic.\n\n\nThe amplitude in one bin is a test statistic. With noise sd 0.5 and 24 samples, a flat gene shows a 24-h “amplitude” of up to about 0.46 one time in a hundred. Genes with true amplitude 0.5 pass only 63 times out of 100: the power of a 48-h design is limited. Published tools (JTK_CYCLE, RAIN, the cosinor method, Lomb–Scargle) differ in their statistics and in how they handle uneven sampling and waveform shape, but all rest on this projection onto a 24-h wave. Multiple testing across 20 000 genes needs a false-discovery-rate correction on top."
+    "text": "Screening many genes\nset.seed(4)\nt &lt;- seq(0, 46, by = 2); G &lt;- 1000\nE &lt;- matrix(rnorm(24 * G, sd = 0.5), 24, G)          # 24 times x 1000 genes\npeak &lt;- runif(100, 0, 24)                            # genes 1-100 cycle\nE[, 1:100] &lt;- E[, 1:100] + 0.5 * cos(2 * pi * outer(t, peak, \"-\") / 24)\namp24 &lt;- 2 * Mod(mvfft(E)[3, ]) / 24                 # 24-h bin, all genes\nnull  &lt;- 2 * Mod(mvfft(apply(E, 2, sample))[3, ]) / 24   # shuffled times\nthr &lt;- quantile(null, 0.99); round(thr, 3)\n#   99%\n# 0.462\nc(cycling = sum(amp24[1:100] &gt; thr), flat = sum(amp24[-(1:100)] &gt; thr))\n# cycling    flat\n#      63       3\n\nmvfft transforms every column: 1000 genes in one call.\nCheck: noise alone gives a non-zero amplitude. Compare with a null (shuffled time order) before calling a gene rhythmic.\n\n\nThe amplitude in one bin is a test statistic. With noise sd 0.5 and 24 samples, a flat gene shows a 24-h “amplitude” of up to about 0.46 one time in a hundred. Genes with true amplitude 0.5 pass only 63 times out of 100: the power of a 48-h design is limited. Published tools (JTK_CYCLE, RAIN, the cosinor method, Lomb–Scargle) differ in their statistics and in how they handle uneven sampling and waveform shape, but all rest on this projection onto a 24-h wave. Multiple testing across 20 000 genes needs a false-discovery-rate correction on top.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#filtering-smoothing-a-noisy-trace",
     "href": "fourier-fft/lec.html#filtering-smoothing-a-noisy-trace",
     "title": "Fourier series and the FFT",
     "section": "Filtering: smoothing a noisy trace",
-    "text": "Filtering: smoothing a noisy trace\nA PER2::LUC bioluminescence trace, every 30 min for 5 days (n = 240), simulated with noise.\nlowpass &lt;- function(y, kmax) {\n  n &lt;- length(y); Y &lt;- fft(y)\n  k &lt;- c(0:(n/2), -(n/2 - 1):-1)        # signed frequency of each entry\n  Y[abs(k) &gt; kmax] &lt;- 0                 # keep periods &gt;= 120/kmax h\n  Re(fft(Y, inverse = TRUE)) / n\n}\ns &lt;- lowpass(y, 15)                     # keep periods &gt;= 8 h\nround(c(noisy = rms(y - truth), smoothed = rms(s - truth)), 2)\n#    noisy smoothed\n#     5.96     4.55\n\nFilter = multiply each coefficient by a gain (here 1 or 0), transform back.\nZero both k and -k, or the result is not real. Re() drops the rounding-level imaginary part.\n\n\nThe trace is 20 + 60 exp(-t/40) + 30 exp(-t/80) cos(2 pi (t - 4)/24) plus noise with sd 6, the typical shape of a luciferase recording: decaying baseline and damped oscillation. rms is sqrt(mean(e^2)), defined in the exercise. The low-pass keeps 31 of 240 coefficients and should remove most of the noise, but the error only drops from 5.96 to 4.55. The next slide shows where the remaining error is. Forgetting to zero the mirrored negative frequencies is a classic bug: the result then has a large imaginary part, and taking Re hides the mistake."
+    "text": "Filtering: smoothing a noisy trace\nA PER2::LUC bioluminescence trace, every 30 min for 5 days (n = 240), simulated with noise.\nlowpass &lt;- function(y, kmax) {\n  n &lt;- length(y); Y &lt;- fft(y)\n  k &lt;- c(0:(n/2), -(n/2 - 1):-1)        # signed frequency of each entry\n  Y[abs(k) &gt; kmax] &lt;- 0                 # keep periods &gt;= 120/kmax h\n  Re(fft(Y, inverse = TRUE)) / n\n}\ns &lt;- lowpass(y, 15)                     # keep periods &gt;= 8 h\nround(c(noisy = rms(y - truth), smoothed = rms(s - truth)), 2)\n#    noisy smoothed\n#     5.96     4.55\n\nFilter = multiply each coefficient by a gain (here 1 or 0), transform back.\nZero both k and -k, or the result is not real. Re() drops the rounding-level imaginary part.\n\n\nThe trace is 20 + 60 exp(-t/40) + 30 exp(-t/80) cos(2 pi (t - 4)/24) plus noise with sd 6, the typical shape of a luciferase recording: decaying baseline and damped oscillation. rms is sqrt(mean(e^2)), defined in the exercise. The low-pass keeps 31 of 240 coefficients and should remove most of the noise, but the error only drops from 5.96 to 4.55. The next slide shows where the remaining error is. Forgetting to zero the mirrored negative frequencies is a classic bug: the result then has a large imaginary part, and taking Re hides the mistake.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#filtering-fails-at-the-edges",
     "href": "fourier-fft/lec.html#filtering-fails-at-the-edges",
     "title": "Fourier series and the FFT",
     "section": "Filtering fails at the edges",
-    "text": "Filtering fails at the edges\n\n\nLeft: the trace starts at 95 and ends at 20. The periodic extension has a jump; the cut-off filter rings and pulls both ends towards each other (start: 64 instead of 95).\nRight: subtract a straight-line fit, filter, add it back: error 4.55 → 2.49.\nCheck: plot the smoothed curve over the data, especially the first and last few points.\n\n\nSame message as the growth curve and leakage: the DFT treats the record as one period of a periodic signal. A trend makes the ends disagree, and the sharp cut-off in frequency produces Gibbs ringing in time. Remedies: detrend (linear or a smooth fit), mirror the data before filtering, pad, or use a gentler filter whose gain falls smoothly to zero. For smoothing alone, splines or a moving average with proper edge handling are often simpler; Fourier filtering pays off when the frequency content matters (remove 50 Hz mains hum, or a known stripe in an image)."
+    "text": "Filtering fails at the edges\n\n\nLeft: the trace starts at 95 and ends at 20. The periodic extension has a jump; the cut-off filter rings and pulls both ends towards each other (start: 64 instead of 95).\nRight: subtract a straight-line fit, filter, add it back: error 4.55 → 2.49.\nCheck: plot the smoothed curve over the data, especially the first and last few points.\n\n\nSame message as the growth curve and leakage: the DFT treats the record as one period of a periodic signal. A trend makes the ends disagree, and the sharp cut-off in frequency produces Gibbs ringing in time. Remedies: detrend (linear or a smooth fit), mirror the data before filtering, pad, or use a gentler filter whose gain falls smoothly to zero. For smoothing alone, splines or a moving average with proper edge handling are often simpler; Fourier filtering pays off when the frequency content matters (remove 50 Hz mains hum, or a known stripe in an image).",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#the-convolution-theorem",
     "href": "fourier-fft/lec.html#the-convolution-theorem",
     "title": "Fourier series and the FFT",
     "section": "The convolution theorem",
-    "text": "The convolution theorem\nA moving average is a convolution: (h * y)_j = \\sum_m h_m\\, y_{j-m}. The DFT turns it into a product:\n\\mathrm{DFT}(h * y)_k = H_k \\, Y_k \\qquad \\text{(circular convolution)}\nm &lt;- 9                                          # 4-h moving average\nh &lt;- c(rep(1/m, 5), rep(0, n - m), rep(1/m, 4)) # box centred on 0, wrapped\nma_fft &lt;- Re(fft(fft(y) * fft(h), inverse = TRUE)) / n\nma_dir &lt;- stats::filter(y, rep(1/m, m), circular = TRUE)\nmax(abs(ma_fft - ma_dir))\n# [1] 4.263256e-14\nround(c(ma_fft[1], truth[1]), 1)\n# [1] 63.4 95.0                                 # wrap-around at the start\n\nDirect: n\\cdot m operations. Via FFT: O(n\\log n), whatever the width m.\nCircular: the first values average in the last samples. For an ordinary (linear) convolution, pad both with zeros to length \\ge n + m - 1.\n\n\nThe convolution theorem is why the FFT matters far beyond spectra: every linear, shift-invariant filter (smoothing, blur, cross-correlation for aligning two signals) is a multiplication of coefficients. fft(h) is the gain of the moving-average filter at each frequency: it is not 0/1 but a sinc shape, so a box filter lets some high frequencies through (exercise). The wrap-around value 63.4 is the same edge problem as before, now from the circular convolution. stats::filter with circular = FALSE gives NA at the ends instead; convolve(x, rev(h), type = “open”) pads for you."
+    "text": "The convolution theorem\nA moving average is a convolution: (h * y)_j = \\sum_m h_m\\, y_{j-m}. The DFT turns it into a product:\n\\mathrm{DFT}(h * y)_k = H_k \\, Y_k \\qquad \\text{(circular convolution)}\nm &lt;- 9                                          # 4-h moving average\nh &lt;- c(rep(1/m, 5), rep(0, n - m), rep(1/m, 4)) # box centred on 0, wrapped\nma_fft &lt;- Re(fft(fft(y) * fft(h), inverse = TRUE)) / n\nma_dir &lt;- stats::filter(y, rep(1/m, m), circular = TRUE)\nmax(abs(ma_fft - ma_dir))\n# [1] 4.263256e-14\nround(c(ma_fft[1], truth[1]), 1)\n# [1] 63.4 95.0                                 # wrap-around at the start\n\nDirect: n\\cdot m operations. Via FFT: O(n\\log n), whatever the width m.\nCircular: the first values average in the last samples. For an ordinary (linear) convolution, pad both with zeros to length \\ge n + m - 1.\n\n\nThe convolution theorem is why the FFT matters far beyond spectra: every linear, shift-invariant filter (smoothing, blur, cross-correlation for aligning two signals) is a multiplication of coefficients. fft(h) is the gain of the moving-average filter at each frequency: it is not 0/1 but a sinc shape, so a box filter lets some high frequencies through (exercise). The wrap-around value 63.4 is the same edge problem as before, now from the circular convolution. stats::filter with circular = FALSE gives NA at the ends instead; convolve(x, rev(h), type = “open”) pads for you.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#image-blur-is-a-convolution",
     "href": "fourier-fft/lec.html#image-blur-is-a-convolution",
     "title": "Fourier series and the FFT",
     "section": "Image blur is a convolution",
-    "text": "Image blur is a convolution\n\n\nA microscope image = true image convolved with the point spread function (PSF). 2D: fft() of a matrix, multiply, transform back: O(N^2\\log N) for an N\\times N image.\nDeconvolution = divide by fft(psf). Where that is \\approx 10^{-18}, noise is amplified 10^{18}×: the image is lost. Regularise, as in The SVD, rank deficiency and regularisation.\n\n\nOne slide, to connect to imaging. The blurred image is computed as Re(fft(fft(img) * fft(psf), inverse = TRUE)) / N^2 with a Gaussian PSF of sd 2 pixels, stored with its centre at pixel [1, 1] (the 2D version of the wrapped box on the previous slide). Deconvolution is an ill-conditioned linear problem: the Fourier coefficients of the PSF are the singular values of the blur matrix, and dividing by tiny ones amplifies noise exactly like the small singular values in the SVD unit. Wiener filtering (ridge regression in frequency space) and Richardson–Lucy are the standard remedies in microscopy software."
+    "text": "Image blur is a convolution\n\n\nA microscope image = true image convolved with the point spread function (PSF). 2D: fft() of a matrix, multiply, transform back: O(N^2\\log N) for an N\\times N image.\nDeconvolution = divide by fft(psf). Where that is \\approx 10^{-18}, noise is amplified 10^{18}×: the image is lost. Regularise, as in The SVD, rank deficiency and regularisation.\n\n\nOne slide, to connect to imaging. The blurred image is computed as Re(fft(fft(img) * fft(psf), inverse = TRUE)) / N^2 with a Gaussian PSF of sd 2 pixels, stored with its centre at pixel [1, 1] (the 2D version of the wrapped box on the previous slide). Deconvolution is an ill-conditioned linear problem: the Fourier coefficients of the PSF are the singular values of the blur matrix, and dividing by tiny ones amplifies noise exactly like the small singular values in the SVD unit. Wiener filtering (ridge regression in frequency space) and Richardson–Lucy are the standard remedies in microscopy software.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#checklist-detecting-fourier-trouble",
     "href": "fourier-fft/lec.html#checklist-detecting-fourier-trouble",
     "title": "Fourier series and the FFT",
     "section": "Checklist: detecting Fourier trouble",
-    "text": "Checklist: detecting Fourier trouble\n\nOff-by-one in frequency → R’s X[k + 1] is k cycles per record; period = T/k.\nAmplitudes n/2 times too big → fft is unnormalised; amplitude = 2|X_k|/n.\nInverse off by a factor n → fft(X, inverse = TRUE) / n.\nComplex result after filtering → zero k and -k together.\nA peak at an unexpected period → aliasing? Is the rhythm faster than 1/(2\\Delta t)?\nBroad peak, raised floor → leakage: window, or a whole number of cycles.\nWiggles at the ends → the record does not wrap around: detrend, pad, or mirror.\nUnexpectedly slow → large prime factor in n? Pad to nextn(n) or trim.\n\n\nPin this next to the keyboard. The first three are convention bugs and are caught by a test signal: always run your pipeline once on a pure cosine with known amplitude, period and phase, and check that you get them back. The next four are properties of the DFT that no convention fixes."
+    "text": "Checklist: detecting Fourier trouble\n\nOff-by-one in frequency → R’s X[k + 1] is k cycles per record; period = T/k.\nAmplitudes n/2 times too big → fft is unnormalised; amplitude = 2|X_k|/n.\nInverse off by a factor n → fft(X, inverse = TRUE) / n.\nComplex result after filtering → zero k and -k together.\nA peak at an unexpected period → aliasing? Is the rhythm faster than 1/(2\\Delta t)?\nBroad peak, raised floor → leakage: window, or a whole number of cycles.\nWiggles at the ends → the record does not wrap around: detrend, pad, or mirror.\nUnexpectedly slow → large prime factor in n? Pad to nextn(n) or trim.\n\n\nPin this next to the keyboard. The first three are convention bugs and are caught by a test signal: always run your pipeline once on a pure cosine with known amplitude, period and phase, and check that you get them back. The next four are properties of the DFT that no convention fixes.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "fourier-fft/lec.html#summary",
     "href": "fourier-fft/lec.html#summary",
     "title": "Fourier series and the FFT",
     "section": "Summary",
-    "text": "Summary\n\nEquispaced samples of periodic data: interpolate with sines and cosines. The coefficients are the DFT, X_k = \\sum_j x_j e^{-2\\pi i jk/n}, because the basis is orthogonal.\nThe DFT is a matrix–vector product, O(n^2). The FFT splits even/odd samples recursively: O(n\\log n). Awkward (prime) n can be slow in R.\nR’s fft: unnormalised, 1-indexed, mirror-symmetric for real data. Amplitude 2|X_k|/n, phase -\\arg X_k, period T/k.\nNyquist: sampling every \\Delta t resolves periods down to 2\\Delta t. Faster rhythms are aliased onto slower ones, silently.\nA non-periodic record leaks (window it) and rings at the edges (detrend it).\nConvolution theorem: smoothing and blur are products of DFTs; circular unless zero-padded. Deconvolution is ill-conditioned.\n\nNext: Part 7 starts with Numerical differentiation: derivatives from sampled data, where noise is amplified much as in deconvolution.\n\nThe two ideas to keep: the FFT is just a fast way to compute an orthogonal change of basis, and everything it tells you is about a periodic, sampled version of your data. Most mistakes come from forgetting one of those two words. Numerical differentiation of noisy data is a high-pass filter (in Fourier terms, multiplication by i k), which is why it amplifies noise; the next unit treats it with finite differences."
+    "text": "Summary\n\nEquispaced samples of periodic data: interpolate with sines and cosines. The coefficients are the DFT, X_k = \\sum_j x_j e^{-2\\pi i jk/n}, because the basis is orthogonal.\nThe DFT is a matrix–vector product, O(n^2). The FFT splits even/odd samples recursively: O(n\\log n). Awkward (prime) n can be slow in R.\nR’s fft: unnormalised, 1-indexed, mirror-symmetric for real data. Amplitude 2|X_k|/n, phase -\\arg X_k, period T/k.\nNyquist: sampling every \\Delta t resolves periods down to 2\\Delta t. Faster rhythms are aliased onto slower ones, silently.\nA non-periodic record leaks (window it) and rings at the edges (detrend it).\nConvolution theorem: smoothing and blur are products of DFTs; circular unless zero-padded. Deconvolution is ill-conditioned.\n\nNext: Part 7 starts with Numerical differentiation: derivatives from sampled data, where noise is amplified much as in deconvolution.\n\nThe two ideas to keep: the FFT is just a fast way to compute an orthogonal change of basis, and everything it tells you is about a periodic, sampled version of your data. Most mistakes come from forgetting one of those two words. Numerical differentiation of noisy data is a high-pass filter (in Fourier terms, multiplication by i k), which is why it amplifies noise; the next unit treats it with finite differences.",
+    "crumbs": [
+      "Home",
+      "Part 6: Interpolation and approximation",
+      "Fourier series and the FFT",
+      "Lecture (slides)"
+    ]
   },
   {
     "objectID": "power-iteration/lec.html#power-iteration-on-the-fish",
@@ -8384,7 +8528,7 @@
     "href": "phase-plane/lec.html#the-separatrix-the-edge-between-two-fates",
     "title": "Equilibria, stability and the phase plane",
     "section": "The separatrix: the edge between two fates",
-    "text": "The separatrix: the edge between two fates\nThe stable direction of the saddle continues as a curve, the separatrix: starts on one side end in U on, on the other in V on. Compute it by running the ODE backwards from the saddle along \\mathbf v_{\\text{stable}}. Biased switch, V’s promoter 3 % weaker:\nlibrary(rootSolve)\nau &lt;- 3; av &lt;- 2.9\ntoggle2 &lt;- function(t, x, parms)\n  list(c(au / (1 + x[2]^2) - x[1], av / (1 + x[1]^2) - x[2]))\nxs &lt;- multiroot(function(x) toggle2(0, x, NULL)[[1]], start = c(1, 1.3))$root\ne  &lt;- eigen(jacobian.full(y = xs, func = toggle2))    # FD Jacobian\ne$values\n# [1] -2.176727  0.176727\nvs &lt;- e$vectors[, e$values &lt; 0]                       # stable direction\ntb &lt;- seq(0, -7, by = -0.01)                          # backwards in time\nup   &lt;- ode(y = xs + 1e-6 * vs, times = tb, func = toggle2, parms = NULL)\ndown &lt;- ode(y = xs - 1e-6 * vs, times = tb, func = toggle2, parms = NULL)\n\nWhy backwards? Forwards in time, the stable direction attracts: trajectories near the separatrix come towards the saddle, so we cannot follow the separatrix away from it. Reversing time turns the attracting direction into a repelling one, so a start a distance 1e-6 from the saddle along v_stable runs out along the separatrix. Two runs, one for each side. In the symmetric switch the separatrix is the diagonal u = v (by symmetry), but with alpha_v = 2.9 the saddle moves to (1.094, 1.320) and the separatrix bends: no symmetry argument helps, and we need this computation. jacobian.full from rootSolve gives a finite-difference Jacobian of a deSolve-style function. Note the selection e$values &lt; 0: here eigen lists the negative eigenvalue first.",
+    "text": "The separatrix: the edge between two fates\nThe saddle’s stable direction continues as a curve, the separatrix, between the two basins. Trace it by running the ODE backwards from the saddle along \\mathbf v_{\\text{stable}}. Biased switch (\\alpha_v = 2.9):\nlibrary(rootSolve)\nau &lt;- 3; av &lt;- 2.9\ntoggle2 &lt;- function(t, x, parms)\n  list(c(au / (1 + x[2]^2) - x[1], av / (1 + x[1]^2) - x[2]))\nxs &lt;- multiroot(function(x) toggle2(0, x, NULL)[[1]], start = c(1, 1.3))$root\ne  &lt;- eigen(jacobian.full(y = xs, func = toggle2))    # FD Jacobian\ne$values\n# [1] -2.176727  0.176727\nvs &lt;- e$vectors[, e$values &lt; 0]                       # stable direction\ntb &lt;- seq(0, -7, by = -0.01)                          # backwards in time\nup   &lt;- ode(y = xs + 1e-6 * vs, times = tb, func = toggle2, parms = NULL)\ndown &lt;- ode(y = xs - 1e-6 * vs, times = tb, func = toggle2, parms = NULL)\n\nWhy backwards? Forwards in time, the stable direction attracts: trajectories near the separatrix come towards the saddle, so we cannot follow the separatrix away from it. Reversing time turns the attracting direction into a repelling one, so a start a distance 1e-6 from the saddle along v_stable runs out along the separatrix. Two runs, one for each side. In the symmetric switch the separatrix is the diagonal u = v (by symmetry), but with alpha_v = 2.9 the saddle moves to (1.094, 1.320) and the separatrix bends: no symmetry argument helps, and we need this computation. jacobian.full from rootSolve gives a finite-difference Jacobian of a deSolve-style function. Note the selection e$values &lt; 0: here eigen lists the negative eigenvalue first.",
     "crumbs": [
       "Home",
       "Part 8: Ordinary differential equations",
@@ -10339,6 +10483,19 @@
       "Part 8: Ordinary differential equations",
       "Equilibria, stability and the phase plane",
       "Exercise"
+    ]
+  },
+  {
+    "objectID": "phase-plane/lec.html#try-it-where-does-the-cell-go",
+    "href": "phase-plane/lec.html#try-it-where-does-the-cell-go",
+    "title": "Equilibria, stability and the phase plane",
+    "section": "Try it: where does the cell go?",
+    "text": "Try it: where does the cell go?\n\n\n\n\nThe toggle switch and the Sel’kov oscillator, live in the browser: normalised velocity arrows, the nullclines (blue du/dt = 0, red dv/dt = 0), the fixed points with their type from the Jacobian’s eigenvalues (black stable, white unstable), and trajectories by RK4 with h = 0.01 wherever I click. Symmetric switch first. Click (0.5, 0.3) and (0.3, 0.5): both rise towards the saddle, then split, U on and V on at t = 30.6. Read the readout: outer states stable nodes, -1/3 and -5/3; middle a saddle, 0.191 and -2.191. Click (2, 2): it slides into the saddle and stays there; the readout warns. Click (2, 2.0001): it sits at the saddle for a long time and reaches V on only at t = 75, which previews the next slide. Tick basins of the flow and separatrix: 50/50, the diagonal is the boundary. Click biased toggle: 58/42, the orange separatrix bends above the diagonal and is exactly the colour boundary; contrast with Newton’s banded basins on the previous slide. Drag alpha_v down: the V-on basin shrinks, V on and the saddle approach each other, and between 2.71 and 2.70 they vanish together. Then Sel’kov: inside and outside starts end on the same cycle (u 0.245 to 1.518, period 9.62); drag b to 0.3 (stable spiral, the oscillation dies) and back over 0.35 (a small cycle is born, a Hopf bifurcation).",
+    "crumbs": [
+      "Home",
+      "Part 8: Ordinary differential equations",
+      "Equilibria, stability and the phase plane",
+      "Lecture (slides)"
     ]
   }
 ]

@@ -99,7 +99,7 @@ Z <- outer(10^lg, 10^lg, Vectorize(function(a, e) if (abs(a - e) < 1e-9) NA else
 fig("fig02-rss-landscape.svg", w = 7.4, h = 6, expr = {
   par(mar = c(4.8, 5.8, 1.5, 1))
   lev <- c(0.07, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 40)
-  image(lg, lg, log10(Z), col = hcl.colors(60, "Blues 3", rev = TRUE), axes = FALSE,
+  image(lg, lg, log10(Z), col = hcl.colors(60, "Blues 3", rev = TRUE), axes = FALSE, useRaster = TRUE,
         xlab = expression(k[a] ~ "(per hour)"), ylab = expression(k[e] ~ "(per hour)"))
   contour(lg, lg, Z, levels = lev, add = TRUE, labcex = 0.9, col = "grey25")
   ax <- c(0.03, 0.1, 0.3, 1, 3, 10)
@@ -109,7 +109,7 @@ fig("fig02-rss-landscape.svg", w = 7.4, h = 6, expr = {
   points(log10(p_flip[1]), log10(p_flip[2]), pch = 8, cex = 2.2, lwd = 2.5, col = col_d)
   text(log10(p_hat[1]), log10(p_hat[2]) - 0.17, "V = 20.2 L", cex = 1.2, col = col_b, font = 2)
   text(log10(p_flip[1]), log10(p_flip[2]) + 0.17, "V = 3.8 L", cex = 1.2, col = col_d, font = 2)
-  text(log10(4), log10(5.5), expression(k[a] == k[e]), cex = 1.2, col = col_ref)
+  text(log10(5), log10(2.2), expression(k[a] == k[e]), cex = 1.3, col = "grey20")
 })
 
 ## ---- fig03: convergence of Gauss-Newton and Levenberg-Marquardt ---------------
@@ -143,7 +143,7 @@ fig("fig04-gn-lm-paths.svg", expr = {
   lines(P_lm[, 1], P_lm[, 2], type = "o", pch = 19, lwd = 2.5, col = col_c)
   arrows(P_gn[1, 1], P_gn[1, 2], 0.02, 0.05 + (P_gn[2, 2] - 0.05) * (3 - 0.02) / (3 - P_gn[2, 1]),
          lwd = 2.5, col = col_b, length = 0.15)
-  text(0.15, 0.135, "GN step to\nka = -2.2, V = 0.04", col = col_b, cex = 1.15, adj = 0, font = 2)
+  text(0.05, 0.025, "GN step to ka = -2.2, V = 0.04", col = col_b, cex = 1.15, adj = 0, font = 2)
   points(3, 0.05, pch = 15, cex = 1.8)
   text(3, 0.05, "start", pos = 1, cex = 1.2)
   points(p_hat[1], p_hat[2], pch = 8, cex = 2, lwd = 2.5, col = col_a)
@@ -178,20 +178,20 @@ fig("fig05-solver-error.svg", w = 11, h = 5, expr = {
 
 resid_ode <- function(q, tol) y - pk_ode(exp(q), tol)
 tols <- 10^-(3:12)
-epsf <- c(0, 1e-10, 1e-6)        # FD step sqrt(epsfcn) * |q|; 0 means sqrt(machine eps)
+epsf <- c(0, 1e-10)        # FD step sqrt(epsfcn) * |q|; 0 means sqrt(machine eps)
 E <- sapply(epsf, function(ef) sapply(tols, function(tol) {
   f <- nls.lm(log(c(0.5, 0.1, 10)), fn = resid_ode, tol = tol,
               control = nls.lm.control(epsfcn = ef))
   abs(exp(f$par[1]) / p_hat[1] - 1)
 }))
 fig("fig06-tolerance-step.svg", expr = {
-  matplot(tols, E, log = "xy", type = "o", pch = c(19, 17, 15), lty = 1, lwd = 2.5,
-          col = c(col_b, col_a, col_c), xaxt = "n", yaxt = "n", ylim = c(1e-8, 1e-2),
+  matplot(tols, E, log = "xy", type = "o", pch = c(19, 17), lty = 1, lwd = 2.5,
+          col = c(col_b, col_a), xaxt = "n", yaxt = "n", ylim = c(1e-8, 1),
+          xlim = c(1e-3, 1e-12),
           xlab = "ODE solver tolerance (rtol = atol)", ylab = expression("relative error in" ~ k[a]))
-  logaxis(1, -(3:12)); logaxis(2, seq(-8, -2))
-  legend("bottomleft", c("FD step 1.5e-8 |q|  (MINPACK default)", "FD step 1e-5 |q|",
-                         "FD step 1e-3 |q|"),
-         col = c(col_b, col_a, col_c), pch = c(19, 17, 15), lwd = 2.5, bty = "n", cex = 1.2)
+  logaxis(1, -(3:12)); logaxis(2, seq(-8, 0, by = 2))
+  legend("topright", c("FD step 1.5e-8 |q|  (MINPACK default)", "FD step 1e-5 |q|  (epsfcn = 1e-10)"),
+         col = c(col_b, col_a), pch = c(19, 17), lwd = 2.5, bty = "n", cex = 1.2)
 })
 
 ## ---- fig07: multistart -------------------------------------------------------------
@@ -208,7 +208,7 @@ fig("fig07-multistart.svg", w = 7.4, h = 6, expr = {
   par(mar = c(4.8, 5.8, 1.5, 1))
   plot(log10(starts$ka), log10(starts$ke), pch = c(19, 17, 4)[cls], cex = 1.8, lwd = 2.5,
        col = c(col_b, col_d, "grey30")[cls], axes = FALSE, xlim = log10(c(0.02, 15)),
-       ylim = log10(c(0.03, 20)), xlab = expression("start" ~ k[a]),
+       ylim = log10(c(0.03, 120)), xlab = expression("start" ~ k[a]),
        ylab = expression("start" ~ k[e]))
   ax <- c(0.03, 0.1, 0.3, 1, 3, 10)
   axis(1, at = log10(ax), labels = ax); axis(2, at = log10(ax), labels = ax); box()

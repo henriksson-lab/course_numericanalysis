@@ -26,7 +26,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 21 | euler | done | done | done |
 | 22 | runge-kutta | done | done | done |
 | 23 | stiffness | running | | |
-| 24 | phase-plane | done | running | |
+| 24 | phase-plane | done | done | done |
 | 25 | gillespie | running | | |
 | 26 | optimisation-1d | running | | |
 | 27 | gradient-methods | running | | |
@@ -37,7 +37,8 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 32 | diffusion-implicit | running | | |
 | 33 | steady-state-2d | running | | |
 | 34 | advection-diffusion | running | | |
-| 35–37 | | queued | | |
+| 35 | reaction-diffusion | running | | |
+| 36–37 | | queued | | |
 
 ## Audit notes (pass 3)
 
