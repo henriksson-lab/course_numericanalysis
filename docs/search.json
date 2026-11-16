@@ -15764,5 +15764,603 @@
       "Iterative linear solvers in depth",
       "Quiz"
     ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#about-this-lecture",
+    "href": "iterative-solvers/lec.html#about-this-lecture",
+    "title": "Iterative linear solvers in depth",
+    "section": "About this lecture",
+    "text": "About this lecture\nStructure: symmetric, banded, sparse ended with a glimpse of Jacobi and conjugate gradient. This optional lecture explains why they behave as they do, and what is used in practice.\n\nOn 2D and especially 3D grids, a sparse direct solve fills in: memory and time explode. Iterative methods only need products A\\mathbf{x}.\nJacobi and Gauss–Seidel are splittings. Their speed is the spectral radius of an iteration matrix (eigenvalues again), and it gets worse as the grid is refined.\nConjugate gradient (SPD matrices) needs about \\sqrt{\\kappa} iterations; preconditioning makes \\kappa smaller; GMRES handles nonsymmetric matrices; multigrid needs the same number of iterations on every grid.\nBiology: oxygen in a cell-laden gel, refined until each grid point is one cell, and then in 3D.\n\n\nThis is further reading: not required for the rest of the course. It assumes the sparse-matrix material of Structure: symmetric, banded, sparse (Part 3), eigenvalues from Part 5, and the 2D Laplacian of Steady state in two dimensions (Part 10), which we rebuild here in one slide so that the lecture can be read on its own. The message to take away is the last bullet: the number of iterations depends on the condition number, and the condition number of a diffusion matrix grows as the grid is refined. Everything else (preconditioning, multigrid) is an attack on that growth.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#recap-the-glimpse-from-part-3",
+    "href": "iterative-solvers/lec.html#recap-the-glimpse-from-part-3",
+    "title": "Iterative linear solvers in depth",
+    "section": "Recap: the glimpse from Part 3",
+    "text": "Recap: the glimpse from Part 3\nFrom Structure: symmetric, banded, sparse, on the morphogen in a row of 1000 cells:\n\nAn iterative method improves a guess using only A\\mathbf{x}: O(\\text{nnz}) work per step, no fill-in, no factor stored.\nJacobi: \\mathbf{x} \\leftarrow \\mathbf{x} + D^{-1}(\\mathbf{b} - A\\mathbf{x}), D = diagonal of A. It took about 4160 iterations; CG took about 240.\nJacobi gains digits at a fixed rate (linear convergence) and diverges for \\begin{pmatrix}1&2\\\\2&1\\end{pmatrix}; CG needs A SPD.\nCheck: monitor the residual \\|\\mathbf{b} - A\\mathbf{x}\\|, stop on a tolerance, report when the iteration limit is hit.\n\nOpen questions from then: why 4160 and 240? Why does Jacobi diverge for the 2\\times2 matrix? And what if A is not symmetric?\n\nOne-slide recap; the exercise of that unit (C8) had the students write jacobi() and cg() in about 10 lines each, so we do not repeat the code here. Today’s answers: 4160 comes from the spectral radius of the Jacobi iteration matrix (0.995 there); 240 from the square root of the condition number; the 2 x 2 diverges because its iteration matrix has an eigenvalue -2; and for nonsymmetric matrices we use GMRES.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#biology-oxygen-in-a-culture-chamber",
+    "href": "iterative-solvers/lec.html#biology-oxygen-in-a-culture-chamber",
+    "title": "Iterative linear solvers in depth",
+    "section": "Biology: oxygen in a culture chamber",
+    "text": "Biology: oxygen in a culture chamber\n\n\nA 1 mm × 1 mm gel with cells, oxygen enters through all four walls (concentration 1 = ambient). Cells consume it: hypoxic core where c &lt; 0.25 (about 5 % O₂).\nSteady state: -D\\,\\Delta c = -q. With u = 1 - c (the oxygen deficit): -\\Delta u = \\Phi, u = 0 on the walls, \\Phi = qL^2/(Dc_0) = 12.\nAt h = 7.8 µm (about one grid point per cell): 16 129 unknowns. Centre c = 0.116; 14 % of the gel is hypoxic.\n\n\nThe model is the culture-chamber problem of Steady state in two dimensions (Part 10), with uniform zero-order consumption (Michaelis-Menten uptake is the nonlinear version treated there). Numbers, all order-of-magnitude: D = 2000 µm^2/s for oxygen in water, c0 = 0.2 mM (air-saturated medium), about 1e8 cells per mL each consuming about 50 amol O2 per second gives q of about 5 µM/s, and with L = 1 mm that is Phi = q L^2 / (D c0) = 12. The real experiments [O1, O2] use gas-impermeable barriers or a PDMS membrane to shape the gradient on purpose; here we just ask how hypoxic the middle of a thick gel gets. The point for this lecture: a question about cells needs a grid with roughly one point per cell, and in 3D that is a million unknowns per cubic millimetre.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#the-matrix-a-2d-laplacian",
+    "href": "iterative-solvers/lec.html#the-matrix-a-2d-laplacian",
+    "title": "Iterative linear solvers in depth",
+    "section": "The matrix: a 2D Laplacian",
+    "text": "The matrix: a 2D Laplacian\nlibrary(Matrix)\nlap1 &lt;- function(m) bandSparse(m, k = -1:1,\n  diagonals = list(rep(-1, m - 1), rep(2, m), rep(-1, m - 1)))\nlap2 &lt;- function(m) { I &lt;- Diagonal(m); T &lt;- lap1(m); kronecker(I, T) + kronecker(T, I) }\nm &lt;- 127; A &lt;- lap2(m); b &lt;- rep(12 / (m + 1)^2, m^2)    # multiplied through by h^2\nc(n = nrow(A), nnz = nnzero(A))\n#     n   nnz\n# 16129 80137\nu &lt;- solve(A, b)                     # sparse direct solve (Cholesky, reordered)\n1 - u[(m^2 + 1) / 2]                 # oxygen in the centre\n# [1] 0.1159863\n\nEach row: 4u_{ij} - u_{i-1,j} - u_{i+1,j} - u_{i,j-1} - u_{i,j+1} = \\Phi h^2. SPD, five non-zeros per row.\nkronecker builds the 2D operator from the 1D one; the same trick with three factors gives 3D (seven non-zeros per row).\n\n\nThis is the construction of Steady state in two dimensions; we multiply the equation by h^2 so that A has integer entries 4 and -1 and the right-hand side is Phi h^2. The unknowns are numbered row by row (natural ordering): u[i + m (j-1)]. lap2(3)[1:4, 1:4] shows the pattern: 4 on the diagonal, -1 for the left/right neighbour (next to the diagonal) and for the neighbour above/below (m positions away), with a 0 where a row of the grid ends. At this size, the direct solve takes a fraction of a second. The question of the next slide is what happens when we refine or go to 3D.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#why-iterative-fill-in-in-2d-and-3d",
+    "href": "iterative-solvers/lec.html#why-iterative-fill-in-in-2d-and-3d",
+    "title": "Iterative linear solvers in depth",
+    "section": "Why iterative? Fill-in in 2D and 3D",
+    "text": "Why iterative? Fill-in in 2D and 3D\n\n\n\n\nCholesky with the best ordering Matrix finds:\n\n\n\ngrid\nunknowns\nnnz(A)\nnnz(L)\ntime\n\n\n\n\n2D 800²\n640 000\n3.2 M\n27 M\n11 s\n\n\n3D 50³\n125 000\n0.86 M\n38 M\n52 s\n\n\n3D 100³\n10⁶\n6.9 M\n~600 M\n~1 h\n\n\n\n\n\nIn 2D the factor is 9 times larger than A; in 3D 44 times, growing like n^{4/3} (time like n^2). A 1 mm³ tissue block at 10 µm needs ~7 GB for L.\nCG on that block: 6.9 M non-zeros stored (83 MB), 203 iterations, 6 s in R.\n\n\nNumbers from make-iterative-solvers-figs.R (Cholesky(A, perm = TRUE), timed on one core) and from one CG run on lap3(100). The 3D 100^3 row is an extrapolation from the measured 3D points (nnz(L) ~ n^(4/3), time ~ n^2 for nested dissection), so read it as an order of magnitude. Why 3D is so much worse: with the best ordering (nested dissection), the separators that cut the grid into pieces are lines in 2D (m points) but planes in 3D (m^2 points), and the separator blocks become dense. Memory per non-zero: about 12 bytes in CSC (Structure: symmetric, banded, sparse), so 600 M non-zeros is about 7 GB. An iterative method stores A, x and a handful of vectors: memory O(n). The price: the number of iterations, which is the rest of this lecture.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#jacobi-and-gaussseidel-as-splittings",
+    "href": "iterative-solvers/lec.html#jacobi-and-gaussseidel-as-splittings",
+    "title": "Iterative linear solvers in depth",
+    "section": "Jacobi and Gauss–Seidel as splittings",
+    "text": "Jacobi and Gauss–Seidel as splittings\nSplit A = M - N with M easy to solve. Then A\\mathbf{x} = \\mathbf{b} becomes the fixed-point iteration \\mathbf{x}_{k+1} = \\mathbf{x}_k + M^{-1}(\\mathbf{b} - A\\mathbf{x}_k).\n\n\n\n\n\n\n\n\nmethod\nM\none step means\n\n\n\n\nJacobi\ndiagonal D\nevery point: average of its 4 old neighbours (+ source)\n\n\nGauss–Seidel\nlower triangle of A (incl. diagonal)\nsweep through the grid, use new values as soon as they exist\n\n\n\nFour interior points, A = lap2(2), \\mathbf{b} = (1,1,1,1), exact x_i = 0.5, start at 0:\n\nJacobi: x_i = 0.25 \\to 0.375 \\to 0.4375: error 0.25, 0.125, 0.0625, halves each step.\nGauss–Seidel, first sweep: 0.25,\\ (1 + 0.25)/4 = 0.3125,\\ 0.3125,\\ (1 + 0.625)/4 = 0.40625.\n\n\nThe general picture: any matrix splitting turns the linear system into a fixed-point iteration x = g(x), exactly as in Bisection and fixed-point iteration (Part 2); there the iteration converged when |g’| &lt; 1 near the root, here the role of g’ is played by the iteration matrix T = I - M^{-1} A (next slide but one). M must be cheap to solve with: a diagonal for Jacobi (one division per point), a triangle for Gauss-Seidel (one forward substitution, also O(nnz)). In the four-point example each point has two neighbours inside the domain; for Jacobi all four values stay equal, x &lt;- (1 + 2x)/4, so the error is multiplied by exactly 1/2 each step. Gauss-Seidel uses the freshly computed value of point 1 when it updates point 2, and so on; after one sweep it is already further along. Exercise B1 completes the second sweep.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#both-in-ten-lines",
+    "href": "iterative-solvers/lec.html#both-in-ten-lines",
+    "title": "Iterative linear solvers in depth",
+    "section": "Both in ten lines",
+    "text": "Both in ten lines\nsplitting &lt;- function(A, b, M, tol = 1e-6, maxit = 1e5) {\n  x &lt;- numeric(length(b))\n  for (it in 0:maxit) {\n    r &lt;- b - (A %*% x)[, 1]                     # residual\n    if (sqrt(sum(r^2)) &lt; tol * sqrt(sum(b^2))) return(it)\n    x &lt;- x + as.vector(solve(M, r))             # x &lt;- x + M^{-1} r\n  }\n  NA                                            # not converged\n}\nm &lt;- 63; A &lt;- lap2(m); b &lt;- rep(12 / (m + 1)^2, m^2)\nc(jacobi = splitting(A, b, Diagonal(x = diag(A))), gauss_seidel = splitting(A, b, tril(A)))\n#       jacobi gauss_seidel\n#        11302         5652\n\nStop on the relative residual \\|\\mathbf{r}\\| / \\|\\mathbf{b}\\| &lt; 10^{-6}. tril keeps the lower triangle; solve with a triangular sparse M is a forward substitution.\n3969 unknowns, and still 11 302 Jacobi sweeps. Gauss–Seidel takes exactly half. Why these numbers?\n\n\nThe same function does both methods; only M changes. That is the point of the splitting view. Gauss-Seidel needing exactly half the Jacobi iterations is no accident for this matrix: its spectral radius is the square of Jacobi’s (next slide). In practice Gauss-Seidel is written as a loop that overwrites x in place, point by point; the triangular solve is the same arithmetic. Each run takes a few seconds in R; at m = 127 it takes 45 193 Jacobi sweeps.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#the-rate-is-a-spectral-radius",
+    "href": "iterative-solvers/lec.html#the-rate-is-a-spectral-radius",
+    "title": "Iterative linear solvers in depth",
+    "section": "The rate is a spectral radius",
+    "text": "The rate is a spectral radius\nThe exact solution is a fixed point, so the error \\mathbf{e}_k = \\mathbf{x}_k - \\mathbf{x} obeys \\mathbf{e}_{k+1} = T\\,\\mathbf{e}_k, \\qquad T = I - M^{-1}A. Write \\mathbf{e}_0 in eigenvectors of T: each component is multiplied by its eigenvalue every step. The slowest one wins: error \\approx \\rho(T)^k, spectral radius \\rho(T) = \\max|\\lambda_i(T)|.\nA7 &lt;- as.matrix(lap2(7))                       # 49 unknowns, h = 1/8\nTJ  &lt;- diag(49) - A7 / 4                       # Jacobi: I - D^{-1} A\nTGS &lt;- diag(49) - solve(A7 * lower.tri(A7, diag = TRUE), A7)\nrho &lt;- function(T) max(Mod(eigen(T)$values))\nc(rho(TJ), rho(TGS), cos(pi / 8), cos(pi / 8)^2)\n# [1] 0.9238795 0.8535534 0.9238795 0.8535534\n\nConverges if and only if \\rho(T) &lt; 1. Iterations per digit: \\ln 10 / (-\\ln\\rho). For the 2\\times2 of Part 3, \\rho = 2: divergence.\nFor this grid \\rho_J = \\cos \\pi h, \\rho_{GS} = \\cos^2 \\pi h. At m = 63: \\rho_J = 0.99880, 1910 sweeps per digit, \\approx 11\\,460 for six digits (measured: 11 302).\n\n\nThis is the power iteration of Power iteration and friends (Part 5) in disguise: repeatedly multiplying by T, the error lines up with the dominant eigenvector, and the residual ratio settles at rho (exercise C1 checks this: 0.99518 for m = 31). Mod() because T_GS is not symmetric and could have complex eigenvalues (here they are real). eigen() is the dense routine of How eigen() works, and big problems; fine for 49 unknowns, and the formula cos(pi h) comes from the sine modes of the Laplacian that we met in The diffusion (heat) equation by finite differences. The 2 x 2 matrix [1 2; 2 1] from Part 3 has T_J = [0 -2; -2 0], eigenvalues +2 and -2, so the error doubles. Sufficient condition for Jacobi to converge: strict diagonal dominance. The prediction 11 463 slightly overestimates because the start error does not have its full component in the slowest mode.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#why-they-slow-down-as-the-grid-is-refined",
+    "href": "iterative-solvers/lec.html#why-they-slow-down-as-the-grid-is-refined",
+    "title": "Iterative linear solvers in depth",
+    "section": "Why they slow down as the grid is refined",
+    "text": "Why they slow down as the grid is refined\n\n\n Gauss–Seidel error, m = 31.\n\n\nEach sweep only talks to neighbours: wiggly error is averaged away fast, smooth error barely moves.\n\\rho_J = \\cos\\pi h \\approx 1 - \\tfrac{\\pi^2h^2}{2}, so sweeps per digit \\approx 0.47/h^2: halve h, 4× the sweeps (and 4× the unknowns).\nThe same fact as a condition number: \\kappa(A) = \\lambda_{\\max}/\\lambda_{\\min} \\approx 4/(\\pi^2h^2) (Pivoting, norms and conditioning): 1659 at m = 63, 26 560 at m = 255.\n\n\n\nThe left panel is random error; after 10 sweeps the high-frequency part is gone; after 200 only the smoothest mode, a single bump, is left, and it decays by a factor cos^2(pi h) = 0.990 per sweep. Information travels one grid point per sweep: for the centre to learn about the walls takes at least m/2 sweeps, and averaging needs many crossings. Plain Jacobi additionally keeps a checkerboard mode with eigenvalue -cos(pi h), which is why multigrid uses Gauss-Seidel or damped Jacobi as the smoother. The eigenvalues of the 2D Laplacian (h^2-scaled) are 4 sin^2(i pi h / 2) + 4 sin^2(j pi h / 2), from about 2 pi^2 h^2 to about 8; hence kappa = cot^2(pi h / 2), about 4 / (pi^2 h^2). The same eigenvalues set the explicit time-step limit in The diffusion (heat) equation by finite differences. Total work for Jacobi is then sweeps x unknowns ~ h^-4 in 2D: refining by 2 costs 16 times.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#failure-a-small-step-is-not-a-small-error",
+    "href": "iterative-solvers/lec.html#failure-a-small-step-is-not-a-small-error",
+    "title": "Iterative linear solvers in depth",
+    "section": "Failure: a small step is not a small error",
+    "text": "Failure: a small step is not a small error\nA tempting stopping rule: stop when the iterate no longer changes.\nu &lt;- as.vector(solve(A, b))                    # reference, m = 63\nx &lt;- numeric(m^2); d &lt;- diag(A)\nfor (it in 1:1e5) {\n  step &lt;- (b - (A %*% x)[, 1]) / d             # Jacobi step\n  x &lt;- x + step\n  if (max(abs(step)) &lt; 1e-6) break             # \"nothing changes any more\"\n}\nc(it, max(abs(x - u)))\n# [1] 5.875000e+03 8.286336e-04\n\nSteps of 10^{-6}, but the error is 830 times larger: with \\rho close to 1 the iteration crawls. Error \\approx step \\cdot \\rho/(1-\\rho) = 8.29\\times10^{-4}.\nCheck: stop on the residual relative to \\|\\mathbf{b}\\|; on a test problem, compare with a direct solve; look at the residual curve: a straight line on a log scale with a shallow slope means “still far away”.\n\n\nThis is the classic failure of slowly converging linear iterations: the change per step is small because the method is slow, not because it is done. The estimate: the remaining error is the sum of all future steps, a geometric series step (rho + rho^2 + …) = step rho / (1 - rho); with rho = cos(pi/64) = 0.9988 the factor is 833, and the measured error 8.29e-4 matches it to two digits. The deficit u is about 0.88 at most, so we have three correct digits, not six. A residual test is better but not perfect either: a small residual is not a small error when A is ill-conditioned (Pivoting, norms and conditioning), error &lt;= kappa * residual in relative terms. Exercise B4 does the geometric-series estimate by hand.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#conjugate-gradient-the-krylov-idea",
+    "href": "iterative-solvers/lec.html#conjugate-gradient-the-krylov-idea",
+    "title": "Iterative linear solvers in depth",
+    "section": "Conjugate gradient: the Krylov idea",
+    "text": "Conjugate gradient: the Krylov idea\nAfter k products with A, every method on these slides has \\mathbf{x}_k in the Krylov space \\mathcal{K}_k = \\text{span}\\{\\mathbf{b}, A\\mathbf{b}, A^2\\mathbf{b}, \\dots, A^{k-1}\\mathbf{b}\\}. Jacobi uses only the newest direction with a fixed weight. CG picks the best \\mathbf{x}_k in all of \\mathcal{K}_k:\n\nFor SPD A, solving A\\mathbf{x} = \\mathbf{b} = minimising f(\\mathbf{x}) = \\tfrac12 \\mathbf{x}^TA\\mathbf{x} - \\mathbf{b}^T\\mathbf{x}. CG minimises the error in the “A-norm” over \\mathcal{K}_k.\nSearch directions \\mathbf{p}_k are A-conjugate (\\mathbf{p}_i^TA\\mathbf{p}_j = 0): a step never spoils earlier ones. Each step: one A\\mathbf{p}, two dot products, three vector updates. Memory: 4 vectors.\nBound: error \\le 2\\left(\\frac{\\sqrt\\kappa - 1}{\\sqrt\\kappa + 1}\\right)^k, so iterations \\approx \\tfrac12\\sqrt{\\kappa}\\,\\ln(2/\\text{tol}): \\sqrt\\kappa instead of \\kappa.\n\n\nKrylov space: the only vectors you can make from b with k multiplications by A. Gradient descent on f (Gradient descent, Newton and quasi-Newton, Part 9) also stays in this space but zigzags when kappa is large; CG keeps a memory of the previous direction so that the new direction is conjugate to all old ones, and the minimisation over the growing space is exact without storing it (a three-term recurrence; Lanczos in How eigen() works, and big problems is the same recurrence used for eigenvalues). In exact arithmetic CG finishes in at most n steps; that is irrelevant in practice, where we stop after far fewer. For m = 63: kappa = 1659, sqrt = 41, times ln(2e6)/2 = 7.3 gives about 300 as the bound; the measured 100 is better because the bound is a worst case over right-hand sides. What matters is the scaling: sqrt(kappa) ~ 1/h. Note: Jacobi can also be seen as using K_k, but it picks a fixed polynomial in A, not the optimal one.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#cg-against-the-splittings",
+    "href": "iterative-solvers/lec.html#cg-against-the-splittings",
+    "title": "Iterative linear solvers in depth",
+    "section": "CG against the splittings",
+    "text": "CG against the splittings\n\n\nSame chamber, m = 63, tolerance 10^{-6}: Jacobi 11 302, Gauss–Seidel 5652, CG 100, CG with an incomplete-Cholesky preconditioner 40.\nCG’s residual is not monotone (it minimises the A-norm of the error, not the residual), but the trend is steep.\n\n\nLog-log axes so that all four fit (the x axis is iteration + 1, so that the start, iteration 0, can be shown); on linear iteration axes the splittings are straight lines (linear convergence, Convergence and cost) with slope log10(rho). CG’s curve bends downwards: it gets faster as the Krylov space captures the extreme eigenvalues. Each CG iteration costs about the same as a Jacobi sweep (one sparse matrix-vector product plus a few vector operations), so the 100 vs 11 302 is a fair comparison of work. The green curve is preconditioned; we come to it in two slides. The non-monotone residual is the reason to stop on a tolerance and not on “the residual went up”.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#iterations-against-grid-size",
+    "href": "iterative-solvers/lec.html#iterations-against-grid-size",
+    "title": "Iterative linear solvers in depth",
+    "section": "Iterations against grid size",
+    "text": "Iterations against grid size\n\n\nDoubling m: Jacobi and Gauss–Seidel ×4 (slope 2), CG and preconditioned CG ×2 (slope 1), multigrid constant (5 V-cycles).\nWork = iterations × unknowns: in 2D, Jacobi \\sim h^{-4}, CG \\sim h^{-3}, multigrid \\sim h^{-2}, i.e. O(n).\n\n\nMeasured counts (dots); Jacobi and Gauss-Seidel stop at m = 127 (45 193 and 22 598 sweeps; minutes in R), and the dotted line is the prediction log(1e-6)/log(cos(pi h)) from the spectral radius. CG: 24, 50, 100, 203, 409, 827 for m = 15 … 511: exactly a factor 2 per refinement, as sqrt(kappa) ~ 1/h predicts. Incomplete-Cholesky CG lowers the constant (13 … 275) but not the slope. Multigrid needs 5 cycles from m = 15 to 511; each cycle costs a few sweeps on the fine grid. In 3D the picture is the same with n = m^3: CG on 100^3 took 203 iterations, the same as 127^2 in 2D, because the iteration count depends on h, not on the dimension.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#preconditioning",
+    "href": "iterative-solvers/lec.html#preconditioning",
+    "title": "Iterative linear solvers in depth",
+    "section": "Preconditioning",
+    "text": "Preconditioning\nSolve M^{-1}A\\mathbf{x} = M^{-1}\\mathbf{b} instead, with M \\approx A and M\\mathbf{z} = \\mathbf{r} cheap. CG then needs \\sim\\sqrt{\\kappa(M^{-1}A)} iterations. Only one line of CG changes: \\mathbf{z} = M^{-1}\\mathbf{r}.\n\nJacobi (diagonal): M = D. Free. Removes bad scaling (rows of very different size); does nothing if the diagonal is constant.\nIncomplete Cholesky, IC(0): run Cholesky but drop every fill-in entry: L keeps the pattern of A, LL^T \\approx A. Two triangular solves per iteration.\n\npcg &lt;- function(A, b, Minv = function(r) r, tol = 1e-6, maxit = 1e4) {\n  x &lt;- numeric(length(b)); r &lt;- b; z &lt;- Minv(r); p &lt;- z; rz &lt;- sum(r * z)\n  for (it in 1:maxit) {\n    Ap &lt;- (A %*% p)[, 1]; alpha &lt;- rz / sum(p * Ap)\n    x &lt;- x + alpha * p; r &lt;- r - alpha * Ap\n    if (sqrt(sum(r^2)) &lt; tol * sqrt(sum(b^2))) return(list(x = x, it = it))\n    z &lt;- Minv(r); rz_new &lt;- sum(r * z); p &lt;- z + (rz_new / rz) * p; rz &lt;- rz_new\n  }\n  list(x = x, it = NA)                                   # not converged\n}\n\nThe two extremes: M = I (plain CG, free, slow) and M = A (one iteration, but solving with M is the original problem). A preconditioner is a compromise: close enough to A that kappa(M^-1 A) is small, cheap enough that applying M^-1 costs about one matrix-vector product. For CG, M must be SPD too (then the method is equivalent to CG on a symmetrically scaled system). IC(0) in words: do the Cholesky algorithm of Structure: symmetric, banded, sparse, but wherever it would create a new non-zero (fill-in), throw it away. For the five-point matrix this gives a three-term recurrence along the grid (in the exercise). It can break down (negative number under the square root) for matrices that are not diagonally dominant; modified and shifted variants exist. Memory: one more copy of the pattern of A. Allowing more fill (IC(k), ILU(k), threshold dropping) gives a better M for more memory; multigrid used as the preconditioner gives iteration counts independent of h. With pcg and Minv = identity, this is exactly the CG of Part 3.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#experiment-what-does-a-preconditioner-buy",
+    "href": "iterative-solvers/lec.html#experiment-what-does-a-preconditioner-buy",
+    "title": "Iterative linear solvers in depth",
+    "section": "Experiment: what does a preconditioner buy?",
+    "text": "Experiment: what does a preconditioner buy?\nA second chamber: a dense cell aggregate (radius 0.3 mm) in the middle where D is 10× lower (more realistic for a drug molecule than for oxygen). A = -\\nabla\\cdot(D\\nabla\\,\\cdot), still SPD; the diagonal now varies from 0.4 to 4.\n\n\n\n\n\n\n\n\n\n\nCG iterations to 10^{-6}\nuniform, m = 63\nuniform, m = 127\naggregate, m = 63\naggregate, m = 127\n\n\n\n\nno preconditioner\n100\n203\n197\n399\n\n\nJacobi M = D\n100\n203\n103\n208\n\n\nincomplete Cholesky\n40\n73\n49\n97\n\n\n\nd &lt;- diag(A); L &lt;- ic0(A, m); Lt &lt;- t(L)          # ic0: exercise C4\nc(pcg(A, b)$it, pcg(A, b, function(r) r / d)$it,\n  pcg(A, b, function(r) as.vector(solve(Lt, solve(L, r))))$it)\n\nJacobi: useless on the uniform chamber, halves the count with a jump in D. IC: 2–4× fewer, but still doubling with m.\n\n\nThe failure case for a preconditioner is the left column: on the constant-coefficient Laplacian, D = 4I, so D^-1 A = A/4 has the same condition number and CG takes exactly the same steps. With a 10-fold jump in D, plain CG pays for the jump (kappa grows about 10x, iterations about 2x: sqrt(10) would be 3.2, the bound is pessimistic) and the diagonal scaling removes most of it. IC(0) costs two triangular solves per iteration (about twice the work of a matrix-vector product), so 40 IC iterations are roughly 120 plain CG iterations of work: a real but modest gain, and not every preconditioner pays off in wall-clock time. Check: always report both iteration count and time. Oxygen diffusion in dense tissue is perhaps 2-3 times slower than in water; a 10-fold drop is typical of larger molecules (antibodies, drugs binding to tissue), so treat the aggregate as an illustration.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#flow-through-the-chamber-a-is-not-symmetric",
+    "href": "iterative-solvers/lec.html#flow-through-the-chamber-a-is-not-symmetric",
+    "title": "Iterative linear solvers in depth",
+    "section": "Flow through the chamber: A is not symmetric",
+    "text": "Flow through the chamber: A is not symmetric\n\n\nPerfused chamber: medium flows left to right, u = 100 µm/s, Péclet number uL/D = 50; upwind differences as in Flow plus diffusion. Now A \\ne A^T.\nCG fails silently: the true residual grows to 314 after 300 iterations. Check: isSymmetric(A) before using CG.\nGMRES converges in 116 iterations; restarted GMRES(20) in 187.\n\n\nAdvection-diffusion with the upwind scheme of Flow plus diffusion: the advection term adds Pe h to the diagonal and -Pe h to the upstream neighbour only, so the matrix is no longer symmetric (Pe h = 0.78 at m = 63). The fixed concentration on the outflow wall is a simplification to keep the matrix small; the matrix structure, not the boundary details, is the point. CG’s derivation needs symmetry (the minimisation of x^T A x / 2 - b^T x only gives Ax = b for symmetric A); here it does not converge and nothing in the algorithm warns you. Nonsymmetric matrices also arise from Newton’s method on reaction-diffusion systems (the Jacobian) and from implicit time steps with flow. The perfused gel is better oxygenated (minimum 0.88) because the flow brings oxygen in.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#gmres-in-one-slide",
+    "href": "iterative-solvers/lec.html#gmres-in-one-slide",
+    "title": "Iterative linear solvers in depth",
+    "section": "GMRES in one slide",
+    "text": "GMRES in one slide\nGeneralised Minimal RESidual: the \\mathbf{x}_k \\in \\mathcal{K}_k with the smallest residual. Arnoldi builds an orthonormal basis Q of \\mathcal{K}_k (Gram–Schmidt); a tiny least-squares problem gives the best combination.\ngmres &lt;- function(A, b, k = 300, tol = 1e-6) {\n  Q &lt;- matrix(0, length(b), k + 1); H &lt;- matrix(0, k + 1, k)\n  beta &lt;- sqrt(sum(b^2)); Q[, 1] &lt;- b / beta\n  for (j in 1:k) {\n    w &lt;- (A %*% Q[, j])[, 1]                           # one product with A\n    for (i in 1:j) { H[i, j] &lt;- sum(Q[, i] * w); w &lt;- w - H[i, j] * Q[, i] }\n    H[j + 1, j] &lt;- sqrt(sum(w^2)); Q[, j + 1] &lt;- w / H[j + 1, j]\n    e1 &lt;- c(beta, rep(0, j)); Hj &lt;- H[1:(j + 1), 1:j, drop = FALSE]\n    y &lt;- qr.solve(Hj, e1)                              # (j+1) x j least squares\n    if (sqrt(sum((e1 - Hj %*% y)^2)) &lt; tol * beta) break\n  }\n  list(x = as.vector(Q[, 1:j] %*% y), it = j)\n}\n\nResidual never increases. Price: stores all k basis vectors, work per step grows with k. Restart after 20–50 steps (GMRES(k)); restarting can stall. On the symmetric chamber: GMRES 99, CG 100 (CG is the cheap version).\n\n\nThe least-squares problem is the QR approach of Least squares: normal equations vs QR (Part 4), at size (j+1) x j; qr.solve does it. Production codes update a QR of H with Givens rotations instead of re-solving. Memory: k vectors of length n; for n = 1e6 and k = 300 that is 2.4 GB, which is why restarts are used. GMRES(20) needed 187 iterations instead of 116 here; on harder problems restarted GMRES can stall completely (the residual stops decreasing), and the cure is a better preconditioner rather than a longer restart. Alternatives with short recurrences for nonsymmetric matrices: BiCGSTAB, IDR(s). Arnoldi is also what eigs/ARPACK runs for eigenvalues (How eigen() works, and big problems).",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#multigrid-in-one-picture",
+    "href": "iterative-solvers/lec.html#multigrid-in-one-picture",
+    "title": "Iterative linear solvers in depth",
+    "section": "Multigrid in one picture",
+    "text": "Multigrid in one picture\n\n\nA few Gauss–Seidel sweeps make the error smooth. Smooth error on a fine grid is wiggly on a coarser grid, where sweeps are cheap and effective again. Recurse down to a tiny grid, solve, interpolate back up.\nOne V-cycle costs a few fine-grid sweeps; 5 cycles to 10^{-6} for every m from 15 to 511: O(n) work.\n\n\nThe slide on grid refinement showed that relaxation kills high-frequency error and leaves smooth error; multigrid turns that weakness into a method. On the coarse grid (every second point, a quarter of the unknowns in 2D) the remaining error has half as many points per wavelength, so it looks rougher and relaxation works on it. The coarse problem is the residual equation A e = r, restricted. Our 40-line implementation in make-iterative-solvers-figs.R uses Gauss-Seidel V(2,2) cycles with Galerkin coarse operators and needed 5 cycles for m = 15, 31, 63, 127, 255 and 511. Algebraic multigrid (AMG) builds the coarse levels from the matrix alone, so it also works on unstructured finite-element meshes (Beyond rectangles: finite elements and flow); used as a preconditioner for CG, it is the default choice for large diffusion problems. Libraries: hypre (BoomerAMG), PETSc, pyamg (Python), AMGCL.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#tools-and-which-solver",
+    "href": "iterative-solvers/lec.html#tools-and-which-solver",
+    "title": "Iterative linear solvers in depth",
+    "section": "Tools, and which solver?",
+    "text": "Tools, and which solver?\n\n\n\n\nR\nPython\nRust\n\n\n\n\nCG, PCG\nhand-written; cPCG, Rlinsolve\nscipy.sparse.linalg.cg(A, b, M=..., callback=...)\nhand-written on sprs\n\n\nGMRES\npracma::gmres (dense), Rlinsolve\nscipy.sparse.linalg.gmres(..., restart=...)\nhand-written\n\n\nmultigrid\n—\npyamg\n—\n\n\n\n\n\n\n\n\n\n\nmatrix\nfirst choice\n\n\n\n\nsparse, 1D or moderate 2D\nsparse direct: solve(A, b), spsolve (Part 3)\n\n\nlarge 2D/3D, SPD\nCG + preconditioner (IC, multigrid)\n\n\nlarge, nonsymmetric\nGMRES(k) or BiCGSTAB + preconditioner (ILU)\n\n\n\nChecks: isSymmetric(A); report iterations and the final relative residual; did it hit maxit? Compare with a direct solve on a small grid.\n\nR has no iterative solvers in base or Matrix; the packages listed exist on CRAN but are not needed for this unit and are not on the install page. In Python, scipy’s cg and gmres take a callback (cg: called with the current iterate; gmres: with callback_type=“pr_norm”, called with the residual norm at every inner step), which is the way to count iterations; their info return value is 0 on success and positive when the iteration limit was hit. Large-scale codes (PETSc, Trilinos, hypre) offer all of these with many preconditioners. A practical rule: start with a sparse direct solver; when memory runs out or 3D grids appear, switch to preconditioned CG or GMRES, and keep the direct solver on a small grid as the test.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "iterative-solvers/lec.html#summary",
+    "href": "iterative-solvers/lec.html#summary",
+    "title": "Iterative linear solvers in depth",
+    "section": "Summary",
+    "text": "Summary\n\nWhy iterative: in 3D the Cholesky factor fills in (n^{4/3} memory, n^2 time); iterative methods need only A\\mathbf{x} and O(n) memory.\nSplittings \\mathbf{x} \\leftarrow \\mathbf{x} + M^{-1}(\\mathbf{b} - A\\mathbf{x}): Jacobi (M = D), Gauss–Seidel (M = lower triangle). Error \\sim\\rho(T)^k, T = I - M^{-1}A; converge iff \\rho &lt; 1.\nOn a diffusion grid \\rho = \\cos\\pi h, \\kappa \\approx 4/(\\pi^2h^2): smooth error decays slowly, iterations ×4 per refinement.\nCG (SPD): best point in the Krylov space, iterations \\sim\\sqrt\\kappa \\sim 1/h. Preconditioning shrinks \\kappa (Jacobi: fixes scaling only; incomplete Cholesky: 2–4×). Multigrid: constant.\nGMRES for nonsymmetric A (flow); stores its basis, restart with care. CG on a nonsymmetric matrix fails without a warning.\nChecks: relative residual, not step size; isSymmetric; maxit reached?; compare with a direct solve on a small grid.\n\n\nThe one-line version: the cost of an iterative solve is (cost per iteration) x (number of iterations), the first is O(nnz), the second is set by the condition number, and the condition number of a diffusion problem grows like 1/h^2. Preconditioners and multigrid exist to break that growth. Where this connects: Steady state in two dimensions and Reaction-diffusion and pattern formation (Part 10) produce the matrices; Beyond rectangles: finite elements and flow (Part 11) produces bigger and less regular ones, for which algebraic multigrid and Krylov methods are the standard tools inside COMSOL, FEniCS and friends.",
+    "crumbs": [
+      "Home",
+      "Part 11: Further reading (optional)",
+      "Iterative linear solvers in depth",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#about-this-lecture",
+    "href": "reaction-diffusion/lec.html#about-this-lecture",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "About this lecture",
+    "text": "About this lecture\nSo far in Part 10 molecules only moved. In an embryo they are also made and destroyed: \\partial c/\\partial t = D\\,\\partial^2 c/\\partial x^2 + f(c). The reaction term f changes what the equation can do.\n\nSynthesis–diffusion–degradation: a source and first-order decay give an exponential gradient with decay length \\lambda = \\sqrt{D/k}. We check the grid against the exact solution.\nIMEX (diffusion implicit, reaction explicit) and operator splitting: two ways to treat the two terms differently. Each has its own error and its own failure.\nTuring patterns: two species, a uniform state that is stable without diffusion becomes unstable with it. Eigenvalues of a 2 × 2 matrix per wavenumber say which wavelengths grow.\nA 2D simulation in a few seconds, and the checks that separate a real pattern from a numerical artefact.\nBiology: the Bicoid gradient and the temperature-step experiment [M1]; embryo trap arrays [M3]; Fgf8 in zebrafish [M4].\n\n\nThe last core unit of the course, and the one that uses the most earlier material: the tridiagonal Thomas solver (Part 3), stiffness and implicit steps (Part 8), eigenvalues and the phase plane (Parts 5 and 8), the FFT (Part 6). Time units in this lecture are minutes, to match the morphogen in a row of cells from Structure: symmetric, banded, sparse; lengths are µm. All data are synthetic: the model plus noise. Literature values are quoted as approximate orders of magnitude; check them against the papers before using them.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#biology-the-bicoid-gradient",
+    "href": "reaction-diffusion/lec.html#biology-the-bicoid-gradient",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Biology: the Bicoid gradient",
+    "text": "Biology: the Bicoid gradient\n\n\nbicoid mRNA sits at the anterior pole of the Drosophila egg. The protein spreads and is degraded: high at the head end, low at the tail. Target genes read the concentration as position.\nReported values (approximate): decay length \\approx 100 µm, about 1/5 of the 500 µm egg; protein lifetime tens of minutes; D from about 0.3 µm²/s (FRAP) to about 7 µm²/s (FCS).\n\n\nBicoid is the textbook morphogen. The decay length of about 100 µm (roughly 20 % of egg length) is widely reported (e.g. Houchmandzadeh et al. 2002; Gregor et al. 2007). Diffusion coefficients disagree by a factor of about 20 depending on the method (FRAP in Gregor et al. 2007, about 0.3 µm^2/s; FCS in Abu-Arish et al. 2010, about 7 µm^2/s), which is part of a long debate about how the gradient forms. These are not on our source list; treat them as approximate and check before quoting. Our running numbers, D = 100 µm^2/min (1.7 µm^2/s) and k = 0.01 per min (lifetime 100 min), are Bicoid-like in spirit: they give the right decay length, not a fitted model.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#recap-what-you-already-have",
+    "href": "reaction-diffusion/lec.html#recap-what-you-already-have",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Recap: what you already have",
+    "text": "Recap: what you already have\n\n\nMorphogen in a row of cells (Structure: symmetric, banded, sparse):\n\nexchange rate 1 per min, decay k = 0.01 per min, source in cell 1,\na tridiagonal system, solved by thomas(a, b, c, d) in O(n),\ndecay length \\sqrt{D/k} = 10 cells.\n\n\nDiffusion on a grid (The diffusion (heat) equation by finite differences, Implicit schemes and the method of lines):\n\nnodes x_i = i\\,\\Delta x, stencil (1, -2, 1)/\\Delta x^2, ghost points for no flux,\nFTCS needs D\\,\\Delta t/\\Delta x^2 \\le 1/2,\nbackward Euler: no step limit, one Thomas solve per step.\n\n\nToday: the row of cells is a diffusion grid with \\Delta x = one cell. With \\Delta x = 10 µm, exchange at 1 per min means D = 1 \\cdot 10^2 = 100 µm²/min.\n\nOne slide only; all of this was taught in its own unit. The link in the last line is worth a moment: the compartment model “each cell passes morphogen to its neighbour at rate D_cell” and the finite-difference grid “D/dx^2 times the second difference” are the same equations with D_cell = D/dx^2. So a cell-based model is a finite-difference (finite-volume) discretisation with the grid fixed by the biology, and the decay length of 10 cells is 100 µm.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#adding-a-reaction-term",
+    "href": "reaction-diffusion/lec.html#adding-a-reaction-term",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Adding a reaction term",
+    "text": "Adding a reaction term\nMass balance per slice, now with production and decay:\n\\frac{\\partial c}{\\partial t} = \\underbrace{D\\,\\frac{\\partial^2 c}{\\partial x^2}}_{\\text{diffusion}} \\; \\underbrace{-\\,k\\,c}_{\\text{decay}}, \\qquad 0 &lt; x &lt; L\n\nSource: an influx j at the anterior pole, -D\\,\\partial c/\\partial x = j at x = 0. Wall at the posterior pole: \\partial c/\\partial x = 0 at x = L.\nNumbers: D = 100 µm²/min, k = 0.01 per min, L = 500 µm; j is chosen so that c(0) \\approx 1.\nSteady state: D\\,c'' = k\\,c. Solutions e^{\\pm x/\\lambda} with \\lambda = \\sqrt{D/k} = \\sqrt{100/0.01} = 100 \\ \\text{µm}.\n\n\nThe reaction term is local: it involves only c at the same point. Diffusion couples neighbours; reaction does not. That difference is what IMEX and splitting exploit later. Exact steady state with these boundary conditions: c(x) = (j lambda / D) cosh((L - x)/lambda) / sinh(L/lambda). With j = D/lambda = 1 µm/min (in units of concentration) this gives c(0) = coth(5) = 1.0001. In the infinite embryo it is simply e^{-x/lambda}. Students who did the exercise in Structure: symmetric, banded, sparse saw the discrete version: c[11]/c[1] = 0.368, one decay length.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#the-decay-length-lambda-sqrtdk",
+    "href": "reaction-diffusion/lec.html#the-decay-length-lambda-sqrtdk",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "The decay length \\lambda = \\sqrt{D/k}",
+    "text": "The decay length \\lambda = \\sqrt{D/k}\nA molecule lives about 1/k and moves about \\sqrt{2D/k} in that time: the gradient reaches about \\lambda before it is degraded.\n\n\n\n\n\n\n\n\n\n\nD\n1/k (lifetime)\n\\lambda\n\n\n\n\nour running example\n100 µm²/min\n100 min\n100 µm\n\n\nBicoid (approx.)\n0.3–7 µm²/s\n30–50 min\n≈ 100 µm\n\n\nFgf8, zebrafish [M4] (approx.)\n≈ 50 µm²/s\n≈ 13 min (inferred)\n≈ 200 µm\n\n\n\n\nc falls by e every \\lambda. A threshold c_T is crossed at x_T = \\lambda\\ln(c_0/c_T): for c_0/c_T = 10, x_T = 230 µm.\n\\lambda depends on the ratio D/k. Double both: same gradient, formed twice as fast.\n\n\nOnly two of D, k, lambda need to be measured; the third follows. For Bicoid, lambda = 100 µm and a 50 min lifetime would need D = 1e4 / 3000 = 3.3 µm^2/s, between the FRAP and FCS values: this arithmetic is part of the debate. The Fgf8 row is approximate: an FCS diffusion coefficient of order 50 µm^2/s and a decay length of order 200 µm were reported by Yu et al. 2009 [M4]; the lifetime 200^2/50 = 800 s is our inference, not a quoted number. The last bullet matters for the temperature experiment later: if every rate scales by the same factor, the steady gradient does not change.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#steady-state-on-the-grid",
+    "href": "reaction-diffusion/lec.html#steady-state-on-the-grid",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Steady state on the grid",
+    "text": "Steady state on the grid\nD &lt;- 100; k &lt;- 0.01; L &lt;- 500               # µm^2/min, 1/min, µm\nlam &lt;- sqrt(D / k); j &lt;- D / lam            # lambda = 100 µm, c(0) close to 1\nN &lt;- 50; dx &lt;- L / N; x &lt;- (0:N) * dx; r &lt;- D / dx^2\nlo &lt;- c(0, rep(-r, N - 1), -2 * r)          # -D c'' with ghost points:\ndi &lt;- rep(2 * r, N + 1)                     #   both end rows get a 2\nup &lt;- c(-2 * r, rep(-r, N - 1), 0)\nsrc &lt;- c(2 * j / dx, rep(0, N))             # the influx enters via the ghost point\ncs &lt;- thomas(lo, di + k, up, src)           # (-D c'' + k c) = src\nexact &lt;- j * lam / D * cosh((L - x) / lam) / sinh(L / lam)\nmax(abs(cs - exact))\n# [1] 0.001247396\n\nGhost point at x = 0: c_{-1} = c_1 + 2\\Delta x\\, j/D (the slope is -j/D). At x = L: c_{N+1} = c_{N-1}.\n\n\nThe same three-diagonal layout as in Implicit schemes and the method of lines: lo, di, up are the diagonals of minus D times the second difference, so a steady solve adds k to the diagonal and an implicit step uses 1 + dt times the diagonals. The ghost point at the source end: the central difference (c_1 - c_{-1})/(2 dx) = -j/D gives c_{-1}; substituting into the stencil at node 0 doubles the coupling to c_1 and adds 2 j / dx to the right-hand side. thomas() is the function from Structure: symmetric, banded, sparse, unchanged. The matrix is not symmetric (the 2 in the end rows), but it is diagonally dominant, so Thomas without pivoting is safe.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#check-against-the-exact-solution",
+    "href": "reaction-diffusion/lec.html#check-against-the-exact-solution",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Check against the exact solution",
+    "text": "Check against the exact solution\n\n\nGhost point: error falls 4× per halving of \\Delta x (order 2). With \\Delta x = \\lambda (orange) the shape is still right to about 10 %.\nFailure: the one-sided boundary (c_1 - c_0)/\\Delta x = -j/D is only first order, and it breaks the mass balance: k\\int c\\,dx should equal j; at \\Delta x = 50 µm it is 1.32\\,j.\n\n\nTwo independent checks, as in Structure: symmetric, banded, sparse. The convergence check needs an exact solution, which we have here and rarely have in practice. The mass balance does not: at steady state everything that comes in must be degraded, k times the integral of c (trapezoid rule) equals j. With the ghost point this holds to rounding error on every grid; with the one-sided boundary it is off by 81 % at dx = 100 and 32 % at dx = 50. The lesson generalises: one sloppy first-order boundary row spoils a second-order scheme everywhere. A grid with dx = lambda is far too coarse for a quantitative answer, but it still gives the shape: the decay length sets the resolution needed, as the wavelength will for Turing patterns.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#how-fast-does-the-gradient-form",
+    "href": "reaction-diffusion/lec.html#how-fast-does-the-gradient-form",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "How fast does the gradient form?",
+    "text": "How fast does the gradient form?\n\n\nStart from c = 0. Near the source the gradient is ready in about 1/k; further away it takes longer.\nLocal accumulation time \\tau(x) = \\int_0^\\infty \\bigl(1 - c(x,t)/c_s(x)\\bigr)\\,dt. Numerically: 50.2, 100.0, 150.3 min at x = 0, 100, 200 µm. Formula for a long embryo: (1 + x/\\lambda)/(2k) = 50, 100, 150 min.\n\n\nProfiles from IMEX Euler (next slides) with dt = 1 min. Right: c divided by its steady value at three positions. The accumulation time is the area above the curve: a mean time to reach steady state, defined without choosing a threshold such as 90 %. The formula (1 + x/lambda)/(2k) for a semi-infinite domain with a constant influx is from Berezhkovskii, Sample and Shvartsman (2010); our numbers, computed with dt = 0.5 min and the trapezoid rule (exercise C2), agree to within 0.3 %. Biology: the gradient is not instantaneous. With a lifetime of 100 min the posterior part needs hours; for the real Bicoid gradient the lifetime and so the formation time are thought to be shorter. Whether the gradient is at steady state when it is read is a real question in the field.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#two-terms-two-time-scales",
+    "href": "reaction-diffusion/lec.html#two-terms-two-time-scales",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Two terms, two time scales",
+    "text": "Two terms, two time scales\nEuler on the method-of-lines system \\mathbf c' = -K_D\\mathbf c - k\\,\\mathbf c + \\mathbf s must be stable for both parts:\n\n\n\n\n\n\n\n\n\npart\nfastest rate\nEuler needs\nhere (\\Delta x = 10 µm)\n\n\n\n\ndiffusion\n4D/\\Delta x^2\n\\Delta t \\le \\Delta x^2/(2D)\n0.5 min; at \\Delta x = 1 µm: 0.005 min\n\n\ndecay\nk\n\\Delta t \\le 2/k\n200 min\n\n\nfast receptor binding\n\\approx 1 per s\n\\Delta t \\le 2 s\n\n\n\n\n\nDiffusion on a fine grid is stiff (Stiffness and implicit methods): treat it implicitly. That is a linear, tridiagonal solve.\nReactions are often nonlinear (Hill functions, u^2v) but local. Fully implicit means a Newton solve with the coupled Jacobian every step.\nIdea: implicit where it is cheap and needed, explicit where it is not.\n\n\nK_D is the positive diffusion matrix (lo, di, up). The table is the stability limit of Euler, h |lambda| &lt;= 2, for each part separately. For the Bicoid model the reaction is slow and linear, so it would be fine to do everything implicitly (backward Euler with k on the diagonal, as in Implicit schemes and the method of lines). The point is the general case: with a nonlinear reaction, backward Euler on the whole system needs Newton for systems of equations at every step, with a Jacobian that couples the diffusion band and the reaction. The receptor-binding row is an order of magnitude only: binding to abundant receptors can be much faster than degradation, and then the reaction is the stiff part.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#imex-euler-diffusion-implicit-reaction-explicit",
+    "href": "reaction-diffusion/lec.html#imex-euler-diffusion-implicit-reaction-explicit",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "IMEX Euler: diffusion implicit, reaction explicit",
+    "text": "IMEX Euler: diffusion implicit, reaction explicit\n\\frac{\\mathbf c^{n+1} - \\mathbf c^{n}}{\\Delta t} = -K_D\\,\\mathbf c^{n+1} + \\mathbf f(\\mathbf c^{n}) + \\mathbf s \\quad\\Longrightarrow\\quad (I + \\Delta t\\,K_D)\\,\\mathbf c^{n+1} = \\mathbf c^n + \\Delta t\\,\\bigl(\\mathbf f(\\mathbf c^n) + \\mathbf s\\bigr)\nimex &lt;- function(c, dt, nsteps, f) {          # f(c): reaction, explicit\n  for (n in seq_len(nsteps))\n    c &lt;- thomas(dt * lo, 1 + dt * di, dt * up, c + dt * (f(c) + src))\n  c\n}\nf &lt;- function(c) -k * c                       # linear decay\nfor (dt in c(1, 10, 50))                      # run to t = 5000 min, compare with cs\n  print(max(abs(imex(rep(0, N + 1), dt, 5000 / dt, f) - cs)))\n# [1] 2.38698e-14\n# [1] 1.121325e-14\n# [1] 1.076916e-14\n\nOne Thomas solve per step, any f, no Newton. Order 1 in time.\nThe steady state of IMEX is exact for every \\Delta t: set \\mathbf c^{n+1} = \\mathbf c^n and \\Delta t cancels.\n\n\nThe left-hand matrix is the same as for backward Euler on pure diffusion, so the Thomas call is the one from Implicit schemes and the method of lines. The reaction only enters the right-hand side, evaluated at the old values, so it can be anything: a Hill function, a two-species reaction, a lookup table. In the loop, the IMEX run to t = 5000 min reaches the steady state of the grid to rounding error, with a step of 1, 10 or even 50 minutes. That is a useful property (the long-time answer does not depend on the step), but it also means a large step can hide a wrong transient. IMEX stands for implicit-explicit; higher-order versions (IMEX Runge–Kutta, SBDF2) exist.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#when-imex-fails",
+    "href": "reaction-diffusion/lec.html#when-imex-fails",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "When IMEX fails",
+    "text": "When IMEX fails\nOne Fourier mode e^{iqx}, with linear decay f = -kc: each step multiplies it by\nG(q) = \\frac{1 - k\\,\\Delta t}{1 + D q^2\\,\\Delta t}.\n\nThe denominator \\ge 1: the diffusion part never limits \\Delta t.\nThe numerator is Euler on the reaction: |1 - k\\Delta t| \\le 1 needs \\Delta t \\le 2/k, and the uniform mode (q = 0) gets no help from diffusion.\nFast receptor binding at 1 per s: IMEX needs \\Delta t \\le 2 s, as slow as explicit diffusion on a 30 µm grid.\nCheck: compute \\Delta t\\,\\lambda for the eigenvalues \\lambda of the reaction Jacobian, and stay inside Euler’s stability region (|1 + \\Delta t\\lambda| \\le 1).\n\n\nA Fourier mode is an eigenvector of the diffusion matrix (with periodic boundaries exactly, otherwise approximately), so the scheme acts on it as on a scalar: the implicit factor 1/(1 + D q^2 dt) times the explicit factor 1 - k dt. Stiff reactions are therefore the weak point of IMEX. Remedies: treat the stiff reaction implicitly too (it is local, so this is a small Newton solve per grid point, not a big coupled one), or split the operators and solve the reaction exactly or with a stiff ODE solver. The same check reappears for the Turing model, where the reaction eigenvalues are complex: -0.1 ± 0.995i.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#operator-splitting",
+    "href": "reaction-diffusion/lec.html#operator-splitting",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Operator splitting",
+    "text": "Operator splitting\nWrite \\mathbf c' = \\mathcal A\\mathbf c + \\mathcal B\\mathbf c with \\mathcal A = diffusion (with the influx), \\mathcal B = reaction. Solve each part on its own, one after the other:\n\nLie splitting: \\Delta t of diffusion, then \\Delta t of reaction.\nStrang splitting: \\Delta t/2 reaction, \\Delta t diffusion, \\Delta t/2 reaction.\n\nfor (s in 1:nsteps) {                     # both parts done exactly here\n  lie    &lt;- exp(-kx * dt) * diffuse(lie, dt)\n  strang &lt;- exp(-kx * dt / 2) * diffuse(exp(-kx * dt / 2) * strang, dt)\n}\n\nEach sub-problem gets its best solver: diffusion by a tridiagonal solve (or FFT), the decay exactly, a stiff reaction by an ODE solver per grid point.\n\n\nkx is the decay rate at each grid point (it varies along the embryo later). diffuse(c, dt) solves the pure diffusion problem with the influx for time dt. To see the splitting error alone, we do it exactly here with the matrix exponential of the 51 x 51 diffusion matrix (Matrix::expm in R, scipy.linalg.expm, nalgebra’s exp in the exercise); in practice it is a backward Euler or Crank–Nicolson step with Thomas. The reaction step is a set of independent scalar ODEs, one per grid point; for c’ = -k c it is a multiplication by exp(-k dt). Splitting is how many large simulation codes are organised: diffusion, reaction, and in Flow plus diffusion also advection, each by its own method.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#the-splitting-error",
+    "href": "reaction-diffusion/lec.html#the-splitting-error",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "The splitting error",
+    "text": "The splitting error\n\n\n\n\n\nError at t = 60 min against the exact solution of the grid ODEs. Lie: slope 1. Strang: slope 2 (for small steps). IMEX: slope 1.\nExact sub-steps, still an error: doing \\mathcal A then \\mathcal B is not doing both at once unless they commute, \\mathcal{AB} = \\mathcal{BA}.\nHere they do not: the influx at x = 0 is decayed only in the reaction step. With no source and uniform k the error is 10^{-15} (exercise).\n\n\n\nFor matrices, e^{(A+B)h} = e^{Ah} e^{Bh} only if AB = BA; the leading error per step is h^2/2 (AB - BA), so Lie is first order globally. Strang is symmetric and the h^2 term cancels: second order. Here the Strang slope approaches 2 only for small steps (the ratio between the last two points is 3.7): at large steps the stiff diffusion modes and the boundary source reduce the order, a known effect. When do the parts commute? Uniform decay k I commutes with any diffusion matrix, so a pure decay problem has no splitting error at all. A spatially varying k(x) or a localised source breaks it. That includes the temperature step on the next slide. Check in practice: halve dt and compare, exactly as for any time stepper.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#a-temperature-step-across-the-embryo-m1",
+    "href": "reaction-diffusion/lec.html#a-temperature-step-across-the-embryo-m1",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "A temperature step across the embryo [M1]",
+    "text": "A temperature step across the embryo [M1]\n\n\n\n\nLucchetta et al. held a Drosophila embryo between two laminar streams at different temperatures (about 20 and 27 °C), so its halves develop at different speeds [M1].\n\nModel (synthetic, assumed): k doubles in the warm half; D, j unchanged.\nWhere is c = 0.1? All cold: 230.7 µm. All warm: 138.3 µm. Posterior warm: 220.2 µm. Anterior warm: 138.9 µm.\nk(x) varies, so Lie splitting has an error; IMEX and a steady solve do not care.\n\n\n\nThe experiment is described in Implicit schemes and the method of lines, which computes the temperature inside the embryo: the step is sharp, so modelling k as a step function is reasonable. The factor 2 for k over 7 degrees is an assumption (a Q10 of about 2.7), not a measurement, and we ignore the smaller change of D (about 20 % from the lower viscosity of warm water). In this toy model the threshold position is set almost entirely by the anterior half, where the gradient is high: warming the posterior moves it by 10 µm, warming the anterior by 92 µm. What the real embryo does, and how the patterning network compensates, is the subject of the paper [M1]; our model only shows how to ask the question quantitatively. The steady solve is the same Thomas call with a k vector on the diagonal.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#measuring-gradients-in-many-embryos",
+    "href": "reaction-diffusion/lec.html#measuring-gradients-in-many-embryos",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Measuring gradients in many embryos",
+    "text": "Measuring gradients in many embryos\n\nEmbryo trap arrays [M3]: a microfluidic array that holds many Drosophila embryos upright, so the Dorsal gradient around the embryo’s circumference can be imaged in hundreds of embryos at once. Many embryos → a distribution of gradient shapes, not one curve.\nFgf8 in zebrafish [M4]: a source–sink gradient. FCS gave a diffusion coefficient (order 50 µm²/s); the profile gave \\lambda (order 200 µm). Then k = D/\\lambda^2 \\approx 1.3\\cdot10^{-3} per s: degradation inferred, not measured. Blocking receptor-mediated uptake (endocytosis) flattens the gradient, as \\lambda = \\sqrt{D/k} predicts.\nExercise (synthetic): fit \\lambda to 20 noisy profiles by a straight line through \\log c: 200.3 \\pm 12.2 µm. With a background of 0.05 added: 229.9 µm. The log fit is biased by any offset.\n\n\nBoth papers are on our source list but were only read at abstract level; quote the numbers as orders of magnitude. The trap array paper [M3] imaged the Dorsal nuclear gradient, which is formed by a different mechanism (nuclear import downstream of Toll signalling), so the SDD model does not apply directly; the point here is the data: one profile per embryo, many embryos, and the need to fit each one. The circumference is a ring, so a model of it would use periodic boundary conditions, as the 2D Turing simulation below does. For Fgf8, the source-sink picture is: freely diffusing molecules from a local source, removed by receptor-mediated endocytosis in the target cells. The fit in the exercise is linear least squares from Part 4; the bias from a background offset is a classic failure: always subtract the background (or fit it as a parameter, Part 9) before taking logs.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#turings-idea-diffusion-can-destabilise",
+    "href": "reaction-diffusion/lec.html#turings-idea-diffusion-can-destabilise",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Turing’s idea: diffusion can destabilise",
+    "text": "Turing’s idea: diffusion can destabilise\nTwo species, an activator u and a substrate v (Schnakenberg model, dimensionless):\n\\frac{\\partial u}{\\partial t} = a - u + u^2 v + \\nabla^2 u, \\qquad \\frac{\\partial v}{\\partial t} = b - u^2 v + d\\,\\nabla^2 v\n\na = 0.1, b = 0.9: uniform steady state u^* = a + b = 1, v^* = b/(a+b)^2 = 0.9.\nWithout diffusion it is stable: Jacobian J = \\begin{pmatrix} 0.8 & 1 \\\\ -1.8 & -1 \\end{pmatrix}, trace -0.2, det 1 (Equilibria, stability and the phase plane).\nWith v diffusing d times faster than u: some wavelengths grow. Spots or stripes appear from noise.\n\n\nTuring (1952) showed that diffusion, which on its own smooths everything, can make a stable uniform state unstable when two species diffuse at different rates: local activation, long-range inhibition (or depletion). Here u makes more of itself (u^2 v) and uses up v; v diffuses fast, so a local peak of u drains v from a wide surrounding region and suppresses u there. Turing-type mechanisms have been proposed for digit spacing, hair and feather follicles and fish skin stripes; for most, whether the real molecules behave like the model is debated. We use Schnakenberg because its algebra is simple, not as a model of a specific tissue. Length and time are dimensionless: D_u = 1 sets the length unit.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#linear-stability-one-wavelength-at-a-time",
+    "href": "reaction-diffusion/lec.html#linear-stability-one-wavelength-at-a-time",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Linear stability, one wavelength at a time",
+    "text": "Linear stability, one wavelength at a time\nPerturb the uniform state by \\boldsymbol\\delta(t)\\cos(qx). Then \\nabla^2 \\to -q^2, and\n\\frac{d\\boldsymbol\\delta}{dt} = \\bigl(J - q^2\\,\\mathrm{diag}(1, d)\\bigr)\\,\\boldsymbol\\delta \\qquad\\text{a 2 × 2 matrix for each } q.\nJ &lt;- matrix(c(0.8, -1.8, 1, -1), 2)                 # column-wise\ngrowth &lt;- function(q, d) max(Re(eigen(J - q^2 * diag(c(1, d)))$values))\nq &lt;- seq(0, 1.5, by = 0.001)\ng &lt;- sapply(q, growth, d = 20)\nrange(q[g &gt; 0]); q[which.max(g)]; 2 * pi / q[which.max(g)]\n# [1] 0.272 0.822\n# [1] 0.487\n# [1] 12.90182\n\nUnstable for 0.272 &lt; q &lt; 0.822; fastest growth at wavelength \\approx 12.9, rate 0.263.\n\n\ncos(qx) is an eigenfunction of the second derivative with eigenvalue -q^2, so each wavelength evolves independently in the linearised problem, the same idea as the Fourier modes of the diffusion equation in The diffusion (heat) equation by finite differences. For each q we need the eigenvalues of a 2 x 2 matrix: exactly the phase-plane test from Equilibria, stability and the phase plane, now repeated for every wavelength. The curve of the largest real part against q is the dispersion relation. The pattern that emerges from small random noise is dominated, at first, by the fastest-growing wavelength. Python: numpy.linalg.eigvals; in the exercise Rust uses the trace-determinant formula.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#the-dispersion-relation",
+    "href": "reaction-diffusion/lec.html#the-dispersion-relation",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "The dispersion relation",
+    "text": "The dispersion relation\n\n\n\n\n\nd = 1, 5: every q decays. d = 10, 20: a band of unstable wavelengths.\nTrace of J - q^2\\,\\mathrm{diag}(1, d) is -0.2 - q^2(1 + d) &lt; 0 always, so instability needs \\det &lt; 0: a real eigenvalue crossing 0, a pattern that stands still.\n\\det = d\\,q^4 - (0.8d - 1)\\,q^2 + 1. Negative for some q only if d &gt; d_c = 8.57.\n\n\n\nTrace-determinant classification from Equilibria, stability and the phase plane: with negative trace, the only way to an unstable eigenvalue is a negative determinant, which makes one eigenvalue real and positive: a saddle in the (delta_u, delta_v) plane for that wavelength. The kinks in the curves are where the two eigenvalues change from a complex pair to two real ones. The determinant is a quadratic in q^2; its minimum is negative when (0.8 d - 1)^2 &gt; 4 d, i.e. d &gt; 8.57 (exercise B5). So the substrate must diffuse at least 8.6 times faster than the activator: the classic difficulty of Turing models, since similar-sized proteins diffuse at similar rates.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#a-2d-simulation-imex-with-the-fft",
+    "href": "reaction-diffusion/lec.html#a-2d-simulation-imex-with-the-fft",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "A 2D simulation: IMEX with the FFT",
+    "text": "A 2D simulation: IMEX with the FFT\nN &lt;- 80; dx &lt;- 1; dt &lt;- 0.1; d &lt;- 20; a &lt;- 0.1; b &lt;- 0.9   # periodic 80 x 80\ns &lt;- 4 / dx^2 * sin(pi * (0:(N - 1)) / N)^2\nkap &lt;- outer(s, s, \"+\")              # five-point Laplacian in Fourier space\nz &lt;- lcg(2 * N^2) - 0.5              # small noise (same numbers in Python, Rust)\nu &lt;- matrix(1 + 0.02 * z[1:N^2], N); v &lt;- matrix(0.9 + 0.02 * z[-(1:N^2)], N)\nsolve_diff &lt;- function(w, Dw)        # solves (I - dt Dw Laplacian) w_new = w\n  Re(fft(fft(w) / (1 + dt * Dw * kap), inverse = TRUE)) / N^2\nfor (n in 1:2000) {                  # to t = 200\n  f &lt;- a - u + u^2 * v; g &lt;- b - u^2 * v                   # reaction: explicit\n  u &lt;- solve_diff(u + dt * f, 1); v &lt;- solve_diff(v + dt * g, d)   # diffusion: implicit\n}\n\nPeriodic grid: fft diagonalises the five-point Laplacian, so the implicit solve is a division. 2 s in R.\n\n\nThe same IMEX Euler as in 1D; only the linear solve differs. On a periodic grid the eigenvectors of the five-point Laplacian (Steady state in two dimensions) are the 2D Fourier modes, with eigenvalues -(4/dx2)(sin2(pi k/N) + sin^2(pi l/N)): that is kap. So: transform, divide each coefficient by 1 + dt D kap, transform back. Cost O(N^2 log N) per step, much cheaper than a sparse solve. With walls instead of periodic edges one would use a sparse direct solve (Steady state in two dimensions) or a cosine transform. Explicit FTCS would need dt &lt;= dx^2/(4 d) = 0.0125 for v: 16 000 steps instead of 2000. lcg is a tiny random number generator (Park–Miller) defined in the exercise so that all three languages start from the same noise; R’s runif would do as well. fft in R does the 2D transform of a matrix; Python numpy.fft.fft2.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#the-pattern-forms",
+    "href": "reaction-diffusion/lec.html#the-pattern-forms",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "The pattern forms",
+    "text": "The pattern forms\n\n\nFrom 1 % noise: a mixture of wavelengths at t = 10, spots by t = 30, a nearly hexagonal array of 47 spots at t = 200.\n\n\nu on the 80 x 80 periodic domain. At t = 10 the perturbation has grown from 0.01 to about 0.03 in amplitude and already shows the preferred length scale; this is the linear regime, where the dispersion relation applies. By t = 30 the nonlinear terms limit the growth and spots form; between t = 30 and 200 the spots rearrange slowly into a nearly regular array. The final spot spacing (about 12, as 47 spots in a box of side 80 suggest) is close to, but need not equal, the fastest linear wavelength 12.9: the nonlinear dynamics select the final spacing. The exact arrangement of spots depends on the initial noise; the spacing does not.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#pattern-or-artefact",
+    "href": "reaction-diffusion/lec.html#pattern-or-artefact",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Pattern or artefact?",
+    "text": "Pattern or artefact?\n\n\n\\Delta x = 1 and 0.5: 47 and 46 spots. \\Delta x = 2: 63 spots, smaller and blocky. Only 6 grid points per wavelength: the grid changed the answer.\nRight: d = 5 has no Turing instability, yet \\Delta t = 0.4 produces large blobs. With \\Delta t = 0.1: uniform, as theory says.\n\n\nLeft and middle: same model, same time step, different grids. Halving dx from 1 to 0.5 changes the spot count by one (the noise is laid out differently on a different grid, so the exact count wanders slightly); going from 1 to 2 changes it by a third. The five-point Laplacian underestimates q^2 for short waves (by 7 % at the fastest wavelength with dx = 2), which shifts the band, and spots only 3-4 points wide are badly resolved. Right: a parameter set that cannot make a Turing pattern, with an IMEX step that is too large for the reaction (next slide). It is not even stationary: it oscillates in time. A student who varied only d would conclude that d = 5 makes patterns.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#why-the-time-step-made-a-pattern",
+    "href": "reaction-diffusion/lec.html#why-the-time-step-made-a-pattern",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Why the time step made a pattern",
+    "text": "Why the time step made a pattern\nfor (dt in c(0.1, 0.2, 0.4))                  # Euler factor of the q = 0 mode\n  print(max(Mod(eigen(diag(2) + dt * J)$values)))\n# [1] 0.9949874\n# [1] 1\n# [1] 1.03923\n\nThe reaction Jacobian has eigenvalues -0.1 \\pm 0.995i: a weakly damped oscillator. Euler is stable on it only for \\Delta t &lt; 0.2 (Initial value problems and Euler’s method).\nLong waves get almost no damping from implicit diffusion, so they grow by 4 % per step: the “pattern” is the time step.\nCheck: the pattern must not change when \\Delta t is halved, and |1 + \\Delta t\\lambda| \\le 1 for the reaction eigenvalues.\n\n\n\n\nd = 20, \\Delta x = 1\n\\Delta t = 0.4\n0.2\n0.1\n0.05\n\n\n\n\nspots at t = 200\n48\n48\n47\n47\n\n\n\n\n|1 + dt lambda|^2 = (1 - 0.1 dt)^2 + 0.99 dt^2 = 1 - 0.2 dt + dt^2, below 1 only for dt &lt; 0.2. The table shows the real pattern (d = 20) is robust: from dt = 0.4 to 0.05 the spot count changes by at most one, because the Turing modes grow much faster than the spurious oscillation. So the same too-large step is harmless in one parameter regime and creates a pattern in another. That is why the check is “refine and compare”, applied to every result you report, not just once. The general rule: a pattern whose wavelength or existence depends on dx or dt is a property of the method, not of the model.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#before-you-trust-a-reactiondiffusion-simulation",
+    "href": "reaction-diffusion/lec.html#before-you-trust-a-reactiondiffusion-simulation",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Before you trust a reaction–diffusion simulation",
+    "text": "Before you trust a reaction–diffusion simulation\n\nResolution: at least ~10 grid points per decay length or per pattern wavelength. Refine \\Delta x; the answer (threshold position, spot spacing, spot count) must not move.\nTime step: halve \\Delta t; nothing should change. Explicit reaction: |1 + \\Delta t\\lambda| \\le 1 for the reaction eigenvalues; explicit diffusion: D\\Delta t/\\Delta x^2 \\le 1/2 (1D), \\le 1/4 (2D).\nExact solutions and invariants: steady state vs \\lambda = \\sqrt{D/k} formula; mass balance k\\int c = j; uniform state unchanged without noise.\nLinear theory: the band of growing wavelengths from the 2 × 2 eigenvalues should match the early pattern. A pattern where theory says none: suspect the method.\nBoundaries: second-order (ghost points); periodic vs walls changes the pattern near edges.\nSplitting: Lie is first order even with exact sub-steps; prefer Strang, or check with a smaller \\Delta t.\n\n\nThese are the checks of the unit, collected. Most need no exact solution: mass balance, refinement in dx and dt, and comparison with linear theory. The linear theory check is the reaction-diffusion version of “check against a simpler model”: the dispersion relation is cheap (2 x 2 eigenvalues) and tells you which wavelengths can grow at all. A grid-scale checkerboard (wavelength 2 dx) is the signature of an unstable explicit diffusion step, as in The diffusion (heat) equation by finite differences; the right panel of the artefact slide shows that a too-large reaction step can produce smooth, convincing-looking structures instead.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#summary",
+    "href": "reaction-diffusion/lec.html#summary",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "Summary",
+    "text": "Summary\n\nReaction–diffusion: \\partial c/\\partial t = D\\,\\nabla^2 c + f(c). Synthesis–diffusion–degradation gives an exponential gradient with decay length \\lambda = \\sqrt{D/k}: 100 µm for our Bicoid-like numbers.\nOn the grid: ghost-point boundaries (order 2), one Thomas solve. Checks: exact cosh solution, mass balance k\\int c = j, refinement. A one-sided boundary is order 1 and breaks mass balance.\nIMEX Euler: diffusion implicit (no step limit), reaction explicit (any f, no Newton). Limited by Euler on the reaction: \\Delta t \\le 2/k; the steady state is exact for any \\Delta t.\nSplitting: Lie (order 1), Strang (order 2); an error even with exact sub-steps, unless the parts commute (they do not with a source or k(x)).\nTuring: per wavenumber, eigenvalues of J - q^2\\,\\mathrm{diag}(D_u, D_v). Here a band of growing wavelengths for d &gt; 8.57.\nArtefacts: a too-coarse grid changes the spot count (63 vs 47); a too-large \\Delta t makes a “pattern” where there is none. Refine both.\n\n\nThe technical summary of the unit. Every item has a check attached; the artefact slide is the one to remember. The next slide closes the course as a whole.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "reaction-diffusion/lec.html#what-you-can-now-do",
+    "href": "reaction-diffusion/lec.html#what-you-can-now-do",
+    "title": "Reaction–diffusion and pattern formation",
+    "section": "What you can now do",
+    "text": "What you can now do\n\nNumbers (Part 1): predict rounding, overflow and cancellation; read the order of a method off a log–log error plot.\nEquations (Parts 2–4): solve nonlinear equations and linear systems, use structure (banded, sparse), know when a fit or a solve is ill-conditioned.\nEigenvalues and approximation (Parts 5–7): compute eigenvalues and the SVD, interpolate, differentiate and integrate numerically, use the FFT.\nDynamics (Part 8): integrate ODEs with step-size control, recognise stiffness, classify steady states.\nFitting (Part 9): optimise, fit models to data, and ask whether the parameters are identifiable.\nSpace (Part 10): turn a PDE into a grid, choose explicit or implicit time stepping, and check the result.\nAbove all: every method can fail, and you know the check that catches it: an exact case, a refinement, an invariant, a second method.\n\n\nA one-slide wrap-up of the whole course. The common thread is the last bullet: each unit paired a method with a biological problem, showed it working, showed it failing, and gave the check. That habit transfers to any numerical tool, including ones this course did not cover. Part 11 (Further reading) has two optional decks for those who want to go further: Beyond rectangles: finite elements and flow, and Iterative linear solvers in depth.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Reaction–diffusion and pattern formation",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "diffusion-implicit/lec.html#try-it-one-time-step-three-schemes",
+    "href": "diffusion-implicit/lec.html#try-it-one-time-step-three-schemes",
+    "title": "Implicit schemes and the method of lines",
+    "section": "Try it: one time step, three schemes",
+    "text": "Try it: one time step, three schemes\n\n\n\n\nThe chamber (N = 50, dx = 10 µm), computed live with FTCS (orange), backward Euler (blue) and Crank–Nicolson (red), all with the same r = D dt / dx^2. Left: the profiles at time t; right: the error at the reference time against dt for all three, with slope-1 and slope-2 guides and the shaded region where FTCS is unstable. Start on the sharp start at r = 0.4: all three agree with the exact curve, FTCS error 8e-5 with 1500 steps. Click 0.6: FTCS overflows, the other two do not notice. Click 40 and press play: FTCS is gone in a few steps, backward Euler is smooth but lags (error 0.011 at 60 s, 15 steps), Crank–Nicolson overshoots the source at the first grid point (1.1775) and flips back and forth. Click 4 and 10: Crank–Nicolson with 60 to 150 steps beats FTCS with 1200; read the cost line. Then switch to the smooth sine: backward Euler on slope 1, Crank–Nicolson on slope 2 until it hits the space-error floor at 1.2e-4, the same picture as the previous slide, now with a marker you can move. The Embryo tab (later slides) runs the embryo model; the flow-stopped case with dt = 50 ms reproduces the Crank–Nicolson figure.",
+    "crumbs": [
+      "Home",
+      "Part 10: Diffusion and heat: finite-difference PDEs",
+      "Implicit schemes and the method of lines",
+      "Lecture (slides)"
+    ]
   }
 ]

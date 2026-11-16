@@ -281,6 +281,48 @@ All later code on this page uses `thomas`, `be_step`, `cn_step` and `exact` from
 (a) Insulated channel side ($h = 0$): the time until the channel side reaches 94.5 °C, for PDMS and glass, $H = 1$ and 2 mm. Compare with B6(b).
 (b) Heat loss to air with $h = 10$ W/(m² K) (fact 8; careful with mm and m): run 600 s and report the steady drop $95 - T_\text{top}$. Compare with B6(c).
 
+## Explore {#explore}
+
+The demo below runs the three schemes in your browser. The **Race** tab solves the chamber ($L = 500$ µm, $D = 1000$ µm²/s, $N = 50$, $\Delta x = 10$ µm) with FTCS, backward Euler and Crank–Nicolson, all with the **same** time step, set by $r = D\,\Delta t/\Delta x^2$ from 0.1 to 100 ($\Delta t$ from 0.01 to 10 s). Two starts: the **sharp start** (source $c = 1$, sink $c = 0$, empty channel; exact solution: the Fourier series, error measured at $t = 60$ s) and the **smooth sine** (both ends 0, $c = \sin(\pi x/L)$; exact solution $e^{-D(\pi/L)^2t}\sin(\pi x/L)$, error at $t = 30$ s). Panel (a) shows the profiles after $n$ steps; panel (b) the largest error at the reference time against $\Delta t$ for all three schemes, with slope-1 and slope-2 guide lines (dashed) and a marker at the current $\Delta t$. The readout gives the growth factor of the zigzag mode for each scheme (fact 5), the errors and the cost: the number of steps (one Thomas solve each for the implicit schemes) and rough operation counts, at 5, 8 and 13 operations per grid point and step for FTCS, backward Euler and Crank–Nicolson. The **Embryo** tab runs the model of B5 and C5 ($N = 200$) with backward Euler or Crank–Nicolson.
+
+The browser computes in the same IEEE doubles as R, Python and Rust, so the numbers agree with the code on this page to the digits shown.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="implicit" data-tab="race" data-ic="step" data-r="0.4"></div>
+<script src="../demos/dist/implicit.js"></script>
+```
+
+**E1. (stable or not)** On the sharp start, click $r = 0.4$, $0.5$ and $0.6$ and read the FTCS error at $t = 60$ s and its zigzag factor. Then click $r = 40$ ($\Delta t = 4$ s). What happens to each of the three schemes? Press **play** to watch it happen from $t = 0$.
+
+::: {.callout-note collapse="true" title="Answer E1"}
+FTCS: error $8.5\times10^{-5}$ at $r = 0.4$ (zigzag factor $-0.6$), $1.7\times10^{-4}$ at $r = 0.5$ (factor $-1$), and at $r = 0.6$ the error is $\infty$: the factor $-1.4$ applied 1000 times overflows, although $r$ is only 20 % above the limit. At $r = 40$ the factor is $-159$; after 15 steps the FTCS values are of order $10^{31}$ and the plot shows only vertical lines. Backward Euler (factor 0.006) gives a smooth profile, slightly behind the exact one, with error 0.011, as on the lecture slide (c = 0.7583 at 100 µm). Crank–Nicolson (factor $-0.975$) has the right shape in the middle, but near the source it zigzags: $c(10\text{ µm}) = 1.1775$, above the source value 1, error 0.20. Both implicit schemes are stable at $r = 40$; neither is as accurate as FTCS at $r = 0.4$.
+:::
+
+**E2. (orders)** Switch to the **smooth sine**. Click $r = 1$, $10$ and $100$ ($\Delta t = 0.1$, 1 and 10 s) and write down the backward Euler and Crank–Nicolson errors at $t = 30$ s. By what factor does each error change per factor 10 in $\Delta t$? Where in panel (b) does the Crank–Nicolson curve stop following slope 2, and at what level?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Backward Euler: $8.3\times10^{-4}$, $7.2\times10^{-3}$, $0.063$: a factor 8.7 per decade, close to 10, so order 1 (parallel to the slope-1 line). Crank–Nicolson: $1.2\times10^{-4}$, $7.2\times10^{-5}$, $4.7\times10^{-3}$. Between $\Delta t = 5$ and 10 s it follows slope 2 ($1.1\times10^{-3}$ to $4.7\times10^{-3}$, factor 4.4 per halving). Below about 1 s it is flat at $1.2\times10^{-4}$: the **space** error of the 10 µm grid, which no time step can remove (the floor of fig04 and C2(c)). The dip to $7\times10^{-5}$ near $\Delta t = 1$–2 s is the lucky cancellation of time and space errors. FTCS leaves the chart to the right of the dashed line (at $r = 1$ its error is $10^{126}$); it comes back only for the last few points, $\Delta t \ge 5$ s, where 3–6 steps are too few for the rounding errors that seed the zigzag to grow.
+:::
+
+**E3. (sharp data)** Back to the **sharp start**. Compare the two implicit curves in panel (b): for which $\Delta t$ is Crank–Nicolson better, and for which is backward Euler better? Then click $r = 4$ and $r = 10$ and read $c(10\text{ µm})$ and the errors. Why does the same scheme that wins on the sine lose here at large $\Delta t$?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+Crank–Nicolson wins clearly up to $\Delta t = 1$ s (error $2.7\times10^{-5}$ to $8.9\times10^{-5}$, against $1.4\times10^{-4}$ to $2.8\times10^{-3}$ for backward Euler); the curves cross near $\Delta t = 1.5$ s, and above that backward Euler is better ($r = 40$: 0.011 against 0.20; $r = 100$: 0.027 against 0.56). At $r = 4$: $c(10\text{ µm}) = 0.9762$ for both, error $2.4\times10^{-5}$ (CN) against $1.1\times10^{-3}$ (BE), the lecture's fix "CN with $\Delta t = 0.4$ s". The sharp start contains strong high modes; Crank–Nicolson multiplies them by nearly $-1$ when $r \gg 1$ ($-0.975$ at $r = 40$, $-0.78$ at $r = 4$), so they survive and flip. The sine has no high modes, so there is nothing to flip.
+:::
+
+**E4. (what a step costs)** Still on the sharp start at $t = 60$ s, read the cost line for $r = 0.4$, $r = 10$ and $r = 40$. Which run reaches an error below $10^{-4}$ with the fewest operations? How does it compare with FTCS at its limit?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+FTCS at $r = 0.5$ needs 1200 steps, about 294 000 operations, for an error of $1.7\times10^{-4}$ (at $r = 0.4$: 1500 steps, error $8.5\times10^{-5}$). Crank–Nicolson at $r = 10$ ($\Delta t = 1$ s): 60 Thomas solves, about 38 000 operations, error $8.9\times10^{-5}$: about 8 times cheaper than FTCS for a slightly smaller error. At $r = 40$ Crank–Nicolson costs only 15 solves (about 9 600 operations), but its error is 0.20; backward Euler with 15 steps (about 5 900 operations) gives 0.011. A larger step is only cheaper if the answer is still good enough; for this chamber $\Delta t \approx 1$ s with Crank–Nicolson is the sweet spot.
+:::
+
+**E5. (the embryo)** Open the **Embryo** tab (streams on, Crank–Nicolson, $\Delta t = 1$ ms, $R = 100$ µm) and press **play**. When are the two points of panel (d) within a few tenths of a degree of their final values? Read the 10–90 % width. Then set $R = 50$ and $R = 150$ µm. Finally choose **flow stopped** with $\Delta t = 50$ ms and step through $t = 50$, 100 and 150 ms, first with Crank–Nicolson, then with backward Euler.
+
+::: {.callout-note collapse="true" title="Answer E5"}
+$\tau = 12.3$ ms. The posterior point (375 µm) is at 24.3 °C after $\tau$, 26.7 °C after $4\tau = 49$ ms and 26.8 °C at 100 ms; the anterior point (125 µm) warms by 0.17 °C, by conduction from the warm half. So the profile is steady after about 50–60 ms. Width at $t = 100$ ms: 133.9 µm against $2\lambda\ln 5 = 133.8$ µm, with $\lambda = 41.6$ µm. $R = 50$ µm: $\tau = 3.1$ ms, $\lambda = 20.8$ µm, width 67.0 µm (formula 66.9). $R = 150$ µm: $\tau = 27.8$ ms, $\lambda = 62.4$ µm, width 210 µm against 201 µm: the tips are now only $4\lambda$ from the middle and the formula, which ignores them, is no longer good to 1 %. Flow stopped, Crank–Nicolson, $\Delta t = 50$ ms ($r = 1120$): after one step the step points the **wrong way** (26.4 °C at 245 µm, 20.6 °C at 255 µm), after the next the right way again (20.6 and 26.4 °C), then wrong again (26.2 and 20.8 °C), and the readout counts the points that change direction; the error against the exact series stays near 3 °C. Backward Euler with the same step is smooth, error 0.4 °C at 50 ms and 0.2 °C at 100 ms: this is fig03 of the lecture.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — the implicit systems (B1, C1)"}

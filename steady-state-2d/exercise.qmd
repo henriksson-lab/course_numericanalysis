@@ -225,6 +225,53 @@ The uptake numbers are an order-of-magnitude estimate, not taken from [B1]: an *
 (b) Without clipping, at $2\times10^5$ cells/cm² ($R_0 = 1$): how many steps, and what is the smallest value? Is it a valid answer?
 (c) With clipping, for 1, 2 and $3\times10^5$ cells/cm²: Newton steps, smallest $c$, and the fraction of the chamber below 10 µM. Plot the last field (R: [`image`](https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/image.html); Python: `plt.imshow(C.T, origin="lower")`, note the transpose).
 
+## Explore {#explore}
+
+The demo below solves the lecture's oxygen chamber in your browser: $4000 \times 2000$ µm, $D = 2000$ µm²/s, $c_0 = 200$ µM on the open edges, $R_0 = 0.5$ µM/s per $10^5$ cells/cm², $K_m = 1$ µM. Panel (a) is the top view: the colour is the oxygen level (grey where it is negative), the vermillion line the hypoxic contour, the white circle the lowest value, the pink dotted line the outline of the cells when they do not cover the whole floor. Edges drawn in blue are open to medium ($c = c_0$), grey ones are sealed (no flux, by a ghost point as in the trench). Drag on the map to move the dashed cross-section, which panel (b) shows, or switch the mouse to **paint** or **erase** cells. **grid check** replaces panel (b) by a table for $h = 200$ down to $12.5$ µm.
+
+The demo does not use the lecture's sparse direct solve and Newton but an iterative method, nonlinear SOR (successive over-relaxation): sweep through the grid in the order $k$, solve each point's five-point equation for its own value (for Michaelis–Menten a quadratic, whose non-negative root is taken), and over-relax. It solves the same equations, so the numbers agree with the lecture's to the digits shown. Every change restarts it from the current field (a warm start); the readout counts the sweeps.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="oxygen2d" data-uptake="constant" data-density="1" data-h="50"></div>
+<script src="../demos/dist/oxygen2d.js"></script>
+```
+
+**E1. (constant uptake fails)** The demo starts with constant uptake at $10^5$ cells/cm². Read the lowest oxygen level. Move the cell slider to $2\times10^5$: what happens, and on what fraction of the chamber? Find the density at which the centre first reaches 0. Then, still at $2\times10^5$, switch to **linear kc** and to **Michaelis–Menten**, and compare the lowest value and the hypoxic area of the three models.
+
+::: {.callout-note collapse="true" title="Answer E1"}
+At $10^5$ cells/cm²: min $c = 86.15$ µM in the centre, as on the lecture slide. At $2\times10^5$: $-27.71$ µM, and the field is negative (grey) on 13.7 % of the chamber: impossible, since constant uptake keeps consuming oxygen that is not there. The centre crosses 0 between $1.75$ ($+0.76$ µM) and $1.80\times10^5$ cells/cm² ($-4.94$ µM). Linear uptake ($k = R_0/c_0$) never goes negative, but gives min $81.96$ µM and no hypoxia at all: it is right at the edge and far too weak inside (18× too low at 10 µM). Michaelis–Menten gives min $0.564$ µM and 10.0 % of the chamber below 10 µM, as in C6. Only the last one is both possible and realistic.
+:::
+
+**E2. (a hypoxic threshold)** With Michaelis–Menten uptake, move the density through $1.5$, $1.7$, $1.75$, $2$, $3$ and $4\times10^5$ cells/cm² and record the lowest value and the hypoxic area. Where does the core appear, and how fast does it grow? At $2\times10^5$, move the threshold slider to 5 and 20 µM. How much does the answer depend on that convention?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+| density ($10^5$/cm²) | 1.5 | 1.7 | 1.75 | 2 | 3 | 4 |
+|---|---|---|---|---|---|---|
+| min $c$ (µM) | 32.2 | 12.4 | 8.24 | 0.564 | 0.003 | 0.000 |
+| hypoxic | 0 % | 0 % | 1.1 % | 10.0 % | 25.3 % | 33.6 % |
+
+The core appears at about $1.75\times10^5$ cells/cm², where constant uptake would just empty the centre (E1). Above that the centre is nearly anoxic ($c \ll K_m$, so those cells consume almost nothing) and the core grows quickly, then more slowly. At $2\times10^5$ the threshold matters: 5.7 % below 5 µM, 10.0 % below 10 µM, 16.3 % below 20 µM. "About 10 %" is only meaningful together with the threshold that defines it.
+:::
+
+**E3. (which edges supply the oxygen?)** At $10^5$ cells/cm² with Michaelis–Menten uptake (fully open: min $87.19$ µM), untick **left** and **right**, so that only the long edges are open. Then open them again and untick **top** and **bottom** instead. Finally seal only **top**. Where is the lowest value in each case, and why do the results differ so much? Use the 1D estimate $c_0 - R_0L^2/(8D)$ for a gap of width $L$ between two open edges.
+
+::: {.callout-note collapse="true" title="Answer E3"}
+Only top and bottom open: min $76.34$ µM, near the centre, no hypoxia. The 1D estimate across the 2 mm gap gives $200 - 0.5\cdot2000^2/16000 = 75$ µM: the short edges were adding only about 11 µM. Only left and right open: the oxygen has to travel up to 2 mm, the 1D estimate across 4 mm is $200 - 500 < 0$, and indeed 49.4 % of the chamber is hypoxic (min $0.000$). Top sealed: the sealed wall acts as a mirror, the chamber behaves like half of one twice as wide, and the lowest value moves onto the sealed wall ($y = 2000$, min $0.001$, 17.3 % hypoxic). The supply depends on the distance to the nearest open edge, so the short dimension of the chamber decides.
+:::
+
+**E4. (cells only in a spheroid)** Click **spheroid** (a disc of cells of radius 700 µm) and use Michaelis–Menten uptake with the slider at 3, then 4 $\times10^5$ cells/cm². Read the two hypoxic fractions in the readout. Which one would you report for a biological experiment? Use **paint** to add cells around the disc, and watch the hypoxic core.
+
+::: {.callout-note collapse="true" title="Answer E4"}
+At $3\times10^5$: min $7.61$ µM, hypoxic 0.7 % of the chamber but 3.4 % of the cells. At $4\times10^5$: 5.7 % of the chamber but 28.9 % of the cells. For a biological statement you want the fraction of **cells** that are hypoxic: the empty floor around the disc only passes oxygen on and dilutes the chamber-wide number. A disc of cells is much better supplied than the confluent layer at the same density (at $2\times10^5$ its centre stays at 68 µM), because the oxygen does not have to pass other consuming cells on its way in. Painting cells around the disc lowers the oxygen arriving at its edge, and the hypoxic core grows although the disc itself is unchanged.
+:::
+
+**E5. (is the grid fine enough?)** Click **reset**, choose Michaelis–Menten and $2\times10^5$ cells/cm², and open **grid check**. Compare the column of min $c$ and of the hypoxic area with the lecture's table. How do the differences between successive rows shrink? How do the numbers of sweeps grow, and what does that mean for the work per halving of $h$? Then click $h = 200$ and $h = 12.5$ and compare the cross-sections.
+
+::: {.callout-note collapse="true" title="Answer E5"}
+min $c$: 0.811, 0.609, 0.564, 0.553, 0.551 µM; hypoxic area: 13.5, 10.4, 10.0, 9.7, 9.5 %, the lecture's numbers. The differences in min $c$ fall by about 4 per halving (0.045, 0.011, 0.0027 from $h = 100$ on): second order. The area changes irregularly and slowly, since it counts grid points below a threshold. The sweeps roughly double per halving (60, 102, 192, 363, 696), and each sweep visits 4 times as many points, so SOR costs about 8 times more per halving: $h = 12.5$ µm takes on the order of a second. That growth is why large grids need better iterative methods (preconditioned CG, multigrid) or a sparse direct solve. After clicking $h = 200$ and then $12.5$, panel (b) shows the fine solution with the $h = 200$ grid as a dashed grey curve: only 21 points along $x$, yet nowhere more than 0.6 µM away from the fine curve: the curves lie on top of each other at this scale.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — 1D equations and boundaries (B1, B2, C1)"}

@@ -29,7 +29,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 24 | phase-plane | done | done | done |
 | 25 | gillespie | done | done | done |
 | 26 | optimisation-1d | done | done | done |
-| 27 | gradient-methods | done | running | |
+| 27 | gradient-methods | done | done | done |
 | 28 | nonlinear-least-squares | done | done | done |
 | 29 | identifiability | done | done | done |
 | 30 | constrained-lp | done | done | done |
@@ -76,3 +76,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - gnlm demo: extra LM stop rule → 13 passes vs lecture slide's 15 (stated on page). Data panel y-axis clips good-start curve at 4 mg/L.
 - fem-outlook: notes assume content of steady-state-2d, reaction-diffusion, iterative-solvers, advection-diffusion lecture (T-sensor 100 µm, 1000 µm/s) — verify in pass 2. Hydrogel numbers own round values.
 - advection-diffusion: cell-centred grid across channel (vs nodes elsewhere?) — reconcile with steady-state-2d. Device numbers own round values; Kamholz & Yager 2001 cited cautiously. Some code blocks 13–14 lines.
+- gradient-methods deck now 29 slides (near ceiling). optrace race/click not tested headless. design demo: typecheck error in demos/src/design/math.ts:109 reported by two workers — fix in audit.
