@@ -379,7 +379,7 @@ function mount(host: HTMLElement): void {
       htmlEl("td", "", Number.isFinite(e) ? sci(e, 1) : "–", tr);
       const dTxt = !Number.isFinite(d) ? (e === 0 ? "all" : "–") : d >= 15.5 ? "all" : Math.max(0, d).toFixed(1);
       htmlEl("td", "", dTxt, tr);
-      const ratio = r.k === 0 || !Number.isFinite(d) || d >= 15.5 || !Number.isFinite(prevD) ? ""
+      const ratio = r.k === 0 || (m === "bisection" && r.k === 1) || !Number.isFinite(d) || d >= 15.5 || !Number.isFinite(prevD) ? ""
         : m === "bisection" ? ((d - prevD) >= 0 ? "+" : "−") + Math.abs(d - prevD).toFixed(1)
           : prevD >= 0.5 ? (d / prevD).toFixed(1) : "";
       htmlEl("td", "", ratio, tr);

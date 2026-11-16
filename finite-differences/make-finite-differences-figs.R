@@ -93,19 +93,19 @@ e_c <- abs((od(t0 + h) - od(t0 - h)) / (2 * h) - d1)
 e_s <- abs((od(t0 + h) - 2 * od(t0) + od(t0 - h)) / h^2 - d2)
 fig("fig03-error-v.svg", w = 9.5, h = 5.2, expr = {
   plot(h, e_f, log = "xy", type = "l", lwd = 3, col = col_fwd, xaxt = "n", yaxt = "n",
-       ylim = c(1e-13, 1e1), xlab = "step h", ylab = "absolute error")
+       ylim = c(1e-15, 1e4), xlab = "step h", ylab = "absolute error")
   lines(h, e_c, lwd = 3, col = col_cen)
   lines(h, e_s, lwd = 3, col = col_sec)
-  logaxis(1, seq(-12, 0, by = 2)); logaxis(2, seq(-12, 0, by = 3))
+  logaxis(1, seq(-12, 0, by = 2)); logaxis(2, seq(-15, 3, by = 3))
   abline(v = c(eps^(1/2), eps^(1/3), eps^(1/4)), lty = 3, lwd = 2,
          col = c(col_fwd, col_cen, col_sec))
   legend("topright", c("forward  N'  (slope 1)", "central  N'  (slope 2)",
                        "second-derivative  N''  (slope 2)"),
          col = c(col_fwd, col_cen, col_sec), lwd = 3, bty = "n", cex = 1.15,
          bg = "white")
-  text(eps^(1/2), 1e-12, expression(epsilon^{1/2}), pos = 4, cex = 1.3, col = col_fwd)
-  text(eps^(1/3), 1e-12, expression(epsilon^{1/3}), pos = 4, cex = 1.3, col = col_cen)
-  text(eps^(1/4), 1e-12, expression(epsilon^{1/4}), pos = 4, cex = 1.3, col = col_sec)
+  text(eps^(1/2), 1e-14, expression(epsilon^{1/2}), pos = 4, cex = 1.3, col = col_fwd)
+  text(eps^(1/3), 1e-14, expression(epsilon^{1/3}), pos = 4, cex = 1.3, col = col_cen)
+  text(eps^(1/4), 1e-14, expression(epsilon^{1/4}), pos = 4, cex = 1.3, col = col_sec)
 })
 
 ## ---- fig04: noisy data, error against half-width ---------------------------------
@@ -120,12 +120,15 @@ fig("fig04-noise-v.svg", w = 9, h = 5.0, expr = {
   plot(hw, rms, log = "xy", type = "o", pch = 19, lwd = 3, cex = 1.3, col = col_cen,
        xlab = "half-width of the stencil h (hours)", ylab = "rms error of N' (OD/h)",
        ylim = c(0.002, 0.05))
-  hh <- 10^seq(log10(0.12), log10(2.3), length.out = 50)
-  lines(hh, 0.005 / (sqrt(2) * hh), lty = 2, lwd = 2, col = col_ref)
-  lines(hh, 0.0768 / 6 * hh^2 / sqrt(2), lty = 3, lwd = 2, col = col_ref)
-  text(0.2, 0.034, expression(sigma / (sqrt(2) * h)), cex = 1.3, col = col_ref, pos = 4)
-  text(1.45, 0.012, expression("~" * h^2), cex = 1.3, col = col_ref, pos = 2)
-  text(dt, rms[1], "neighbours\n(10 min)", pos = 4, cex = 1.15, offset = 0.8)
+  trunc <- sapply(k, function(k) {           # same, but with exact OD values
+    j <- (k + 1):(n - k)
+    sqrt(mean(((od(t[j + k]) - od(t[j - k])) / (2 * k * dt) - gr(t[j]))^2))
+  })
+  lines(hw, 0.005 / (sqrt(2) * hw), lty = 2, lwd = 2, col = col_ref)
+  lines(hw, trunc, lty = 3, lwd = 2, col = col_ref)
+  text(0.3, 0.012, expression("noise " * sigma / (sqrt(2) * h)), cex = 1.3, col = col_ref, pos = 4)
+  text(0.62, 0.0021, "truncation", cex = 1.3, col = col_ref, pos = 4)
+  text(dt * 1.08, rms[1] * 1.4, "neighbours (10 min)", adj = 0, cex = 1.15)
 })
 
 ## ---- fig05: smoothing before differentiating ---------------------------------------

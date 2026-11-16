@@ -239,6 +239,48 @@ at each step evaluate $f(x)$, replace the endpoint with the same sign, propose a
 
 **C6. Count function evaluations.** Wrap $f$ (and $f'$) so that each call increments a counter. Count the evaluations used to find $c_{50}$ by: `uniroot` with the default `tol` and with `tol = 1e-12` (Python: `brentq` with its default; Rust: `BrentRoot` with `tol` $10^{-4}$ and $10^{-12}$), your Newton from 1 (count $f$ and $f'$), and your secant from (1, 2). Print each error. Which is cheapest? Which is safest? (Python: also try `scipy.optimize.newton` with and without `fprime`, whose `full_output` reports `function_calls`.)
 
+## Explore {#explore}
+
+The demo below runs Newton, secant or bisection in your browser on the three equations of the lecture: the two-site dose–response $f(c) = R(c) - 0.5$, the score $S(\lambda)$ of the zero-truncated Poisson counts, and Michaelis–Menten in log substrate, $\sigma(u) - \tfrac12$ (Newton step $u - \sinh u$). Drag or click in the plot to move the start value (two start values for secant, the bracket $[a, b]$ for bisection). **Step** takes one step and draws the tangent (Newton), the chord through the last two points (secant) or the halved bracket (bisection), and where it meets zero; **Run** keeps stepping, **Back** undoes a step. The table lists each iterate, $f$ there, the error against the wanted root ($c_{50}$, $\hat\lambda$ or $u^* = 0$), the number of correct digits $-\log_{10}\big(|e|/\max(|x^*|, 1)\big)$, and how the digit count changed from the previous step (multiplied for Newton and secant, added for bisection). The digits of $x_k$ that agree with the root are in bold. The demo stops like the lecture's `newton()` and `secant()`: when a step is below $10^{-12}\,|x|$, or after 60 steps.
+
+The browser computes in the same IEEE doubles as R and Python, but `exp` and `log` may round differently in the last bit, so the last digit of an iterate can differ from the lecture.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="newtonstep" data-problem="dose" data-method="newton" data-x0="1"></div>
+<script src="../demos/dist/newtonstep.js"></script>
+```
+
+**E1. (digits double)** Click **Newton c₀ = 1** and press **Step** five times. After each step, write down the error, the number of correct digits and the "× digits" factor. Watch the tangent of each step in the plot. How far is $c_1$ from the root, and why is the first step still a big improvement? How many function evaluations did the run take?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+Errors $3.6\times10^{-1}$, $6.5\times10^{-3}$, $1.6\times10^{-6}$, $9.1\times10^{-14}$, $4.4\times10^{-16}$; correct digits $1.0$, $2.7$, $6.3$, $13.6$, all. From step 2 on the digit count is multiplied by about 2 each step ($2.8$, $2.3$, $2.1$): quadratic convergence. The bold part of $c_k$ grows the same way. The first tangent, drawn at $c_0 = 1$ where the curve is still flat and bending, overshoots to $c_1 = 3.617$, $0.36$ past the root; but the error fell from $2.3$ to $0.36$, and from there the tangent is a good model of the curve. The run stops after 5 steps with 10 evaluations ($f$ and $f'$ at each of $c_0, \ldots, c_4$), as in the lecture.
+:::
+
+**E2. (secant and bisection)** Click **secant 1, 2** and **Run**. Record the correct digits per step and the factors, the number of steps and of evaluations. Then click **bisection [1, 10]** and press **Step** ten times, recording the digits, then **Run** to the end. Which method needs the fewest evaluations of $f$ for full precision?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+Secant: digits $1.3$, $3.2$, $5.3$, $9.4$, all; factors $2.4$, $1.7$, $1.8$, close to the golden ratio $1.618$. It stops after 6 steps (the sixth step is too small to change $c$) with **8** evaluations: 2 for the start values and one per step. Bisection: digits $0.2$, $2.5$, $0.5$, $0.8$, $1.1$, $1.4$, $1.7$, $2.1$, $2.7$, $3.1$: about $+0.3$ per step, with a lucky hit at step 2 ($c = 3.25$) that is lost again at step 3. Bisection needs 42 steps and **44** evaluations. Per evaluation the secant method (8) beats Newton (10 in E1), and both beat bisection by a factor of about 5.
+:::
+
+**E3. (the MLE and a bad start)** Choose **MLE from x̄ = 1.73** and **Run**. Read the digits and factors. Then drag $\lambda_0$ to the right, in steps of 0.01, and find the largest start from which Newton still reaches $\hat\lambda$. Finally click **2 bad start** ($\lambda_0 = 3$) and **Step** through it. What happens to $\lambda_k$, and how does the run end?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+From $\bar x = 1.73$: digits $0.9$, $1.8$, $3.6$, $7.2$, $14.5$, all, with factors $2.1$, $2.0$, $2.0$, $2.0$: textbook quadratic convergence. 6 steps, 12 evaluations, $\hat\lambda = 1.218469525830127$. The last start that works is $\lambda_0 = 2.70$: its first tangent lands at $\lambda_1 = 0.0056$, just right of 0, and Newton crawls back in 15 steps. From $2.71$ on, $\lambda_1 < 0$ ($-0.009$ for $2.71$) and the run fails, in line with the lecture ("up to about 2.7"). From $\lambda_0 = 3$: $\lambda_1 = -0.47$ (the demo warns: negative rate), then $-1.07$, $-2.59$, $-6.03$, $-12.3$, $-24.7$, …: each step roughly doubles $\lambda$, because for negative $\lambda$ the score behaves like $173/\lambda$. At $\lambda_{11} = -789$, $e^{-\lambda}$ overflows, and $\lambda_{12}$ is `NaN`: diverged.
+:::
+
+**E4. (a flat tangent)** Click **1 flat tangent** ($c_0 = 10$) and **Run**. Where does $c_1$ land, what root does the run converge to, and what do the columns $f(c_k)$, error and digits say at the end? Then drag $c_0$ from $6$ to $12$ and watch where the runs end. Finally switch to **bisection** with $[a, b] = [1, 10]$.
+
+::: {.callout-note collapse="true" title="Answer E4"}
+$f'(10)$ is small, so the tangent at $c_0 = 10$ is nearly flat and meets zero at $c_1 = -5.73$. Newton then converges in 6 steps to $c = -3.04997$: the status says *converged*, $f(c_k)$ drops to $10^{-16}$, but the error against $c_{50}$ stays at $6.3$ and the digits at $0$: a confident, wrong, negative dose. Dragging $c_0$: every start up to $7.85$ reaches $c_{50}$. Above that the outcome jumps around: $c_0 = 7.9$–$8.0$ ends at a second negative root, $c = -0.2513$ (right of the pole at $c = -0.1$); $8.05$–$8.2$ comes back to $c_{50}$; $8.25$ and $8.3$ run off to $-10^{300}$ and end in `NaN`; from $8.35$ to $10.3$ every start ends at $-3.05$; most starts between $10.4$ and $11.15$ reach $c_{50}$ again, and from $11.35$ on the iterates run off to $-\infty$. Nothing in Newton's output warns you; only a range check does. Bisection on $[1, 10]$ cannot leave the bracket and always ends at $c_{50}$, at the price of 44 evaluations.
+:::
+
+**E5. (cycling)** Click **3 cycling** ($u_0 = 2.1773189849653$, $S_0 = 8.82\,K_m$) and **Run**. The demo pauses when it detects a cycle. Look at the late digits of $u_k$ in the table, then press **Run** again and let it finish. Then drag $u_0$ to $2.30$ and to $1.61$ ($S_0 = 10\,K_m$ and $5\,K_m$).
+
+::: {.callout-note collapse="true" title="Answer E5"}
+The tangents bounce between $u = 2.177$ and $-2.177$ ($S = 8.82\,K_m$ and $K_m/8.82$), and the demo pauses at step 3 with a cycling warning. The late digits are not constant: $2.17731898496530$, $\ldots 65228$, $\ldots 64363$, $\ldots 53958$: the distance from the exact cycle grows about 12-fold every two steps, because the cycle is unstable and the start is only correct to 13 digits. In this browser the iterates leave the cycle after about 25 steps and then converge to $u = 0$ at step 31; whether a run escapes towards the root or towards infinity depends on the rounding, so R may behave differently. From $u_0 = 2.30$ each step lands farther out: $-2.64$, $4.31$, $-33.0$, $1.1\times10^{14}$, then $-\infty$: diverged. From $u_0 = 1.61$: converged in 5 steps. In 0.01 steps the last start that converges is $u_0 = 2.17$; from $2.18$ on, Newton diverges. A cap on the number of steps (and printing the last iterates) is what turns an endless bounce into a message.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — Newton by hand (B1, B3)"}

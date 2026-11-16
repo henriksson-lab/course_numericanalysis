@@ -7,7 +7,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | # | Slug | A content | B demo | Sidebar/glossary |
 |--|--|--|--|--|
 | 1–4 | Part 1 | done | done | done |
-| 5 | bisection-fixedpoint | done | running | |
+| 5 | bisection-fixedpoint | done | done | done |
 | 6 | newton | done | running | |
 | 7 | newton-systems | done | running | |
 | 8 | lu | done | running | |
@@ -22,7 +22,8 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 17 | fourier-fft | running | | |
 | 18 | finite-differences | running | | |
 | 19 | quadrature | running | | |
-| 20–37 | | queued | | |
+| 20 | monte-carlo | running | | |
+| 21–37 | | queued | | |
 
 ## Audit notes (pass 3)
 
