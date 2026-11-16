@@ -388,11 +388,10 @@ function mount(host: HTMLElement): void {
       txt(14, 202, `τ = −ln(u₁)/a₀ = ${fx(s.tau, 4)} h = ${s.tau * 60 >= 1 ? fx(s.tau * 60, 1) + " min" : fx(s.tau * 3600, 0) + " s"}`, {}, COL.tele);
     } else txt(14, 202, `mean waiting time 1/a₀ = ${fx(60 / a0, 1)} min`, { class: "sm" });
     // --- which? ---
-    txt(14, 236, s ? `which?  u₂ = ${fx(s.u2, 3)},  u₂·a₀ = ${f3(s.u2 * a0)}` : "which?  reaction j with probability a_j/a₀", { "font-weight": 600 });
+    txt(14, 236, s ? `which?  u₂ = ${fx(s.u2, 3)},  u₂·a₀ = ${f3(s.u2 * a0)}` : "which?  reaction j with probability aⱼ/a₀", { "font-weight": 600 });
     const bx0 = 14, bx1 = WB - 14, by0 = 250, bh = 34;
     const bs = scale(0, a0, bx0, bx1);
     let acc = 0;
-    const label: string[] = [];
     a.forEach((aj, j) => {
       const x0 = bs(acc), x1 = bs(acc + aj);
       acc += aj;
@@ -401,7 +400,6 @@ function mount(host: HTMLElement): void {
         svgEl("rect", { x: x0, y: by0, width: Math.max(0.5, x1 - x0), height: bh, fill: cols[j], stroke: chosen ? COL.ink : "#fff", "stroke-width": chosen ? 3.5 : 1 }, svgB);
         if (x1 - x0 > 62) txt((x0 + x1) / 2, by0 + bh / 2 + 6, names[j], { "text-anchor": "middle", "font-weight": 600 }, "#111");
       }
-      label.push(`${names[j]} ${f3(aj)}`);
     });
     if (s) {
       const xm = bs(s.u2 * a0);
@@ -413,7 +411,7 @@ function mount(host: HTMLElement): void {
     a.forEach((aj, j) => {
       const sp = svgEl("tspan", {}, tv);
       sp.style.fill = cols[j]; sp.style.fontWeight = "600";
-      sp.textContent = (j ? "  " : "") + `${names[j]} ${f3(aj)}`;
+      sp.textContent = (j ? "  " : "") + `${names[j]} ${Number(aj.toPrecision(3))}`;
     });
     if (s) {
       const b = s.before, af = s.after;
@@ -550,7 +548,7 @@ function mount(host: HTMLElement): void {
     // ---------- readout ----------
     ro2.replaceChildren();
     const item = (k: string, v: string, cls = "") => { const s = htmlEl("span", cls, "", ro2); htmlEl("b", "", k + " ", s); s.append(v); };
-    let pz = p[0];
+    const pz = p[0];
     item("mean", `${f3(S.mean)} ± ${f3(S.se)} (exact ${f3(ex.mean)})`);
     item("variance", `${f3(S.variance)} (exact ${f3(ex.variance)})`);
     item("Fano", `${f3(S.fano)} (exact ${f3(ex.variance / ex.mean)})`);

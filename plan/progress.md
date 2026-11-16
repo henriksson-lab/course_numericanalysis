@@ -30,7 +30,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 25 | gillespie | done | running | |
 | 26 | optimisation-1d | done | done | done |
 | 27 | gradient-methods | done | running | |
-| 28 | nonlinear-least-squares | done | running | |
+| 28 | nonlinear-least-squares | done | done | done |
 | 29 | identifiability | done | running | |
 | 30 | constrained-lp | done | done | done |
 | 31 | diffusion-explicit | done | done | done |
@@ -73,3 +73,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - constrained-lp demo: edge rate at optimum −2/−1 per freed variable vs lecture slide '−3 per unit x₂' — same edge, different unit; consider aligning slide wording.
 - steady-state-2d: [B1] 'mechanics not nutrients' claim from contentplan, not read — verify. Grid conventions: x_i = i h, µm/s/µM, ghost points, k = i + (j−1)nx — reconcile with diffusion-implicit in pass 2.
 - diffusion-implicit: R/Python solution tabs rely on Background-defined helpers (thomas, be_step, cn_step, exact) — decide self-contained convention in audit. h = 10 W/(m²K) from memory. Read [M2], [H1] full text (agent fetched before no-network rule); [M1], [H2] headline only. Embryo 1D model is our own.
+- gnlm demo: extra LM stop rule → 13 passes vs lecture slide's 15 (stated on page). Data panel y-axis clips good-start curve at 4 mg/L.

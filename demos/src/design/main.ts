@@ -29,15 +29,15 @@ const STYLE = `
 [data-demo="${NAME}"] svg .sm { font-size: 18px; fill: #555; }
 [data-demo="${NAME}"] .dz-bottom { display: flex; flex-wrap: wrap; gap: .6em 1.2em; width: 100%; align-items: flex-start; }
 [data-demo="${NAME}"] .dz-sv { width: 380px; max-width: 100%; height: auto; flex: 0 1 380px; }
-[data-demo="${NAME}"] table.dz-t { border-collapse: collapse; font-family: ui-monospace, monospace; font-size: 17px; }
+[data-demo="${NAME}"] table.dz-t { border-collapse: collapse; font-family: ui-monospace, monospace; font-size: 18px; }
 [data-demo="${NAME}"] table.dz-t th, [data-demo="${NAME}"] table.dz-t td { padding: .08em .5em; text-align: right; }
 [data-demo="${NAME}"] table.dz-t th { font-family: system-ui, sans-serif; font-weight: 600; border-bottom: 1px solid #bbb; }
 [data-demo="${NAME}"] table.dz-t td:first-child { text-align: left; font-family: system-ui, sans-serif; }
-[data-demo="${NAME}"] .dz-info { display: flex; flex-direction: column; gap: .25em; font-size: 17px; flex: 1 1 260px; }
+[data-demo="${NAME}"] .dz-info { display: flex; flex-direction: column; gap: .25em; font-size: 18px; flex: 1 1 260px; }
 [data-demo="${NAME}"] .dz-warn { color: #b00020; font-weight: 600; }
 [data-demo="${NAME}"] .dz-key { display: inline-block; width: 22px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: .3em; }
 .reveal [data-demo="${NAME}"].qb-demo { font-size: 18px; }
-.reveal [data-demo="${NAME}"] .qb-btn { font-size: 17px; }
+.reveal [data-demo="${NAME}"] .qb-btn { font-size: 18px; }
 `;
 
 function injectStyle(): void {
@@ -71,7 +71,8 @@ const KA_GRID = Array.from({ length: NKA }, (_, i) => 10 ** (Math.log10(KA0) + i
 interface Result {
   a: Analysis;
   Smin: number;
-  prof: number[];                    // Delta = (PL - Smin) / s2 on KA_GRID
+  grid: number[];                    // KA_GRID plus the estimates of ka and ke (the two wells)
+  prof: number[];                    // Delta = (PL - Smin) / s2 on grid
   lo: number | null; hi: number | null; // profile interval (null = no bound in range)
   ts: number[]; ys: number[];
 }
@@ -79,7 +80,8 @@ interface Result {
 export function compute(samples: Sample[], noisy: boolean): Result {
   const ts = samples.map(s => s.t), ys = samples.map(s => yOf(s, noisy));
   const a = analyse(ts, ys, noisy);
-  const pl = KA_GRID.map(ka => profileKa(ts, ys, ka));
+  const grid = KA_GRID.concat(a.th.slice(0, 2).filter(v => v > KA0 && v < KA1)).sort((x, y) => x - y);
+  const pl = grid.map(ka => profileKa(ts, ys, ka));
   const Smin = Math.min(a.S, ...pl);
   const delta = (v: number) => (v - Smin) / a.s2;
   const prof = pl.map(delta);
@@ -88,17 +90,17 @@ export function compute(samples: Sample[], noisy: boolean): Result {
   const lk = Math.log(a.th[0]);
   if (a.th[0] > KA0 && a.th[0] < KA1) {
     let i0 = 0;
-    KA_GRID.forEach((k, i) => { if (Math.abs(Math.log(k) - lk) < Math.abs(Math.log(KA_GRID[i0]) - lk)) i0 = i; });
+    grid.forEach((k, i) => { if (Math.abs(Math.log(k) - lk) < Math.abs(Math.log(grid[i0]) - lk)) i0 = i; });
     const f = (l: number) => delta(profileKa(ts, ys, Math.exp(l))) - CRIT;
     const bisect = (a0: number, b0: number) => {      // f(a0) < 0 < f(b0)
       let x0 = a0, x1 = b0;
       for (let it = 0; it < 30; it++) { const m = (x0 + x1) / 2; if (f(m) < 0) x0 = m; else x1 = m; }
       return Math.exp((x0 + x1) / 2);
     };
-    for (let i = i0 + 1; i < NKA; i++) if (prof[i] > CRIT) { hi = bisect(Math.max(lk, Math.log(KA_GRID[i - 1])), Math.log(KA_GRID[i])); break; }
-    for (let i = i0 - 1; i >= 0; i--) if (prof[i] > CRIT) { lo = bisect(Math.min(lk, Math.log(KA_GRID[i + 1])), Math.log(KA_GRID[i])); break; }
+    for (let i = i0 + 1; i < grid.length; i++) if (prof[i] > CRIT) { hi = bisect(Math.max(lk, Math.log(grid[i - 1])), Math.log(grid[i])); break; }
+    for (let i = i0 - 1; i >= 0; i--) if (prof[i] > CRIT) { lo = bisect(Math.min(lk, Math.log(grid[i + 1])), Math.log(grid[i])); break; }
   }
-  return { a, Smin, prof, lo, hi, ts, ys };
+  return { a, Smin, grid, prof, lo, hi, ts, ys };
 }
 
 // ---- formatting ----
@@ -323,13 +325,13 @@ function mount(host: HTMLElement): void {
     svgEl("line", { x1: C.x0, x2: C.x1, y1: cy(CRIT), y2: cy(CRIT), stroke: COL.grey, "stroke-width": 2, "stroke-dasharray": "6 4" }, gStatic);
     txt(C.x1 - 4, cy(CRIT) - 6, "3.84", { "text-anchor": "end", class: "sm" });
     const gC = svgEl("g", { "clip-path": `url(#${clipC})` }, gStatic);
-    const profLine = (p: number[]) => KA_GRID.map((k, i) => `${cx(Math.log(k)).toFixed(1)},${cy(Math.max(-0.5, Math.min(30, p[i]))).toFixed(1)}`).join(" ");
-    if (st.preset !== "full") svgEl("polyline", { points: profLine(gr.prof), fill: "none", stroke: COL.grey, "stroke-width": 2 }, gC);
+    const profLine = (g: number[], p: number[]) => g.map((k, i) => `${cx(Math.log(k)).toFixed(1)},${cy(Math.max(-0.5, Math.min(30, p[i]))).toFixed(1)}`).join(" ");
+    if (st.preset !== "full") svgEl("polyline", { points: profLine(gr.grid, gr.prof), fill: "none", stroke: COL.grey, "stroke-width": 2 }, gC);
     if (!a.singular) {
       const wald = KA_GRID.map(k => ((k - a.th[0]) / a.se[0]) ** 2);
-      svgEl("polyline", { points: profLine(wald), fill: "none", stroke: COL.red, "stroke-width": 2.5, "stroke-dasharray": "3 4" }, gC);
+      svgEl("polyline", { points: profLine(KA_GRID, wald), fill: "none", stroke: COL.red, "stroke-width": 2.5, "stroke-dasharray": "3 4" }, gC);
     }
-    svgEl("polyline", { points: profLine(r.prof), fill: "none", stroke: COL.blue, "stroke-width": 3.5 }, gC);
+    svgEl("polyline", { points: profLine(r.grid, r.prof), fill: "none", stroke: COL.blue, "stroke-width": 3.5 }, gC);
     if (r.lo !== null || r.hi !== null) {
       const x0 = r.lo !== null ? cx(Math.log(r.lo)) : C.x0, x1 = r.hi !== null ? cx(Math.log(r.hi)) : C.x1;
       svgEl("line", { x1: x0, x2: x1, y1: cy(0) - 4, y2: cy(0) - 4, stroke: COL.blue, "stroke-width": 6, "stroke-opacity": 0.5 }, gC);

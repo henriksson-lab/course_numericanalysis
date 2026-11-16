@@ -49,7 +49,7 @@ const STYLE = `
 .reveal [data-demo="${NAME}"].qb-demo { font-size: 18px; margin: 0; gap: .25em; }
 .reveal [data-demo="${NAME}"] .qb-btn { font-size: 16px; padding: .12em .5em; }
 .reveal [data-demo="${NAME}"] .or-main { flex-wrap: nowrap; }
-.reveal [data-demo="${NAME}"] .or-map { flex: 0 0 500px; max-width: 500px; }
+.reveal [data-demo="${NAME}"] .or-map { flex: 0 0 590px; max-width: 590px; }
 .reveal [data-demo="${NAME}"] .or-tab th, .reveal [data-demo="${NAME}"] .or-tab td { padding: 0 .35em; }
 `;
 

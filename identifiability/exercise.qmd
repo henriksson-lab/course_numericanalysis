@@ -268,6 +268,46 @@ R's [`vcov`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/vcov.html)
 (a) Write `se_design(tt, p, sigma)` that returns the predicted SE of $\log k_a, \log k_e, \log V$ for sample times `tt` at a guessed $\theta$ (no data needed). Compare three 6-sample designs: late $(3, 4, 6, 8, 10, 12)$, early $(0.5, 1, 2, 4, 8, 12)$, peak $(1, 2, 3, 4, 6, 12)$, at $\theta = (1, 0.2, 20)$, $\sigma = 0.1$.
 (b) Fit the samples from 3 h with a prior $\log k_a \sim N(\log 1.2, \tau^2)$ as an extra residual (fact 8), for $\tau = 0.1, 0.25, 0.5, 1, 2$. Use [`minpack.lm::nls.lm`](https://cran.r-project.org/package=minpack.lm) with a residual function (Python: `least_squares`; Rust: the LM helper). Report $\hat k_a$ and the SE of $\log k_a$ from the augmented Jacobian. Compare the SE with $\tau$: when is the answer mostly prior?
 
+## Explore {#explore}
+
+The demo uses the model and data of this exercise. Every sample keeps its own noise value from the course data, so **all 12 samples** and **from 3 h** reproduce the fits of the lecture; with **noise** switched off the data are the true curve and the SEs use $\sigma = 0.1$, as in `se_design` (C7). Drag a sample (black dot) along the time axis. Panel (b) shows $\Delta S/s^2$ over $(k_a, k_e)$ with $V$ re-fitted (blue, thick at 3.84) and the Wald ellipse from the $(k_a, k_e)$ block of $s^2(J^TJ)^{-1}$ at the same level (red); (c) the profile of $k_a$ ($k_e$ and $V$ re-fitted for each $k_a$) with the Wald parabola (red dotted); (d) the singular values of the log-parameter Jacobian. Grey: the 12-sample design, for comparison.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="design" data-preset="full"></div>
+<script src="../demos/dist/design.js"></script>
+```
+
+**E1. (the bowl is fine)** With **all 12 samples**, read off the estimates, SEs, correlations and singular values, and compare them with the Background block and C4. Does the red ellipse in (b) match the thick blue contour? Compare the profile and Wald intervals in (c). Where is the second well of the profile, and how deep is it?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+$k_a = 1.015 \pm 0.0624$, $k_e = 0.1906 \pm 0.0104$, $V = 20.22 \pm 0.716$; correlations $-0.82$, $0.90$, $-0.91$; singular values $8.78, 3.48, 1.01$ with $\kappa = 8.73$, and $v_3 = (0.69, -0.60, 0.40)$: all as in the Background block and C4. The ellipse lies almost on the 3.84 contour, a tilted valley (corr $-0.82$). Profile interval $(0.90, 1.14)$, Wald $(0.89, 1.14)$: the quadratic picture holds. The profile has a second well at $k_a = 0.19$, the flip-flop solution ($k_a$ and $k_e$ swapped), with $\Delta = 0$: exactly as deep as the first. The hump between them is what keeps a local fit on one side.
+:::
+
+**E2. (the sparse design)** Click **from 3 h**. Read the SE of $k_a$, the Wald interval, the profile interval and the level at which the profile levels off on the right. What happens to the 3.84 contour in (b) for large $k_a$, and what does the ellipse do instead? Which singular value dropped most, and what is $v_3$?
+
+::: {.callout-note collapse="true" title="Answer E2"}
+$k_a = 1.122 \pm 0.406$ (36 %), Wald $(0.33, 1.92)$, profile $(0.68, \infty)$: the profile levels off at $1.07$ on the right, below 3.84, so there is no upper bound (C5). In (b) the 3.84 contour is open to the right: for large $k_a$ the valley runs horizontally at $k_e \approx 0.17$–$0.23$, every fast absorption fits. The ellipse must close, so it ends at $k_a = 1.92$, and on the left it reaches $0.33$, below the true lower bound 0.68: wrong at both ends. $\sigma_3$ fell from 1.01 to 0.211 ($\sigma_1$ only from 8.78 to 6.03), $\kappa = 28.6$, and $v_3 = (0.98, -0.19, 0.06)$ is almost pure $\log k_a$ with SE $0.369$ along it.
+:::
+
+**E3. (move one sample)** Still on **from 3 h**, drag the 3 h sample to 2 h, then 1 h, then 0.5 h (the times snap to 0.05 h). Each time, note the SE of $k_a$, $\sigma_3$ and the profile interval, and watch the ellipse and the profile. How much did moving a single sample buy, at the same cost of six samples?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+At 2 h: $\mathrm{SE}(k_a) = 0.160$ (15 %), $\sigma_3 = 0.464$, profile $(0.80, 1.49)$: the profile now closes on the right, but it is still clearly asymmetric (Wald $(0.73, 1.36)$). At 1 h: $0.093$ (9 %), $\sigma_3 = 0.682$, profile $(0.87, 1.24)$ against Wald $(0.85, 1.22)$. At 0.5 h: $0.083$ (8 %), $\sigma_3 = 0.746$, profile $(0.89, 1.22)$, Wald $(0.88, 1.20)$. The ellipse shrinks from a long cigar to a small, tilted one, and the 3.84 contour closes around it. One sample moved from 3 h to 1 h divides the SE of $k_a$ by more than 4, and with 6 samples we come close to the 12-sample value 0.062. The profile shows the same as $\sigma_3$: the weakest direction got stronger, and the quadratic picture became valid again.
+:::
+
+**E4. (before the experiment)** Untick **noise**: the data are now the true curve and the SEs use $\sigma = 0.1$. Compare **from 3 h** with **spread**: read SE/est. of $k_a$ (for small values this is the SE of $\log k_a$) and compare with the lecture slide "Design in code". Then click **all late**, first without and then with noise. What do the SEs, the correlations and (d) say?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+From 3 h: SE/est. of $k_a$ 40 %, of $k_e$ 11 %, of $V$ 6.1 %; spread: 10 %, 8.7 %, 5.9 %. These are the lecture's $0.398, 0.115, 0.061$ and $0.101, 0.087, 0.059$: the design can be judged from $J$ at a guess of $\theta$, with no data. Without noise the profile of "from 3 h" still levels off (at 0.98), so the problem is the design, not the noise realisation. All late (7–12 h) without noise: $\mathrm{SE}(k_a) = 10.7$ (1100 %), $\mathrm{SE}(V) = 41$, $r(k_e, V) = -1.00$, $\sigma_3 = 0.0092$, $\kappa = 496$. With noise the fit wanders off to $k_a = 2.64$, where $\sigma_3 \approx 0$: $J$ is singular and there are no standard errors at all. Only the tail $A e^{-k_e t}$ is seen, two numbers for three parameters.
+:::
+
+**E5. (only the rising phase)** Click **first 3 h** (with noise). Which parameters are now badly determined? Look at the correlations and at the profile in (c): what happened to the two flip-flop wells?
+
+::: {.callout-note collapse="true" title="Answer E5"}
+Now $k_e$ ($0.181 \pm 0.105$, 58 %) and $V$ ($20.7 \pm 4.4$, 21 %) are poor, $k_a$ is at 28 %; the correlations are $-0.97$, $0.99$, $-0.99$, and $v_3 = (0.40, -0.86, 0.31)$ is mostly $\log k_e$. Three hours do not show the elimination. In (c) the hump between the two wells is only about 1.7, below 3.84, so the profile interval is $(< 0.05, 1.60)$: it contains the flip-flop branch. With only the rising phase the data cannot even tell which rate is absorption and which is elimination. Early samples fix $k_a$, late samples fix $k_e$: a good design has both, as **spread** does.
+:::
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — Jacobians by hand (B1, B3)"}

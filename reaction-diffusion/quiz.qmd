@@ -1,0 +1,155 @@
+---
+title: "Quiz: reaction–diffusion and pattern formation"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of reaction–diffusion models and how to simulate them. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** A morphogen has $D = 10$ µm²/s and a lifetime of 10 min. Roughly how far does its steady gradient reach (its decay length)? At what distance has it fallen to 1 % of its value at the source, in a long tissue?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\lambda = \sqrt{D/k}$ with $k = 1/\text{lifetime}$; convert minutes to seconds. $c = c_0 e^{-x/\lambda}$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$k = 1/600$ per s, $\lambda = \sqrt{10 \cdot 600} = \sqrt{6000} \approx 77$ µm. 1 % at $x = \lambda\ln 100 = 4.6\,\lambda \approx 355$ µm.
+:::
+
+---
+
+**Q2.** Which of these makes a synthesis–diffusion–degradation gradient twice as long: doubling $D$; halving $k$; doubling $D$ **and** halving $k$; doubling both $D$ and $k$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$\lambda$ depends on the ratio $D/k$, under a square root.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Only doubling $D$ and halving $k$ together: $D/k$ goes up 4×, $\lambda$ 2×. Doubling $D$ or halving $k$ alone gives $\sqrt2 \approx 1.41$×. Doubling both leaves $\lambda$ unchanged (the gradient forms twice as fast, and with a fixed influx its amplitude $j/\sqrt{Dk}$ halves).
+:::
+
+---
+
+**Q3.** Two students put the no-flux/influx boundary at $x = 0$ on the grid in different ways: one with a ghost point, one with the one-sided difference $(c_1 - c_0)/\Delta x = -j/D$. Both get a plausible-looking exponential. Name two checks that tell the versions apart, and what each shows.
+
+::: {.callout-tip collapse="true" title="Hint"}
+One check needs an exact solution, one does not.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(1) **Grid refinement**: halving $\Delta x$ cuts the error by 4 with the ghost point (order 2) but only by 2 with the one-sided boundary (order 1); without an exact solution, compare successive refinements. (2) **Mass balance**: at steady state $k\int c\,dx$ must equal the influx $j$. The ghost-point scheme satisfies it to rounding on every grid; the one-sided version is off (32 % at $\Delta x = 50$ µm in the lecture).
+:::
+
+---
+
+**Q4.** In IMEX Euler for $\partial c/\partial t = D\,\partial^2 c/\partial x^2 + f(c)$, which term is treated implicitly and which explicitly? Give one reason for each choice.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Think about which term is stiff, which is nonlinear, and which couples neighbouring grid points.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Diffusion implicitly: on a fine grid it is stiff (fastest rate $4D/\Delta x^2$), and it is linear, so the implicit step is one tridiagonal (Thomas) or FFT solve. The reaction explicitly: it may be nonlinear, and treating it implicitly would need a Newton solve every step; it is local, so evaluating it at the old values costs one function call per point.
+:::
+
+---
+
+**Q5.** An IMEX simulation of a ligand that is taken up by receptors at an effective rate $k = 5$ per min uses $\Delta t = 0.5$ min. The grid is fine and diffusion is fast. Is the step stable? What would you change?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Implicit diffusion does not help the reaction. Look at $1 - k\Delta t$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$k\Delta t = 2.5 > 2$, so $|1 - k\Delta t| = 1.5$: the explicit reaction is unstable, and the uniform mode (which diffusion does not damp) grows with alternating sign. Either take $\Delta t < 2/k = 0.4$ min (and smaller still for accuracy, e.g. $\Delta t \le 0.1$), or treat the uptake implicitly / exactly (it is local and linear: $c \to c\,e^{-k\Delta t}$ in a splitting scheme).
+:::
+
+---
+
+**Q6.** Lie splitting with exact sub-steps (exact diffusion, exact decay) is still only first order. For which of these problems is it exact: (a) uniform decay, no source; (b) uniform decay with a source at one end; (c) decay rate that changes along the embryo?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The splitting error comes from $\mathcal{AB} - \mathcal{BA}$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Only (a). Uniform decay is $kI$, which commutes with the diffusion matrix, so $e^{(A - kI)t} = e^{At}e^{-kt}$. In (b) the source is decayed only in the reaction step, so order matters; in (c) $\mathrm{diag}(k_i)$ does not commute with diffusion ($AK \ne KA$ when the $k_i$ differ).
+:::
+
+---
+
+**Q7.** An IMEX run with $\Delta t = 50$ min reaches exactly the same steady gradient as one with $\Delta t = 1$ min. Does that show that $\Delta t = 50$ min is a good choice?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Write down the fixed point of the IMEX step.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. At a fixed point $\mathbf c^{n+1} = \mathbf c^n$, and $\Delta t$ cancels from $(I + \Delta t K_D)\mathbf c = \mathbf c + \Delta t(\mathbf f(\mathbf c) + \mathbf s)$: the steady state is the same for **every** stable step. The transient (how fast the gradient forms, the accumulation times) can still be badly wrong. Check the time course by halving $\Delta t$.
+:::
+
+---
+
+**Q8.** What is a Turing instability, and how do you compute whether a two-species model has one?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Two conditions: without diffusion, and with diffusion. One matrix per wavenumber.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A uniform steady state that is **stable without diffusion** (all eigenvalues of the reaction Jacobian $J$ have negative real part) but **unstable with diffusion** for some wavelengths. For each wavenumber $q$, compute the eigenvalues of the 2 × 2 matrix $J - q^2\,\mathrm{diag}(D_u, D_v)$; the largest real part against $q$ is the dispersion relation. If it is positive for a band of $q$, perturbations with those wavelengths grow into a pattern, initially at the fastest-growing wavelength.
+:::
+
+---
+
+**Q9.** For the Schnakenberg model with $a = 0.1$, $b = 0.9$, can there be a Turing pattern when both species diffuse equally fast ($d = 1$)? Why?
+
+::: {.callout-tip collapse="true" title="Hint"}
+$J = \begin{pmatrix} 0.8 & 1 \\ -1.8 & -1\end{pmatrix}$. With $d = 1$, $J - q^2 I$ has the same eigenvectors as $J$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+No. With equal diffusion, $J - q^2 I$ has eigenvalues $\lambda_J - q^2$: diffusion only shifts every eigenvalue further left, so a stable state stays stable. In general, $\det(J - q^2\,\mathrm{diag}(1, d)) = d\,q^4 - (0.8d - 1)q^2 + 1$ can only become negative if $d > 8.57$: the substrate must diffuse much faster than the activator.
+:::
+
+---
+
+**Q10.** Your 2D simulation shows a fine checkerboard: high and low values alternate from one grid point to the next. Turing pattern or artefact? What do you check?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is the wavelength of a checkerboard, in units of $\Delta x$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+An artefact. A checkerboard has wavelength $2\Delta x$, the shortest the grid can hold, and it is set by the grid, not the model. It is the signature of an unstable explicit diffusion step ($D\Delta t/\Delta x^2$ above $1/4$ in 2D). Check: compute $D\Delta t/\Delta x^2$ for every species; halve $\Delta t$ and $\Delta x$, and see whether the wavelength follows the grid; compare with the unstable band from the dispersion relation.
+:::
+
+---
+
+**Q11.** A pattern has 47 spots with $\Delta x = 1$ and 63 spots with $\Delta x = 2$. With $\Delta x = 0.5$ it has 46. Which grid would you trust, and how would you report the result?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look for the point where refining stops changing the answer.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\Delta x = 1$ (or 0.5): halving the spacing from 1 to 0.5 changes the count by one, which is within the variation from a different noise layout, while $\Delta x = 2$ (6 points per wavelength) is clearly under-resolved. Report a grid-independent statistic (spot count or spacing, about 12) together with the refinement test, not the exact positions of the spots, which depend on the initial noise.
+:::
+
+---
+
+**Q12.** With $d = 5$ the Schnakenberg model has no Turing instability, yet IMEX with $\Delta t = 0.4$ produces large moving blobs. Explain.
+
+::: {.callout-tip collapse="true" title="Hint"}
+The reaction Jacobian has eigenvalues $-0.1 \pm 0.995i$. Which modes does implicit diffusion fail to damp?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The reaction part is explicit Euler, which is stable on $\lambda = -0.1 \pm 0.995i$ only for $\Delta t < 0.2$ ($|1 + \Delta t\lambda|^2 = 1 - 0.2\Delta t + \Delta t^2$). At $\Delta t = 0.4$ the factor is 1.039, so long waves and the uniform mode, which implicit diffusion hardly damps, grow by about 4 % per step and saturate in nonlinear oscillating blobs. With $\Delta t = 0.1$ the solution stays uniform, as theory says. The "pattern" is made by the time step.
+:::
