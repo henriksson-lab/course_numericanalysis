@@ -17,7 +17,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 12 | svd | done | done | done |
 | 13 | power-iteration | done | running | |
 | 14 | eigen-algorithms | running | | |
-| 15 | polynomial-interpolation | running | | |
+| 15 | polynomial-interpolation | done | running | |
 | 16 | splines | done | running | |
 | 17 | fourier-fft | running | | |
 | 18 | finite-differences | done | done | done |
@@ -44,3 +44,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - finite-differences: optim default BFGS gradient = central diff with ndeps=1e-3 — verify. Install: numDeriv.
 - splines: tradeSeq / Monocle use spline trends — from memory, verify.
 - monte-carlo: from memory — RANDU history, R 3.6 sample() change, ChaCha12 as StdRng, Bellman 'curse of dimensionality', bedtools shuffle / GAT / regioneR. Slides 13–18 figures not seen in browser.
+- polynomial-interpolation: figure slides not screenshotted (Chrome hung) — check overflow.
