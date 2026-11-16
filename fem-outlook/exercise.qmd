@@ -33,7 +33,7 @@ with $f = 0$. The exact solution is $u(x) = \cosh\big((L-x)/\lambda\big)/\cosh(L
 3. **Element matrices** for an element of length $h_e$ (constant $D$, $k$, $f$ on it):
    $$\frac{D}{h_e}\begin{pmatrix} 1 & -1\\ -1 & 1\end{pmatrix} + \frac{k h_e}{6}\begin{pmatrix} 2 & 1\\ 1 & 2\end{pmatrix}, \qquad \frac{f h_e}{2}\begin{pmatrix}1\\1\end{pmatrix}.$$
    **Lumped** version: replace the uptake block by $\frac{k h_e}{2}\begin{pmatrix}1&0\\0&1\end{pmatrix}$.
-4. **Assembly.** Add the block of element $e$ into rows and columns $e, e+1$. Then move the column of the known $u_0$ to the right-hand side and drop row 0. The result is tridiagonal and symmetric: solve with the **Thomas algorithm** (from *Structure: symmetric, banded, sparse*).
+4. **Assembly.** Add the block of element $e$ into rows and columns $e, e+1$. Then move the column of the known $u_0$ to the right-hand side and drop row 0. The result is tridiagonal and symmetric: solve with the **Thomas algorithm** (from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd)).
 5. **Graded mesh.** $x_i = L\,(i/N)^2$ puts short elements near $x = 0$ (first one $L/N^2$) and long ones at depth.
 
 The solver in each language. R and Rust use the Thomas algorithm; Python uses [`scipy.linalg.solve_banded`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_banded.html), which takes the three diagonals in a 3-row array. `D`, `k` and `f` may be single numbers or one value per element.
@@ -255,7 +255,7 @@ $$-\frac{2}{h_1 + h_2}\left(\frac{u_2 - u_1}{h_2} - \frac{u_1 - u_0}{h_1}\right)
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — hats and integrals (B1)"}
-On an element $[x_j, x_{j+1}]$ only $\varphi_j$ and $\varphi_{j+1}$ are non-zero, so $u_h$ is the straight line between $(x_j, u_j)$ and $(x_{j+1}, u_{j+1})$. The integral of a straight line over an element is its length times the mean of the end values (the trapezoid rule of *Numerical integration*, here exact).
+On an element $[x_j, x_{j+1}]$ only $\varphi_j$ and $\varphi_{j+1}$ are non-zero, so $u_h$ is the straight line between $(x_j, u_j)$ and $(x_{j+1}, u_{j+1})$. The integral of a straight line over an element is its length times the mean of the end values (the trapezoid rule of [*Numerical integration*](../quadrature/lec.qmd), here exact).
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 2 — assembly (B2, B3)"}
@@ -263,11 +263,11 @@ Write each element matrix in its own 2 × 2, then add: node $i$ gets the bottom-
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 3 — the solver (C1–C3)"}
-The Thomas convention is the one from *Implicit schemes and the method of lines*: all four vectors of length $m$, `a[1]` and `c[m]` unused. Python's [`solve_banded((1, 1), ab, rhs)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_banded.html) wants the superdiagonal in row 0 (first entry unused), the diagonal in row 1 and the subdiagonal in row 2 (last entry unused). For the slab use [`cosh`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Hyperbolic.html) and `tanh` (Python: [`np.cosh`](https://numpy.org/doc/stable/reference/generated/numpy.cosh.html)).
+The Thomas convention is the one from [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd): all four vectors of length $m$, `a[1]` and `c[m]` unused. Python's [`solve_banded((1, 1), ab, rhs)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_banded.html) wants the superdiagonal in row 0 (first entry unused), the diagonal in row 1 and the subdiagonal in row 2 (last entry unused). For the slab use [`cosh`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Hyperbolic.html) and `tanh` (Python: [`np.cosh`](https://numpy.org/doc/stable/reference/generated/numpy.cosh.html)).
 :::
 
 ::: {.callout-tip collapse="true" title="Hint 4 — order and interpolation (C2, C3)"}
-If the error is $\approx C N^{-p}$, then $p = \log_2(e_N/e_{2N})$. Plot with [`matplot(..., log = "xy")`](https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/matplot.html) (Python: [`plt.loglog`](https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.loglog.html)). To read $u_h$ between nodes use [`approx`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/approxfun.html) (Python: [`np.interp`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html)): linear interpolation is exactly $u_h$. A per-element vector: the midpoints are `head(x, -1) + diff(x) / 2` (Python: `x[:-1] + np.diff(x) / 2`). Test "is there a node at 100" with a tolerance, not `==` (*How computers store numbers*).
+If the error is $\approx C N^{-p}$, then $p = \log_2(e_N/e_{2N})$. Plot with [`matplot(..., log = "xy")`](https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/matplot.html) (Python: [`plt.loglog`](https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.loglog.html)). To read $u_h$ between nodes use [`approx`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/approxfun.html) (Python: [`np.interp`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html)): linear interpolation is exactly $u_h$. A per-element vector: the midpoints are `head(x, -1) + diff(x) / 2` (Python: `x[:-1] + np.diff(x) / 2`). Test "is there a node at 100" with a tolerance, not `==` ([*How computers store numbers*](../floating-point/lec.qmd)).
 :::
 
 ## Solutions
@@ -304,6 +304,7 @@ The left side is $-\big(\frac{u_2 - u_1}{h_2} - \frac{u_1 - u_0}{h_1}\big)$; div
 ### R
 
 ```r
+# uses assemble(), fem1d(), exact(), L, D, k, lam from the Background
 x <- seq(0, 500, by = 100); h <- 100              # 5 elements
 S0 <- assemble(x, D = 100, k = 0)
 S0$di * h / 100                                   # K scaled by h / D
@@ -332,6 +333,7 @@ cat(sprintf("consistent %.4f  lumped %.4f\n", max(abs(fem1d(xu, D, k) - exact(xu
 ### Python
 
 ```python
+# uses np, assemble(), fem1d(), exact(), L, D, k, lam from the Background
 x = np.arange(0, 501, 100.0); h = 100             # 5 elements
 di0, off0, _ = assemble(x, 100, 0)
 print(di0 * h / 100)                               # K scaled by h / D
@@ -463,6 +465,7 @@ fn main() {
 ### R
 
 ```r
+# uses assemble(), fem1d(), exact(), L, D, k, lam from the Background
 cat("  N   uniform    graded  ratio\n")
 #   N   uniform    graded  ratio
 Ns <- c(5, 10, 20, 40, 80, 160); errs <- NULL
@@ -492,6 +495,7 @@ c(amount(xu, fem1d(xu, D, k)), amount(xg, fem1d(xg, D, k)), lam * tanh(L / lam))
 ### Python
 
 ```python
+# uses np, assemble(), fem1d(), exact(), L, D, k, lam from the Background
 import matplotlib.pyplot as plt
 
 print("  N   uniform    graded  ratio")
@@ -623,6 +627,7 @@ Both meshes are **second order** (observed $p = 2.006$ and $2.000$); the graded 
 ### R
 
 ```r
+# uses assemble(), fem1d(), exact(), L, D, k, lam from the Background
 for (N in c(2, 4, 6, 8, 10)) {
   xu <- seq(0, L, length.out = N + 1)
   cat(sprintf("N = %2d  h/lambda = %4.1f  min u = %9.2e  lumped min = %.2e\n", N, L / N / lam,
@@ -655,6 +660,7 @@ for (N in c(50, 49, 100, 99, 200, 199)) {
 ### Python
 
 ```python
+# uses np, assemble(), fem1d(), exact(), L, D, k, lam from the Background
 for N in [2, 4, 6, 8, 10]:
     xu = np.linspace(0, L, N + 1)
     print(f"N = {N:2d}  h/lambda = {L / N / lam:4.1f}  min u = {fem1d(xu, D, k).min():9.2e}"
@@ -787,6 +793,6 @@ fn main() {
 
 ## Where this leads
 
-- *Steady state in two dimensions* (Part 10): the same steady problem on a 2D rectangle with the five-point stencil. A 2D finite element code replaces the loop over intervals by a loop over triangles with 3 × 3 element matrices; the resulting sparse matrix is solved with the same sparse direct solvers.
-- *Iterative linear solvers in depth* (Part 11): for 3D meshes with millions of nodes the sparse system is solved iteratively (conjugate gradients works because $K$ is symmetric positive definite), with preconditioning.
-- *Flow plus diffusion* (Part 10) took the Poiseuille profile as given. A Stokes solver (COMSOL, FEniCS, Firedrake, scikit-fem) computes the flow in any geometry; that velocity field can then be fed into the advection–diffusion equation on the same mesh.
+- [*Steady state in two dimensions*](../steady-state-2d/lec.qmd) (Part 10): the same kind of steady problem (diffusion plus uptake, there oxygen under a lid) on a 2D rectangle with the five-point stencil. A 2D finite element code replaces the loop over intervals by a loop over triangles with 3 × 3 element matrices; the resulting sparse matrix is solved with the same sparse direct solvers.
+- [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (Part 11): for 3D meshes with millions of nodes the sparse system is solved iteratively (conjugate gradients works because $K$ is symmetric positive definite), with preconditioning.
+- [*Flow plus diffusion*](../advection-diffusion/lec.qmd) (Part 10) took the Poiseuille profile as given. A Stokes solver (COMSOL, FEniCS, Firedrake, scikit-fem) computes the flow in any geometry; that velocity field can then be fed into the advection–diffusion equation on the same mesh.
