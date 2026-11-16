@@ -83,3 +83,18 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - reaction-diffusion: time in minutes vs seconds in diffusion-explicit — reconcile. 2D uses periodic FFT diffusion, not Kronecker Laplacian. From memory: Bicoid λ≈100 µm, D FRAP 0.3 / FCS 7 µm²/s; Fgf8 D≈50, λ≈200 µm; Gregor 2007, Abu-Arish 2010, Berezhkovskii 2010 (notes only). Slides not screenshotted.
 - Overflow probe (first run, docs as of pass 1): stiffness slide 9 "Try it: the fast eigenvalue sets the step" overflows (741/720 px). 16 decks gave no result (Chrome timeouts under load) — rerun serially in audit: advection-diffusion, convergence-cost, diffusion-explicit, diffusion-implicit, fem-outlook, floating-point, gradient-methods, identifiability, intro, iterative-solvers, least-squares-qr, lu, newton-systems, optimisation-1d, quadrature, reaction-diffusion, runge-kutta.
 - iterative-solvers: built its own oxygen-in-gel chamber (Φ = 12) because steady-state-2d didn't exist yet — align with steady-state-2d in pass 2 or state difference.
+
+## Pass 2 (cross-references) — started
+
+Brief: plan/xref-brief.md. Reports: plan/pass2/<group>.md.
+
+| Group | Units | Status |
+|--|--|--|
+| parts1-2 | 1–7 | running |
+| parts3-4 | 8–12 | running |
+| parts5-6 | 13–17 | running |
+| parts7-8a | 18–22 | running |
+| parts8b-9a | 23–26 | running |
+| part9b | 27–30 | running |
+| part10a | 31–34 | running |
+| part10b-11 | 35–37 | waits for reaction-diffusion demo |
