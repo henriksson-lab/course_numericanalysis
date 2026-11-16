@@ -10,6 +10,18 @@ sister course (read-only):
 with its embedding in `.../scrna-log/exercise.qmd` (search `data-demo`) and
 `.../scrna-log/lec.qmd`. Also skim `.../demos/src/compensation/main.ts`.
 
+## Avoid permission prompts (the course lead is often away)
+
+- Work only inside the project folder and your scratch directory under
+  `/big/henriksson/temp/claude-tmp/claude-1001/-data-henriksson-github-course-numericanalysis/f8db0def-e4f4-45f6-aad8-5433352f3d1d/scratchpad`. Never use `/tmp`: for temporary dirs use
+  `mktemp -d -p /big/henriksson/temp/claude-tmp/claude-1001/-data-henriksson-github-course-numericanalysis/f8db0def-e4f4-45f6-aad8-5433352f3d1d/scratchpad` (e.g. Chrome's `--user-data-dir`).
+- Never touch `.claude/`, `.git/`, `~/.config`, or anything outside those two
+  places; no `git` commands; no network access (`curl`, `pip install`,
+  `install.packages`, `cargo add`); no `sudo`; no `pkill`/`killall`; no
+  `rm -rf` outside your scratch directory.
+- Prefer simple single commands with absolute paths over long `cd … && …`
+  chains.
+
 ## What to produce
 
 1. `demos/src/<name>/main.ts` — plain TypeScript, DOM + SVG, no libraries, no
@@ -54,7 +66,7 @@ do not promise bit-identical agreement with R output on the page.
   (`google-chrome --headless=new --no-sandbox --window-size=1280,900
   --dump-dom file://.../docs/<unit>/exercise.html`)
   and confirm the demo mounted (its SVG is present in the DOM, no visible
-  error). Use a fresh `--user-data-dir=$(mktemp -d)` per Chrome call and do
+  error). Use a fresh `--user-data-dir=$(mktemp -d -p /big/henriksson/temp/claude-tmp/claude-1001/-data-henriksson-github-course-numericanalysis/f8db0def-e4f4-45f6-aad8-5433352f3d1d/scratchpad)` per Chrome call and do
   NOT use `--virtual-time-budget` (it hangs here); wrap in `timeout 60`.
   Screenshots via `--screenshot` are optional; retry once on an empty result.
 - Never kill processes you did not start (no `pkill`/`killall`): other workers run Chrome too.

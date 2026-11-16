@@ -33,7 +33,7 @@ The last two units interpolated data with polynomials and splines. For **periodi
 The sister course (Quantitative biology, Fourier lecture) gave the picture: a signal is a sum of waves, the transform is a change of basis, and filtering works by masking the spectrum. Here we look at the machinery: what fft() computes exactly (and its conventions), why it is fast, and the three ways it misleads you: aliasing, leakage and wrap-around. The biology thread is a circadian time course, the kind of data from a liver or Arabidopsis experiment sampled every few hours over two days.
 :::
 
-## A biology problem first {.smaller}
+## A biology problem first
 
 A clock-controlled gene (think *Dbp* in mouse liver), log2 expression, measured every **2 h** for **48 h** (simulated).
 
@@ -47,7 +47,7 @@ A clock-controlled gene (think *Dbp* in mouse liver), log2 expression, measured 
 This is the running example of the unit: 24 numbers, given as a literal vector in the code so that every language uses the same data. It was simulated as 8 + 1.5 cos(2 pi (t - 6)/24) plus noise with sd 0.3, so the true answers are amplitude 1.5, period 24 h, peak at 6 h after lights on. Circadian studies really do face this design question: published guidelines for genome-scale rhythm studies recommend sampling every 2 h or more often over at least two cycles. We will see at the end why sparser sampling is risky.
 :::
 
-## Recap: interpolation in a basis {.smaller}
+## Recap: interpolation in a basis
 
 In *Polynomial interpolation* we wrote the interpolant as a combination of basis functions and solved for the coefficients:
 
@@ -65,7 +65,7 @@ $$p(t) = a_0 + \sum_{k=1}^{n/2-1}\Big[a_k\cos\frac{2\pi k t}{T} + b_k\sin\frac{2
 One-slide recap of the interpolation idea, only to frame the Fourier basis as "one more basis". Counting coefficients: the constant, a cosine and a sine for each k from 1 to n/2 - 1, and only a cosine at k = n/2 (the sine at k = n/2 is zero at every sample, since sin(pi j) = 0). Total n. The last term, the fastest wave on the grid, alternates +1, -1 from sample to sample; it will be the Nyquist frequency later. Solving this n x n system by Gaussian elimination would cost n^3; the next slides show that the matrix is so special that we never need to.
 :::
 
-## The DFT gives the coefficients {.smaller}
+## The DFT gives the coefficients
 
 Because sines and cosines on an equispaced grid are **orthogonal**, each coefficient is a plain sum (no system to solve). In complex form, with $e^{i\theta} = \cos\theta + i\sin\theta$:
 
@@ -83,7 +83,7 @@ $$a_0 = \frac{X_0}{n}, \qquad a_k = \frac{2\,\mathrm{Re}\,X_k}{n}, \qquad b_k = 
 The complex exponential is only bookkeeping: it packs the cosine sum (real part) and the sine sum (imaginary part) into one number. Students who are not at ease with complex numbers only need e^{i theta} = cos + i sin, and that Mod gives the length and Arg the angle of a complex number. Do the n = 4 example on the board. Note X_3 is the complex conjugate of X_1: for real data the second half of the DFT mirrors the first and carries no new information. The exercise has more of these by hand.
 :::
 
-## `fft()` in R: the conventions {.smaller}
+## `fft()` in R: the conventions
 
 ```r
 x <- c(7.81, 8.81, 9.05, 9.98, 9.40, 8.50, 8.15, 7.47, 6.87, 6.41, 7.15, 7.37,
@@ -105,7 +105,7 @@ sum(x)
 These three conventions cause most fft bugs. R and numpy both put no factor in front of the forward transform; some textbooks and other software use 1/n or 1/sqrt(n). R's indices start at 1, so frequency k lives at index k + 1; numpy's start at 0, so frequency k is X[k] directly, which is one reason to be careful when translating code. The mirror: index 24 is the conjugate of index 2, index 23 of index 3, and so on. Negative frequencies are just the other half of the cosine: cos = (e^{i theta} + e^{-i theta})/2.
 :::
 
-## Reading off amplitude, period and phase {.smaller}
+## Reading off amplitude, period and phase
 
 For $x_j = A\cos(2\pi k t_j/T - \theta)$ the DFT gives $X_k = \tfrac{nA}{2}e^{-i\theta}$. So amplitude $= 2|X_k|/n$ and phase $\theta = -\arg X_k$.
 
@@ -129,7 +129,7 @@ k; 48 / k                              # cycles per 48 h -> period (h)
 This is the whole "rhythm detection" computation for one gene: one fft, one Mod, one Arg. The peak time comes from the phase: the cosine peaks when 2 pi k t / T = theta, i.e. t = theta/(2 pi) x period. The %% 24 brings it into [0, 24). Two cautions: the amplitude formula 2|X_k|/n holds for 0 < k < n/2; for k = 0 and k = n/2 it is |X_k|/n. And the frequencies are only those with a whole number of cycles in the record: 48, 24, 16, 12, ... hours. A 22-h rhythm falls between bins (leakage, later).
 :::
 
-## Trigonometric interpolation in code {.smaller}
+## Trigonometric interpolation in code
 
 ```r
 trig_interp <- function(x, T, tt) {    # evaluate p(t) at times tt
@@ -165,7 +165,7 @@ The interpolant is exact at the samples up to rounding. Between samples it is th
 The right panel uses the course's logistic growth curve (K = 1.2, N0 = 0.05, r = 0.8 per hour) sampled every hour for 16 h. The trigonometric interpolant is periodic with period 16 h by construction, so between t = 15 and t = 16 it must come back down to 0.05. Fitting a jump with smooth waves gives Gibbs-type ringing that spreads over the whole record. The same problem returns as leakage and as edge effects in filtering. The rule: Fourier methods assume that the record wraps around.
 :::
 
-## The DFT is a matrix {.smaller}
+## The DFT is a matrix
 
 $X = F x$ with $F_{jk} = w^{jk}$, $w = e^{-2\pi i/n}$. For $n = 4$, $w = -i$:
 
@@ -247,7 +247,7 @@ Write it yourself first, then use the library. This recursive version is correct
 Timings on our laptop; yours will differ by a constant factor, not in the slopes. Read off the slopes as in Convergence and cost: a factor 10 in n gives a factor 100 in time for the matrix, about 13 for the FFT. The crossover between matrix and hand-written FFT is around n = 256, because the R recursion has a large constant overhead. The lesson about constants: an O(n log n) algorithm in a slow language can lose to an O(n^2) one in compiled code for small n, but never for large n.
 :::
 
-## When `fft()` is slow: awkward $n$ {.smaller}
+## When `fft()` is slow: awkward $n$
 
 ```r
 set.seed(1)
@@ -267,7 +267,7 @@ nextn(65537)                                   # next 2^a 3^b 5^c
 About a factor 700 for adding one sample. It bites in practice when n is the number of frames of a movie or the length of a recording, which nobody chose to be a power of 2. Padding changes the frequency grid (k now counts cycles per padded length) and adds an edge, so for spectra it is often better to trim to a nice length. scipy.fft.next_fast_len is the Python equivalent of nextn. (R's factor() is something else entirely: it makes categorical variables.)
 :::
 
-## Sampling and the Nyquist frequency {.smaller}
+## Sampling and the Nyquist frequency
 
 Samples every $\Delta t$ hours, $n$ samples, record length $T = n\Delta t$.
 
@@ -297,7 +297,7 @@ $\cos(2\pi\cdot 4j/4.8) = \cos(2\pi j\cdot\tfrac56) = \cos(2\pi j\cdot\tfrac16) 
 Frequencies above Nyquist fold back: f and f_s - f (and f + any multiple of f_s) give the same samples. Here f = 1/4.8 = 0.2083 per hour, f_s = 1/4 = 0.25 per hour, so the alias is 0.25 - 0.2083 = 0.0417 per hour = 1/24. The 2-h samples (blue) still follow the fast rhythm: Nyquist is 1/4 per hour, above 1/4.8. Ultradian rhythms of a few hours exist (p53 pulses, about 5.5 h; Hes1, about 2 h; 12-h and 8-h harmonics of the clock), so this is not only a textbook trick. The same effect makes wagon wheels turn backwards in films.
 :::
 
-## Aliasing in the spectrum {.smaller}
+## Aliasing in the spectrum
 
 ```r
 f <- function(t) cos(2 * pi * t / 4.8)      # true period 4.8 h
@@ -329,7 +329,7 @@ The fft cannot know that the samples came from a fast rhythm; any frequency anal
 Leakage is the spectral version of the growth-curve wiggles: the periodic extension of 4.7 cycles has a jump at the wrap-around point, and a jump needs all frequencies. The window removes the jump by forcing both ends to zero. Divide by sum(w) instead of n to keep the amplitude scale. Zero-padding (appending zeros) samples the same spectrum on a finer grid, which helps to locate the peak between bins; it does not improve the true resolution 1/T. One slide only: windows are a large topic in signal processing (Hamming, Blackman, Welch's method), and Hann is a good default.
 :::
 
-## Screening many genes {.smaller}
+## Screening many genes
 
 ```r
 set.seed(4)
@@ -354,7 +354,7 @@ c(cycling = sum(amp24[1:100] > thr), flat = sum(amp24[-(1:100)] > thr))
 The amplitude in one bin is a test statistic. With noise sd 0.5 and 24 samples, a flat gene shows a 24-h "amplitude" of up to about 0.46 one time in a hundred. Genes with true amplitude 0.5 pass only 63 times out of 100: the power of a 48-h design is limited. Published tools (JTK_CYCLE, RAIN, the cosinor method, Lomb–Scargle) differ in their statistics and in how they handle uneven sampling and waveform shape, but all rest on this projection onto a 24-h wave. Multiple testing across 20 000 genes needs a false-discovery-rate correction on top.
 :::
 
-## Filtering: smoothing a noisy trace {.smaller}
+## Filtering: smoothing a noisy trace
 
 A PER2::LUC bioluminescence trace, every 30 min for 5 days ($n = 240$), simulated with noise.
 
@@ -390,7 +390,7 @@ The trace is 20 + 60 exp(-t/40) + 30 exp(-t/80) cos(2 pi (t - 4)/24) plus noise 
 Same message as the growth curve and leakage: the DFT treats the record as one period of a periodic signal. A trend makes the ends disagree, and the sharp cut-off in frequency produces Gibbs ringing in time. Remedies: detrend (linear or a smooth fit), mirror the data before filtering, pad, or use a gentler filter whose gain falls smoothly to zero. For smoothing alone, splines or a moving average with proper edge handling are often simpler; Fourier filtering pays off when the frequency content matters (remove 50 Hz mains hum, or a known stripe in an image).
 :::
 
-## The convolution theorem {.smaller}
+## The convolution theorem
 
 A moving average is a **convolution**: $(h * y)_j = \sum_m h_m\, y_{j-m}$. The DFT turns it into a product:
 
@@ -440,7 +440,7 @@ One slide, to connect to imaging. The blurred image is computed as Re(fft(fft(im
 Pin this next to the keyboard. The first three are convention bugs and are caught by a test signal: always run your pipeline once on a pure cosine with known amplitude, period and phase, and check that you get them back. The next four are properties of the DFT that no convention fixes.
 :::
 
-## Summary {.smaller}
+## Summary
 
 - Equispaced samples of periodic data: interpolate with sines and cosines. The coefficients are the **DFT**, $X_k = \sum_j x_j e^{-2\pi i jk/n}$, because the basis is orthogonal.
 - The DFT is a matrix–vector product, $O(n^2)$. The **FFT** splits even/odd samples recursively: $O(n\log n)$. Awkward (prime) $n$ can be slow in R.

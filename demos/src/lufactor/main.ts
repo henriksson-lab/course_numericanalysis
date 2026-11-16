@@ -537,8 +537,8 @@ function mount(host: HTMLElement): void {
     const M = Math.max(10, m);
     const once = (k: number) => (k === 0 ? 0 : Fo + k * So), again = (k: number) => k * (Fo + So);
     const L = 84, R = W - 16, T = 92, B = HC - 34;
-    const raw = again(M), mag = 10 ** Math.floor(Math.log10(raw));
-    const unit = [1, 2, 2.5, 5, 10].map(d => d * mag / 4).find(d => d * 4 >= raw)!;
+    const raw = again(M) / 4, mag = 10 ** Math.floor(Math.log10(raw));
+    const unit = [1, 2, 2.5, 5, 10].map(d => d * mag).find(d => d >= raw)!;
     const ymax = 4 * unit;
     const sx = scale(0, M, L, R), sy = scale(0, ymax, B, T);
     svgEl("text", { x: 8, y: 22, class: "ttl" }, svgC).textContent = `Operations after m samples, n = ${nn === 3 ? "3 (this A)" : "1000"}`;

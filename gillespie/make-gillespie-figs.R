@@ -109,7 +109,8 @@ fig("fig02-small-numbers.svg", w = 11, h = 5.0, mfrow = c(1, 2), {
 fig("fig03-ssa-step.svg", w = 11, h = 4.6, mfrow = c(1, 2), {
   a0 <- 20
   curve(1 - exp(-a0 * x), 0, 0.2, lwd = 4, col = col_a, ylim = c(0, 1),
-        xlab = expression("waiting time " * tau * " (h)"), ylab = "u",
+        xlab = expression("waiting time " * tau * " (h)"),
+        ylab = expression(F(tau) == 1 - e^{-a[0] * tau}),
         main = expression("1. when?  " * tau * " = " * -log(u[1]) / a[0]))
   u1 <- 0.3; tau <- -log(u1) / a0
   # inverse transform of 1 - u: plot F and read off at 1 - u1
@@ -118,7 +119,7 @@ fig("fig03-ssa-step.svg", w = 11, h = 4.6, mfrow = c(1, 2), {
   text(tau, 0.08, sprintf("  %.4f h", tau), adj = 0, cex = 1.3, col = col_b)
   text(0.003, 1 - u1 + 0.07, expression(1 - u[1] == 0.7), adj = 0, cex = 1.3, col = col_b)
   par(mar = c(4.8, 2, 2.6, 1))
-  plot(NA, xlim = c(0, 20), ylim = c(0, 1), axes = FALSE, xlab = "", ylab = "",
+  plot(NA, xlim = c(-0.5, 21.5), ylim = c(0, 1), axes = FALSE, xlab = "", ylab = "",
        main = expression("2. which?  " * u[2] * a[0] * " falls in reaction j's piece"))
   rect(0, 0.35, 10, 0.65, col = adjustcolor(col_a, 0.35), border = col_a, lwd = 2)
   rect(10, 0.35, 20, 0.65, col = adjustcolor(col_c, 0.35), border = col_c, lwd = 2)
@@ -162,16 +163,16 @@ set.seed(5)
 pc <- ssa_path(c(1, 10, 100), S3, constit, 40)
 pb <- ssa_path(c(0, 10, 100), S3, telegraph, 40)
 fig("fig05-telegraph.svg", w = 11, h = 5.6, mfrow = c(2, 2), {
-  par(mar = c(4.2, 5.6, 2.4, 1))
+  par(mar = c(4.6, 5.6, 2.4, 1), mgp = c(3, 0.8, 0))
   for (k in 1:2) {
     p <- if (k == 1) pc else pb
     plot(p$t, p$x[, 2], type = "s", col = if (k == 1) col_a else col_b, lwd = 1.4,
-         ylim = c(0, 70), xlab = "", ylab = "mRNA",
+         ylim = c(0, 45), xlab = "", ylab = "mRNA",
          main = if (k == 1) "constitutive" else "telegraph (bursty)")
     if (k == 2) {                          # shade the on periods
       on <- p$x[, 1] == 1
       idx <- which(on)
-      for (i in idx) rect(p$t[i], -5, p$t[i + 1], 75, col = adjustcolor(col_c, 0.3), border = NA)
+      for (i in idx) rect(p$t[i], -5, p$t[i + 1], 75, col = adjustcolor(col_c, 0.45), border = NA)
       lines(p$t, p$x[, 2], type = "s", col = col_b, lwd = 1.4)
     }
     abline(h = 10, lty = 2, col = col_ref)
@@ -179,7 +180,7 @@ fig("fig05-telegraph.svg", w = 11, h = 5.6, mfrow = c(2, 2), {
   for (k in 1:2) {
     p <- if (k == 1) pc else pb
     plot(p$t, p$x[, 3], type = "s", col = if (k == 1) col_a else col_b, lwd = 1.4,
-         ylim = c(0, 400), xlab = "time (h)", ylab = "protein")
+         ylim = c(0, 250), xlab = "time (h)", ylab = "protein")
     abline(h = 100, lty = 2, col = col_ref)
   }
 })
@@ -192,7 +193,7 @@ fig("fig06-protein.svg", w = 11, h = 5.0, mfrow = c(1, 2), {
     v <- if (k == 1) Xc[, 3] else Xb[, 3]
     h <- hist(pmin(v, 499), breaks = br, plot = FALSE)
     plot(h, col = adjustcolor(if (k == 1) col_a else col_b, 0.6), border = "white",
-         freq = FALSE, xlab = "protein molecules per cell", ylab = "density", ylim = c(0, 0.02),
+         freq = FALSE, xlab = "protein molecules per cell", ylab = "density", ylim = c(0, 0.042),
          main = if (k == 1) "constitutive" else "telegraph (bursty)")
     curve(dpois(round(x), 100), add = TRUE, n = 501, lwd = 2.5, col = col_ref, lty = 2)
     legend("topright", bty = "n", cex = 1.25,

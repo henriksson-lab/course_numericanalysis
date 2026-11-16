@@ -240,10 +240,10 @@ The Armijo (sufficient decrease) condition asks for a decrease of at least a sma
 ![](fig03-zigzag.svg){width="92%" fig-align="center"}
 
 - On a long narrow valley, $-\nabla f$ points across the valley, not along it. Each step overshoots to the other side.
-- With exact line search the error shrinks per step by about $\left(\dfrac{\kappa - 1}{\kappa + 1}\right)^2$. For the 4PL, $\kappa = 550$: $0.9928$ per step, about **1900** steps per 6 digits.
+- With exact line search the error shrinks per step by about $\dfrac{\kappa - 1}{\kappa + 1}$. For the 4PL, $\kappa = 550$: $0.9964$ per step, about **3800** steps per 6 digits.
 
 ::: notes
-Left: f = (x1^2 + 10 x2^2)/2, kappa = 10, exact line search: the best step along the current gradient. Successive directions are at right angles, so the path zig-zags across the valley and makes slow progress along it. Right: the error after k steps for kappa = 10, 100, 1000, from the worst-case start (1, 1/kappa). The rate depends only on kappa: 10 needs about 50 steps per 6 digits, 1000 needs thousands. The 4PL with kappa = 550 predicts about 1900 steps per 6 digits; our Armijo version took 3453 because backtracking does not find the best step. This is the same condition number as in Pivoting, norms and conditioning: there it bounded error amplification in a linear solve, here it bounds the speed of the simplest optimiser. Rescaling the parameters changes kappa, which is why scaling matters (later slide).
+Left: f = (x1^2 + 10 x2^2)/2, kappa = 10, exact line search: the best step along the current gradient. Successive directions are at right angles, so the path zig-zags across the valley and makes slow progress along it. Right: the error after k steps for kappa = 10, 100, 1000, from the worst-case start (1, 1/kappa). The rate depends only on kappa: (kappa - 1)/(kappa + 1) per step for the error (its square for f - f*), so kappa = 10 needs about 70 steps per 6 digits and kappa = 1000 about 7000. The 4PL with kappa = 550 predicts about 3800 steps per 6 digits; our Armijo version took 3453, from a start where part of the error was in the steep directions. This is the same condition number as in Pivoting, norms and conditioning: there it bounded error amplification in a linear solve, here it bounds the speed of the simplest optimiser. Rescaling the parameters changes kappa, which is why scaling matters (later slide).
 :::
 
 ## Newton's method for minimisation {.smaller}
@@ -299,7 +299,7 @@ Five steps instead of 3453. Every step here has a = 1, the full Newton step; the
 - Newton: 5 steps. BFGS (in a few slides): 13 steps, gradients only. Steepest descent: a straight line on a log axis, **linear** convergence, slope set by $\kappa$.
 
 ::: notes
-Distance to the best parameters, log scale, all from the same start p0. The steepest descent curve on the right is a straight line after an initial phase: linear convergence, a fixed fraction per step, as in Convergence and cost. The slope corresponds to about 0.996 per step. Newton bends down ever faster (quadratic). BFGS starts like steepest descent, because its first approximation of the Hessian is the identity, then learns the curvature and accelerates (superlinear convergence). In terms of work: steepest descent used 3453 gradients and many more function values for the backtracking.
+Distance to the best parameters, log scale, all from the same start p0. The steepest descent curve on the right is a straight line after an initial phase: linear convergence, a fixed fraction per step, as in Convergence and cost. The slope corresponds to about 0.995 per step, close to the (kappa - 1)/(kappa + 1) = 0.9964 predicted from kappa = 550. Newton bends down ever faster (quadratic). BFGS starts like steepest descent, because its first approximation of the Hessian is the identity, then learns the curvature and accelerates (superlinear convergence). In terms of work: steepest descent used 3453 gradients and many more function values for the backtracking.
 :::
 
 ## When Newton fails {.smaller}
@@ -378,7 +378,7 @@ The memory argument is the whole story: n^2 storage and n^2 work per step are fi
 ![](fig05-nelder-mead.svg){width="90%" fig-align="center"}
 
 - Keep $n + 1$ points (a **simplex**: a triangle in 2-D). Replace the worst by its **reflection** through the others; **expand** if that was very good, **contract** if bad, **shrink** if nothing helps.
-- Needs only $f$: works for noisy or non-smooth functions. `optim`'s **default**. Slow (linear at best), and it can stop at a non-minimum, especially in many dimensions.
+- Needs only $f$: works for noisy or non-smooth functions. `optim`'s **default**. Slow, and it can stop at a non-minimum, especially in many dimensions.
 
 ::: notes
 Nelder and Mead, 1965. No gradients, no line search, just comparisons of function values, so it does not care about rounding noise in f, kinks, or discontinuities that would wreck a finite-difference gradient. Right: the points R's optim evaluates when fitting only EC50 and Hill (63 evaluations); the simplex tumbles downhill, then shrinks around the minimum. Weaknesses: in more than a handful of dimensions it becomes very slow, and the simplex can collapse into a flat shape and stop where the gradient is not zero; there are known examples (McKinnon 1998) where it converges to a non-stationary point. Its stopping rule is "the function values at the corners agree to reltol", which is also satisfied on a plateau: that is what happened to the growth curve in Why numerical analysis?.
@@ -394,7 +394,7 @@ Nelder and Mead, 1965. No gradients, no line search, just comparisons of functio
 | `"CG"` | `"CG"` | `NonlinearConjugateGradient` | conjugate gradients |
 | [`nlm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/nlm.html) | `"trust-exact"`, `"Newton-CG"` | `Newton`, `TrustRegion` | Newton-type |
 
-- No gradient given → **finite differences**: R's `optim` uses central differences with `ndeps = 1e-3` (an absolute step!); scipy uses forward differences with $h \approx \sqrt\varepsilon\,|x|$.
+- No gradient given → **finite differences**: R's `optim` uses central differences with `ndeps = 1e-3` (an absolute step!); scipy uses forward differences with $h \approx \sqrt\varepsilon\max(1, |x|)$.
 - Stopping: **relative change in $f$** below `reltol` $\approx 1.5\times10^{-8}$ (R), gradient norm below `gtol` $= 10^{-5}$ (scipy BFGS). `maxit` = 500 for Nelder–Mead, 100 for BFGS in R.
 - `convergence = 0` means "a stopping rule was met", not "this is the minimum".
 
@@ -465,7 +465,7 @@ optim(c(r = 0.5, K = 1, N0 = 0.05), sse_h)$par   # time in hours
 # 0.5241071 1.1913604 0.0165278
 ```
 
-- At $r = 0.5$/min the model is at $K$ after 2 minutes; $\partial\,\mathrm{SSE}/\partial r \approx 4\times10^{-23}$. BFGS never moves $r$; Nelder–Mead's simplex finds no difference and stops.
+- At $r = 0.5$/min the model reaches $K$ within minutes, long before the first reading: $\partial\,\mathrm{SSE}/\partial r \approx 4\times10^{-23}$. BFGS never moves $r$; Nelder–Mead wanders on the plateau until its corner values agree.
 - In hours the natural guess is right, and $\kappa$ drops from $1.2\times10^4$ to $1.0\times10^3$. **Choose units so parameters are near 1.**
 
 ::: notes
@@ -485,10 +485,10 @@ table(round(nm, 1))
 #     10      2      1      1      1
 ```
 
-- Nelder–Mead from 15 starts: 5 end far from the minimum, every one with `convergence = 0`. BFGS with the analytic gradient finds 314.9 from all 15.
+- Nelder–Mead from 15 starts: 5 end far from the minimum, 4 of them with `convergence = 0`. BFGS with the analytic gradient finds 314.9 from all 15.
 
 ::: notes
-These are the generic defences, and they are cheap. A data-based start is what commercial curve-fitting software does. SSfpl uses log dose and a scale parameter (1/Hill on the natural log scale), which also takes care of scaling. Multistart costs 15 fits here, a fraction of a second. If all starts agree, you have some confidence it is the global minimum (no proof!); if they disagree, look at the bad ones: here Nelder-Mead from EC50 = 100 or Hill = 3 gets stuck with a too steep curve. Different local minima, or the same minimum found with poor accuracy, are both worth knowing about. The rows of starts are (EC50, hill); bottom and top start at 0 and 100.
+These are the generic defences, and they are cheap. A data-based start is what commercial curve-fitting software does. SSfpl uses log dose and a scale parameter (1/Hill on the natural log scale), which also takes care of scaling. Multistart costs 15 fits here, a fraction of a second. If all starts agree, you have some confidence it is the global minimum (no proof!); if they disagree, look at the bad ones: here Nelder-Mead ends with a step-like curve (Hill 11 to 14) from two of the Hill = 3 starts, and with a very shallow one (Hill 0.17 to 0.45, plateaus far outside the data) from three others; only one of the five says so (convergence = 1, maxit reached). Different local minima, or the same minimum found with poor accuracy, are both worth knowing about. The rows of starts are (EC50, hill); bottom and top start at 0 and 100.
 :::
 
 ## Stochastic gradient descent, in one slide {.smaller}

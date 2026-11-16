@@ -18,6 +18,18 @@ Use this when writing a new unit. Read first:
    1280×720, katex), the "About this lecture" opener, `::: notes` on every
    slide, `{.smaller}` where needed, and the exercise/quiz page structure.
 
+## Avoid permission prompts (the course lead is often away)
+
+- Work only inside the project folder and your scratch directory under
+  `/big/henriksson/temp/claude-tmp/claude-1001/-data-henriksson-github-course-numericanalysis/f8db0def-e4f4-45f6-aad8-5433352f3d1d/scratchpad`. Never use `/tmp`: for temporary dirs use
+  `mktemp -d -p /big/henriksson/temp/claude-tmp/claude-1001/-data-henriksson-github-course-numericanalysis/f8db0def-e4f4-45f6-aad8-5433352f3d1d/scratchpad` (e.g. Chrome's `--user-data-dir`).
+- Never touch `.claude/`, `.git/`, `~/.config`, or anything outside those two
+  places; no `git` commands; no network access (`curl`, `pip install`,
+  `install.packages`, `cargo add`); no `sudo`; no `pkill`/`killall`; no
+  `rm -rf` outside your scratch directory.
+- Prefer simple single commands with absolute paths over long `cd … && …`
+  chains.
+
 ## Files to produce, all inside `<slug>/`
 
 - `lec.qmd` — reveal.js deck, **≤ 30 slides including the title slide**

@@ -148,7 +148,6 @@ tt <- seq(0, 24, length.out = 500)
 plot(tt, model(tt), type = "l", lwd = 3, col = oi["red"], las = 1,
      xlab = "time after dose (h)", ylab = "concentration (mg/L)", ylim = c(-0.8, 8))
 segments(xs, -0.8, xs, -0.2, col = oi["blue"], lwd = 1.2)
-points(xs, model(xs), pch = 19, cex = 0.5, col = oi["blue"])
 text(24, 7.2, paste0(length(xs), " evaluations, error 9e-10\n",
                      "(uniform Simpson: 513 evaluations, error 1e-6)"),
      adj = 1, cex = 1.3)
@@ -185,7 +184,7 @@ legend("top", c("before: infinite at both ends",
                 expression("after x = sin"^2 * theta * ": constant 2 on (0, " * pi/2 * ")")),
        col = c(oi["red"], oi["blue"]), lwd = 3, lty = c(1, 2), bty = "n", cex = 1.15)
 x <- seq(0, 10, length.out = 500);  t <- seq(0, 0.999, length.out = 500)
-plot(x / 10, exp(-x), type = "l", lwd = 3, col = oi["red"], ylim = c(0, 1.05),
+plot(x / 10, exp(-x), type = "l", lwd = 3, col = oi["red"], ylim = c(0, 1.7),
      las = 1, xlab = "x / 10  or  t", ylab = "integrand",
      main = expression(e^-x ~ "on [0, " * infinity * ")"))
 lines(t, exp(-t / (1 - t)) / (1 - t)^2, lwd = 3, col = oi["blue"], lty = 2)
@@ -206,8 +205,10 @@ for (cfg in list(c(6, 0), c(6, 3), c(3, 1.5))) {
   a <- h * (sum(ys) - (ys[1] + ys[length(ys)]) / 2)
   plot(tt, pk(tt), type = "l", lwd = 3, col = oi["red"], ylim = c(0, 1050),
        xlab = "retention time (s)", ylab = "signal", las = 1,
-       main = sprintf("every %g s: area %+.2g%%, height %+.0f%%",
-                      h, 100 * (a / A - 1), 100 * (max(ys) / 1000 - 1)))
+       main = sprintf("every %g s: area %s, height %+.0f%%", h,
+                      if (abs(a / A - 1) < 1e-4) sprintf("%+.0e", a / A - 1)
+                      else sprintf("%+.1f%%", 100 * (a / A - 1)),
+                      100 * (max(ys) / 1000 - 1)))
   k <- xs >= 280 & xs <= 320
   polygon(c(xs[k][1], xs[k], xs[k][sum(k)]), c(0, ys[k], 0),
           col = tr(oi["sky"]), border = oi["blue"])
@@ -229,7 +230,7 @@ for (lg in c("", "y")) {
   t2 <- if (lg == "y") tt[tt > 0.2] else tt
   plot(t2, model(t2), type = "l", lwd = 3, col = oi["red"], log = lg, ylim = rng,
        las = 1, xlab = "time after dose (h)", ylab = "concentration (mg/L)")
-  lines(t_h, conc, lwd = 2.5, col = oi["blue"], lty = 2)
+  lines(t2, approx(t_h, conc, t2)$y, lwd = 2.5, col = oi["blue"], lty = 2)
   lines(t2, loginterp(t2), lwd = 2.5, col = oi["green"], lty = 3)
   points(t_h, conc, pch = 19, cex = 1.4)
   if (lg == "")

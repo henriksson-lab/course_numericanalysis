@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-html/tabby.min.js"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/light-border.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-662ae1889177880cb371f83234c0a158.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
+  <meta name="generator" content="quarto-1.7.30">
+
+  <meta name="author" content="Numerical analysis for biologists">
+  <title>Numerical analysis for biologists – Identifiability and uncertainty of fitted parameters</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reset.css">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reveal.css">
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+      }
+    pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+    div.sourceCode
+      { color: #24292e;  }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span { color: #24292e; } /* Normal */
+    code span.al { color: #ff5555; font-weight: bold; } /* Alert */
+    code span.an { color: #6a737d; } /* Annotation */
+    code span.at { color: #d73a49; } /* Attribute */
+    code span.bn { color: #005cc5; } /* BaseN */
+    code span.bu { color: #d73a49; } /* BuiltIn */
+    code span.cf { color: #d73a49; } /* ControlFlow */
+    code span.ch { color: #032f62; } /* Char */
+    code span.cn { color: #005cc5; } /* Constant */
+    code span.co { color: #6a737d; } /* Comment */
+    code span.cv { color: #6a737d; } /* CommentVar */
+    code span.do { color: #6a737d; } /* Documentation */
+    code span.dt { color: #d73a49; } /* DataType */
+    code span.dv { color: #005cc5; } /* DecVal */
+    code span.er { color: #ff5555; text-decoration: underline; } /* Error */
+    code span.ex { color: #d73a49; font-weight: bold; } /* Extension */
+    code span.fl { color: #005cc5; } /* Float */
+    code span.fu { color: #6f42c1; } /* Function */
+    code span.im { color: #032f62; } /* Import */
+    code span.in { color: #6a737d; } /* Information */
+    code span.kw { color: #d73a49; } /* Keyword */
+    code span.op { color: #24292e; } /* Operator */
+    code span.ot { color: #6f42c1; } /* Other */
+    code span.pp { color: #d73a49; } /* Preprocessor */
+    code span.re { color: #6a737d; } /* RegionMarker */
+    code span.sc { color: #005cc5; } /* SpecialChar */
+    code span.ss { color: #032f62; } /* SpecialString */
+    code span.st { color: #032f62; } /* String */
+    code span.va { color: #e36209; } /* Variable */
+    code span.vs { color: #032f62; } /* VerbatimString */
+    code span.wa { color: #ff5555; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/theme/quarto-bf56578b9c06c165c166475cd19dbcd1.css">
+  <script>window.backupDefine = window.define; window.define = undefined;</script><script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css">
+  <link href="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/quarto-support/footer.css" rel="stylesheet">
+  <style type="text/css">
+    .reveal div.sourceCode {
+      margin: 0;
+      overflow: auto;
+    }
+    .reveal div.hanging-indent {
+      margin-left: 1em;
+      text-indent: -1em;
+    }
+    .reveal .slide:not(.center) {
+      height: 100%;
+    }
+    .reveal .slide.scrollable {
+      overflow-y: auto;
+    }
+    .reveal .footnotes {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .reveal .slide .absolute {
+      position: absolute;
+      display: block;
+    }
+    .reveal .footnotes ol {
+      counter-reset: ol;
+      list-style-type: none; 
+      margin-left: 0;
+    }
+    .reveal .footnotes ol li:before {
+      counter-increment: ol;
+      content: counter(ol) ". "; 
+    }
+    .reveal .footnotes ol li > p:first-child {
+      display: inline-block;
+    }
+    .reveal .slide ul,
+    .reveal .slide ol {
+      margin-bottom: 0.5em;
+    }
+    .reveal .slide ul li,
+    .reveal .slide ol li {
+      margin-top: 0.4em;
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide ul[role="tablist"] li {
+      margin-bottom: 0;
+    }
+    .reveal .slide ul li > *:first-child,
+    .reveal .slide ol li > *:first-child {
+      margin-block-start: 0;
+    }
+    .reveal .slide ul li > *:last-child,
+    .reveal .slide ol li > *:last-child {
+      margin-block-end: 0;
+    }
+    .reveal .slide .columns:nth-child(3) {
+      margin-block-start: 0.8em;
+    }
+    .reveal blockquote {
+      box-shadow: none;
+    }
+    .reveal .tippy-content>* {
+      margin-top: 0.2em;
+      margin-bottom: 0.7em;
+    }
+    .reveal .tippy-content>*:last-child {
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide > img.stretch.quarto-figure-center,
+    .reveal .slide > img.r-stretch.quarto-figure-center {
+      display: block;
+      margin-left: auto;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-left,
+    .reveal .slide > img.r-stretch.quarto-figure-left  {
+      display: block;
+      margin-left: 0;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-right,
+    .reveal .slide > img.r-stretch.quarto-figure-right  {
+      display: block;
+      margin-left: auto;
+      margin-right: 0; 
+    }
+  </style>
+</head>
+<body class="quarto-light">
+  <div class="reveal">
+    <div class="slides">
+
+<section id="title-slide" class="quarto-title-block center">
+  <h1 class="title">Identifiability and uncertainty of fitted parameters</h1>
+  <p class="subtitle">Part 9 — Optimisation and model fitting</p>
+
+<div class="quarto-title-authors">
+<div class="quarto-title-author">
+<div class="quarto-title-author-name">
+Numerical analysis for biologists 
+</div>
+</div>
+</div>
+
+</section>
+<section id="about-this-lecture" class="slide level2 smaller">
+<h2>About this lecture</h2>
+<p>In <em>Nonlinear least squares and ODE fitting</em> we fitted a pharmacokinetic model and got numbers for <span class="math inline">k_a</span>, <span class="math inline">k_e</span> and <span class="math inline">V</span>. This lecture asks <strong>how much those numbers can be trusted</strong>.</p>
+<ul>
+<li><strong>Structural</strong> non-identifiability: the model itself cannot tell parameters apart (a product <span class="math inline">F\!\cdot\!D/V</span>; the <span class="math inline">k_a/k_e</span> <strong>flip-flop</strong>). No amount of data helps.</li>
+<li><strong>Practical</strong> non-identifiability: the model could, but <em>these</em> data do not.</li>
+<li>Near the optimum the sum of squares is a bowl. Its curvature, the <strong>Hessian</strong> <span class="math inline">\approx 2J^TJ</span>, gives <strong>standard errors</strong> <span class="math inline">\sqrt{\operatorname{diag}(s^2(J^TJ)^{-1})}</span> and a <strong>correlation matrix</strong>.</li>
+<li><strong>Small singular values of <span class="math inline">J</span></strong> name the badly determined combinations, as in <em>The SVD, rank deficiency and regularisation</em>.</li>
+<li>The <strong>profile likelihood</strong> checks the bowl picture, and shows flat directions the standard errors hide. <strong>Sloppy</strong> models have many of them.</li>
+<li>Fixes: <strong>better sampling times</strong>, <strong>reparameterisation</strong>, <strong>priors</strong>.</li>
+</ul>
+<aside class="notes">
+<p>This closes the loop of Part 9: we can now fit a nonlinear model, and the question is what the fitted numbers mean. The numerical content is small (a Jacobian, a matrix inverse or SVD, a loop of re-fits), but the consequences are large: a model that fits the data perfectly can still have parameters that are not determined at all. The running example is the one-compartment oral pharmacokinetic model from the previous unit. Everything here applies equally to growth curves, enzyme kinetics and signalling models.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-biology-problem-the-fit-is-fine" class="slide level2 smaller">
+<h2>A biology problem: the fit is fine</h2>
+
+<img data-src="fig01-same-fit.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:72.0%"><ul>
+<li>One oral dose of 100 mg; the first blood sample is taken at <strong>3 h</strong>. Three fits with absorption rate <span class="math inline">k_a = 0.68</span>, <span class="math inline">2</span> and <span class="math inline">20</span> /h (each with <span class="math inline">k_e</span> and <span class="math inline">V</span> re-fitted) pass equally well through the data.</li>
+<li>The grey circles are what early samples <strong>would</strong> have shown. Without them, the data cannot say how fast the drug was absorbed.</li>
+<li><code>nls</code> happily reports <span class="math inline">k_a = 0.68 \pm 0.31</span> /h. Is that number worth anything?</li>
+</ul>
+<aside class="notes">
+<p>This is the situation the lecture is about. The model fits, the residuals look fine, the software prints an estimate and a standard error, and yet the parameter is not determined: any absorption rate from about 0.3 per hour to infinity (instant absorption) fits the late data. The curves only differ before the first sample. In clinical pharmacokinetics this is common: outpatients come in hours after the dose. The data here are simulated (true ka = 1, ke = 0.2, V = 20) so that we know the truth; the grey points are the early samples of the same simulated subject.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="recap-the-model-and-the-fit" class="slide level2 smaller">
+<h2>Recap: the model and the fit</h2>
+<p>One-compartment model, oral dose <span class="math inline">D</span>, bioavailability <span class="math inline">F</span> (fraction absorbed):</p>
+<p><span class="math display">C(t) = \frac{F\,D\,k_a}{V\,(k_a - k_e)}\left(e^{-k_e t} - e^{-k_a t}\right)</span></p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a aria-hidden="true" tabindex="-1"></a>pk <span class="ot">&lt;-</span> <span class="cf">function</span>(t, ka, ke, V, <span class="at">D =</span> <span class="dv">100</span>) D <span class="sc">*</span> ka <span class="sc">/</span> (V <span class="sc">*</span> (ka <span class="sc">-</span> ke)) <span class="sc">*</span> (<span class="fu">exp</span>(<span class="sc">-</span>ke <span class="sc">*</span> t) <span class="sc">-</span> <span class="fu">exp</span>(<span class="sc">-</span>ka <span class="sc">*</span> t))</span>
+<span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a>t <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.25</span>, <span class="fl">0.5</span>, <span class="dv">1</span>, <span class="fl">1.5</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">12</span>, <span class="dv">24</span>)                         <span class="co"># hours</span></span>
+<span id="cb1-3"><a aria-hidden="true" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.98</span>, <span class="fl">1.89</span>, <span class="fl">2.69</span>, <span class="fl">3.47</span>, <span class="fl">3.39</span>, <span class="fl">3.00</span>, <span class="fl">2.77</span>, <span class="fl">1.98</span>, <span class="fl">1.35</span>, <span class="fl">0.52</span>, <span class="fl">0.28</span>)  <span class="co"># mg/L</span></span>
+<span id="cb1-4"><a aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="fl">0.5</span>, <span class="at">ke =</span> <span class="fl">0.1</span>, <span class="at">V =</span> <span class="dv">10</span>))</span>
+<span id="cb1-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">coef</span>(fit)</span>
+<span id="cb1-6"><a aria-hidden="true" tabindex="-1"></a><span class="co">#         ka         ke          V</span></span>
+<span id="cb1-7"><a aria-hidden="true" tabindex="-1"></a><span class="co">#  0.9976079  0.1925081 20.0326702</span></span>
+<span id="cb1-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">deviance</span>(fit)                          <span class="co"># residual sum of squares</span></span>
+<span id="cb1-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.1626121</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>All 11 samples, <span class="math inline">F = 1</span> assumed. Truth: <span class="math inline">k_a = 1</span>, <span class="math inline">k_e = 0.2</span> /h, <span class="math inline">V = 20</span> L, noise SD 0.15 mg/L.</li>
+</ul>
+<aside class="notes">
+<p>The same model as in the previous unit: first-order absorption from the gut with rate ka, first-order elimination with rate ke, one well-mixed compartment of volume V. The fit with all 11 samples recovers the truth well. The rest of the lecture asks how well, and what goes wrong with fewer or worse-placed samples. D = 100 mg, so D/V has units mg/L. nls uses Gauss-Newton by default; the details are in the previous unit.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="two-kinds-of-trouble" class="slide level2">
+<h2>Two kinds of trouble</h2>
+<p>A parameter is <strong>identifiable</strong> if the data determine it: different values give different predictions.</p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th><strong>Structural</strong></th>
+<th><strong>Practical</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Cause</td>
+<td>the model equations</td>
+<td>the data (too few, too noisy, badly placed)</td>
+</tr>
+<tr class="even">
+<td>Perfect, noise-free data</td>
+<td>still not determined</td>
+<td>determined</td>
+</tr>
+<tr class="odd">
+<td>Example</td>
+<td><span class="math inline">F</span> and <span class="math inline">V</span> only as <span class="math inline">F/V</span>; flip-flop</td>
+<td><span class="math inline">k_a</span> with first sample at 3 h</td>
+</tr>
+<tr class="even">
+<td>Symptom</td>
+<td><span class="math inline">J</span> exactly rank-deficient; equal-SSE minima</td>
+<td>huge SE, <span class="math inline">|r| \to 1</span>, flat profile</td>
+</tr>
+<tr class="odd">
+<td>Fix</td>
+<td>reparameterise, add a different experiment</td>
+<td>better design, more data, prior</td>
+</tr>
+</tbody>
+</table>
+<aside class="notes">
+<p>Structural identifiability is a property of the model and the measured output alone; one can check it with algebra before any experiment. Practical identifiability depends on how many samples, where, and how noisy. A structurally identifiable model can be practically non-identifiable (our sparse design); a structurally non-identifiable model stays so whatever the data. Both show up in the same numerical objects: the Jacobian and the shape of the sum of squares.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="structural-1-parameters-that-only-appear-as-a-product" class="slide level2 smaller">
+<h2>Structural (1): parameters that only appear as a product</h2>
+<p>If the bioavailability <span class="math inline">F</span> is unknown, <span class="math inline">F</span> and <span class="math inline">V</span> enter only through <span class="math inline">F/V</span>: doubling both changes nothing.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V <span class="sc">/</span> F), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="fl">0.5</span>, <span class="at">ke =</span> <span class="fl">0.1</span>, <span class="at">V =</span> <span class="dv">10</span>, <span class="at">F =</span> <span class="fl">0.8</span>))</span>
+<span id="cb2-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># Error in nlsModel(...) : singular gradient matrix at initial parameter estimates</span></span>
+<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a>p4 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">coef</span>(fit), <span class="at">F =</span> <span class="dv">1</span>)</span>
+<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a>J4 <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(p) <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>] <span class="sc">/</span> p[<span class="dv">4</span>]), p4)  <span class="co"># numDeriv</span></span>
+<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">svd</span>(J4 <span class="sc">%*%</span> <span class="fu">diag</span>(p4))<span class="sc">$</span>d                <span class="co"># columns scaled: d C / d log p</span></span>
+<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1.124957e+01 3.096841e+00 9.077142e-01 3.183060e-11</span></span>
+<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">svd</span>(J4 <span class="sc">%*%</span> <span class="fu">diag</span>(p4))<span class="sc">$</span>v[, <span class="dv">4</span>], <span class="dv">3</span>)</span>
+<span id="cb2-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  0.000  0.000 -0.707 -0.707      # log V and log F together</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The Jacobian has an exact null direction: <span class="math inline">\sigma_4 \approx 10^{-11}</span> (rounding), <span class="math inline">v_4 \propto (0, 0, 1, 1)</span> in <span class="math inline">(\log k_a, \log k_e, \log V, \log F)</span>.</li>
+<li>Fix: fit and report the identifiable combination, the <strong>apparent volume</strong> <span class="math inline">V/F</span>. Separating <span class="math inline">F</span> needs a different experiment (an IV dose).</li>
+</ul>
+<aside class="notes">
+<p>“Singular gradient” is how nls reports that the columns of the Jacobian are linearly dependent; Gauss-Newton cannot solve for a step. The SVD tells us exactly which combination is missing: the right singular vector for the zero singular value says increase log V and log F by the same amount, i.e.&nbsp;V/F stays fixed. We use log parameters (each column multiplied by its parameter) so that the singular vectors are about relative changes. jacobian is from the numDeriv package. Pharmacokineticists report V/F and CL/F after oral dosing for exactly this reason; F itself needs an intravenous reference dose.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="structural-2-the-flip-flop" class="slide level2 smaller">
+<h2>Structural (2): the flip-flop</h2>
+
+<img data-src="fig02-flipflop.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:88.0%"><p>Swap <span class="math inline">k_a \leftrightarrow k_e</span> and set <span class="math inline">V' = V\,k_e/k_a</span>: the formula gives <strong>the same</strong> <span class="math inline">C(t)</span> for every <span class="math inline">t</span>.</p>
+<ul>
+<li>Two exact minima with the same SSE: <span class="math inline">(0.998, 0.193, 20.0)</span> and <span class="math inline">(0.193, 0.998, 3.87)</span>. Each is <strong>locally</strong> identifiable; globally the data cannot choose.</li>
+<li>Right: fix <span class="math inline">k_a</span>, re-fit the rest, plot the rise in SSE. Two wells of equal depth.</li>
+</ul>
+<aside class="notes">
+<p>Check the algebra: with ka and ke swapped the prefactor becomes ke/(V’(ke-ka)) and the bracket changes sign, so the curve is unchanged if ke/V’ = ka/V. Biologically: is the drug absorbed fast and eliminated slowly, or absorbed slowly and eliminated fast? The concentration curve alone cannot say. Slow-release formulations really do show “flip-flop kinetics” (absorption slower than elimination), so this is not only a mathematical curiosity. The right panel is a profile, which we define properly later: for each fixed ka, re-fit ke and V and record the SSE. The hump between the wells is what keeps an optimiser on one side: which minimum you get depends on the starting values.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-flip-flop-in-practice" class="slide level2">
+<h2>The flip-flop in practice</h2>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>fit2 <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="fl">0.1</span>, <span class="at">ke =</span> <span class="fl">0.5</span>, <span class="at">V =</span> <span class="dv">5</span>))</span>
+<span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">coef</span>(fit2)</span>
+<span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        ka        ke         V</span></span>
+<span id="cb3-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.1925080 0.9976088 3.8656951</span></span>
+<span id="cb3-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="fu">deviance</span>(fit), <span class="fu">deviance</span>(fit2))</span>
+<span id="cb3-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.1626121 0.1626121</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Same residuals, different parameters. Neither run warns.</li>
+<li><strong>Check:</strong> multistart (previous unit). Equal-SSE minima at different parameter values mean a structural problem, not a convergence problem.</li>
+<li><strong>Fix:</strong> use outside knowledge. An IV dose gives <span class="math inline">k_e</span> directly; or impose <span class="math inline">k_a &gt; k_e</span> by fitting <span class="math inline">k_a = k_e + e^{\delta}</span>.</li>
+</ul>
+<aside class="notes">
+<p>The multistart check from the previous unit was a guard against local minima. Here it finds two minima with identical SSE to all printed digits, which is the signature of a symmetry in the model. The second solution has V = 3.9 L, which is physiologically odd for many drugs, but only outside knowledge can say that. Constraining ka &gt; ke is a modelling decision: make it explicitly and say so.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="near-the-optimum-the-sse-is-a-bowl" class="slide level2 smaller">
+<h2>Near the optimum the SSE is a bowl</h2>
+<p>Taylor expansion of <span class="math inline">S(\theta) = \sum_i r_i(\theta)^2</span> around the optimum <span class="math inline">\hat\theta</span> (gradient = 0):</p>
+<p><span class="math display">S(\hat\theta + \delta) \approx S(\hat\theta) + \tfrac12\,\delta^T H\,\delta, \qquad H = \nabla^2 S</span></p>
+<p>With residuals <span class="math inline">r_i = y_i - C(t_i;\theta)</span> and the Jacobian <span class="math inline">J_{ij} = \partial C(t_i)/\partial\theta_j</span> (<span class="math inline">11\times3</span>):</p>
+<p><span class="math display">H = 2J^TJ \;-\; 2\sum_i r_i\,\nabla^2 C(t_i) \;\approx\; 2J^TJ</span></p>
+<ul>
+<li>The second term is small when residuals are small and random: this is the <strong>Gauss–Newton</strong> approximation from the previous unit.</li>
+<li><strong>Steep</strong> directions of the bowl (large eigenvalues of <span class="math inline">H</span>) are well determined; <strong>flat</strong> ones are not.</li>
+</ul>
+<aside class="notes">
+<p>This is the multivariate version of the parabola from Optimisation in one dimension: near a minimum every smooth function looks quadratic, and the curvature tells how sharply the minimum is defined. The Hessian of the sum of squares has two parts; the one with second derivatives of the model is multiplied by residuals, which are small and of both signs at a good fit, so it nearly cancels. That is why J^T J (which needs only first derivatives) is used everywhere. We will check the approximation numerically in two slides.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="standard-errors-from-the-jacobian" class="slide level2 smaller">
+<h2>Standard errors from the Jacobian</h2>
+<p>If the noise is independent with variance <span class="math inline">\sigma^2</span>, the estimate is approximately normal with</p>
+<p><span class="math display">\operatorname{Cov}(\hat\theta) \approx \sigma^2 (J^TJ)^{-1}, \qquad \hat\sigma^2 = s^2 = \frac{S(\hat\theta)}{n - p} = \frac{0.1626}{11 - 3} = 0.0203</span></p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(numDeriv)</span>
+<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a>th <span class="ot">&lt;-</span> <span class="fu">coef</span>(fit)</span>
+<span id="cb4-3"><a aria-hidden="true" tabindex="-1"></a>J  <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(p) <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>]), th)   <span class="co"># 11 x 3</span></span>
+<span id="cb4-4"><a aria-hidden="true" tabindex="-1"></a>s2 <span class="ot">&lt;-</span> <span class="fu">deviance</span>(fit) <span class="sc">/</span> (<span class="fu">length</span>(y) <span class="sc">-</span> <span class="dv">3</span>)</span>
+<span id="cb4-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(s2 <span class="sc">*</span> <span class="fu">solve</span>(<span class="fu">crossprod</span>(J))))          <span class="co"># standard errors by hand</span></span>
+<span id="cb4-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.1158224 0.0204759 1.3158715</span></span>
+<span id="cb4-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">vcov</span>(fit)))                         <span class="co"># what nls reports</span></span>
+<span id="cb4-8"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        ka        ke         V</span></span>
+<span id="cb4-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># 0.1158224 0.0204759 1.3158715</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The same formula as for linear regression, with <span class="math inline">J</span> in place of the design matrix.</li>
+</ul>
+<aside class="notes">
+<p>For a linear model y = X beta + noise, Cov(beta-hat) = sigma^2 (X^T X)^{-1} exactly. For a nonlinear model we linearise around the optimum: J plays the role of X. So the standard errors printed by summary(nls) are only as good as that linearisation, which is the point of the profile slides. vcov uses the QR factor of the gradient matrix rather than solve(crossprod(J)), for the conditioning reason a few slides on. numDeriv::jacobian uses Richardson extrapolation of central differences (Numerical differentiation unit), so it is accurate to many digits. Python: scipy.optimize.least_squares returns jac, and the covariance is s2 * inv(jac.T @ jac).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-hessian-and-the-fisher-information" class="slide level2 smaller">
+<h2>The Hessian and the Fisher information</h2>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a aria-hidden="true" tabindex="-1"></a>sse <span class="ot">&lt;-</span> <span class="cf">function</span>(p) <span class="fu">sum</span>((y <span class="sc">-</span> <span class="fu">pk</span>(t, p[<span class="dv">1</span>], p[<span class="dv">2</span>], p[<span class="dv">3</span>]))<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb5-2"><a aria-hidden="true" tabindex="-1"></a>H <span class="ot">&lt;-</span> <span class="fu">hessian</span>(sse, th)                         <span class="co"># numDeriv: full second derivatives</span></span>
+<span id="cb5-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(H, <span class="dv">2</span>)                                   <span class="co"># round(2 * crossprod(J), 2):</span></span>
+<span id="cb5-4"><a aria-hidden="true" tabindex="-1"></a><span class="co">#       [,1]   [,2]  [,3]                     #       [,1]   [,2]  [,3]</span></span>
+<span id="cb5-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,] 16.75  -6.56 -1.41                     # [1,] 16.59  -6.56 -1.41</span></span>
+<span id="cb5-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,] -6.56 690.81 10.57                     # [2,] -6.56 696.41 10.57</span></span>
+<span id="cb5-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [3,] -1.41  10.57  0.29                     # [3,] -1.41  10.57  0.29</span></span>
+<span id="cb5-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="dv">2</span> <span class="sc">*</span> s2 <span class="sc">*</span> <span class="fu">solve</span>(H)))</span>
+<span id="cb5-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.11518692 0.02071607 1.32153067</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><span class="math inline">H</span> and <span class="math inline">2J^TJ</span> agree to about 1 %: the Gauss–Newton approximation is good here.</li>
+<li>In likelihood language: <span class="math inline">-\log L = S/(2\sigma^2) + \text{const}</span>, so the <strong>Fisher information</strong> is <span class="math inline">\mathcal I = J^TJ/\sigma^2</span> and <span class="math inline">\operatorname{Cov} \approx \mathcal I^{-1}</span>. For a general likelihood: invert the Hessian of <span class="math inline">-\log L</span> (<code>optim(..., hessian = TRUE)</code>).</li>
+</ul>
+<aside class="notes">
+<p>numDeriv::hessian computes all second derivatives numerically. This is the route to use when the objective is not a sum of squares, e.g.&nbsp;a Poisson or binomial likelihood: minimise the negative log-likelihood with optim, ask for the Hessian, and invert it. For least squares with Gaussian noise the two routes agree up to the residual term. The observed Fisher information is the Hessian of the negative log-likelihood at the optimum; its inverse is the asymptotic covariance. The standard errors differ by about 1 % here, which is irrelevant for reporting.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-correlation-matrix" class="slide level2">
+<h2>The correlation matrix</h2>
+<p><span class="math display">r_{jk} = \frac{\operatorname{Cov}_{jk}}{\sqrt{\operatorname{Cov}_{jj}\operatorname{Cov}_{kk}}}</span></p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">cov2cor</span>(<span class="fu">vcov</span>(fit)), <span class="dv">2</span>)</span>
+<span id="cb6-2"><a aria-hidden="true" tabindex="-1"></a><span class="co">#       ka    ke     V</span></span>
+<span id="cb6-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.00 -0.83  0.90</span></span>
+<span id="cb6-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke -0.83  1.00 -0.93</span></span>
+<span id="cb6-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V   0.90 -0.93  1.00</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><span class="math inline">r(k_a, V) = 0.90</span>: a larger <span class="math inline">k_a</span> can be compensated by a larger <span class="math inline">V</span>. The bowl is a <strong>tilted, elongated valley</strong>.</li>
+<li><span class="math inline">|r| &gt; 0.95</span> is a warning; <span class="math inline">|r| \to 1</span> means one parameter can replace another.</li>
+<li>A standard error alone hides this: each SE is the width of the valley <strong>after</strong> the others have moved along.</li>
+</ul>
+<aside class="notes">
+<p>cov2cor divides each covariance by the product of the two standard errors. High correlation between estimates is not a property of the biology (the true ka and V are not “correlated”), it is a property of the experiment: the data constrain a combination of ka and V much better than either alone. With all 11 samples the correlations are high but below 0.95; on the sparse design they reach 0.99. Python: np.corrcoef does not apply here; compute C / np.outer(se, se).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-svd-of-j-which-combinations-are-determined" class="slide level2 smaller">
+<h2>The SVD of <span class="math inline">J</span>: which combinations are determined</h2>
+<p>Scale the columns (<span class="math inline">\partial C/\partial \log\theta_j = \theta_j\,\partial C/\partial\theta_j</span>) so all parameters are compared in <strong>relative</strong> terms:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a>Jl <span class="ot">&lt;-</span> J <span class="sc">%*%</span> <span class="fu">diag</span>(th)                  <span class="co"># sensitivities to log ka, log ke, log V</span></span>
+<span id="cb7-2"><a aria-hidden="true" tabindex="-1"></a>sv <span class="ot">&lt;-</span> <span class="fu">svd</span>(Jl)</span>
+<span id="cb7-3"><a aria-hidden="true" tabindex="-1"></a>sv<span class="sc">$</span>d</span>
+<span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 8.2918957 3.0896881 0.8728112</span></span>
+<span id="cb7-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(sv<span class="sc">$</span>v[, <span class="dv">3</span>], <span class="dv">2</span>)                   <span class="co"># the worst direction</span></span>
+<span id="cb7-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  0.68 -0.62  0.39</span></span>
+<span id="cb7-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(s2) <span class="sc">/</span> sv<span class="sc">$</span>d                       <span class="co"># SE along each direction (log units)</span></span>
+<span id="cb7-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.01719403 0.04614417 0.16334701</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>As in <em>The SVD, rank deficiency and regularisation</em>: noise along <span class="math inline">v_i</span> is amplified by <span class="math inline">1/\sigma_i</span>. Here the SE along <span class="math inline">v_3</span> is <span class="math inline">s/\sigma_3 = 0.16</span>, about <strong>16 %</strong>.</li>
+<li><span class="math inline">v_3</span>: increase <span class="math inline">k_a</span>, decrease <span class="math inline">k_e</span>, increase <span class="math inline">V</span> together. The data barely notice.</li>
+</ul>
+<aside class="notes">
+<p>This is the link to Part 4. There the matrix was the signature S and v5 said “CD4 minus CD8”; here the matrix is the Jacobian and v3 names the combination of rate constants that the data constrain least. In log units, an SE of 0.16 means a factor exp(0.16) = 1.18, so about 16 % relative uncertainty in that combination, against 2 % along v1. Exact zero singular values are structural non-identifiability (the F/V slide); small ones are practical non-identifiability.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="scaling-and-conditioning" class="slide level2 smaller">
+<h2>Scaling and conditioning</h2>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(J, <span class="at">exact =</span> <span class="cn">TRUE</span>)                <span class="co"># columns in 1/h, 1/h and L</span></span>
+<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 172.817</span></span>
+<span id="cb8-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(Jl, <span class="at">exact =</span> <span class="cn">TRUE</span>)               <span class="co"># columns per unit log-parameter</span></span>
+<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 9.500217</span></span>
+<span id="cb8-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(<span class="fu">crossprod</span>(J), <span class="at">exact =</span> <span class="cn">TRUE</span>)     <span class="co"># forming J^T J squares kappa</span></span>
+<span id="cb8-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 29865.7</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Part of a large <span class="math inline">\kappa(J)</span> is just <strong>units</strong> (<span class="math inline">V</span> in litres vs rates per hour). Log-parameters remove that part; what is left is real.</li>
+<li>As in <em>Pivoting, norms and conditioning</em>: solving with <span class="math inline">J^TJ</span> loses about <span class="math inline">\log_{10}\kappa(J)^2</span> digits. <code>vcov</code> uses the QR factor <span class="math inline">R</span> of <span class="math inline">J</span>: <span class="math inline">(J^TJ)^{-1} = R^{-1}R^{-T}</span>.</li>
+<li><code>solve(crossprod(J))</code> on a sloppy model can return garbage or fail: use <code>chol2inv(qr.R(qr(J)))</code> or the SVD.</li>
+</ul>
+<aside class="notes">
+<p>Two separate issues. First, scaling: a parameter measured in litres has a much smaller derivative than a rate per hour, so the raw kappa is inflated by units. Multiplying each column by its parameter value (equivalent to fitting log parameters) makes the comparison fair. Second, numerical: the covariance matrix is (J^T J)^{-1}, and forming J^T J squares the condition number, exactly as in the normal equations of Least squares: normal equations vs QR. With kappa = 1e8 that leaves no correct digits. chol2inv(qr.R(qr(J))) computes (R^T R)^{-1} from the QR factor without forming J^T J.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="practical-non-identifiability-samples-from-3-h" class="slide level2 smaller">
+<h2>Practical non-identifiability: samples from 3 h</h2>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a aria-hidden="true" tabindex="-1"></a>late <span class="ot">&lt;-</span> t <span class="sc">&gt;=</span> <span class="dv">3</span>                                    <span class="co"># first sample at 3 h</span></span>
+<span id="cb9-2"><a aria-hidden="true" tabindex="-1"></a>fits <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ka =</span> <span class="dv">1</span>, <span class="at">ke =</span> <span class="fl">0.2</span>, <span class="at">V =</span> <span class="dv">20</span>),</span>
+<span id="cb9-3"><a aria-hidden="true" tabindex="-1"></a>            <span class="at">subset =</span> late)</span>
+<span id="cb9-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(fits)<span class="sc">$</span>coefficients[, <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>]</span>
+<span id="cb9-5"><a aria-hidden="true" tabindex="-1"></a><span class="co">#      Estimate Std. Error</span></span>
+<span id="cb9-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  0.6770636 0.30528148</span></span>
+<span id="cb9-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke  0.2144039 0.05541457</span></span>
+<span id="cb9-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V  19.1086919 3.44482006</span></span>
+<span id="cb9-9"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">cov2cor</span>(<span class="fu">vcov</span>(fits)), <span class="dv">3</span>)</span>
+<span id="cb9-10"><a aria-hidden="true" tabindex="-1"></a><span class="co">#        ka     ke      V</span></span>
+<span id="cb9-11"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ka  1.000 -0.936  0.933</span></span>
+<span id="cb9-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># ke -0.936  1.000 -0.986</span></span>
+<span id="cb9-13"><a aria-hidden="true" tabindex="-1"></a><span class="co"># V   0.933 -0.986  1.000</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>After 3 h the curve is <span class="math inline">\approx A\,e^{-k_e t}</span> with <span class="math inline">A = D k_a/(V(k_a - k_e))</span>: only <strong>two</strong> numbers, for three parameters.</li>
+<li>The SE says <span class="math inline">k_a = 0.68 \pm 0.31</span>; Wald 95 % interval <span class="math inline">(0.08, 1.28)</span>. The truth (1.0) is inside, but is this interval right?</li>
+</ul>
+<aside class="notes">
+<p>The model is structurally fine; the problem is where the samples are. Once absorption is complete, exp(-ka t) is negligible and the data only see the elimination phase, which has two features: an amplitude and a slope. ka enters only through the amplitude, together with V, so ka and V can trade off. The correlation of ke and V is -0.986. The SE is not absurd, which makes it dangerous: it suggests ka is known to about 50 %. The next slides show that the truth is much worse.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="where-the-bowl-picture-fails" class="slide level2">
+<h2>Where the bowl picture fails</h2>
+
+<img data-src="fig03-sse-slice.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:88.0%"><ul>
+<li>Contours of <span class="math inline">\Delta S/s^2</span> over <span class="math inline">(k_a, V)</span>, with <span class="math inline">k_e</span> re-fitted at each point; red: the ellipse that the SEs and correlations describe.</li>
+<li>All samples: the ellipse matches the valley. From 3 h: the valley is <strong>open to the right</strong>: <span class="math inline">k_a \to \infty</span> (instant absorption) fits as well. The ellipse cannot show that.</li>
+</ul>
+<aside class="notes">
+<p>The Wald ellipse is the quadratic approximation drawn at the 3.84 level; the blue 3.84 contour is the real thing. With the rich design they coincide: the quadratic picture is fine and the standard errors are trustworthy. With the sparse design the region of acceptable fits is a long channel that never closes: as ka grows, V settles at a value (the IV-bolus volume) and the fit stays acceptable. The ellipse, being an ellipse, must close, and it even extends to negative ka on the left (cut off here). A standard error cannot describe a one-sided, unbounded uncertainty.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-profile-likelihood" class="slide level2 smaller">
+<h2>The profile likelihood</h2>
+<p>To check one parameter, <strong>fix</strong> it on a grid and <strong>re-optimise all the others</strong>:</p>
+<p><span class="math display">\text{PL}(k_a) = \min_{k_e,\,V} S(k_a, k_e, V), \qquad \text{95 \% interval: } \frac{\text{PL}(k_a) - S(\hat\theta)}{s^2} \le 3.84</span></p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a aria-hidden="true" tabindex="-1"></a>prof <span class="ot">&lt;-</span> <span class="cf">function</span>(ka, t, y) {           <span class="co"># fix ka, re-fit ke and V</span></span>
+<span id="cb10-2"><a aria-hidden="true" tabindex="-1"></a>  f <span class="ot">&lt;-</span> <span class="fu">nls</span>(y <span class="sc">~</span> <span class="fu">pk</span>(t, ka, ke, V), <span class="at">start =</span> <span class="fu">list</span>(<span class="at">ke =</span> <span class="fl">0.2</span>, <span class="at">V =</span> <span class="dv">20</span>))</span>
+<span id="cb10-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">deviance</span>(f)</span>
+<span id="cb10-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb10-5"><a aria-hidden="true" tabindex="-1"></a>crit <span class="ot">&lt;-</span> <span class="cf">function</span>(ka) (<span class="fu">prof</span>(ka, t, y) <span class="sc">-</span> <span class="fu">deviance</span>(fit)) <span class="sc">/</span> s2 <span class="sc">-</span> <span class="fl">3.84</span></span>
+<span id="cb10-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="fu">uniroot</span>(crit, <span class="fu">c</span>(<span class="fl">0.3</span>, <span class="fl">0.998</span>))<span class="sc">$</span>root, <span class="fu">uniroot</span>(crit, <span class="fu">c</span>(<span class="fl">0.998</span>, <span class="dv">30</span>))<span class="sc">$</span>root)</span>
+<span id="cb10-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.7794766 1.2375772                         # profile interval</span></span>
+<span id="cb10-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">coef</span>(fit)[<span class="st">"ka"</span>] <span class="sc">+</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">1.96</span>, <span class="fl">1.96</span>) <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">vcov</span>(fit)[<span class="st">"ka"</span>, <span class="st">"ka"</span>])</span>
+<span id="cb10-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.7705976 1.2246214                         # Wald interval</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><span class="math inline">3.84 = 1.96^2</span> is the 95 % point of <span class="math inline">\chi^2_1</span>. For a linear model the two intervals are identical.</li>
+</ul>
+<aside class="notes">
+<p>The profile is the honest version of the standard error: instead of assuming the valley is a parabola, we walk along it. Each grid point is a full nonlinear fit with one parameter held fixed, so it costs as many fits as grid points, which is cheap for small models. The threshold: with Gaussian noise, -2 log L = S/sigma^2 + const, and the likelihood-ratio test says a drop of chi^2_1(0.95) = 3.84 is the 95 % boundary. We plug in s^2 for sigma^2; with few degrees of freedom an F-based threshold is a bit wider, which does not change the picture. With all 11 samples the two intervals agree to within 0.01: the profile confirms the SE. uniroot finds where the profile crosses the threshold, as in Bisection and fixed-point iteration.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="profiles-show-what-the-se-hides" class="slide level2">
+<h2>Profiles show what the SE hides</h2>
+
+<img data-src="fig04-profiles.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:78.0%"><ul>
+<li>All samples (blue): a clear well, close to the Wald parabola (dotted). <span class="math inline">k_a \in (0.78, 1.24)</span>.</li>
+<li>From 3 h (orange): the profile <strong>never</strong> reaches 3.84 between 0.3 and 30. It levels off at 2.15: no upper bound. The Wald interval <span class="math inline">(0.08, 1.28)</span> is wrong at both ends.</li>
+</ul>
+<aside class="notes">
+<p>This is the main diagnostic of the lecture. A profile that rises above the threshold on both sides gives a confidence interval (possibly asymmetric). A profile that flattens below the threshold on one side means the parameter is practically non-identifiable in that direction: here, any ka above 0.3 fits, and the curve stays at 2.15 all the way to infinity (instant absorption). A profile that is flat everywhere means the parameter is not determined at all. On the left of the orange curve the profile also stays low because ka approaches ke, where the flip-flop branch begins. Raue et al.&nbsp;(2009, Bioinformatics) popularised profiles for exactly this use in systems biology.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="sloppy-models" class="slide level2 smaller">
+<h2>Sloppy models</h2>
+
+<img data-src="fig06-sloppy.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:68.0%"><p>Eigenvalues <span class="math inline">\lambda_i</span> of <span class="math inline">J^TJ</span> (log-parameters, so units do not matter), relative to the largest.</p>
+<ul>
+<li>Two-compartment version (5 parameters: <span class="math inline">k_a</span>, <span class="math inline">k_{10}</span>, <span class="math inline">k_{12}</span>, <span class="math inline">k_{21}</span>, <span class="math inline">V</span>), same 11 samples: eigenvalues spread <strong>evenly over 4 decades</strong>.</li>
+<li>SE along each eigenvector <span class="math inline">\propto 1/\sqrt{\lambda_i}</span>: the stiffest combination is known 80× better than the sloppiest.</li>
+<li>Typical of biochemical network models (Gutenkunst et al.&nbsp;2007): a few stiff combinations, many <strong>sloppy</strong> ones, no clear gap.</li>
+</ul>
+<aside class="notes">
+<p>The eigenvalues of J^T J are the squared singular values of J. A gap between large and small (as with the F/V product) says “this many combinations are determined, the rest are not”. Sloppy models have no gap: the eigenvalues are roughly evenly spaced on a log scale, often over 6 or more decades in signalling models with dozens of parameters. Here sqrt(10^3.8) is about 80. The point of Gutenkunst et al.&nbsp;was that this is the norm, not the exception, in systems biology: individual rate constants are rarely determined by time-course data, even when the fit is excellent.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="sloppy-parameters-good-predictions" class="slide level2 smaller">
+<h2>Sloppy parameters, good predictions</h2>
+<p>Prediction SE at time <span class="math inline">t^*</span>: with <span class="math inline">g = \partial C(t^*)/\partial\theta</span>, <span class="math inline">\operatorname{Var}\hat C(t^*) \approx g^T\operatorname{Cov}(\hat\theta)\,g</span>.</p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th><span class="math inline">t^*</span> (h)</th>
+<th>0.5</th>
+<th>1</th>
+<th>6</th>
+<th>12</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>all samples: <span class="math inline">\hat C \pm</span> SE</td>
+<td>1.86 ± 0.08</td>
+<td>2.82 ± 0.08</td>
+<td>1.93 ± 0.08</td>
+<td>0.61 ± 0.09</td>
+</tr>
+<tr class="even">
+<td>from 3 h: <span class="math inline">\hat C \pm</span> SE</td>
+<td>1.42 ± 0.33</td>
+<td>2.29 ± 0.41</td>
+<td>1.98 ± 0.10</td>
+<td>0.58 ± 0.12</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>From 3 h: predictions <strong>inside</strong> the sampled window are as good as with all samples; <strong>before</strong> 3 h they are poor (and still optimistic).</li>
+<li>Ask what you need the model for. A sloppy model can predict well <strong>where the data constrain it</strong>, while its parameters are not determined.</li>
+</ul>
+<aside class="notes">
+<p>This is the constructive side of sloppiness. If the question is “what is the concentration at 6 h”, the sparse design answers it with SE 0.10 mg/L, close to the rich design. If the question is “what is ka” or “what is the peak concentration”, it cannot. The delta-method formula g^T Cov g propagates the parameter covariance to any derived quantity: a prediction, the AUC, the half-life ln 2 / ke. It inherits the linearisation, so for the sparse design the 0.5 h and 1 h SEs are still too small (the true values are 1.86 and 2.82). For those, profile the prediction itself or simulate.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="fix-1-choose-the-sampling-times" class="slide level2 smaller">
+<h2>Fix 1: choose the sampling times</h2>
+
+<img data-src="fig05-sensitivity.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:66.0%"><ul>
+<li>Relative sensitivities <span class="math inline">\theta_j\,\partial C/\partial\theta_j</span>: <span class="math inline">k_a</span> matters only in the <strong>first 3 h</strong>; <span class="math inline">k_e</span> late; <span class="math inline">V</span> near the peak. Ticks: all samples (black), from 3 h (red).</li>
+<li><span class="math inline">J</span> needs only a <strong>guess</strong> of <span class="math inline">\theta</span>, not data: compare designs <strong>before</strong> the experiment.</li>
+</ul>
+<aside class="notes">
+<p>The columns of the Jacobian are these sensitivity curves evaluated at the sample times. A parameter is well determined if its column is large and not proportional to the others at the chosen times. ka has a large positive sensitivity early (faster absorption, faster rise) and a small negative one later, which is almost proportional to the V sensitivity: that is the ka-V trade-off on the sparse design. Optimal experimental design formalises this: choose times to maximise det(J^T J) (D-optimal) or minimise the variance of a parameter of interest.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="design-in-code-same-cost-earlier-samples" class="slide level2 smaller">
+<h2>Design in code: same cost, earlier samples</h2>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a aria-hidden="true" tabindex="-1"></a>se_design <span class="ot">&lt;-</span> <span class="cf">function</span>(tt, <span class="at">p =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="fl">0.2</span>, <span class="dv">20</span>), <span class="at">sigma =</span> <span class="fl">0.15</span>) {</span>
+<span id="cb11-2"><a aria-hidden="true" tabindex="-1"></a>  J <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(<span class="cf">function</span>(lp) <span class="fu">pk</span>(tt, <span class="fu">exp</span>(lp[<span class="dv">1</span>]), <span class="fu">exp</span>(lp[<span class="dv">2</span>]), <span class="fu">exp</span>(lp[<span class="dv">3</span>])), <span class="fu">log</span>(p))</span>
+<span id="cb11-3"><a aria-hidden="true" tabindex="-1"></a>  sigma <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">solve</span>(<span class="fu">crossprod</span>(J))))   <span class="co"># predicted SE of log ka, log ke, log V</span></span>
+<span id="cb11-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb11-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">se_design</span>(<span class="fu">c</span>(<span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">12</span>, <span class="dv">24</span>)), <span class="dv">3</span>)</span>
+<span id="cb11-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.624 0.198 0.103</span></span>
+<span id="cb11-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">se_design</span>(<span class="fu">c</span>(<span class="fl">0.5</span>, <span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">8</span>, <span class="dv">24</span>)), <span class="dv">3</span>)</span>
+<span id="cb11-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.171 0.170 0.105</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Six samples either way. Moving three of them before 3 h cuts the SE of <span class="math inline">\log k_a</span> from 0.62 (a factor 1.9) to 0.17 (18 %), at no cost to <span class="math inline">k_e</span> and <span class="math inline">V</span>.</li>
+<li>The guess <span class="math inline">\theta</span> need not be right, only roughly right. Check several guesses.</li>
+<li>These are linearised SEs; for the first design the profile showed the truth is worse still.</li>
+</ul>
+<aside class="notes">
+<p>This is the cheapest fix of all: it costs nothing but thought before the experiment. sigma is the assay SD (known from calibration). We use the true parameters as the guess here; in practice one uses a literature value or a pilot study, and checks that the conclusion does not depend much on the guess. Note the Jacobian is evaluated at the guess, with no data at all: the identifiability of a design can be computed before a single blood sample is taken.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="fix-2-reparameterise" class="slide level2 smaller">
+<h2>Fix 2: reparameterise</h2>
+<ul>
+<li><strong>Log-parameters</strong> <span class="math inline">\theta = \log k</span>: positivity for free, columns of <span class="math inline">J</span> on the same scale (<span class="math inline">\kappa</span> 173 → 9.5), and the bowl is often more nearly quadratic (better SEs, as factors).</li>
+<li><strong>Fit what is identifiable.</strong> Unknown <span class="math inline">F</span>: estimate <span class="math inline">V/F</span>, not <span class="math inline">F</span> and <span class="math inline">V</span>. From 3 h only: the late curve <span class="math inline">A e^{-k_e t}</span> determines <span class="math inline">k_e</span>, <span class="math inline">A</span>, and the clearance-type quantity <span class="math inline">\text{AUC} = FD/(k_eV)</span>.</li>
+<li><strong>Remove a symmetry.</strong> <span class="math inline">k_a = k_e + e^{\delta}</span> allows only the branch <span class="math inline">k_a &gt; k_e</span>: no flip-flop.</li>
+<li>Reparameterising does not create information. It moves the undetermined part into one named parameter and keeps the rest clean.</li>
+</ul>
+<aside class="notes">
+<p>The general strategy: find the combinations that the data determine (from the SVD of J, the profiles, or algebra), and make them the parameters. Then the fit converges more easily, the covariance matrix is well conditioned, and what you report is meaningful. AUC (area under the curve) and clearance CL = ke V are exactly the quantities clinical pharmacokinetics reports, partly for this reason: they are determined by the elimination phase. Note that log parameters change the Wald interval (symmetric in log ka means asymmetric in ka) but not the profile interval, which is invariant to reparameterisation.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="fix-3-a-prior-is-an-extra-residual" class="slide level2 smaller">
+<h2>Fix 3: a prior is an extra residual</h2>
+<p>Prior knowledge “<span class="math inline">k_a</span> is about 1.2 /h, within a factor <span class="math inline">e^{0.5} = 1.65</span>” becomes one more residual, <span class="math inline">(\log k_a - \log 1.2)/0.5</span>:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(minpack.lm)</span>
+<span id="cb12-2"><a aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="cf">function</span>(lp, t, y) <span class="fu">c</span>((y <span class="sc">-</span> <span class="fu">pk</span>(t, <span class="fu">exp</span>(lp[<span class="dv">1</span>]), <span class="fu">exp</span>(lp[<span class="dv">2</span>]), <span class="fu">exp</span>(lp[<span class="dv">3</span>]))) <span class="sc">/</span> <span class="fl">0.15</span>,</span>
+<span id="cb12-3"><a aria-hidden="true" tabindex="-1"></a>                            (lp[<span class="dv">1</span>] <span class="sc">-</span> <span class="fu">log</span>(<span class="fl">1.2</span>)) <span class="sc">/</span> <span class="fl">0.5</span>)</span>
+<span id="cb12-4"><a aria-hidden="true" tabindex="-1"></a>fp <span class="ot">&lt;-</span> <span class="fu">nls.lm</span>(<span class="at">par =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="fl">0.2</span>, <span class="dv">20</span>)), <span class="at">fn =</span> res, <span class="at">t =</span> t[late], <span class="at">y =</span> y[late])</span>
+<span id="cb12-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">exp</span>(fp<span class="sc">$</span>par)</span>
+<span id="cb12-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  0.9168597  0.1872567 20.7779831</span></span>
+<span id="cb12-7"><a aria-hidden="true" tabindex="-1"></a>Ja <span class="ot">&lt;-</span> <span class="fu">jacobian</span>(res, fp<span class="sc">$</span>par, <span class="at">t =</span> t[late], <span class="at">y =</span> y[late])   <span class="co"># 7 x 3 (6 data + 1 prior)</span></span>
+<span id="cb12-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(<span class="fu">diag</span>(<span class="fu">solve</span>(<span class="fu">crossprod</span>(Ja))))                        <span class="co"># SE of log ka, log ke, log V</span></span>
+<span id="cb12-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.37112145 0.15471983 0.09106729</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>This is <strong>ridge regularisation</strong> (<em>The SVD, rank deficiency and regularisation</em>) on <span class="math inline">\log k_a</span>, and the maximum a posteriori estimate with a log-normal prior.</li>
+<li>SE of <span class="math inline">\log k_a</span>: 0.37, against 0.50 in the prior alone. The data added <strong>little</strong>: the answer is mostly the prior. Say so.</li>
+</ul>
+<aside class="notes">
+<p>Dividing the data residuals by the noise SD (0.15, known from the assay) and the prior residual by the prior SD puts them on the same footing: the sum of squares is then -2 log of likelihood times prior. nls.lm (Levenberg-Marquardt, from the previous unit) takes a residual function, so adding a row is trivial. Python: scipy.optimize.least_squares with the extra residual. The SE now has a finite value, but compare it with the prior SD: the posterior is only a little narrower than the prior, so the estimate is mostly assumption. A prior removes the numerical symptom (flat valley, huge SE) but not the lack of information, the same lesson as NNLS and ridge in Part 4.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="checklist-can-i-trust-these-parameters" class="slide level2 smaller">
+<h2>Checklist: can I trust these parameters?</h2>
+<ul>
+<li><strong>Multistart.</strong> Equal SSE at different parameter values → structural symmetry (flip-flop). Different SSE → local minima.</li>
+<li><strong><code>nls</code> says “singular gradient”</strong>, or <code>svd(J)</code> has a <span class="math inline">\sigma</span> near rounding level → structural: find the combination in <span class="math inline">v_n</span> and reparameterise.</li>
+<li><strong>Standard errors</strong> from <code>vcov</code> / <span class="math inline">s^2(J^TJ)^{-1}</span>, computed by QR or SVD, and the <strong>correlation matrix</strong>: <span class="math inline">|r| &gt; 0.95</span> is a warning.</li>
+<li><strong>SVD of <span class="math inline">J</span></strong> in log-parameters: name the badly determined combinations; look for a gap or an even (sloppy) spread.</li>
+<li><strong>Profile</strong> each parameter you will report. Flat on one side → no bound in that direction; do not quote the SE.</li>
+<li><strong>Before the experiment:</strong> compute <span class="math inline">J</span> at a guessed <span class="math inline">\theta</span> for candidate sampling times.</li>
+<li><strong>Report</strong> what is determined (predictions, <span class="math inline">V/F</span>, AUC), and any prior you used.</li>
+</ul>
+<aside class="notes">
+<p>Every line maps to one of the slides. The order is roughly the order of cost: a multistart and a look at vcov are free once you have a fit; the SVD of J is one line; profiles cost one fit per grid point per parameter. The last line matters most in a paper: if ka is not identifiable from your design, report the quantities that are, and say that ka was fixed or given a prior.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="summary" class="slide level2 smaller">
+<h2>Summary</h2>
+<ul>
+<li><strong>Structural</strong> non-identifiability is in the model: products like <span class="math inline">F/V</span> (exact null direction of <span class="math inline">J</span>), symmetries like the <span class="math inline">k_a/k_e</span> <strong>flip-flop</strong> (equal-SSE minima). <strong>Practical</strong> non-identifiability is in the data.</li>
+<li>Near <span class="math inline">\hat\theta</span>, <span class="math inline">S</span> is a bowl with Hessian <span class="math inline">H \approx 2J^TJ</span>. <strong>Covariance</strong> <span class="math inline">\approx s^2(J^TJ)^{-1}</span> = inverse <strong>Fisher information</strong>; <code>vcov(nls)</code>, <code>numDeriv::hessian</code>. Correlations near ±1 = parameters that trade off.</li>
+<li><strong>Small singular values of <span class="math inline">J</span></strong> = badly determined directions, SE <span class="math inline">s/\sigma_i</span>. Scale to log-parameters; never form <span class="math inline">J^TJ</span> when <span class="math inline">\kappa</span> is large.</li>
+<li><strong>Profile likelihood</strong> (fix one, re-fit the rest) checks the bowl; a flat profile means no bound, whatever the SE says.</li>
+<li><strong>Sloppy</strong> models: eigenvalues of <span class="math inline">J^TJ</span> spread over decades. Predictions can be good where data constrain them.</li>
+<li>Fixes: <strong>design</strong> (sampling times, computable in advance), <strong>reparameterise</strong> (log, identifiable combinations), <strong>priors</strong> (= ridge; say how much they did).</li>
+</ul>
+<p><strong>Next:</strong> <em>Constraints and linear programming</em>: bounds, Lagrange multipliers, and flux balance analysis.</p>
+<aside class="notes">
+<p>The one-sentence version: a good fit is necessary but not sufficient; look at J (its SVD and the covariance it implies) and at profiles before reporting any fitted parameter. The capstone of the course (if used) asks for exactly this analysis on a real time course.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+
+
+</section>
+    </div>
+  <div class="quarto-auto-generated-content" style="display: none;">
+<div class="footer footer-default">
+
+</div>
+</div></div>
+
+  <script>window.backupDefine = window.define; window.define = undefined;</script>
+  <script src="../site_libs/revealjs/dist/reveal.js"></script>
+  <!-- reveal.js plugins -->
+  <script src="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.js"></script>
+  <script src="../site_libs/revealjs/plugin/pdf-export/pdfexport.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/quarto-support/support.js"></script>
+  
+
+  <script src="../site_libs/revealjs/plugin/notes/notes.js"></script>
+  <script src="../site_libs/revealjs/plugin/search/search.js"></script>
+  <script src="../site_libs/revealjs/plugin/zoom/zoom.js"></script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://revealjs.com/config/
+      Reveal.initialize({
+'controlsAuto': false,
+'previewLinksAuto': false,
+'pdfSeparateFragments': false,
+'autoAnimateEasing': "ease",
+'autoAnimateDuration': 1,
+'autoAnimateUnmatched': true,
+'jumpToSlide': true,
+'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
+'smaller': false,
+ 
+        // Display controls in the bottom right corner
+        controls: true,
+
+        // Help the user learn the controls by providing hints, for example by
+        // bouncing the down arrow when they first encounter a vertical slide
+        controlsTutorial: false,
+
+        // Determines where controls appear, "edges" or "bottom-right"
+        controlsLayout: 'edges',
+
+        // Visibility rule for backwards navigation arrows; "faded", "hidden"
+        // or "visible"
+        controlsBackArrows: 'visible',
+
+        // Display a presentation progress bar
+        progress: true,
+
+        // Display the page number of the current slide
+        slideNumber: 'c/t',
+
+        // 'all', 'print', or 'speaker'
+        showSlideNumber: 'all',
+
+        // Add the current slide number to the URL hash so that reloading the
+        // page/copying the URL will return you to the same slide
+        hash: true,
+
+        // Start with 1 for the hash rather than 0
+        hashOneBasedIndex: false,
+
+        // Flags if we should monitor the hash and change slides accordingly
+        respondToHashChanges: true,
+
+        // Push each slide change to the browser history
+        history: false,
+
+        // Enable keyboard shortcuts for navigation
+        keyboard: true,
+
+        // Enable the slide overview mode
+        overview: true,
+
+        // Disables the default reveal.js slide layout (scaling and centering)
+        // so that you can use custom CSS layout
+        disableLayout: false,
+
+        // Vertical centering of slides
+        center: false,
+
+        // Enables touch navigation on devices with touch input
+        touch: true,
+
+        // Loop the presentation
+        loop: false,
+
+        // Change the presentation direction to be RTL
+        rtl: false,
+
+        // see https://revealjs.com/vertical-slides/#navigation-mode
+        navigationMode: 'linear',
+
+        // Randomizes the order of slides each time the presentation loads
+        shuffle: false,
+
+        // Turns fragments on and off globally
+        fragments: true,
+
+        // Flags whether to include the current fragment in the URL,
+        // so that reloading brings you to the same fragment position
+        fragmentInURL: false,
+
+        // Flags if the presentation is running in an embedded mode,
+        // i.e. contained within a limited portion of the screen
+        embedded: false,
+
+        // Flags if we should show a help overlay when the questionmark
+        // key is pressed
+        help: true,
+
+        // Flags if it should be possible to pause the presentation (blackout)
+        pause: true,
+
+        // Flags if speaker notes should be visible to all viewers
+        showNotes: false,
+
+        // Global override for autoplaying embedded media (null/true/false)
+        autoPlayMedia: null,
+
+        // Global override for preloading lazy-loaded iframes (null/true/false)
+        preloadIframes: null,
+
+        // Number of milliseconds between automatically proceeding to the
+        // next slide, disabled when set to 0, this value can be overwritten
+        // by using a data-autoslide attribute on your slides
+        autoSlide: 0,
+
+        // Stop auto-sliding after user input
+        autoSlideStoppable: true,
+
+        // Use this method for navigation when auto-sliding
+        autoSlideMethod: null,
+
+        // Specify the average time in seconds that you think you will spend
+        // presenting each slide. This is used to show a pacing timer in the
+        // speaker view
+        defaultTiming: null,
+
+        // Enable slide navigation via mouse wheel
+        mouseWheel: false,
+
+        // The display mode that will be used to show slides
+        display: 'block',
+
+        // Hide cursor if inactive
+        hideInactiveCursor: true,
+
+        // Time before the cursor is hidden (in ms)
+        hideCursorTime: 5000,
+
+        // Opens links in an iframe preview overlay
+        previewLinks: false,
+
+        // Transition style (none/fade/slide/convex/concave/zoom)
+        transition: 'none',
+
+        // Transition speed (default/fast/slow)
+        transitionSpeed: 'default',
+
+        // Transition style for full page slide backgrounds
+        // (none/fade/slide/convex/concave/zoom)
+        backgroundTransition: 'none',
+
+        // Number of slides away from the current that are visible
+        viewDistance: 3,
+
+        // Number of slides away from the current that are visible on mobile
+        // devices. It is advisable to set this to a lower number than
+        // viewDistance in order to save resources.
+        mobileViewDistance: 2,
+
+        // The "normal" size of the presentation, aspect ratio will be preserved
+        // when the presentation is scaled to fit different resolutions. Can be
+        // specified using percentage units.
+        width: 1280,
+
+        height: 720,
+
+        // Factor of the display size that should remain empty around the content
+        margin: 0.1,
+
+        // reveal.js plugins
+        plugins: [QuartoLineHighlight, PdfExport, RevealMenu, QuartoSupport,
+
+          RevealNotes,
+          RevealSearch,
+          RevealZoom
+        ]
+      });
+    </script>
+    <script id="quarto-html-after-body" type="application/javascript">
+      window.document.addEventListener("DOMContentLoaded", function (event) {
+        const tabsets =  window.document.querySelectorAll(".panel-tabset-tabby")
+        tabsets.forEach(function(tabset) {
+          const tabby = new Tabby('#' + tabset.id);
+        });
+        const isCodeAnnotation = (el) => {
+          for (const clz of el.classList) {
+            if (clz.startsWith('code-annotation-')) {                     
+              return true;
+            }
+          }
+          return false;
+        }
+        const onCopySuccess = function(e) {
+          // button target
+          const button = e.trigger;
+          // don't keep focus
+          button.blur();
+          // flash "checked"
+          button.classList.add('code-copy-button-checked');
+          var currentTitle = button.getAttribute("title");
+          button.setAttribute("title", "Copied!");
+          let tooltip;
+          if (window.bootstrap) {
+            button.setAttribute("data-bs-toggle", "tooltip");
+            button.setAttribute("data-bs-placement", "left");
+            button.setAttribute("data-bs-title", "Copied!");
+            tooltip = new bootstrap.Tooltip(button, 
+              { trigger: "manual", 
+                customClass: "code-copy-button-tooltip",
+                offset: [0, -8]});
+            tooltip.show();    
+          }
+          setTimeout(function() {
+            if (tooltip) {
+              tooltip.hide();
+              button.removeAttribute("data-bs-title");
+              button.removeAttribute("data-bs-toggle");
+              button.removeAttribute("data-bs-placement");
+            }
+            button.setAttribute("title", currentTitle);
+            button.classList.remove('code-copy-button-checked');
+          }, 1000);
+          // clear code selection
+          e.clearSelection();
+        }
+        const getTextToCopy = function(trigger) {
+            const codeEl = trigger.previousElementSibling.cloneNode(true);
+            for (const childEl of codeEl.children) {
+              if (isCodeAnnotation(childEl)) {
+                childEl.remove();
+              }
+            }
+            return codeEl.innerText;
+        }
+        const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+          text: getTextToCopy
+        });
+        clipboard.on('success', onCopySuccess);
+        if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+          const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+            text: getTextToCopy,
+            container: window.document.getElementById('quarto-embedded-source-code-modal')
+          });
+          clipboardModal.on('success', onCopySuccess);
+        }
+          var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+          var mailtoRegex = new RegExp(/^mailto:/);
+            var filterRegex = new RegExp('/' + window.location.host + '/');
+          var isInternal = (href) => {
+              return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+          }
+          // Inspect non-navigation links and adorn them if external
+         var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+          for (var i=0; i<links.length; i++) {
+            const link = links[i];
+            if (!isInternal(link.href)) {
+              // undo the damage that might have been done by quarto-nav.js in the case of
+              // links that we want to consider external
+              if (link.dataset.originalHref !== undefined) {
+                link.href = link.dataset.originalHref;
+              }
+            }
+          }
+        function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+          const config = {
+            allowHTML: true,
+            maxWidth: 500,
+            delay: 100,
+            arrow: false,
+            appendTo: function(el) {
+                return el.closest('section.slide') || el.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'light-border',
+            placement: 'bottom-start',
+          };
+          if (contentFn) {
+            config.content = contentFn;
+          }
+          if (onTriggerFn) {
+            config.onTrigger = onTriggerFn;
+          }
+          if (onUntriggerFn) {
+            config.onUntrigger = onUntriggerFn;
+          }
+            config['offset'] = [0,0];
+            config['maxWidth'] = 700;
+          window.tippy(el, config); 
+        }
+        const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+        for (var i=0; i<noterefs.length; i++) {
+          const ref = noterefs[i];
+          tippyHover(ref, function() {
+            // use id or data attribute instead here
+            let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+            try { href = new URL(href).hash; } catch {}
+            const id = href.replace(/^#\/?/, "");
+            const note = window.document.getElementById(id);
+            if (note) {
+              return note.innerHTML;
+            } else {
+              return "";
+            }
+          });
+        }
+        const findCites = (el) => {
+          const parentEl = el.parentElement;
+          if (parentEl) {
+            const cites = parentEl.dataset.cites;
+            if (cites) {
+              return {
+                el,
+                cites: cites.split(' ')
+              };
+            } else {
+              return findCites(el.parentElement)
+            }
+          } else {
+            return undefined;
+          }
+        };
+        var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+        for (var i=0; i<bibliorefs.length; i++) {
+          const ref = bibliorefs[i];
+          const citeInfo = findCites(ref);
+          if (citeInfo) {
+            tippyHover(citeInfo.el, function() {
+              var popup = window.document.createElement('div');
+              citeInfo.cites.forEach(function(cite) {
+                var citeDiv = window.document.createElement('div');
+                citeDiv.classList.add('hanging-indent');
+                citeDiv.classList.add('csl-entry');
+                var biblioDiv = window.document.getElementById('ref-' + cite);
+                if (biblioDiv) {
+                  citeDiv.innerHTML = biblioDiv.innerHTML;
+                }
+                popup.appendChild(citeDiv);
+              });
+              return popup.innerHTML;
+            });
+          }
+        }
+      });
+      </script>
+    
+
+</body></html>

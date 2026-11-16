@@ -9525,5 +9525,720 @@
       "Initial value problems and Euler's method",
       "Lecture (slides)"
     ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#about-this-lecture",
+    "href": "optimisation-1d/lec.html#about-this-lecture",
+    "title": "Optimisation in one dimension",
+    "section": "About this lecture",
+    "text": "About this lecture\nPart 9 is about fitting models: finding the parameter value that makes a model agree best with data. This lecture does it for one parameter.\n\nA minimum of f is a root of f', but you can also search for the minimum directly, using only values of f: no derivative, and harder to fool.\nGolden-section search keeps a three-point bracket and shrinks it by 0.618 per function evaluation: slow, but it cannot fail on a unimodal function.\nBrent’s method (R’s optimize) adds fast parabolic steps. Newton for minimisation uses f'/f''.\nTwo limits: a minimum can only be located to about \\sqrt{\\varepsilon} \\approx 10^{-8} (the bottom is flat), and every method here finds a local minimum, not necessarily the global one.\n\nBiology: the decay rate of an mRNA from a time course (maximum likelihood with one parameter), and the period of a circadian rhythm, whose likelihood has two local maxima.\n\nThis opens Part 9. Everything here is one-dimensional, so we can draw every function we optimise, and see exactly what each method does. The next unit (Gradient descent, Newton and quasi-Newton) moves to several parameters, where we can no longer draw the function and the ideas from today (brackets, local models, local versus global) are what keeps us safe. The link to Part 2 is direct: a minimum of a smooth function is a root of its derivative, and the methods mirror each other (golden section ~ bisection, parabolic interpolation ~ secant, Brent ~ Brent, Newton ~ Newton).",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#recap-an-mle-as-the-root-of-the-score",
+    "href": "optimisation-1d/lec.html#recap-an-mle-as-the-root-of-the-score",
+    "title": "Optimisation in one dimension",
+    "section": "Recap: an MLE as the root of the score",
+    "text": "Recap: an MLE as the root of the score\nFrom Newton and secant methods: UMI counts of a gene in the 100 cells where it was detected, modelled as a zero-truncated Poisson with rate \\lambda.\n\\ell(\\lambda) = 173\\log\\lambda - 100\\,\\lambda - 100\\log(1 - e^{-\\lambda}) + \\text{const}, \\qquad S(\\lambda) = \\ell'(\\lambda) = \\frac{173}{\\lambda} - \\frac{100}{1 - e^{-\\lambda}}\n\nThe maximum-likelihood estimate (MLE) \\hat\\lambda = 1.218 was found as the root of the score S, with Newton and with uniroot.\nBut the question was never “where is S = 0?”. It was “which \\lambda makes the data most likely?”\nToday: answer that question directly, by maximising \\ell, and see what is gained and what is lost.\n\n\nA quick reminder of the second running example of the Newton unit. 100 cells, counts 1 to 5 in 52, 30, 12, 5 and 1 cells, so the sum is 173. The truncation term (zeros are never seen) is what makes the MLE a transcendental equation. Newton from the mean converged in 6 steps; Newton from 3 ran off to negative rates; uniroot on a wide bracket found it safely.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#minimum-versus-root",
+    "href": "optimisation-1d/lec.html#minimum-versus-root",
+    "title": "Optimisation in one dimension",
+    "section": "Minimum versus root",
+    "text": "Minimum versus root\n\nMaximising \\ell is the same as minimising f = -\\ell (the convention of every optimiser). At a smooth minimum f'(x^*) = 0, so the minimum is a root of f'.\nnll &lt;- function(l) -(173 * log(l) - 100 * l - 100 * log(-expm1(-l)))  # minus log-lik\noptimize(nll, interval = c(0.01, 10), tol = 1e-10)\n# $minimum\n# [1] 1.21847\n#\n# $objective\n# [1] 52.61033\n\nSame answer as uniroot on the score, without writing down the derivative. “nll” is the usual abbreviation for negative log-likelihood. optimize minimises by default; optimize(loglik, …, maximum = TRUE) maximises instead, which is the same thing. Python’s minimize_scalar and Rust’s argmin only minimise: pass the negative log-likelihood. $objective is the value of nll at the minimum.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#why-search-for-the-minimum-directly",
+    "href": "optimisation-1d/lec.html#why-search-for-the-minimum-directly",
+    "title": "Optimisation in one dimension",
+    "section": "Why search for the minimum directly?",
+    "text": "Why search for the minimum directly?\n\n\n\n\n\n\n\n\n\nroot of f'\nminimum of f\n\n\n\n\nneeds\nthe derivative f'\nonly values of f\n\n\na root can be\na minimum, a maximum or a flat inflection\na minimum (lower values are always better)\n\n\nbracket\nsign change of f': 2 points\na low point between two higher ones: 3 points\n\n\naccuracy\n\\sim\\varepsilon relative\nonly \\sim\\sqrt{\\varepsilon} relative (later slide)\n\n\n\n\nOften there is no formula for f': f comes out of an ODE solver, a simulation, or a long likelihood.\nComparing two values of f tells you which one is better. A value of f' only tells you which way is downhill.\nThe price: we lose half of the digits. Usually that is fine for a parameter estimate.\n\n\nThe table is the plan of the lecture. Each method for minimisation has a root-finding twin: bisection becomes golden section, the secant method becomes parabolic interpolation, Newton stays Newton (on f’), and Brent combines the safe and the fast method in both cases. The last row is the surprise of the lecture, and we will see it on a plot. In practice, a rate estimated to 8 significant digits is far more precise than any data justify (the standard error is in the second digit), so the lost digits rarely matter; they matter when the optimum feeds another computation, such as a finite-difference derivative.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#a-biology-problem-how-fast-does-an-mrna-decay",
+    "href": "optimisation-1d/lec.html#a-biology-problem-how-fast-does-an-mrna-decay",
+    "title": "Optimisation in one dimension",
+    "section": "A biology problem: how fast does an mRNA decay?",
+    "text": "A biology problem: how fast does an mRNA decay?\nTranscription is stopped at t = 0 (actinomycin D); qPCR measures the fraction of the mRNA left.\n\n\n\n\nModel: y_i = e^{-k t_i} + \\text{noise}, one unknown, the decay rate k.\nWith Gaussian noise of constant size, the MLE of k minimises the sum of squared errors\n\\text{SSE}(k) = \\sum_i \\left(y_i - e^{-k t_i}\\right)^2 .\n\\text{SSE}'(k) = 0 has no closed form.\n\n\nThe numbers are simulated with k = 0.35 per hour plus noise (sd 0.03), rounded to 3 decimals, so that we know the truth. The Gaussian log-likelihood is -SSE/(2 sigma^2) plus a constant, so for Gaussian noise “maximum likelihood” and “least squares” are the same fit; that is why we can minimise SSE. A common shortcut is to regress log(y) on t with lm, which is linear and has a formula. It gives k = 0.348, not 0.375: taking logs gives the small, noisy late points much more weight. It is a different statistical model (multiplicative noise), not a wrong one, but if the noise is additive the nonlinear fit is the MLE. The half-life is log(2)/k.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#the-objective-function",
+    "href": "optimisation-1d/lec.html#the-objective-function",
+    "title": "Optimisation in one dimension",
+    "section": "The objective function",
+    "text": "The objective function\nt &lt;- c(0, 0.5, 1, 2, 4, 6, 8)                            # hours\ny &lt;- c(1.000, 0.804, 0.684, 0.484, 0.217, 0.094, 0.083)  # fraction left\nsse &lt;- function(k) sum((y - exp(-k * t))^2)\nk &lt;- c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 5)\nround(sapply(k, sse), 4)\n# [1] 2.6793 0.0723 0.0329 0.1678 0.3152 0.5726 0.7708 1.2769\n\n\nOne low valley near k = 0.4. For large k the curve flattens (all predictions near 0) and bends the other way (yellow).\n\n\nThe objective function (also cost, loss) is what we minimise. sse takes a single k, so we use sapply to evaluate it on a vector of k values. Evaluating on a coarse grid is always the first thing to do: it shows where the minimum is, roughly, and whether there is more than one. The yellow region, where SSE’’ &lt; 0, will matter for Newton. For k -&gt; infinity the model predicts 0 for every t &gt; 0, and SSE tends to (1-1)^2 plus the sum of the other y^2, about 1.47.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#brackets-for-a-minimum",
+    "href": "optimisation-1d/lec.html#brackets-for-a-minimum",
+    "title": "Optimisation in one dimension",
+    "section": "Brackets for a minimum",
+    "text": "Brackets for a minimum\nA function is unimodal on [a, b] if it decreases to a single minimum x^* and increases after it.\n\nA bracket for a minimum is three points a &lt; c &lt; b with f(c) &lt; f(a) and f(c) &lt; f(b): a low point between two higher ones. If f is continuous, a (local) minimum lies in (a, b).\nFrom the grid on the previous slide: f(0) = 2.68 &gt; f(0.5) = 0.033 &lt; f(0.75) = 0.168. So (0, 0.5, 0.75) is a bracket; so is [0, 1] with c = 0.5.\nCompare with root finding: there a sign change at two points was enough. Here two values say nothing: is the minimum between them, or beyond the lower one?\n\nRecipe: evaluate f on a grid, take the lowest grid point and its two neighbours.\n\nThe analogy with the intermediate value theorem: a continuous function on a closed interval takes a minimum somewhere, and if the middle value is lower than both ends, that minimum is not at an end, so it is a local minimum inside. Unimodal is the property that makes it the only one. Two points are not enough: f(0.25) &gt; f(0.5) is consistent with a minimum at 0.4 and with one at 3. Brent’s method in optimize assumes that the interval you give contains one minimum; it does not check.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#golden-section-search-the-idea",
+    "href": "optimisation-1d/lec.html#golden-section-search-the-idea",
+    "title": "Optimisation in one dimension",
+    "section": "Golden-section search: the idea",
+    "text": "Golden-section search: the idea\nPlace two points x_1 &lt; x_2 inside [a, b] and compare f(x_1) with f(x_2):\n\nf(x_1) &lt; f(x_2): the minimum cannot be right of x_2. Keep [a, x_2].\notherwise: keep [x_1, b].\n\n\nThe trick is where to put x_1 and x_2: so that one old point is reused, and each step costs one new evaluation.\n\nThe analogue of bisection, but we need two interior points instead of one midpoint, because comparing two values is how we learn which part to throw away. If we put the two points anywhere, each step costs two evaluations. With the golden-ratio placement the surviving interior point is exactly in the right place for the next step, so each step costs one evaluation. In the figure: step 1 compares 0.382 and 0.618 and keeps [0, 0.618]; step 2 reuses 0.382 and adds 0.236; and so on.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#why-0.618",
+    "href": "optimisation-1d/lec.html#why-0.618",
+    "title": "Optimisation in one dimension",
+    "section": "Why 0.618?",
+    "text": "Why 0.618?\nPut the points symmetrically at fractions 1 - g and g of the interval, L = b - a:\nx_1 = a + (1 - g)L, \\qquad x_2 = a + gL .\nKeep [a, x_2], of length gL. The old x_1 should be the new x_2, at fraction g of the new interval:\n(1 - g)L = g \\cdot gL \\quad\\Longrightarrow\\quad g^2 + g - 1 = 0 \\quad\\Longrightarrow\\quad g = \\frac{\\sqrt5 - 1}{2} = 0.6180\\ldots\n\nThe bracket shrinks by 0.618 per evaluation: L_k = 0.618^k L_0. That is linear convergence with rate 0.618.\nBisection for roots: 0.5 per evaluation (\\log_{10} 2 = 0.30 digits). Golden section: \\log_{10}(1/0.618) = 0.21 digits per evaluation.\n\n\ng is 1 over the golden ratio phi = 1.618, hence the name. 1 - g = g^2 = 0.382. The symmetric case (keep [x1, b]) gives the same equation. Linear convergence in the sense of Convergence and cost: the error bound is multiplied by a fixed factor each evaluation. From width 1 to 1e-8 takes log(1e-8)/log(0.618) = 38 evaluations, plus the two to start. Golden section is optimal among methods that only compare function values, in the worst case; it is slower than bisection because comparing two values carries less information than a sign.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#golden-section-by-hand",
+    "href": "optimisation-1d/lec.html#golden-section-by-hand",
+    "title": "Optimisation in one dimension",
+    "section": "Golden section by hand",
+    "text": "Golden section by hand\n\\text{SSE}(k) on [0, 1], four digits:\n\n\n\n\n\n\n\n\n\n\n\n\n\nstep\n[a, b]\nx_1\nf(x_1)\nx_2\nf(x_2)\nkeep\nwidth\n\n\n\n\n1\n[0, 1]\n0.3820\n0.00216\n0.6180\n0.09150\n[a, x_2]\n0.618\n\n\n2\n[0, 0.6180]\n0.2361\n0.09417\n0.3820\n0.00216\n[x_1, b]\n0.382\n\n\n3\n[0.2361, 0.6180]\n0.3820\n0.00216\n0.4721\n0.02204\n[a, x_2]\n0.236\n\n\n\n\nBold: the only new evaluation in each step. The other point is reused.\nAfter 4 evaluations the minimum (\\hat k = 0.3754) is in [0.2361, 0.4721].\n0.382 is already close; golden section does not know that, and keeps shrinking at 0.618 per step.\n\n\nDo this with the students. New points: in step 2, b - g(b - a) = 0.618 - 0.6180.618 = 0.2361. In step 3, a + g(b - a) = 0.2361 + 0.6180.3820 = 0.4721. Each comparison throws away the outer part on the side of the larger value. The exercise has the same by hand on a function you can evaluate with a calculator. Note that golden section uses only the order of the two values, not their size: f(0.382) is 40 times smaller than f(0.618), but that information is not used. Parabolic interpolation will use it.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#golden-section-search-in-r",
+    "href": "optimisation-1d/lec.html#golden-section-search-in-r",
+    "title": "Optimisation in one dimension",
+    "section": "Golden-section search in R",
+    "text": "Golden-section search in R\ngolden &lt;- function(f, a, b, tol = 1e-8) {\n  g &lt;- (sqrt(5) - 1) / 2                      # 0.618...\n  x1 &lt;- b - g * (b - a); f1 &lt;- f(x1)\n  x2 &lt;- a + g * (b - a); f2 &lt;- f(x2)\n  while (b - a &gt; tol) {\n    if (f1 &lt; f2) { b &lt;- x2; x2 &lt;- x1; f2 &lt;- f1; x1 &lt;- b - g * (b - a); f1 &lt;- f(x1) }\n    else         { a &lt;- x1; x1 &lt;- x2; f1 &lt;- f2; x2 &lt;- a + g * (b - a); f2 &lt;- f(x2) }\n  }\n  (a + b) / 2\n}\ngolden(sse, 0, 1)\n# [1] 0.3753873\n\nOne new f per pass through the loop. Width &lt; 10^{-8} after 38 passes.\nCannot fail on a unimodal function: no start value, no derivative, never leaves [a, b].\n\n\nNine lines. In each branch: shrink the interval, shift the surviving point into its new role, and evaluate one new point. The stopping rule is on the bracket width, an absolute tolerance; for a parameter of size 1000 you would want tol relative to |x|. On a function that is not unimodal it still returns a point, a local minimum (or a point near the edge); it gives no warning. We will see that at the end.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#how-fast",
+    "href": "optimisation-1d/lec.html#how-fast",
+    "title": "Optimisation in one dimension",
+    "section": "How fast?",
+    "text": "How fast?\n\n\nGolden section: a straight line on a log scale, slope \\log_{10} 0.618 = -0.21 per evaluation. Linear.\nBrent and Newton: superlinear, but they stall near 10^{-9} and 10^{-13}. Why the floors differ comes in a few slides.\n\n\nError of the best point found so far, against the number of function evaluations, all on SSE(k). Golden section’s staircase follows 0.618^n; it reaches 1e-9 after about 42 evaluations. Brent (optimize with tol = 1e-12) and Newton (from 0.2, counting two evaluations per step for SSE’ and SSE’’) reach 1e-8 in about 10 evaluations. Brent stalls at about 5e-10: it compares values of f, and those values stop changing near the minimum. Newton works with the derivative and gets further. Keep this picture in mind for the slide on the flat bottom.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#parabolic-interpolation",
+    "href": "optimisation-1d/lec.html#parabolic-interpolation",
+    "title": "Optimisation in one dimension",
+    "section": "Parabolic interpolation",
+    "text": "Parabolic interpolation\nUse the sizes of the three values: fit a parabola through (a, f_a), (b, f_b), (c, f_c) and jump to its vertex,\nx_\\text{new} = b - \\frac12\\,\\frac{(b-a)^2(f_b - f_c) - (b-c)^2(f_b - f_a)}{(b-a)(f_b - f_c) - (b-c)(f_b - f_a)} .\n\n\nNear the minimum f looks like a parabola, so the vertex is very close: order about 1.32, superlinear.\nFar away it can jump anywhere, even to a maximum (a parabola opening downwards). From (0, 0.5, 1) the next steps go to -1.51, then wander off to k = 34.\n\n\nThe minimisation twin of the secant method: there we fitted a line to two values of f and found its root; here we fit a parabola to three values of f and find its vertex. Repeating it with the three latest points is successive parabolic interpolation. From (0.2, 0.3, 0.5): errors 0.020, 0.014, 0.008, 7e-6, 2e-4, 2e-6, 2e-9: fast but not smooth. From (0, 0.5, 1), the first vertex 0.70 is already worse than 0.5, and the iteration then runs away: no bracket is kept. Like the secant method: fast when close, unsafe when not.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#brents-method-a-fast-step-on-a-leash",
+    "href": "optimisation-1d/lec.html#brents-method-a-fast-step-on-a-leash",
+    "title": "Optimisation in one dimension",
+    "section": "Brent’s method: a fast step on a leash",
+    "text": "Brent’s method: a fast step on a leash\nThe minimiser twin of uniroot (Brent 1973):\n\nKeep a bracket [a, b] and the three best points so far.\nTry a parabolic step. Accept it if it lands inside the bracket and the steps are shrinking.\nOtherwise take a golden-section step.\n\n\nAs safe as golden section; superlinear near the minimum. No derivative.\nR: optimize (alias optimise). Python: scipy.optimize.minimize_scalar. Rust: argmin’s BrentOpt.\nAlso inside optim(method = \"Brent\") for one parameter.\n\n\nExactly the idea of the safeguarded root finder from Newton and secant methods: a fast method that is allowed to act only while it behaves, and a slow guaranteed method as a fallback. Brent’s minimiser starts at the golden-section point a + 0.382(b - a), which matters for the circadian example later. Python: minimize_scalar(f, bounds=(a, b), method=“bounded”) is the version with an interval like optimize; method=“brent” (the default) wants a bracket triple or finds one itself. In Rust, BrentOpt::new(a, b) from the argmin crate.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#optimize-in-practice",
+    "href": "optimisation-1d/lec.html#optimize-in-practice",
+    "title": "Optimisation in one dimension",
+    "section": "optimize in practice",
+    "text": "optimize in practice\ncount &lt;- 0\nfc &lt;- function(k) { count &lt;&lt;- count + 1; sse(k) }   # counts evaluations\noptimize(fc, c(0, 1))$minimum; count\n# [1] 0.3754002\n# [1] 11\ncount &lt;- 0; optimize(fc, c(0, 1), tol = 1e-10)$minimum; count\n# [1] 0.3753873\n# [1] 14\ncount &lt;- 0; golden(fc, 0, 1, tol = 1e-10); count\n# [1] 0.3753873\n# [1] 50\n\nDefault tol is \\varepsilon^{1/4} \\approx 1.2\\times10^{-4}, an absolute tolerance: the default answer is off in the 5th digit. Set tol.\nBrent: 14 evaluations; golden section: 50, for the same accuracy.\n\n\nThe same default as uniroot, and the same advice. 0.3754002 versus the true 0.3753873: fine for reporting a half-life of 1.85 h, not fine if the estimate feeds into anything else. With tol = 1e-10 Brent takes only three more evaluations. Golden section needs 50, as predicted: log(1e-10)/log(0.618) = 48, plus 2. The counter uses &lt;&lt;- to change a variable outside the function, the same trick as in the Newton exercise. For the record: the half-life is log(2)/0.3754 = 1.85 hours.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#how-precisely-can-we-locate-a-minimum",
+    "href": "optimisation-1d/lec.html#how-precisely-can-we-locate-a-minimum",
+    "title": "Optimisation in one dimension",
+    "section": "How precisely can we locate a minimum?",
+    "text": "How precisely can we locate a minimum?\nBack to the zero-truncated Poisson, where the root of the score is known to full precision:\nS &lt;- function(l) 173 / l - 100 / (-expm1(-l))       # score = -nll'\nlhat &lt;- uniroot(S, c(0.01, 10), tol = 1e-15)$root\nd &lt;- 10^-(5:10)                                      # step away from lhat\nnll(lhat + d) - nll(lhat)\n# [1]  2.845923e-09  2.845013e-11  2.629008e-13  0.000000e+00  7.105427e-15\n# [6] -2.842171e-14\nS(lhat + d)\n# [1] -5.691820e-04 -5.691856e-05 -5.691860e-06 -5.691860e-07 -5.691859e-08\n# [6] -5.691874e-09\noptimize(nll, c(0.01, 10), tol = 1e-15)$minimum - lhat\n# [1] 6.859067e-10\n\n1e-8 away from \\hat\\lambda, f has not changed at all; at 1e-10 it is even lower. The score still sees every step.\nAsking optimize for tol = 1e-15 does not help: about 9 digits is all there is.\n\n\nThe values of nll near the minimum are around 52.6, and the change in nll over a distance of 1e-8 is about 3e-15: that is smaller than the gap between doubles near 52.6 (7e-15). So the computer literally cannot tell those two points apart by their f values. The differences we see for d &lt;= 1e-8 are rounding noise: one of them is even negative, so a point 1e-10 away “looks better” than the minimum. The score, by contrast, is linear in the distance near its root, so its values keep shrinking in proportion: -5.69e-4, -5.69e-5, … all the way down.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#the-flat-bottom-why-sqrtvarepsilon",
+    "href": "optimisation-1d/lec.html#the-flat-bottom-why-sqrtvarepsilon",
+    "title": "Optimisation in one dimension",
+    "section": "The flat bottom: why \\sqrt{\\varepsilon}",
+    "text": "The flat bottom: why \\sqrt{\\varepsilon}\n\nTaylor at the minimum, where f'(x^*) = 0: \\;f(x^* + \\delta) \\approx f(x^*) + \\tfrac12 f''(x^*)\\,\\delta^2.\nThe change is lost in rounding when \\tfrac12 f''\\delta^2 &lt; \\varepsilon\\,|f(x^*)|, that is, for\n|\\delta| \\lesssim \\sqrt{\\varepsilon}\\,\\sqrt{2|f(x^*)|/f''(x^*)} = 1.5\\times10^{-8} \\cdot \\sqrt{2\\cdot 52.6/56.9} \\approx 2\\times10^{-8} .\n\nLeft: nll minus its minimum on a 1e-8 scale, in units of 1e-14: a noisy staircase in steps of about 7e-15 (the gap between doubles near 52.6), around the true parabola (red). Any point in the middle region is as good as any other, as far as the computer can tell. Right: the score near the root is a clean straight line. A root changes f’ linearly in delta, so it is resolved to about epsilon; a minimum changes f quadratically in delta, so only to about sqrt(epsilon). This is a general limit, not a weakness of optimize: every method that compares values of f has it, including Nelder-Mead and the line searches in the next unit. If you need more digits, find the root of f’. And never set tol below about sqrt(eps)*|x|: R’s optimize and argmin’s BrentOpt both use a relative part sqrt(eps) internally for exactly this reason.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#newton-for-minimisation",
+    "href": "optimisation-1d/lec.html#newton-for-minimisation",
+    "title": "Optimisation in one dimension",
+    "section": "Newton for minimisation",
+    "text": "Newton for minimisation\nFit the local parabola (second-order Taylor) at x_k and jump to its vertex:\nq(x) = f(x_k) + f'(x_k)(x - x_k) + \\tfrac12 f''(x_k)(x - x_k)^2, \\qquad x_{k+1} = x_k - \\frac{f'(x_k)}{f''(x_k)} .\n\nThis is Newton’s method on f': quadratic convergence near a minimum with f''(x^*) &gt; 0.\nFor the zero-truncated Poisson, f = -\\ell, f' = -S, f'' = -S': exactly the Newton iteration on the score from Newton and secant methods (6 steps from \\bar x).\nIt needs f' and f'', and it works on f', so it reaches full precision (no \\sqrt\\varepsilon floor).\nf''(\\hat x) is the curvature at the minimum. For a likelihood, it gives the standard error.\n\n\nThe derivation in one line: q’(x) = f’(x_k) + f’‘(x_k)(x - x_k) = 0 gives the step. Newton for minimisation is not a new method; it is Newton for roots applied to f’. Everything from Part 2 carries over: digits double near the minimum, a wrong derivative makes it linear, a bad start can diverge. One new failure appears: f’’ can be negative, and then the local parabola opens downwards and its vertex is a maximum. Standard errors from the curvature are the topic of Identifiability and uncertainty of fitted parameters.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#newton-on-the-decay-rate",
+    "href": "optimisation-1d/lec.html#newton-on-the-decay-rate",
+    "title": "Optimisation in one dimension",
+    "section": "Newton on the decay rate",
+    "text": "Newton on the decay rate\nd1 &lt;- function(k) sum(2 * (y - exp(-k * t)) * t * exp(-k * t))        # SSE'\nd2 &lt;- function(k) sum(2 * t^2 * exp(-k * t) * (2 * exp(-k * t) - y))  # SSE''\nnewton_min &lt;- function(d1, d2, x0, n = 6) {\n  x &lt;- x0\n  for (i in 1:n) x[i + 1] &lt;- x[i] - d1(x[i]) / d2(x[i])\n  x\n}\nprint(newton_min(d1, d2, 0.2), digits = 10)\n# [1] 0.2000000000 0.2778001915 0.3394487230 0.3697526835 0.3752380818\n# [6] 0.3753872034 0.3753873095\nnewton_min(d1, d2, 0.7)\n# [1]  0.700000 -1.659596 -1.597081 -1.534561 -1.472036 -1.409503 -1.346962\nnewton_min(d1, d2, 1.0)\n# [1]  1.000000  3.956008  5.844671  7.797795  9.779586 11.772747 13.770211\n\nFrom 0.2: digits double after a slow start. From 0.7: a negative rate. From 1.0: off to k = \\infty.\n\n\nCheck d1 and d2 against numDeriv::grad and numDeriv::hessian before trusting them (the exercise does). The fixed number of steps keeps the slide short; a real implementation has a stopping rule as in the Newton unit. From 0.7, SSE’’ = 0.25 is small and positive: the local parabola is very flat and its vertex far to the left. From 1.0, SSE’’ is negative (-0.19): see the next slide.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#when-newton-heads-uphill",
+    "href": "optimisation-1d/lec.html#when-newton-heads-uphill",
+    "title": "Optimisation in one dimension",
+    "section": "When Newton heads uphill",
+    "text": "When Newton heads uphill\n\n\nLeft: f'' &gt; 0, the local parabola opens upwards; its vertex is a good guess for the minimum.\nRight: f'' &lt; 0, the parabola opens downwards; its vertex is a maximum of q, and Newton walks away from the minimum, towards the flat plateau at k \\to \\infty.\nChecks: f''(x_k) &gt; 0 at every step, and f(x_{k+1}) &lt; f(x_k). If either fails, do not take the step.\n\n\nRoot-finding Newton does not care whether a root of f’ is a minimum or a maximum; it heads for whatever stationary point the local model suggests. From k = 1 the nearest “stationary point” of the local model is a maximum at 3.96, and beyond that SSE keeps rising slowly towards its limit 1.47 at infinity, so Newton follows it out. The two checks are the start of the safeguards in the next unit: if f’’ &lt;= 0 use a different direction, and if f does not decrease, shorten the step (line search). Or bracket first and let Brent do the work.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#convexity",
+    "href": "optimisation-1d/lec.html#convexity",
+    "title": "Optimisation in one dimension",
+    "section": "Convexity",
+    "text": "Convexity\nf is convex on an interval if f''(x) \\ge 0 there: the graph bends upwards everywhere, every chord lies above it.\n\nA convex function has no separate local minima: a local minimum is the global one.\nNewton’s local parabola always opens upwards, so each step points downhill. (It can still overshoot: see the exercise.)\n-\\ell for the zero-truncated Poisson is convex for all \\lambda &gt; 0 (-S' &gt; 0). Any reasonable method finds \\hat\\lambda.\n\\text{SSE}(k) for the decay is convex only for k &lt; 0.80 (the yellow region on the earlier plot). Start right of it and Newton fails.\n\nMany likelihoods are convex in the right parameterisation (Poisson and logistic regression, in their coefficients). Nonlinear models (decay curves, ODEs, periods) usually are not.\n\nConvexity is the property that turns “a local minimum” into “the answer”. It is why fitting a GLM never needs a starting value in practice, and why fitting an ODE model always does. Convexity depends on the parameterisation: SSE as a function of log(k) has a different shape. The exercise has f(x) = x - 2 log x, which is convex for all x &gt; 0 and still sends Newton out of its domain from x0 = 4: convexity guarantees the direction, not the step length.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#local-versus-global-a-circadian-period",
+    "href": "optimisation-1d/lec.html#local-versus-global-a-circadian-period",
+    "title": "Optimisation in one dimension",
+    "section": "Local versus global: a circadian period",
+    "text": "Local versus global: a circadian period\nA bioluminescence reporter of a clock gene, every 4 h for 6 days. Fit a sine wave with unknown period T.\nt &lt;- seq(0, 140, by = 4)                           # 36 time points (h)\nset.seed(15)                                       # simulated, true period 24.5 h\ny &lt;- round(2 + 0.6 * cos(2 * pi * (t - 6) / 24.5) + rnorm(36, sd = 0.3), 2)\nrss &lt;- function(T) {                               # best sine wave with period T\n  X &lt;- cbind(1, cos(2 * pi * t / T), sin(2 * pi * t / T))\n  sum(lm.fit(X, y)$residuals^2)                    # linear least squares for fixed T\n}\n\nFor a fixed T, mean, amplitude and phase come from a linear least-squares fit. What is left, \\text{RSS}(T), depends on T only.\nWith Gaussian noise, \\log L(T) = -\\tfrac{n}{2}\\log \\text{RSS}(T) + \\text{const}: minima of RSS are maxima of the likelihood.\n\n\nCircadian periods are estimated like this all the time (cosinor fits, and periodograms, which are the same idea on a grid). The data are simulated so that we know the truth: period 24.5 h, peak at 6 h, amplitude 0.6, noise sd 0.3. Writing a cos + b sin instead of A cos(2 pi t/T - phi) makes the model linear in a and b, so for each T the best a, b and mean come from lm.fit (Least squares: normal equations vs QR). The remaining one-dimensional problem in T is the hard, nonlinear part: we “profile out” the linear parameters.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#optimize-returns-the-wrong-period",
+    "href": "optimisation-1d/lec.html#optimize-returns-the-wrong-period",
+    "title": "Optimisation in one dimension",
+    "section": "optimize returns the wrong period",
+    "text": "optimize returns the wrong period\n\noptimize(rss, c(10, 40))$minimum       # a plausible search range\n# [1] 32.40162                         # a local minimum: as bad as no rhythm at all\noptimize(rss, c(15, 35))$minimum\n# [1] 24.63047                         # the global minimum\n\nRSS(T) is flat at about 10.5 (the RSS of a flat line is 10.72) with small wiggles, and has one narrow, deep dip near the true period. Brent’s first two golden-section points on [10, 40] are 21.5 and 28.5, both on the flat part (orange crosses). RSS(28.5) = 10.31 is a bit lower than RSS(21.5) = 10.36, so the method keeps [21.5, 40]; the next comparison (28.5 against 32.9) keeps [28.5, 40], and the dip is gone for good. The method then converges, correctly, to a local minimum at 32.4 h. No warning: as far as optimize knows, the function is unimodal, because we promised it was.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#grid-first-then-refine",
+    "href": "optimisation-1d/lec.html#grid-first-then-refine",
+    "title": "Optimisation in one dimension",
+    "section": "Grid first, then refine",
+    "text": "Grid first, then refine\nTg &lt;- seq(10, 40, by = 0.25)                # grid finer than the dip (about 3 h wide)\nr  &lt;- sapply(Tg, rss)\nT0 &lt;- Tg[which.min(r)]; T0\n# [1] 24.75\noptimize(rss, c(T0 - 0.5, T0 + 0.5), tol = 1e-6)$minimum\n# [1] 24.63047\nc(rss(24.63047), rss(32.40162))\n# [1]  1.908081 10.225063\n\nA grid finds the right basin; a local method (Brent, Newton) then polishes it. 121 + 10 evaluations.\nThe grid spacing must be smaller than the narrowest dip you care about. Too coarse and it can miss it too.\nAlternatives: multistart (run from many starting points, keep the best), and always compare the objective at the candidates.\n\n\nFor one parameter a grid is cheap and the most reliable method there is; in ten parameters a grid is impossible (10^10 points for 10 per axis), which is why multistart and good starting values matter so much in the next units. The width of the dip is about the period squared divided by the length of the record, 24^2/140 = 4 h: longer recordings give narrower dips, which are both more precise and easier to miss. A periodogram (Fourier series and the FFT) is exactly this grid scan, computed fast. Comparing the objective at the two candidates settles it: 1.9 against 10.2.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#checklist-before-you-trust-a-minimum",
+    "href": "optimisation-1d/lec.html#checklist-before-you-trust-a-minimum",
+    "title": "Optimisation in one dimension",
+    "section": "Checklist: before you trust a minimum",
+    "text": "Checklist: before you trust a minimum\n\nPlot f over the whole plausible range. How many valleys?\nBracket: give optimize an interval that contains one minimum (grid first).\nSet tol (default 1.2\\times10^{-4}, absolute). Do not ask for more than \\sim\\sqrt{\\varepsilon}\\,|x|.\nCheck the answer: not at the edge of the interval? f at the answer lower than at nearby grid points? Biologically sensible (positive rate, period near 24 h)?\nHand-written Newton: check f' and f'' against finite differences; require f'' &gt; 0 and f decreasing at each step.\nLocal vs global: try several intervals or starting points; compare f at every candidate.\n\n\nA minimum at the edge of the interval almost always means the interval was wrong (or the true optimum is a boundary, which is a constrained problem: Constraints and linear programming). The “compare f at every candidate” check is what caught the 32.4 h period. These checks carry over unchanged to many parameters, where you can no longer plot f, which makes them more important there, not less.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "optimisation-1d/lec.html#summary",
+    "href": "optimisation-1d/lec.html#summary",
+    "title": "Optimisation in one dimension",
+    "section": "Summary",
+    "text": "Summary\n\nA smooth minimum is a root of f', but minimising directly needs only values of f, never confuses a minimum with a maximum, and keeps a three-point bracket.\nGolden section: shrink by 0.618 per evaluation (linear), safe on any unimodal function. Parabolic interpolation: superlinear (order ~1.32) but unsafe. Brent = both: optimize, minimize_scalar, BrentOpt. Set tol.\nNewton: x_{k+1} = x_k - f'/f'', quadratic, needs f'' &gt; 0; otherwise it heads for a maximum.\nA minimum can only be located to about \\sqrt\\varepsilon relative: the bottom is flat. For more digits, find the root of f'.\nConvex \\Rightarrow local = global. Otherwise (a circadian period) a local method can return a local minimum without warning: grid first, compare candidates.\n\nNext: Gradient descent, Newton and quasi-Newton: many parameters, the gradient and the Hessian, and line searches.\n\nThe one-dimensional methods return in the next unit as the line search inside every multivariate optimiser: choose a direction, then do a one-dimensional minimisation along it. The decay-rate fit returns with two parameters (initial amount and rate) in Nonlinear least squares and ODE fitting, and the curvature at the minimum returns as standard errors in Identifiability and uncertainty of fitted parameters.",
+    "crumbs": [
+      "Home",
+      "Part 9: Optimisation and model fitting",
+      "Optimisation in one dimension",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "gradient-methods/lec.html#about-this-lecture",
+    "href": "gradient-methods/lec.html#about-this-lecture",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "About this lecture",
+    "text": "About this lecture\nFitting a model means finding the parameters that make a misfit (a sum of squares, a negative log-likelihood) as small as possible. With more than one parameter we need new tools.\n\nThe gradient (the slopes in every direction) and the Hessian (the curvatures). Both are Jacobians, which you met in Newton for systems of equations.\nSteepest descent with a backtracking line search, and why it zig-zags when the Hessian is badly conditioned.\nNewton’s method for minimisation: fast near the minimum, unreliable far from it.\nQuasi-Newton (BFGS, L-BFGS): build the curvature from gradients. Nelder–Mead: no derivatives at all.\nWhat optim and scipy.optimize.minimize do, and why scaling and starting values matter. One slide on stochastic gradient descent.\nBiology: fitting a 4-parameter logistic dose–response curve (EC50, Hill slope, top, bottom). We also explain the growth-curve failure from Why numerical analysis?.\n\n\nThis is the central unit of Part 9. Everything the students do when they call optim, nls or scipy.optimize.minimize happens here. The previous unit, Optimisation in one dimension, gave the one-variable picture: a minimum has f’ = 0 and f’’ &gt; 0, golden section and Brent need no derivatives, and a line search picks a step along a direction. Today we go to several variables. The new mathematics is small: the gradient and the Hessian are Jacobians, so the students already know how to compute and check them. The real content is the behaviour of the methods: which ones are slow, which ones fail, and how to tell."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#a-biology-problem-a-doseresponse-curve",
+    "href": "gradient-methods/lec.html#a-biology-problem-a-doseresponse-curve",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "A biology problem: a dose–response curve",
+    "text": "A biology problem: a dose–response curve\n\n\n\n\nA reporter assay: 9 doses of an agonist, 2 wells each. The 4-parameter logistic (4PL):\nm(c) = b + \\frac{t - b}{1 + (\\mathrm{EC50}/c)^{h}}\n\nb, t: bottom and top plateaus (% of max)\n\\mathrm{EC50}: dose at half response (µM)\nh: Hill slope\n\n\n\nFind the 4 numbers that minimise the sum of squared errors \\mathrm{SSE}(\\mathbf p) = \\sum_i (y_i - m(c_i))^2. There is no formula: we must search.\n\n\nThe 4PL (also called the Hill equation with baseline, or the four-parameter logistic of GraphPad Prism) is the standard model for dose-response data: drug screens, receptor assays, ELISA standard curves. The data are simulated (bottom 5, top 100, EC50 1.5 µM, Hill 1.2, noise sd 4), so we know what a good answer looks like. In Newton and secant methods we had a known curve and solved for the dose with R = 0.5; here the curve is unknown and we solve for its parameters from measurements. Four parameters means a search in four dimensions: we cannot plot the SSE, and grid search with 100 values per parameter would need 10^8 evaluations."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#fitting-is-minimising",
+    "href": "gradient-methods/lec.html#fitting-is-minimising",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Fitting is minimising",
+    "text": "Fitting is minimising\ndose &lt;- rep(10^seq(-2, 2, by = 0.5), each = 2)        # µM: 9 doses, 2 wells each\ny &lt;- c(12.9, 9.8, 2.9, 0.1, 4.2, 9.7, 17.7, 22.3, 49.7, 42.1,\n       67.3, 72.6, 97.4, 91.8, 94.6, 93.3, 92.9, 95.1)  # % of max response\nf4 &lt;- function(p, c)                     # p = (bottom, top, EC50, hill)\n  p[1] + (p[2] - p[1]) / (1 + (p[3] / c)^p[4])\nsse &lt;- function(p) sum((y - f4(p, dose))^2)\np0 &lt;- c(0, 100, 1, 1)                    # a first guess, read off the plot\nsse(p0)\n# [1] 558.9029\n\nsse is an ordinary R function of a vector p of length 4. Every method today only needs to call it (and perhaps its gradient).\nThe best fit has \\mathrm{SSE} = 314.924 at \\mathbf p^* = (5.39,\\ 96.17,\\ 1.271,\\ 1.240). How do we get there from \\mathbf p_0?\n\n\nThe starting guess comes from the plot: the response runs from about 0 to about 100, crosses 50 near 1 µM, and a Hill slope of 1 is the usual default. Later in the lecture we see what happens with a worse guess. The answer quoted here is what every method in this lecture should agree on; we use it to measure errors. Note that p is a vector, and p[3] is EC50: R indexes from 1."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#what-we-already-have",
+    "href": "gradient-methods/lec.html#what-we-already-have",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "What we already have",
+    "text": "What we already have\nFrom Optimisation in one dimension:\n\nAt a minimum of f(x): f'(x^*) = 0 and f''(x^*) &gt; 0. A line search finds a good step along one direction.\n\nFrom Newton for systems of equations:\n\nThe Jacobian J of \\mathbf F: \\mathbb R^n \\to \\mathbb R^m has entries J_{ij} = \\partial F_i / \\partial x_j (row = output, column = input).\nNewton for \\mathbf F(\\mathbf x) = \\mathbf 0: solve J\\,\\boldsymbol\\delta = -\\mathbf F, set \\mathbf x \\leftarrow \\mathbf x + \\boldsymbol\\delta. Quadratic convergence near the root.\nA finite-difference Jacobian costs n+1 evaluations of \\mathbf F, step h \\approx \\sqrt\\varepsilon; numDeriv::jacobian does it more accurately.\n\nToday: minimum of f(\\mathbf x) = a point where all slopes are zero and the surface curves up in every direction.\n\nOne slide of recap. Two facts carry over: the one-variable conditions for a minimum, and Newton’s method as “linearise, then solve a linear system”. The plan for the rest of the lecture is to write “all slopes zero” as a system of n equations, the gradient equal to zero, and to reuse the Jacobian machinery on it. The idea of a line search from the previous unit comes back as the safeguard that makes every method in this lecture work from a poor start."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#the-gradient-all-slopes-at-once",
+    "href": "gradient-methods/lec.html#the-gradient-all-slopes-at-once",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "The gradient: all slopes at once",
+    "text": "The gradient: all slopes at once\n\n\nFor f(x_1, x_2) = x_1^2 + x_1x_2 + 3x_2^2 at (2, 1):\n\\frac{\\partial f}{\\partial x_1} = 2x_1 + x_2 = 5, \\quad \\frac{\\partial f}{\\partial x_2} = x_1 + 6x_2 = 8\n\\nabla f(2, 1) = \\begin{pmatrix} 5 \\\\ 8 \\end{pmatrix}\n\nThe gradient \\nabla f is the Jacobian of a scalar function: one row, written as a column.\nIt points uphill, perpendicular to the contour lines; -\\nabla f is the steepest descent direction.\nAt a minimum: \\nabla f(\\mathbf x^*) = \\mathbf 0.\n\n\n\nArrows: -\\nabla \\mathrm{SSE} for the 4PL, bottom and top held at their best values.\n\n\nPen and paper first: a partial derivative is the ordinary derivative with the other variable frozen, as in Newton for systems. A scalar function has a 1 by n Jacobian; by convention we write it as a column vector and call it the gradient, with the symbol nabla. Why uphill: the change of f for a small step d is approximately the gradient dotted with d, which is largest when d points along the gradient and zero when d runs along a contour. The figure shows the SSE of the dose-response fit as a function of EC50 and Hill, with the two plateaus frozen at their best values; every arrow is the negative gradient, normalised to the same length. All arrows cross the contours at right angles (the axes have the same scale) and point roughly, but not exactly, at the minimum."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#the-gradient-of-the-sse-the-chain-rule",
+    "href": "gradient-methods/lec.html#the-gradient-of-the-sse-the-chain-rule",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "The gradient of the SSE: the chain rule",
+    "text": "The gradient of the SSE: the chain rule\n\\mathrm{SSE}(\\mathbf p) = \\sum_i r_i^2 with residuals r_i = y_i - m(c_i; \\mathbf p), so\n\\nabla \\mathrm{SSE} = -2\\, J^\\mathsf{T} \\mathbf r, \\qquad J_{ij} = \\frac{\\partial m(c_i)}{\\partial p_j} \\quad (18 \\times 4)\ngrad_sse &lt;- function(p) {\n  u &lt;- (p[3] / dose)^p[4];  D &lt;- 1 + u\n  J &lt;- cbind(u / D,                                       # dm/d bottom\n             1 / D,                                       # dm/d top\n             -(p[2] - p[1]) * p[4] * u / (p[3] * D^2),    # dm/d EC50\n             -(p[2] - p[1]) * u * log(p[3] / dose) / D^2) # dm/d hill\n  -2 * drop(t(J) %*% (y - f4(p, dose)))\n}\ngrad_sse(p0)\n# [1]    -1.729861    48.929861 -1125.637873    59.964774\nlibrary(numDeriv);  grad(sse, p0)             # check with finite differences\n# [1]    -1.729861    48.929861 -1125.637873    59.964774\n\nThe SSE is a sum of squares of the residuals, so each partial derivative is -2 times the sum of residual times the derivative of the model prediction. Collect the model derivatives in the 18 by 4 Jacobian of the predictions and the whole gradient is one matrix product. The four model derivatives are first-year calculus: with u = (EC50/c)^h and D = 1 + u, the derivative of D with respect to EC50 is h u / EC50 and with respect to h is u log(EC50/c). numDeriv::grad uses Richardson extrapolation of central differences (Numerical differentiation) and agrees to all printed digits. Always run this check before trusting a hand-coded gradient: a wrong sign or a missing factor shows up as a difference of order 1. Read the numbers: the slope along EC50 is 20 times larger than any other; we come back to that."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#the-hessian-the-jacobian-of-the-gradient",
+    "href": "gradient-methods/lec.html#the-hessian-the-jacobian-of-the-gradient",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "The Hessian: the Jacobian of the gradient",
+    "text": "The Hessian: the Jacobian of the gradient\nThe gradient is a vector function of \\mathbf x, so it has a Jacobian: the Hessian, H_{ij} = \\dfrac{\\partial^2 f}{\\partial x_i\\,\\partial x_j}.\nFor f = x_1^2 + x_1x_2 + 3x_2^2: \\nabla f = (2x_1 + x_2,\\ x_1 + 6x_2), so H = \\begin{pmatrix} 2 & 1 \\\\ 1 & 6 \\end{pmatrix} (symmetric).\nQuadratic model (Taylor in several variables):\nf(\\mathbf x + \\mathbf s) \\approx f(\\mathbf x) + \\nabla f^\\mathsf{T}\\mathbf s + \\tfrac12\\, \\mathbf s^\\mathsf{T} H\\, \\mathbf s\nTest for a minimum: \\nabla f = \\mathbf 0 and H positive definite (all eigenvalues &gt; 0): the surface curves up in every direction.\n\nHere: eigenvalues 4 \\pm \\sqrt5 = 6.24,\\ 1.76, both positive. One positive, one negative: a saddle. Both negative: a maximum.\n\n\nThe one-variable conditions f’ = 0, f’’ &gt; 0 become gradient = 0 and Hessian positive definite. The Hessian is symmetric because mixed partial derivatives do not depend on the order (for smooth f). For a 2 by 2 matrix: positive definite if and only if the determinant and the trace are both positive; here det = 11, trace = 8. The quadratic model is the one from the Taylor table in Why numerical analysis?, now with vectors: s^T H s is the curvature along the direction s, times the length squared. Eigenvectors of H are the directions of largest and smallest curvature, the axes of the elliptical contours."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#the-hessian-at-the-4pl-minimum",
+    "href": "gradient-methods/lec.html#the-hessian-at-the-4pl-minimum",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "The Hessian at the 4PL minimum",
+    "text": "The Hessian at the 4PL minimum\nhess &lt;- function(p) jacobian(grad_sse, p)      # Jacobian of the gradient\nH &lt;- hess(pstar);  round(H, 1)                 # pstar = best fit\n#        [,1]   [,2]   [,3]   [,4]\n# [1,]   16.0    2.8 -123.8 -100.8\n# [2,]    2.8   14.4 -123.6   99.6\n# [3,] -123.8 -123.6 3611.5   12.5\n# [4,] -100.8   99.6   12.5 3701.6\nev &lt;- eigen(H, symmetric = TRUE)$values;  ev\n# [1] 3708.824707 3618.223881    9.741189    6.737673\nmax(ev) / min(ev)\n# [1] 550.4608\n\nAll four eigenvalues positive: a true minimum.\nCurvature differs by a factor 550 between directions: the valley is long and narrow. This is the condition number \\kappa(H) from Pivoting, norms and conditioning.\n\n\nWe get the Hessian as the finite-difference Jacobian of the analytic gradient: four extra gradient evaluations. This is exactly the finite-difference Jacobian of Newton for systems, applied to F = gradient. numDeriv::hessian(sse, p) also works and needs only sse, at more cost. The eigenvalues say: along EC50 and Hill (the large entries 3611 and 3701), the SSE is steep; along bottom and top, it is shallow, with curvature about 7 to 10. Part of this is units: a change of 1 µM in EC50 is a huge change, a change of 1 % in top is a small one. Condition number of a symmetric positive definite matrix = largest over smallest eigenvalue. We will see that kappa decides the speed of steepest descent, and in Identifiability and uncertainty of fitted parameters, the same Hessian gives the standard errors."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#steepest-descent-with-a-fixed-step",
+    "href": "gradient-methods/lec.html#steepest-descent-with-a-fixed-step",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Steepest descent with a fixed step",
+    "text": "Steepest descent with a fixed step\nGo downhill: \\mathbf x_{k+1} = \\mathbf x_k - \\alpha\\, \\nabla f(\\mathbf x_k), with a fixed step size \\alpha.\nx &lt;- p0\nfor (k in 1:5000) x &lt;- x - 1e-4 * grad_sse(x)\nsse(x)\n# [1] 315.1635                            # 5000 steps, still not at 314.924\nx &lt;- p0\nfor (k in 1:20) x &lt;- x - 6e-4 * grad_sse(x)\nsse(x)\n# [1] NaN                                 # overshoots, EC50 &lt; 0, NaN after 11 steps\n\nToo small: slow. Too large: each step overshoots the valley and the iteration blows up.\nOn a quadratic, steepest descent is stable only for \\alpha &lt; 2/\\lambda_{\\max}; here 2/3709 = 5.4\\times10^{-4}. Nobody knows \\lambda_{\\max} in advance.\n\n\nThis is the simplest possible method, and the one used (with tricks) to train neural networks. With alpha = 1e-4 it creeps; with 6e-4 the steps along the steep EC50 direction overshoot, grow, EC50 goes negative, (negative)^h is NaN in R, and everything after is NaN. The bound 2 / lambda_max is the same stability condition as for Euler’s method on y’ = -lambda y (Initial value problems and Euler’s method): steepest descent with a fixed step is Euler’s method on the gradient flow x’ = -grad f. A step that suits the steep direction is far too small for the shallow one, which is the whole problem."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#backtracking-line-search-armijo",
+    "href": "gradient-methods/lec.html#backtracking-line-search-armijo",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Backtracking line search (Armijo)",
+    "text": "Backtracking line search (Armijo)\nTry \\alpha = 1; halve it until the step decreases f enough: f(\\mathbf x - \\alpha \\mathbf g) \\le f(\\mathbf x) - c\\,\\alpha\\, \\|\\mathbf g\\|^2, with c = 10^{-4}.\nsd_armijo &lt;- function(f, g, x, tol = 1e-4, maxit = 1e4) {\n  for (k in 1:maxit) {\n    gk &lt;- g(x)\n    if (sqrt(sum(gk^2)) &lt; tol) break           # gradient ~ 0: stop\n    a &lt;- 1\n    while (!isTRUE(f(x - a * gk) &lt;= f(x) - 1e-4 * a * sum(gk^2)))\n      a &lt;- a / 2                                # backtrack\n    x &lt;- x - a * gk\n  }\n  list(par = x, steps = k - 1)\n}\nsd_armijo(sse, grad_sse, p0)$steps\n# [1] 3453\n\nisTRUE also rejects a step that gives NaN. Never diverges; but 3453 steps.\n\n\nThe Armijo (sufficient decrease) condition asks for a decrease of at least a small fraction c of what the linear model predicts: alpha times the squared gradient length. Halving guarantees that some step is accepted, because for small enough alpha the linear model is accurate. This is the backtracking line search from Optimisation in one dimension, used here along the direction -g. Production codes also enforce a curvature condition (the Wolfe conditions) so that steps are not too short, and interpolate rather than halve. The stopping tolerance 1e-4 on the gradient length is about 1e-7 of its starting size; asking for much less runs into rounding, because a line search on f cannot see decreases below about eps times f (about 7e-14 here). A real code should also cap the number of halvings."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#why-steepest-descent-zig-zags",
+    "href": "gradient-methods/lec.html#why-steepest-descent-zig-zags",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Why steepest descent zig-zags",
+    "text": "Why steepest descent zig-zags\n\n\nOn a long narrow valley, -\\nabla f points across the valley, not along it. Each step overshoots to the other side.\nWith exact line search the error shrinks per step by about \\dfrac{\\kappa - 1}{\\kappa + 1}. For the 4PL, \\kappa = 550: 0.9964 per step, about 3800 steps per 6 digits.\n\n\nLeft: f = (x1^2 + 10 x2^2)/2, kappa = 10, exact line search: the best step along the current gradient. Successive directions are at right angles, so the path zig-zags across the valley and makes slow progress along it. Right: the error after k steps for kappa = 10, 100, 1000, from the worst-case start (1, 1/kappa). The rate depends only on kappa: (kappa - 1)/(kappa + 1) per step for the error (its square for f - f*), so kappa = 10 needs about 70 steps per 6 digits and kappa = 1000 about 7000. The 4PL with kappa = 550 predicts about 3800 steps per 6 digits; our Armijo version took 3453, from a start where part of the error was in the steep directions. This is the same condition number as in Pivoting, norms and conditioning: there it bounded error amplification in a linear solve, here it bounds the speed of the simplest optimiser. Rescaling the parameters changes kappa, which is why scaling matters (later slide)."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#newtons-method-for-minimisation",
+    "href": "gradient-methods/lec.html#newtons-method-for-minimisation",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Newton’s method for minimisation",
+    "text": "Newton’s method for minimisation\nMinimum \\Rightarrow \\nabla f = \\mathbf 0: a system of n equations. Apply Newton for systems with \\mathbf F = \\nabla f and J = H:\nH(\\mathbf x_k)\\, \\mathbf s = -\\nabla f(\\mathbf x_k), \\qquad \\mathbf x_{k+1} = \\mathbf x_k + \\mathbf s\n\n\n\n\n\n\n\nNewton for systems\nNewton for minimisation\n\n\n\n\n\\mathbf F(\\mathbf x) = \\mathbf 0\n\\nabla f(\\mathbf x) = \\mathbf 0\n\n\nJacobian J\nHessian H (= Jacobian of \\nabla f)\n\n\nsolve(J, -F)\nsolve(H, -g)\n\n\n\n\nSame step = the minimum of the quadratic model. On a quadratic f, one step is exact. Toy example from (2, 1): \\mathbf s = -H^{-1}(5, 8)^\\mathsf{T} = (-2, -1), straight to (0, 0).\nQuadratic convergence near the minimum. The condition number does not slow it down.\n\n\nThis slide is the bridge. Setting the derivative of the quadratic model to zero, grad f + H s = 0, gives the same step as Newton on the gradient. In one variable this is x - f’(x)/f’’(x), from Optimisation in one dimension. By hand: H = [2 1; 1 6], det 11, inverse = (1/11)[6 -1; -1 2]; H^-1 (5, 8) = (1/11)(30 - 8, -5 + 16) = (2, 1); the step is (-2, -1). Newton uses the curvature in every direction, so it rescales the long narrow valley into a round one: kappa no longer matters. The cost: second derivatives (n^2 of them) and a linear solve, O(n^3), per step."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#newton-in-r",
+    "href": "gradient-methods/lec.html#newton-in-r",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Newton in R",
+    "text": "Newton in R\nnewton_min &lt;- function(f, g, H, x, tol = 1e-4, maxit = 50) {\n  for (k in 1:maxit) {\n    gk &lt;- g(x)\n    if (sqrt(sum(gk^2)) &lt; tol) break\n    s &lt;- solve(H(x), -gk)                      # Newton direction\n    a &lt;- 1                                     # line search, as before\n    while (!isTRUE(f(x + a * s) &lt;= f(x) + 1e-4 * a * sum(gk * s))) a &lt;- a / 2\n    x &lt;- x + a * s\n  }\n  list(par = x, steps = k - 1)\n}\nnewton_min(sse, grad_sse, hess, p0)$steps\n# [1] 5\n\n\n\n\n\n\n\n\n\n\n\n\nstep\n0\n1\n2\n3\n4\n5\n\n\n\n\nSSE\n558.90\n395.01\n315.68\n314.92418\n314.92395940\n314.92395940\n\n\n\\lVert\\nabla \\mathrm{SSE}\\rVert\n1128\n218\n11.6\n0.735\n1.4\\times10^{-4}\n2.2\\times10^{-11}\n\n\n\n\nFive steps instead of 3453. Every step here has a = 1, the full Newton step; the line search is only a safety net. Read the gradient row: 0.735, 1.4e-4, 2.2e-11, the exponent roughly doubles, which is quadratic convergence as in Newton and secant methods. The Hessian is the finite-difference Jacobian of the analytic gradient, with about 8 correct digits; that is enough for quadratic convergence in practice. Each step costs one gradient plus four more for the Hessian, plus a 4 by 4 solve: trivial here, expensive for thousands of parameters."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#three-methods-on-the-same-fit",
+    "href": "gradient-methods/lec.html#three-methods-on-the-same-fit",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Three methods on the same fit",
+    "text": "Three methods on the same fit\n\n\nNewton: 5 steps. BFGS (in a few slides): 13 steps, gradients only. Steepest descent: a straight line on a log axis, linear convergence, slope set by \\kappa.\n\n\nDistance to the best parameters, log scale, all from the same start p0. The steepest descent curve on the right is a straight line after an initial phase: linear convergence, a fixed fraction per step, as in Convergence and cost. The slope corresponds to about 0.995 per step, close to the (kappa - 1)/(kappa + 1) = 0.9964 predicted from kappa = 550. Newton bends down ever faster (quadratic). BFGS starts like steepest descent, because its first approximation of the Hessian is the identity, then learns the curvature and accelerates (superlinear convergence). In terms of work: steepest descent used 3453 gradients and many more function values for the backtracking."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#when-newton-fails",
+    "href": "gradient-methods/lec.html#when-newton-fails",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "When Newton fails",
+    "text": "When Newton fails\nStart from a worse guess, \\mathrm{EC50} = 10 µM: \\mathbf p = (0, 100, 10, 1).\neigen(hess(c(0, 100, 10, 1)), symmetric = TRUE)$values\n# [1]   115.27332    13.13729   -42.62776 -2422.74914\n\nTwo negative eigenvalues: the quadratic model has no minimum (a saddle). Pure Newton steps head for any point with \\nabla f = 0; after 20 steps: EC50 = 86, hill = 16, \\mathrm{SSE} = 21188.\nCheck: eigenvalues of H, or \\nabla f^\\mathsf{T}\\mathbf s &lt; 0 (a descent direction); a line search only helps if \\mathbf s goes downhill.\nFixes: make H positive definite (add \\mu I; 9 steps to the minimum from here), a trust region, or quasi-Newton.\n\n\nFar from the minimum the SSE is not shaped like a bowl. With EC50 = 10 µM the model curve sits to the right of most of the data, and the curvature along the Hill direction is negative. Newton’s method only looks for a zero of the gradient, so it is just as happy with a saddle or a maximum: the same lesson as in Newton for systems, where Newton found the unstable middle steady state. The fix “add mu times I” with mu larger than the most negative eigenvalue makes the model a bowl again; for huge mu the step becomes a short steepest descent step. That interpolation between Newton and steepest descent is the Levenberg-Marquardt idea of Nonlinear least squares and ODE fitting. A trust region instead limits the step length to a region where the quadratic model is trusted."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#quasi-newton-learn-the-curvature-from-gradients",
+    "href": "gradient-methods/lec.html#quasi-newton-learn-the-curvature-from-gradients",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Quasi-Newton: learn the curvature from gradients",
+    "text": "Quasi-Newton: learn the curvature from gradients\nThe secant idea from Newton and secant methods: replace f'' by a slope of f' between two points. In n dimensions, with step \\mathbf s_k = \\mathbf x_{k+1} - \\mathbf x_k and gradient change \\mathbf y_k = \\nabla f_{k+1} - \\nabla f_k:\n\\textbf{secant condition:}\\quad B_{k+1}\\,\\mathbf y_k = \\mathbf s_k \\qquad (B \\approx H^{-1})\nBFGS (Broyden, Fletcher, Goldfarb, Shanno, 1970) picks the update closest to B_k that satisfies it:\nB_{k+1} = V^\\mathsf{T} B_k V + \\rho\\, \\mathbf s_k \\mathbf s_k^\\mathsf{T}, \\qquad V = I - \\rho\\, \\mathbf y_k \\mathbf s_k^\\mathsf{T}, \\quad \\rho = 1/(\\mathbf y_k^\\mathsf{T}\\mathbf s_k)\n\nStart from B_0 = I (first step = steepest descent). Direction -B_k \\nabla f_k: no Hessian, no linear solve.\nIf \\mathbf y_k^\\mathsf{T}\\mathbf s_k &gt; 0, B stays positive definite: every direction goes downhill.\n\n\nIn one variable the secant condition says B times (change of f’) equals the step, which is the secant method applied to f’. In n variables one secant condition gives only n equations for the n^2 entries of B, so there are many solutions; BFGS takes the one closest to the previous B (in a weighted norm), which turns out to be a rank-2 update. The four authors found it independently in 1970. Keeping the inverse Hessian means no linear solve: the direction is a matrix-vector product, O(n^2). y^T s &gt; 0 says the slope increased along the step, i.e. the function curves up along it; the Wolfe line search guarantees this, our simpler Armijo version checks it and skips the update otherwise. Broyden’s method for root finding, mentioned in Newton for systems of equations, is the same idea for a nonsymmetric Jacobian."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#bfgs-in-r",
+    "href": "gradient-methods/lec.html#bfgs-in-r",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "BFGS in R",
+    "text": "BFGS in R\nbfgs &lt;- function(f, g, x, tol = 1e-4, maxit = 200) {\n  n &lt;- length(x); B &lt;- diag(n); gk &lt;- g(x)     # B ~ inverse Hessian\n  for (k in 1:maxit) {\n    if (sqrt(sum(gk^2)) &lt; tol) break\n    s &lt;- -drop(B %*% gk);  a &lt;- 1\n    while (!isTRUE(f(x + a*s) &lt;= f(x) + 1e-4 * a * sum(gk*s))) a &lt;- a / 2\n    s &lt;- a * s;  x &lt;- x + s;  gn &lt;- g(x);  yv &lt;- gn - gk;  gk &lt;- gn\n    if ((sy &lt;- sum(yv * s)) &gt; 0) {             # curvature check\n      V &lt;- diag(n) - outer(yv, s) / sy\n      B &lt;- t(V) %*% B %*% V + outer(s, s) / sy }\n  }\n  list(par = x, steps = k - 1)\n}\nbfgs(sse, grad_sse, p0)$steps\n# [1] 13\n\n13 steps, one gradient each, plus backtracking. Superlinear convergence; no second derivatives.\n\n\nThirteen lines. The update is the formula from the previous slide; outer(s, s) is the matrix s s^T. Without a gradient function, the gradient is taken by finite differences, which is what optim does when you do not pass gr. Compare the costs: steepest descent 3453 gradients; Newton 5 gradients plus 5 Hessians (20 gradients with finite differences); BFGS 13 gradients. For four parameters all are instant; for an ODE model where each SSE evaluation takes a second, the difference is hours."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#l-bfgs-when-there-are-many-parameters",
+    "href": "gradient-methods/lec.html#l-bfgs-when-there-are-many-parameters",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "L-BFGS: when there are many parameters",
+    "text": "L-BFGS: when there are many parameters\n\nBFGS stores an n \\times n matrix. For n = 10^6 parameters (an image, a genome-wide model, a neural network) that is 8 \\times 10^{12} bytes.\nL-BFGS (limited-memory BFGS) never forms B. It keeps the last m pairs (\\mathbf s_k, \\mathbf y_k), typically m = 5 to 20, and computes -B\\nabla f from them in O(mn) operations.\nEach step costs about as much as a steepest-descent step, but converges almost as fast as BFGS.\nIn R: optim(method = \"L-BFGS-B\") (the B is for bounds, e.g. lower = 0). In Python: minimize(method=\"L-BFGS-B\"), the default when bounds are given.\n\n\nThe memory argument is the whole story: n^2 storage and n^2 work per step are fine for 4 or 400 parameters and impossible for a million. L-BFGS applies the last m updates to a scaled identity using a short recursion (the two-loop recursion), never storing a matrix. In practice it is the default large-scale smooth optimiser. L-BFGS-B adds simple bounds, lower &lt;= p &lt;= upper, which is useful for parameters that must be positive; Constraints and linear programming treats constraints properly."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#neldermead-no-derivatives-at-all",
+    "href": "gradient-methods/lec.html#neldermead-no-derivatives-at-all",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Nelder–Mead: no derivatives at all",
+    "text": "Nelder–Mead: no derivatives at all\n\n\nKeep n + 1 points (a simplex: a triangle in 2-D). Replace the worst by its reflection through the others; expand if that was very good, contract if bad, shrink if nothing helps.\nNeeds only f: works for noisy or non-smooth functions. optim’s default. Slow, and it can stop at a non-minimum, especially in many dimensions.\n\n\nNelder and Mead, 1965. No gradients, no line search, just comparisons of function values, so it does not care about rounding noise in f, kinks, or discontinuities that would wreck a finite-difference gradient. Right: the points R’s optim evaluates when fitting only EC50 and Hill (63 evaluations); the simplex tumbles downhill, then shrinks around the minimum. Weaknesses: in more than a handful of dimensions it becomes very slow, and the simplex can collapse into a flat shape and stop where the gradient is not zero; there are known examples (McKinnon 1998) where it converges to a non-stationary point. Its stopping rule is “the function values at the corners agree to reltol”, which is also satisfied on a plateau: that is what happened to the growth curve in Why numerical analysis?."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#what-optim-minimize-and-argmin-do",
+    "href": "gradient-methods/lec.html#what-optim-minimize-and-argmin-do",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "What optim, minimize and argmin do",
+    "text": "What optim, minimize and argmin do\n\n\n\nR optim\nPython minimize\nRust argmin\nmethod\n\n\n\n\n\"Nelder-Mead\" (default)\n\"Nelder-Mead\"\nNelderMead\nsimplex, no derivatives\n\n\n\"BFGS\"\n\"BFGS\" (default without bounds)\nBFGS\nquasi-Newton\n\n\n\"L-BFGS-B\"\n\"L-BFGS-B\" (default with bounds)\nLBFGS\nlimited memory, bounds\n\n\n\"CG\"\n\"CG\"\nNonlinearConjugateGradient\nconjugate gradients\n\n\nnlm\n\"trust-exact\", \"Newton-CG\"\nNewton, TrustRegion\nNewton-type\n\n\n\n\nNo gradient given → finite differences: R’s optim uses central differences with ndeps = 1e-3 (an absolute step!); scipy uses forward differences with h \\approx \\sqrt\\varepsilon\\max(1, |x|).\nStopping: relative change in f below reltol \\approx 1.5\\times10^{-8} (R), gradient norm below gtol = 10^{-5} (scipy BFGS). maxit = 500 for Nelder–Mead, 100 for BFGS in R.\nconvergence = 0 means “a stopping rule was met”, not “this is the minimum”.\n\n\nThe point of this table is that the library methods are the ones we just wrote, plus careful engineering: better line searches (Wolfe conditions, interpolation), scaling of the first B, and stopping rules. Defaults matter. optim’s ndeps = 1e-3 is an absolute step: fine for parameters near 1, terrible for a parameter of size 1e-6 or 1e4, which is one more reason to scale. R’s nlm is a Newton-type method with finite-difference Hessian; nlminb (PORT library) is another common choice. Python users: minimize returns an OptimizeResult with x, fun, nfev, njev, success, message. The Rust argmin crate provides the same solvers; we use it in the exercises."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#the-4pl-with-optim",
+    "href": "gradient-methods/lec.html#the-4pl-with-optim",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "The 4PL with optim",
+    "text": "The 4PL with optim\nfor (m in c(\"Nelder-Mead\", \"BFGS\", \"CG\", \"L-BFGS-B\")) {\n  o &lt;- optim(p0, sse, method = m)\n  cat(sprintf(\"%-11s  SSE %.4f  EC50 %.4f  fn %3d  gr %3s  conv %d\\n\",\n              m, o$value, o$par[3], o$counts[1], o$counts[2], o$convergence))\n}\n# Nelder-Mead  SSE 314.9240  EC50 1.2711  fn 335  gr  NA  conv 0\n# BFGS         SSE 314.9240  EC50 1.2711  fn  40  gr  11  conv 0\n# CG           SSE 321.2024  EC50 1.2765  fn 333  gr 101  conv 1\n# L-BFGS-B     SSE 314.9240  EC50 1.2710  fn  36  gr  36  conv 0\n\nfn, gr: calls of sse and of the (finite-difference) gradient; each gr costs 8 more sse calls.\nConjugate gradients hit maxit = 100 (conv 1): another victim of \\kappa = 550.\nPassing the analytic gradient, optim(p0, sse, grad_sse, method = \"BFGS\"), saves the finite-difference calls.\n\n\nAll but CG agree on the minimum to the printed digits. Nelder-Mead needs 335 function calls; BFGS 40 plus 11 gradients, each of which is 8 function calls by central differences, so 128 in total. CG is a method between steepest descent and quasi-Newton that needs only O(n) memory; it is also slowed down by a bad condition number and stops at its iteration limit with a worse SSE. It at least says so: convergence = 1 means maxit reached. Always print the convergence code and the counts."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#scaling-the-same-data-in-nm",
+    "href": "gradient-methods/lec.html#scaling-the-same-data-in-nm",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Scaling: the same data in nM",
+    "text": "Scaling: the same data in nM\n\n\n\n\ndose_nM &lt;- dose * 1000\nsse_nM &lt;- function(p) sum((y - f4(p, dose_nM))^2)\no &lt;- optim(c(0, 100, 1, 1), sse_nM, method = \"BFGS\")\nround(o$par, 2); o$value; o$convergence\n# [1]  48.69 127.67   2.24 -13.82\n# [1] 25807.26\n# [1] 0\n\n\n“EC50 is about 1” is now 1000 times too small. The curve sits left of every dose; BFGS slides to a flat line at the mean (hill = -13.8) and reports success.\nEven from a good start (EC50 = 1000), \\kappa(H) = 1.9\\times10^{6} and BFGS stops early: SSE 314.9246, 109 calls. With control = list(parscale = c(1, 100, 1000, 1)): 314.9240, 36 calls.\n\n\nSame data, same model, only the dose unit changed. Two separate problems. First, the habit of starting at 1: with doses from 10 to 100000 nM, an EC50 of 1 nM means every well is on the top plateau, and the optimiser goes to a degenerate fit where the curve is flat over the data (a negative Hill slope with EC50 below all doses gives the constant 48.69, the mean of y). The SSE is then flat in EC50 and hill, the gradient is zero there, and BFGS stops. Second, scaling: the EC50 entry of the Hessian shrinks by a factor 10^6, the condition number grows from 550 to 1.9 million, and the finite-difference step ndeps = 1e-3 is now tiny relative to EC50 = 1271. parscale tells optim to work with p / parscale internally, so all parameters are of size 1. Fitting log10(EC50) instead of EC50 does the same job and also keeps EC50 positive."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#back-to-the-growth-curve",
+    "href": "gradient-methods/lec.html#back-to-the-growth-curve",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Back to the growth curve",
+    "text": "Back to the growth curve\nWhy numerical analysis?: logistic fit, time in minutes, start r = 0.5 (“per hour” by habit).\ngrad(sse_min, c(r = 0.5, K = 1, N0 = 0.05))      # time in minutes\n# [1] 0.000 3.940 0.098\noptim(c(r = 0.5, K = 1, N0 = 0.05), sse_min, method = \"BFGS\")$par\n#            r            K           N0\n# 0.5000000000 0.8358333304 0.0009999665\noptim(c(r = 0.5, K = 1, N0 = 0.05), sse_h)$par   # time in hours\n#         r         K        N0\n# 0.5241071 1.1913604 0.0165278\n\nAt r = 0.5/min the model reaches K within minutes, long before the first reading: \\partial\\,\\mathrm{SSE}/\\partial r \\approx 4\\times10^{-23}. BFGS never moves r; Nelder–Mead wanders on the plateau until its corner values agree.\nIn hours the natural guess is right, and \\kappa drops from 1.2\\times10^4 to 1.0\\times10^3. Choose units so parameters are near 1.\n\n\nNow we can explain the opening failure of the course. The model at r = 0.5 per minute predicts e^(-60) of the way from K at the first measurement (120 minutes), so it is K at every time point after zero. Changing r changes nothing: the exact partial derivative is 3.8e-23, numDeriv prints 0. A gradient method moves only in directions where the slope is nonzero, so r stays exactly 0.5 and only K and N0 are fitted (K to the mean of the later points). Nelder-Mead’s reflections in r also change nothing, the corner values agree to reltol and it stops. With time in hours the same starting value is in the right region, both Nelder-Mead and BFGS find r = 0.524 per hour (doubling time 79 minutes), and the Hessian is better conditioned because r is no longer 100 times smaller than the other parameters."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#starting-values-and-multistart",
+    "href": "gradient-methods/lec.html#starting-values-and-multistart",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Starting values and multistart",
+    "text": "Starting values and multistart\n\nStart from the data: bottom ≈ min(y), top ≈ max(y), EC50 ≈ dose where y crosses halfway, hill ≈ 1. R’s SSfpl self-start model for nls does this for you.\nMultistart: run from many starts, keep the best, and look at how many agree.\n\nstarts &lt;- expand.grid(EC50 = 10^(-2:2), hill = c(0.5, 1, 3))   # 15 starts\nnm &lt;- apply(starts, 1, function(s) optim(c(0, 100, s), sse)$value)\ntable(round(nm, 1))\n#  314.9 1344.4 1557.2 1926.8 2453.2\n#     10      2      1      1      1\n\nNelder–Mead from 15 starts: 5 end far from the minimum, every one with convergence = 0. BFGS with the analytic gradient finds 314.9 from all 15.\n\n\nThese are the generic defences, and they are cheap. A data-based start is what commercial curve-fitting software does. SSfpl uses log dose and a scale parameter (1/Hill on the natural log scale), which also takes care of scaling. Multistart costs 15 fits here, a fraction of a second. If all starts agree, you have some confidence it is the global minimum (no proof!); if they disagree, look at the bad ones: here Nelder-Mead from EC50 = 100 or Hill = 3 gets stuck with a too steep curve. Different local minima, or the same minimum found with poor accuracy, are both worth knowing about. The rows of starts are (EC50, hill); bottom and top start at 0 and 100."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#stochastic-gradient-descent-in-one-slide",
+    "href": "gradient-methods/lec.html#stochastic-gradient-descent-in-one-slide",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Stochastic gradient descent, in one slide",
+    "text": "Stochastic gradient descent, in one slide\nWhen the objective is a sum over many data points, f(\\mathbf p) = \\sum_{i=1}^N f_i(\\mathbf p), with N in the millions (images, sequences, cells):\n\\mathbf p_{k+1} = \\mathbf p_k - \\alpha_k \\sum_{i \\in \\text{batch}_k} \\nabla f_i(\\mathbf p_k)\n\nEach step uses the gradient of a small random minibatch (say 32 points): a noisy but cheap estimate of \\nabla f.\nNo line search: the learning rate \\alpha_k is set by hand and decreased over time; variants (momentum, Adam) adapt it per parameter, a cheap form of scaling.\nThis is how neural networks are trained (gradients by automatic differentiation). For an 18-point dose–response curve, use BFGS.\n\n\nOne slide only, because students will meet it in machine learning. The noise is a feature for huge data sets: a full gradient over 10 million images costs 10 million evaluations; a minibatch gradient costs 32, so you get hundreds of thousands of rough steps for the price of one exact one. The disadvantages are those of steepest descent (condition number, step size) plus noise: it converges slowly to an exact minimum, which in machine learning is not the goal. Adam divides each gradient component by a running estimate of its size, which is a diagonal rescaling, the same idea as parscale. Automatic differentiation computes exact gradients by applying the chain rule to the program; it is the third way, next to hand-derived and finite differences."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#checklist-for-a-fit",
+    "href": "gradient-methods/lec.html#checklist-for-a-fit",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Checklist for a fit",
+    "text": "Checklist for a fit\n\nCheck the gradient against numDeriv::grad before using it (agreement to ~10^{-6} relative, not ~1).\nLook at the convergence code and the counts; maxit reached means “not finished”.\nPlot the fitted curve over the data. A flat line or a step is a degenerate fit.\nUnits and scale: parameters near 1 (µM, hours, log EC50), or parscale.\nStart from the data, and multistart: do the answers agree?\nAt the answer: gradient near 0 and Hessian eigenvalues all positive (a minimum, not a saddle or plateau). A huge \\kappa warns of poorly determined parameters.\nMethod: smooth with gradient → BFGS (L-BFGS for many parameters); noisy or non-smooth → Nelder–Mead; sum of squares → Nonlinear least squares and ODE fitting.\n\n\nA list to keep next to the keyboard. Each item caught one of today’s failures: the wrong gradient (exercise), the iteration limit (CG), the flat fits (nM start, growth curve), the bad conditioning (nM, minutes), the bad starts (Nelder-Mead multistart), and the saddle (Newton from EC50 = 10). The Hessian at the answer comes back in Identifiability and uncertainty of fitted parameters, where its inverse gives standard errors; a near-zero eigenvalue means a parameter combination the data do not determine."
+  },
+  {
+    "objectID": "gradient-methods/lec.html#summary",
+    "href": "gradient-methods/lec.html#summary",
+    "title": "Gradient descent, Newton and quasi-Newton",
+    "section": "Summary",
+    "text": "Summary\n\nGradient \\nabla f: Jacobian of a scalar function, points uphill. Hessian H: Jacobian of the gradient. Minimum: \\nabla f = \\mathbf 0, H positive definite.\nSteepest descent + backtracking (Armijo): always goes downhill, but converges linearly at a rate set by \\kappa(H); it zig-zags in narrow valleys.\nNewton: solve H\\mathbf s = -\\nabla f. Quadratic convergence near the minimum; can head for saddles when H is not positive definite.\nBFGS builds H^{-1} from gradient differences; L-BFGS stores only a few of them. Nelder–Mead uses only f.\noptim (default Nelder–Mead) and minimize (default BFGS) report “converged” when a stopping rule is met. Scale the parameters, start from the data, multistart, check.\n\nNext: Nonlinear least squares and ODE fitting: Gauss–Newton and Levenberg–Marquardt use the structure of a sum of squares.\n\nRecap the three families: first-order (steepest descent, SGD), second-order (Newton), and in between (quasi-Newton), plus the derivative-free simplex. The SSE has special structure: its Hessian is approximately 2 J^T J, using only the model Jacobian we already computed for the gradient. That is Gauss-Newton, and adding mu I to it is Levenberg-Marquardt, the method behind nls and minpack.lm: the next unit."
+  },
+  {
+    "objectID": "eigen-algorithms/lec.html#try-it-the-qr-algorithm-live",
+    "href": "eigen-algorithms/lec.html#try-it-the-qr-algorithm-live",
+    "title": "How eigen() works, and big problems",
+    "section": "Try it: the QR algorithm, live",
+    "text": "Try it: the QR algorithm, live\n\n\n\n\nThe QR algorithm computed live in the browser, with deflation below 1e-12 exactly as in exercise C2. Left: A_k as a heat map (blue positive, orange negative, paler = smaller, white below 1e-12; the diagonal outlined, deflated eigenvalues in green). Right: the subdiagonal entries on a log axis, with the dashed rates |lambda_{i+1}/lambda_i|^k when there is no shift. Start with the lecture’s 3 x 3, no shift: step +1 gives the A_1 of the background (4.41, 0.691, 3.15, -0.538, 1.43); press play: a32 follows 0.423^k and deflates at k = 33, a21 follows 0.634^k, all three eigenvalues at k = 62 (fig02). Switch to Rayleigh: 7 steps, |a32| goes 7e-3, 1e-7, 6e-22 (fig03); Wilkinson: 4 steps. Then “close lambda1, lambda2”: rate 0.932, 367 steps unshifted, 6 with Wilkinson. B with the Rayleigh shift: mu = 2 sits halfway between 1 and 3 and nothing moves; Wilkinson finds both in one step. Predator-prey J: the 2 x 2 block keeps rotating (next slides). 4 x 4 community: a43 deflates (-0.5), a21 goes to 0 (-3), the block for -1 +- i stays and repeats every 4 steps. If time allows, the second tab belongs to the sensitivity slides: n = 10, eps = 1e-10 moves the chain’s eigenvalues by 0.1 and the symmetric matrix’s by 4e-11.",
+    "crumbs": [
+      "Home",
+      "Part 5: Eigenvalue problems",
+      "How `eigen()` works, and big problems",
+      "Lecture (slides)"
+    ]
+  },
+  {
+    "objectID": "identifiability/lec.html#about-this-lecture",
+    "href": "identifiability/lec.html#about-this-lecture",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "About this lecture",
+    "text": "About this lecture\nIn Nonlinear least squares and ODE fitting we fitted a pharmacokinetic model and got numbers for k_a, k_e and V. This lecture asks how much those numbers can be trusted.\n\nStructural non-identifiability: the model itself cannot tell parameters apart (a product F\\!\\cdot\\!D/V; the k_a/k_e flip-flop). No amount of data helps.\nPractical non-identifiability: the model could, but these data do not.\nNear the optimum the sum of squares is a bowl. Its curvature, the Hessian \\approx 2J^TJ, gives standard errors \\sqrt{\\operatorname{diag}(s^2(J^TJ)^{-1})} and a correlation matrix.\nSmall singular values of J name the badly determined combinations, as in The SVD, rank deficiency and regularisation.\nThe profile likelihood checks the bowl picture, and shows flat directions the standard errors hide. Sloppy models have many of them.\nFixes: better sampling times, reparameterisation, priors.\n\n\nThis closes the loop of Part 9: we can now fit a nonlinear model, and the question is what the fitted numbers mean. The numerical content is small (a Jacobian, a matrix inverse or SVD, a loop of re-fits), but the consequences are large: a model that fits the data perfectly can still have parameters that are not determined at all. The running example is the one-compartment oral pharmacokinetic model from the previous unit. Everything here applies equally to growth curves, enzyme kinetics and signalling models."
+  },
+  {
+    "objectID": "identifiability/lec.html#a-biology-problem-the-fit-is-fine",
+    "href": "identifiability/lec.html#a-biology-problem-the-fit-is-fine",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "A biology problem: the fit is fine",
+    "text": "A biology problem: the fit is fine\n\n\nOne oral dose of 100 mg; the first blood sample is taken at 3 h. Three fits with absorption rate k_a = 0.68, 2 and 20 /h (each with k_e and V re-fitted) pass equally well through the data.\nThe grey circles are what early samples would have shown. Without them, the data cannot say how fast the drug was absorbed.\nnls happily reports k_a = 0.68 \\pm 0.31 /h. Is that number worth anything?\n\n\nThis is the situation the lecture is about. The model fits, the residuals look fine, the software prints an estimate and a standard error, and yet the parameter is not determined: any absorption rate from about 0.3 per hour to infinity (instant absorption) fits the late data. The curves only differ before the first sample. In clinical pharmacokinetics this is common: outpatients come in hours after the dose. The data here are simulated (true ka = 1, ke = 0.2, V = 20) so that we know the truth; the grey points are the early samples of the same simulated subject."
+  },
+  {
+    "objectID": "identifiability/lec.html#recap-the-model-and-the-fit",
+    "href": "identifiability/lec.html#recap-the-model-and-the-fit",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Recap: the model and the fit",
+    "text": "Recap: the model and the fit\nOne-compartment model, oral dose D, bioavailability F (fraction absorbed):\nC(t) = \\frac{F\\,D\\,k_a}{V\\,(k_a - k_e)}\\left(e^{-k_e t} - e^{-k_a t}\\right)\npk &lt;- function(t, ka, ke, V, D = 100) D * ka / (V * (ka - ke)) * (exp(-ke * t) - exp(-ka * t))\nt &lt;- c(0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 24)                         # hours\ny &lt;- c(0.98, 1.89, 2.69, 3.47, 3.39, 3.00, 2.77, 1.98, 1.35, 0.52, 0.28)  # mg/L\nfit &lt;- nls(y ~ pk(t, ka, ke, V), start = list(ka = 0.5, ke = 0.1, V = 10))\ncoef(fit)\n#         ka         ke          V\n#  0.9976079  0.1925081 20.0326702\ndeviance(fit)                          # residual sum of squares\n# [1] 0.1626121\n\nAll 11 samples, F = 1 assumed. Truth: k_a = 1, k_e = 0.2 /h, V = 20 L, noise SD 0.15 mg/L.\n\n\nThe same model as in the previous unit: first-order absorption from the gut with rate ka, first-order elimination with rate ke, one well-mixed compartment of volume V. The fit with all 11 samples recovers the truth well. The rest of the lecture asks how well, and what goes wrong with fewer or worse-placed samples. D = 100 mg, so D/V has units mg/L. nls uses Gauss-Newton by default; the details are in the previous unit."
+  },
+  {
+    "objectID": "identifiability/lec.html#two-kinds-of-trouble",
+    "href": "identifiability/lec.html#two-kinds-of-trouble",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Two kinds of trouble",
+    "text": "Two kinds of trouble\nA parameter is identifiable if the data determine it: different values give different predictions.\n\n\n\n\n\n\n\n\n\nStructural\nPractical\n\n\n\n\nCause\nthe model equations\nthe data (too few, too noisy, badly placed)\n\n\nPerfect, noise-free data\nstill not determined\ndetermined\n\n\nExample\nF and V only as F/V; flip-flop\nk_a with first sample at 3 h\n\n\nSymptom\nJ exactly rank-deficient; equal-SSE minima\nhuge SE, |r| \\to 1, flat profile\n\n\nFix\nreparameterise, add a different experiment\nbetter design, more data, prior\n\n\n\n\nStructural identifiability is a property of the model and the measured output alone; one can check it with algebra before any experiment. Practical identifiability depends on how many samples, where, and how noisy. A structurally identifiable model can be practically non-identifiable (our sparse design); a structurally non-identifiable model stays so whatever the data. Both show up in the same numerical objects: the Jacobian and the shape of the sum of squares."
+  },
+  {
+    "objectID": "identifiability/lec.html#structural-1-parameters-that-only-appear-as-a-product",
+    "href": "identifiability/lec.html#structural-1-parameters-that-only-appear-as-a-product",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Structural (1): parameters that only appear as a product",
+    "text": "Structural (1): parameters that only appear as a product\nIf the bioavailability F is unknown, F and V enter only through F/V: doubling both changes nothing.\nnls(y ~ pk(t, ka, ke, V / F), start = list(ka = 0.5, ke = 0.1, V = 10, F = 0.8))\n# Error in nlsModel(...) : singular gradient matrix at initial parameter estimates\np4 &lt;- c(coef(fit), F = 1)\nJ4 &lt;- jacobian(function(p) pk(t, p[1], p[2], p[3] / p[4]), p4)  # numDeriv\nsvd(J4 %*% diag(p4))$d                # columns scaled: d C / d log p\n# [1] 1.124957e+01 3.096841e+00 9.077142e-01 3.183060e-11\nround(svd(J4 %*% diag(p4))$v[, 4], 3)\n# [1]  0.000  0.000 -0.707 -0.707      # log V and log F together\n\nThe Jacobian has an exact null direction: \\sigma_4 \\approx 10^{-11} (rounding), v_4 \\propto (0, 0, 1, 1) in (\\log k_a, \\log k_e, \\log V, \\log F).\nFix: fit and report the identifiable combination, the apparent volume V/F. Separating F needs a different experiment (an IV dose).\n\n\n“Singular gradient” is how nls reports that the columns of the Jacobian are linearly dependent; Gauss-Newton cannot solve for a step. The SVD tells us exactly which combination is missing: the right singular vector for the zero singular value says increase log V and log F by the same amount, i.e. V/F stays fixed. We use log parameters (each column multiplied by its parameter) so that the singular vectors are about relative changes. jacobian is from the numDeriv package. Pharmacokineticists report V/F and CL/F after oral dosing for exactly this reason; F itself needs an intravenous reference dose."
+  },
+  {
+    "objectID": "identifiability/lec.html#structural-2-the-flip-flop",
+    "href": "identifiability/lec.html#structural-2-the-flip-flop",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Structural (2): the flip-flop",
+    "text": "Structural (2): the flip-flop\n\nSwap k_a \\leftrightarrow k_e and set V' = V\\,k_e/k_a: the formula gives the same C(t) for every t.\n\nTwo exact minima with the same SSE: (0.998, 0.193, 20.0) and (0.193, 0.998, 3.87). Each is locally identifiable; globally the data cannot choose.\nRight: fix k_a, re-fit the rest, plot the rise in SSE. Two wells of equal depth.\n\n\nCheck the algebra: with ka and ke swapped the prefactor becomes ke/(V’(ke-ka)) and the bracket changes sign, so the curve is unchanged if ke/V’ = ka/V. Biologically: is the drug absorbed fast and eliminated slowly, or absorbed slowly and eliminated fast? The concentration curve alone cannot say. Slow-release formulations really do show “flip-flop kinetics” (absorption slower than elimination), so this is not only a mathematical curiosity. The right panel is a profile, which we define properly later: for each fixed ka, re-fit ke and V and record the SSE. The hump between the wells is what keeps an optimiser on one side: which minimum you get depends on the starting values."
+  },
+  {
+    "objectID": "identifiability/lec.html#the-flip-flop-in-practice",
+    "href": "identifiability/lec.html#the-flip-flop-in-practice",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "The flip-flop in practice",
+    "text": "The flip-flop in practice\nfit2 &lt;- nls(y ~ pk(t, ka, ke, V), start = list(ka = 0.1, ke = 0.5, V = 5))\ncoef(fit2)\n#        ka        ke         V\n# 0.1925080 0.9976088 3.8656951\nc(deviance(fit), deviance(fit2))\n# [1] 0.1626121 0.1626121\n\nSame residuals, different parameters. Neither run warns.\nCheck: multistart (previous unit). Equal-SSE minima at different parameter values mean a structural problem, not a convergence problem.\nFix: use outside knowledge. An IV dose gives k_e directly; or impose k_a &gt; k_e by fitting k_a = k_e + e^{\\delta}.\n\n\nThe multistart check from the previous unit was a guard against local minima. Here it finds two minima with identical SSE to all printed digits, which is the signature of a symmetry in the model. The second solution has V = 3.9 L, which is physiologically odd for many drugs, but only outside knowledge can say that. Constraining ka &gt; ke is a modelling decision: make it explicitly and say so."
+  },
+  {
+    "objectID": "identifiability/lec.html#near-the-optimum-the-sse-is-a-bowl",
+    "href": "identifiability/lec.html#near-the-optimum-the-sse-is-a-bowl",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Near the optimum the SSE is a bowl",
+    "text": "Near the optimum the SSE is a bowl\nTaylor expansion of S(\\theta) = \\sum_i r_i(\\theta)^2 around the optimum \\hat\\theta (gradient = 0):\nS(\\hat\\theta + \\delta) \\approx S(\\hat\\theta) + \\tfrac12\\,\\delta^T H\\,\\delta, \\qquad H = \\nabla^2 S\nWith residuals r_i = y_i - C(t_i;\\theta) and the Jacobian J_{ij} = \\partial C(t_i)/\\partial\\theta_j (11\\times3):\nH = 2J^TJ \\;-\\; 2\\sum_i r_i\\,\\nabla^2 C(t_i) \\;\\approx\\; 2J^TJ\n\nThe second term is small when residuals are small and random: this is the Gauss–Newton approximation from the previous unit.\nSteep directions of the bowl (large eigenvalues of H) are well determined; flat ones are not.\n\n\nThis is the multivariate version of the parabola from Optimisation in one dimension: near a minimum every smooth function looks quadratic, and the curvature tells how sharply the minimum is defined. The Hessian of the sum of squares has two parts; the one with second derivatives of the model is multiplied by residuals, which are small and of both signs at a good fit, so it nearly cancels. That is why J^T J (which needs only first derivatives) is used everywhere. We will check the approximation numerically in two slides."
+  },
+  {
+    "objectID": "identifiability/lec.html#standard-errors-from-the-jacobian",
+    "href": "identifiability/lec.html#standard-errors-from-the-jacobian",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Standard errors from the Jacobian",
+    "text": "Standard errors from the Jacobian\nIf the noise is independent with variance \\sigma^2, the estimate is approximately normal with\n\\operatorname{Cov}(\\hat\\theta) \\approx \\sigma^2 (J^TJ)^{-1}, \\qquad \\hat\\sigma^2 = s^2 = \\frac{S(\\hat\\theta)}{n - p} = \\frac{0.1626}{11 - 3} = 0.0203\nlibrary(numDeriv)\nth &lt;- coef(fit)\nJ  &lt;- jacobian(function(p) pk(t, p[1], p[2], p[3]), th)   # 11 x 3\ns2 &lt;- deviance(fit) / (length(y) - 3)\nsqrt(diag(s2 * solve(crossprod(J))))          # standard errors by hand\n# [1] 0.1158224 0.0204759 1.3158715\nsqrt(diag(vcov(fit)))                         # what nls reports\n#        ka        ke         V\n# 0.1158224 0.0204759 1.3158715\n\nThe same formula as for linear regression, with J in place of the design matrix.\n\n\nFor a linear model y = X beta + noise, Cov(beta-hat) = sigma^2 (X^T X)^{-1} exactly. For a nonlinear model we linearise around the optimum: J plays the role of X. So the standard errors printed by summary(nls) are only as good as that linearisation, which is the point of the profile slides. vcov uses the QR factor of the gradient matrix rather than solve(crossprod(J)), for the conditioning reason a few slides on. numDeriv::jacobian uses Richardson extrapolation of central differences (Numerical differentiation unit), so it is accurate to many digits. Python: scipy.optimize.least_squares returns jac, and the covariance is s2 * inv(jac.T @ jac)."
+  },
+  {
+    "objectID": "identifiability/lec.html#the-hessian-and-the-fisher-information",
+    "href": "identifiability/lec.html#the-hessian-and-the-fisher-information",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "The Hessian and the Fisher information",
+    "text": "The Hessian and the Fisher information\nsse &lt;- function(p) sum((y - pk(t, p[1], p[2], p[3]))^2)\nH &lt;- hessian(sse, th)                         # numDeriv: full second derivatives\nround(H, 2)                                   # round(2 * crossprod(J), 2):\n#       [,1]   [,2]  [,3]                     #       [,1]   [,2]  [,3]\n# [1,] 16.75  -6.56 -1.41                     # [1,] 16.59  -6.56 -1.41\n# [2,] -6.56 690.81 10.57                     # [2,] -6.56 696.41 10.57\n# [3,] -1.41  10.57  0.29                     # [3,] -1.41  10.57  0.29\nsqrt(diag(2 * s2 * solve(H)))\n# [1] 0.11518692 0.02071607 1.32153067\n\nH and 2J^TJ agree to about 1 %: the Gauss–Newton approximation is good here.\nIn likelihood language: -\\log L = S/(2\\sigma^2) + \\text{const}, so the Fisher information is \\mathcal I = J^TJ/\\sigma^2 and \\operatorname{Cov} \\approx \\mathcal I^{-1}. For a general likelihood: invert the Hessian of -\\log L (optim(..., hessian = TRUE)).\n\n\nnumDeriv::hessian computes all second derivatives numerically. This is the route to use when the objective is not a sum of squares, e.g. a Poisson or binomial likelihood: minimise the negative log-likelihood with optim, ask for the Hessian, and invert it. For least squares with Gaussian noise the two routes agree up to the residual term. The observed Fisher information is the Hessian of the negative log-likelihood at the optimum; its inverse is the asymptotic covariance. The standard errors differ by about 1 % here, which is irrelevant for reporting."
+  },
+  {
+    "objectID": "identifiability/lec.html#the-correlation-matrix",
+    "href": "identifiability/lec.html#the-correlation-matrix",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "The correlation matrix",
+    "text": "The correlation matrix\nr_{jk} = \\frac{\\operatorname{Cov}_{jk}}{\\sqrt{\\operatorname{Cov}_{jj}\\operatorname{Cov}_{kk}}}\nround(cov2cor(vcov(fit)), 2)\n#       ka    ke     V\n# ka  1.00 -0.83  0.90\n# ke -0.83  1.00 -0.93\n# V   0.90 -0.93  1.00\n\nr(k_a, V) = 0.90: a larger k_a can be compensated by a larger V. The bowl is a tilted, elongated valley.\n|r| &gt; 0.95 is a warning; |r| \\to 1 means one parameter can replace another.\nA standard error alone hides this: each SE is the width of the valley after the others have moved along.\n\n\ncov2cor divides each covariance by the product of the two standard errors. High correlation between estimates is not a property of the biology (the true ka and V are not “correlated”), it is a property of the experiment: the data constrain a combination of ka and V much better than either alone. With all 11 samples the correlations are high but below 0.95; on the sparse design they reach 0.99. Python: np.corrcoef does not apply here; compute C / np.outer(se, se)."
+  },
+  {
+    "objectID": "identifiability/lec.html#the-svd-of-j-which-combinations-are-determined",
+    "href": "identifiability/lec.html#the-svd-of-j-which-combinations-are-determined",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "The SVD of J: which combinations are determined",
+    "text": "The SVD of J: which combinations are determined\nScale the columns (\\partial C/\\partial \\log\\theta_j = \\theta_j\\,\\partial C/\\partial\\theta_j) so all parameters are compared in relative terms:\nJl &lt;- J %*% diag(th)                  # sensitivities to log ka, log ke, log V\nsv &lt;- svd(Jl)\nsv$d\n# [1] 8.2918957 3.0896881 0.8728112\nround(sv$v[, 3], 2)                   # the worst direction\n# [1]  0.68 -0.62  0.39\nsqrt(s2) / sv$d                       # SE along each direction (log units)\n# [1] 0.01719403 0.04614417 0.16334701\n\nAs in The SVD, rank deficiency and regularisation: noise along v_i is amplified by 1/\\sigma_i. Here the SE along v_3 is s/\\sigma_3 = 0.16, about 16 %.\nv_3: increase k_a, decrease k_e, increase V together. The data barely notice.\n\n\nThis is the link to Part 4. There the matrix was the signature S and v5 said “CD4 minus CD8”; here the matrix is the Jacobian and v3 names the combination of rate constants that the data constrain least. In log units, an SE of 0.16 means a factor exp(0.16) = 1.18, so about 16 % relative uncertainty in that combination, against 2 % along v1. Exact zero singular values are structural non-identifiability (the F/V slide); small ones are practical non-identifiability."
+  },
+  {
+    "objectID": "identifiability/lec.html#scaling-and-conditioning",
+    "href": "identifiability/lec.html#scaling-and-conditioning",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Scaling and conditioning",
+    "text": "Scaling and conditioning\nkappa(J, exact = TRUE)                # columns in 1/h, 1/h and L\n# [1] 172.817\nkappa(Jl, exact = TRUE)               # columns per unit log-parameter\n# [1] 9.500217\nkappa(crossprod(J), exact = TRUE)     # forming J^T J squares kappa\n# [1] 29865.7\n\nPart of a large \\kappa(J) is just units (V in litres vs rates per hour). Log-parameters remove that part; what is left is real.\nAs in Pivoting, norms and conditioning: solving with J^TJ loses about \\log_{10}\\kappa(J)^2 digits. vcov uses the QR factor R of J: (J^TJ)^{-1} = R^{-1}R^{-T}.\nsolve(crossprod(J)) on a sloppy model can return garbage or fail: use chol2inv(qr.R(qr(J))) or the SVD.\n\n\nTwo separate issues. First, scaling: a parameter measured in litres has a much smaller derivative than a rate per hour, so the raw kappa is inflated by units. Multiplying each column by its parameter value (equivalent to fitting log parameters) makes the comparison fair. Second, numerical: the covariance matrix is (J^T J)^{-1}, and forming J^T J squares the condition number, exactly as in the normal equations of Least squares: normal equations vs QR. With kappa = 1e8 that leaves no correct digits. chol2inv(qr.R(qr(J))) computes (R^T R)^{-1} from the QR factor without forming J^T J."
+  },
+  {
+    "objectID": "identifiability/lec.html#practical-non-identifiability-samples-from-3-h",
+    "href": "identifiability/lec.html#practical-non-identifiability-samples-from-3-h",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Practical non-identifiability: samples from 3 h",
+    "text": "Practical non-identifiability: samples from 3 h\nlate &lt;- t &gt;= 3                                    # first sample at 3 h\nfits &lt;- nls(y ~ pk(t, ka, ke, V), start = list(ka = 1, ke = 0.2, V = 20),\n            subset = late)\nsummary(fits)$coefficients[, 1:2]\n#      Estimate Std. Error\n# ka  0.6770636 0.30528148\n# ke  0.2144039 0.05541457\n# V  19.1086919 3.44482006\nround(cov2cor(vcov(fits)), 3)\n#        ka     ke      V\n# ka  1.000 -0.936  0.933\n# ke -0.936  1.000 -0.986\n# V   0.933 -0.986  1.000\n\nAfter 3 h the curve is \\approx A\\,e^{-k_e t} with A = D k_a/(V(k_a - k_e)): only two numbers, for three parameters.\nThe SE says k_a = 0.68 \\pm 0.31; Wald 95 % interval (0.08, 1.28). The truth (1.0) is inside, but is this interval right?\n\n\nThe model is structurally fine; the problem is where the samples are. Once absorption is complete, exp(-ka t) is negligible and the data only see the elimination phase, which has two features: an amplitude and a slope. ka enters only through the amplitude, together with V, so ka and V can trade off. The correlation of ke and V is -0.986. The SE is not absurd, which makes it dangerous: it suggests ka is known to about 50 %. The next slides show that the truth is much worse."
+  },
+  {
+    "objectID": "identifiability/lec.html#where-the-bowl-picture-fails",
+    "href": "identifiability/lec.html#where-the-bowl-picture-fails",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Where the bowl picture fails",
+    "text": "Where the bowl picture fails\n\n\nContours of \\Delta S/s^2 over (k_a, V), with k_e re-fitted at each point; red: the ellipse that the SEs and correlations describe.\nAll samples: the ellipse matches the valley. From 3 h: the valley is open to the right: k_a \\to \\infty (instant absorption) fits as well. The ellipse cannot show that.\n\n\nThe Wald ellipse is the quadratic approximation drawn at the 3.84 level; the blue 3.84 contour is the real thing. With the rich design they coincide: the quadratic picture is fine and the standard errors are trustworthy. With the sparse design the region of acceptable fits is a long channel that never closes: as ka grows, V settles at a value (the IV-bolus volume) and the fit stays acceptable. The ellipse, being an ellipse, must close, and it even extends to negative ka on the left (cut off here). A standard error cannot describe a one-sided, unbounded uncertainty."
+  },
+  {
+    "objectID": "identifiability/lec.html#the-profile-likelihood",
+    "href": "identifiability/lec.html#the-profile-likelihood",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "The profile likelihood",
+    "text": "The profile likelihood\nTo check one parameter, fix it on a grid and re-optimise all the others:\n\\text{PL}(k_a) = \\min_{k_e,\\,V} S(k_a, k_e, V), \\qquad \\text{95 \\% interval: } \\frac{\\text{PL}(k_a) - S(\\hat\\theta)}{s^2} \\le 3.84\nprof &lt;- function(ka, t, y) {           # fix ka, re-fit ke and V\n  f &lt;- nls(y ~ pk(t, ka, ke, V), start = list(ke = 0.2, V = 20))\n  deviance(f)\n}\ncrit &lt;- function(ka) (prof(ka, t, y) - deviance(fit)) / s2 - 3.84\nc(uniroot(crit, c(0.3, 0.998))$root, uniroot(crit, c(0.998, 30))$root)\n# [1] 0.7794766 1.2375772                         # profile interval\ncoef(fit)[\"ka\"] + c(-1.96, 1.96) * sqrt(vcov(fit)[\"ka\", \"ka\"])\n# [1] 0.7705976 1.2246214                         # Wald interval\n\n3.84 = 1.96^2 is the 95 % point of \\chi^2_1. For a linear model the two intervals are identical.\n\n\nThe profile is the honest version of the standard error: instead of assuming the valley is a parabola, we walk along it. Each grid point is a full nonlinear fit with one parameter held fixed, so it costs as many fits as grid points, which is cheap for small models. The threshold: with Gaussian noise, -2 log L = S/sigma^2 + const, and the likelihood-ratio test says a drop of chi^2_1(0.95) = 3.84 is the 95 % boundary. We plug in s^2 for sigma^2; with few degrees of freedom an F-based threshold is a bit wider, which does not change the picture. With all 11 samples the two intervals agree to within 0.01: the profile confirms the SE. uniroot finds where the profile crosses the threshold, as in Bisection and fixed-point iteration."
+  },
+  {
+    "objectID": "identifiability/lec.html#profiles-show-what-the-se-hides",
+    "href": "identifiability/lec.html#profiles-show-what-the-se-hides",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Profiles show what the SE hides",
+    "text": "Profiles show what the SE hides\n\n\nAll samples (blue): a clear well, close to the Wald parabola (dotted). k_a \\in (0.78, 1.24).\nFrom 3 h (orange): the profile never reaches 3.84 between 0.3 and 30. It levels off at 2.15: no upper bound. The Wald interval (0.08, 1.28) is wrong at both ends.\n\n\nThis is the main diagnostic of the lecture. A profile that rises above the threshold on both sides gives a confidence interval (possibly asymmetric). A profile that flattens below the threshold on one side means the parameter is practically non-identifiable in that direction: here, any ka above 0.3 fits, and the curve stays at 2.15 all the way to infinity (instant absorption). A profile that is flat everywhere means the parameter is not determined at all. On the left of the orange curve the profile also stays low because ka approaches ke, where the flip-flop branch begins. Raue et al. (2009, Bioinformatics) popularised profiles for exactly this use in systems biology."
+  },
+  {
+    "objectID": "identifiability/lec.html#sloppy-models",
+    "href": "identifiability/lec.html#sloppy-models",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Sloppy models",
+    "text": "Sloppy models\n\nEigenvalues \\lambda_i of J^TJ (log-parameters, so units do not matter), relative to the largest.\n\nTwo-compartment version (5 parameters: k_a, k_{10}, k_{12}, k_{21}, V), same 11 samples: eigenvalues spread evenly over 4 decades.\nSE along each eigenvector \\propto 1/\\sqrt{\\lambda_i}: the stiffest combination is known 80× better than the sloppiest.\nTypical of biochemical network models (Gutenkunst et al. 2007): a few stiff combinations, many sloppy ones, no clear gap.\n\n\nThe eigenvalues of J^T J are the squared singular values of J. A gap between large and small (as with the F/V product) says “this many combinations are determined, the rest are not”. Sloppy models have no gap: the eigenvalues are roughly evenly spaced on a log scale, often over 6 or more decades in signalling models with dozens of parameters. Here sqrt(10^3.8) is about 80. The point of Gutenkunst et al. was that this is the norm, not the exception, in systems biology: individual rate constants are rarely determined by time-course data, even when the fit is excellent."
+  },
+  {
+    "objectID": "identifiability/lec.html#sloppy-parameters-good-predictions",
+    "href": "identifiability/lec.html#sloppy-parameters-good-predictions",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Sloppy parameters, good predictions",
+    "text": "Sloppy parameters, good predictions\nPrediction SE at time t^*: with g = \\partial C(t^*)/\\partial\\theta, \\operatorname{Var}\\hat C(t^*) \\approx g^T\\operatorname{Cov}(\\hat\\theta)\\,g.\n\n\n\n\n\n\n\n\n\n\nt^* (h)\n0.5\n1\n6\n12\n\n\n\n\nall samples: \\hat C \\pm SE\n1.86 ± 0.08\n2.82 ± 0.08\n1.93 ± 0.08\n0.61 ± 0.09\n\n\nfrom 3 h: \\hat C \\pm SE\n1.42 ± 0.33\n2.29 ± 0.41\n1.98 ± 0.10\n0.58 ± 0.12\n\n\n\n\nFrom 3 h: predictions inside the sampled window are as good as with all samples; before 3 h they are poor (and still optimistic).\nAsk what you need the model for. A sloppy model can predict well where the data constrain it, while its parameters are not determined.\n\n\nThis is the constructive side of sloppiness. If the question is “what is the concentration at 6 h”, the sparse design answers it with SE 0.10 mg/L, close to the rich design. If the question is “what is ka” or “what is the peak concentration”, it cannot. The delta-method formula g^T Cov g propagates the parameter covariance to any derived quantity: a prediction, the AUC, the half-life ln 2 / ke. It inherits the linearisation, so for the sparse design the 0.5 h and 1 h SEs are still too small (the true values are 1.86 and 2.82). For those, profile the prediction itself or simulate."
+  },
+  {
+    "objectID": "identifiability/lec.html#fix-1-choose-the-sampling-times",
+    "href": "identifiability/lec.html#fix-1-choose-the-sampling-times",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Fix 1: choose the sampling times",
+    "text": "Fix 1: choose the sampling times\n\n\nRelative sensitivities \\theta_j\\,\\partial C/\\partial\\theta_j: k_a matters only in the first 3 h; k_e late; V near the peak. Ticks: all samples (black), from 3 h (red).\nJ needs only a guess of \\theta, not data: compare designs before the experiment.\n\n\nThe columns of the Jacobian are these sensitivity curves evaluated at the sample times. A parameter is well determined if its column is large and not proportional to the others at the chosen times. ka has a large positive sensitivity early (faster absorption, faster rise) and a small negative one later, which is almost proportional to the V sensitivity: that is the ka-V trade-off on the sparse design. Optimal experimental design formalises this: choose times to maximise det(J^T J) (D-optimal) or minimise the variance of a parameter of interest."
+  },
+  {
+    "objectID": "identifiability/lec.html#design-in-code-same-cost-earlier-samples",
+    "href": "identifiability/lec.html#design-in-code-same-cost-earlier-samples",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Design in code: same cost, earlier samples",
+    "text": "Design in code: same cost, earlier samples\nse_design &lt;- function(tt, p = c(1, 0.2, 20), sigma = 0.15) {\n  J &lt;- jacobian(function(lp) pk(tt, exp(lp[1]), exp(lp[2]), exp(lp[3])), log(p))\n  sigma * sqrt(diag(solve(crossprod(J))))   # predicted SE of log ka, log ke, log V\n}\nround(se_design(c(3, 4, 6, 8, 12, 24)), 3)\n# [1] 0.624 0.198 0.103\nround(se_design(c(0.5, 1, 2, 4, 8, 24)), 3)\n# [1] 0.171 0.170 0.105\n\nSix samples either way. Moving three of them before 3 h cuts the SE of \\log k_a from 0.62 (a factor 1.9) to 0.17 (18 %), at no cost to k_e and V.\nThe guess \\theta need not be right, only roughly right. Check several guesses.\nThese are linearised SEs; for the first design the profile showed the truth is worse still.\n\n\nThis is the cheapest fix of all: it costs nothing but thought before the experiment. sigma is the assay SD (known from calibration). We use the true parameters as the guess here; in practice one uses a literature value or a pilot study, and checks that the conclusion does not depend much on the guess. Note the Jacobian is evaluated at the guess, with no data at all: the identifiability of a design can be computed before a single blood sample is taken."
+  },
+  {
+    "objectID": "identifiability/lec.html#fix-2-reparameterise",
+    "href": "identifiability/lec.html#fix-2-reparameterise",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Fix 2: reparameterise",
+    "text": "Fix 2: reparameterise\n\nLog-parameters \\theta = \\log k: positivity for free, columns of J on the same scale (\\kappa 173 → 9.5), and the bowl is often more nearly quadratic (better SEs, as factors).\nFit what is identifiable. Unknown F: estimate V/F, not F and V. From 3 h only: the late curve A e^{-k_e t} determines k_e, A, and the clearance-type quantity \\text{AUC} = FD/(k_eV).\nRemove a symmetry. k_a = k_e + e^{\\delta} allows only the branch k_a &gt; k_e: no flip-flop.\nReparameterising does not create information. It moves the undetermined part into one named parameter and keeps the rest clean.\n\n\nThe general strategy: find the combinations that the data determine (from the SVD of J, the profiles, or algebra), and make them the parameters. Then the fit converges more easily, the covariance matrix is well conditioned, and what you report is meaningful. AUC (area under the curve) and clearance CL = ke V are exactly the quantities clinical pharmacokinetics reports, partly for this reason: they are determined by the elimination phase. Note that log parameters change the Wald interval (symmetric in log ka means asymmetric in ka) but not the profile interval, which is invariant to reparameterisation."
+  },
+  {
+    "objectID": "identifiability/lec.html#fix-3-a-prior-is-an-extra-residual",
+    "href": "identifiability/lec.html#fix-3-a-prior-is-an-extra-residual",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Fix 3: a prior is an extra residual",
+    "text": "Fix 3: a prior is an extra residual\nPrior knowledge “k_a is about 1.2 /h, within a factor e^{0.5} = 1.65” becomes one more residual, (\\log k_a - \\log 1.2)/0.5:\nlibrary(minpack.lm)\nres &lt;- function(lp, t, y) c((y - pk(t, exp(lp[1]), exp(lp[2]), exp(lp[3]))) / 0.15,\n                            (lp[1] - log(1.2)) / 0.5)\nfp &lt;- nls.lm(par = log(c(1, 0.2, 20)), fn = res, t = t[late], y = y[late])\nexp(fp$par)\n# [1]  0.9168597  0.1872567 20.7779831\nJa &lt;- jacobian(res, fp$par, t = t[late], y = y[late])   # 7 x 3 (6 data + 1 prior)\nsqrt(diag(solve(crossprod(Ja))))                        # SE of log ka, log ke, log V\n# [1] 0.37112145 0.15471983 0.09106729\n\nThis is ridge regularisation (The SVD, rank deficiency and regularisation) on \\log k_a, and the maximum a posteriori estimate with a log-normal prior.\nSE of \\log k_a: 0.37, against 0.50 in the prior alone. The data added little: the answer is mostly the prior. Say so.\n\n\nDividing the data residuals by the noise SD (0.15, known from the assay) and the prior residual by the prior SD puts them on the same footing: the sum of squares is then -2 log of likelihood times prior. nls.lm (Levenberg-Marquardt, from the previous unit) takes a residual function, so adding a row is trivial. Python: scipy.optimize.least_squares with the extra residual. The SE now has a finite value, but compare it with the prior SD: the posterior is only a little narrower than the prior, so the estimate is mostly assumption. A prior removes the numerical symptom (flat valley, huge SE) but not the lack of information, the same lesson as NNLS and ridge in Part 4."
+  },
+  {
+    "objectID": "identifiability/lec.html#checklist-can-i-trust-these-parameters",
+    "href": "identifiability/lec.html#checklist-can-i-trust-these-parameters",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Checklist: can I trust these parameters?",
+    "text": "Checklist: can I trust these parameters?\n\nMultistart. Equal SSE at different parameter values → structural symmetry (flip-flop). Different SSE → local minima.\nnls says “singular gradient”, or svd(J) has a \\sigma near rounding level → structural: find the combination in v_n and reparameterise.\nStandard errors from vcov / s^2(J^TJ)^{-1}, computed by QR or SVD, and the correlation matrix: |r| &gt; 0.95 is a warning.\nSVD of J in log-parameters: name the badly determined combinations; look for a gap or an even (sloppy) spread.\nProfile each parameter you will report. Flat on one side → no bound in that direction; do not quote the SE.\nBefore the experiment: compute J at a guessed \\theta for candidate sampling times.\nReport what is determined (predictions, V/F, AUC), and any prior you used.\n\n\nEvery line maps to one of the slides. The order is roughly the order of cost: a multistart and a look at vcov are free once you have a fit; the SVD of J is one line; profiles cost one fit per grid point per parameter. The last line matters most in a paper: if ka is not identifiable from your design, report the quantities that are, and say that ka was fixed or given a prior."
+  },
+  {
+    "objectID": "identifiability/lec.html#summary",
+    "href": "identifiability/lec.html#summary",
+    "title": "Identifiability and uncertainty of fitted parameters",
+    "section": "Summary",
+    "text": "Summary\n\nStructural non-identifiability is in the model: products like F/V (exact null direction of J), symmetries like the k_a/k_e flip-flop (equal-SSE minima). Practical non-identifiability is in the data.\nNear \\hat\\theta, S is a bowl with Hessian H \\approx 2J^TJ. Covariance \\approx s^2(J^TJ)^{-1} = inverse Fisher information; vcov(nls), numDeriv::hessian. Correlations near ±1 = parameters that trade off.\nSmall singular values of J = badly determined directions, SE s/\\sigma_i. Scale to log-parameters; never form J^TJ when \\kappa is large.\nProfile likelihood (fix one, re-fit the rest) checks the bowl; a flat profile means no bound, whatever the SE says.\nSloppy models: eigenvalues of J^TJ spread over decades. Predictions can be good where data constrain them.\nFixes: design (sampling times, computable in advance), reparameterise (log, identifiable combinations), priors (= ridge; say how much they did).\n\nNext: Constraints and linear programming: bounds, Lagrange multipliers, and flux balance analysis.\n\nThe one-sentence version: a good fit is necessary but not sufficient; look at J (its SVD and the covariance it implies) and at profiles before reporting any fitted parameter. The capstone of the course (if used) asks for exactly this analysis on a real time course."
   }
 ]
