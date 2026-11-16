@@ -25,7 +25,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 20 | monte-carlo | done | done | done |
 | 21 | euler | done | done | done |
 | 22 | runge-kutta | done | done | done |
-| 23 | stiffness | running | | |
+| 23 | stiffness | done | running | |
 | 24 | phase-plane | done | done | done |
 | 25 | gillespie | done | running | |
 | 26 | optimisation-1d | done | running | |
@@ -65,3 +65,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - diffusion-explicit: slides not visually checked ('FTCS by hand', 'When is the gradient established?', 'No-flux boundary').
 - lu demo: E5/swap reveals B5(b)(c) answers; E1/E2 show counts asked in B3(b)/B6(a) — decide in audit. lu/exercise.html needs a re-render (stale vs latest lufactor.js layout — page text unchanged).
 - gillespie: gene params differ from euler's (10/min, 0.2/min) — noted in slide notes; reconcile wording in pass 2. Adds SIR early-extinction (2 slides). Only 2 slides screenshotted.
+- stiffness: deSolve ode45 quirks on Robertson stated on slides; wall times machine-specific. Stray Chrome profile dir at /big/henriksson/temp/claude-tmp/claude-1001/chr1 (outside scratchpad) — clean up when user present.

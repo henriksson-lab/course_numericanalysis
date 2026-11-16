@@ -159,13 +159,15 @@ function mount(host: HTMLElement): void {
   const multiBtn = button(g5, "multistart", () => {
     if (st.multi) { st.multi = null; draw(); return; }
     const p = PROBLEMS[st.prob];
-    const [L, R] = p.bracket, n = 6, pts: Pt[] = [];
+    const L = st.a0, R = st.b0, n = 5, pts: Pt[] = [];
     let evals = 0;
     for (let i = 0; i < n; i++) {
-      const r = runAll(brent(p.f, L + i * (R - L) / n, L + (i + 1) * (R - L) / n, 1e-10));
+      const lo = L + i * (R - L) / n, hi = L + (i + 1) * (R - L) / n;
+      const r = runAll(brent(p.f, lo, hi, 1e-10));
       evals += r.evals.length;
       const x = r.rows[r.rows.length - 1].best, f = p.f(x);
-      if (!pts.some(q => Math.abs(q.x - x) < 1e-4 * (R - L))) pts.push({ x, f });
+      const atEdge = Math.min(x - lo, hi - x) < 1e-3 * (hi - lo);    // not a minimum inside
+      if (!atEdge && !pts.some(q => Math.abs(q.x - x) < 1e-4 * (R - L))) pts.push({ x, f });
     }
     st.multi = { pts: pts.sort((u, v) => u.x - v.x), evals };
     st.curve = true;
@@ -224,9 +226,10 @@ function mount(host: HTMLElement): void {
     curveBtn.textContent = st.curve ? "hide the curve" : "plot the curve";
     curveBtn.classList.toggle("on", st.curve);
     multiBtn.classList.toggle("on", !!st.multi);
-    zoomBtn.textContent = st.zoom ? "back to the full curve" : "zoom: flat bottom";
+    zoomBtn.textContent = st.zoom ? "full curve" : "zoom: flat bottom";
     zoomBtn.classList.toggle("on", st.zoom);
     zg.style.display = st.zoom ? "flex" : "none";
+    curveBtn.style.display = multiBtn.style.display = st.zoom ? "none" : "";
     zIn.disabled = st.lw <= -11; zOut.disabled = st.lw >= -2;
     if (st.zoom) drawZoom(p, run); else drawMain(p, run);
     drawLog(p, run);
@@ -331,7 +334,7 @@ function mount(host: HTMLElement): void {
       }
     }
     // multistart results
-    if (st.multi) {
+    if (st.multi && st.multi.pts.length) {
       const best = st.multi.pts.reduce((u, v) => (v.f < u.f ? v : u));
       for (const q of st.multi.pts) {
         const X = sx(q.x), Y = cy(q.f), s = 10;
@@ -510,10 +513,9 @@ function mount(host: HTMLElement): void {
         const d = -Wd + 2 * Wd * i / 400;
         if (p.f(p.xstar + d) === f0) { same++; lo = Math.min(lo, d); hi = Math.max(hi, d); }
       }
-      line([["x̂ =", p.xstar.toPrecision(12)], ["f(x̂) =", f0.toPrecision(10)], ["gap between doubles near f(x̂):", fmtSci(ulp(f0), 2)],
-        ["f″(x̂) =", p.f2.toPrecision(4)]]);
-      line([["zoom ±", fmtSci(Wd, 1)], ["points with f exactly = f(x̂):", `${same} of 401` + (same > 1 ? ` (from ${fmtSci(lo)} to ${fmtSci(hi)})` : ""), same > 1 ? "gs-warn" : ""],
-        ["predicted flat half-width √(2ε|f|/f″) =", fmtSci(flatWidth(p), 3)]]);
+      line([["x̂ =", p.xstar.toPrecision(12)], ["f(x̂) =", f0.toPrecision(10)], ["f″(x̂) =", p.f2.toPrecision(4)],
+        ["gap between doubles near f(x̂):", fmtSci(ulp(f0), 2)], ["predicted flat half-width:", fmtSci(flatWidth(p), 3)]]);
+      line([["zoom ±", fmtSci(Wd, 1)], ["points with f(x) == f(x̂):", `${same} of 401` + (same > 1 ? `, from ${fmtSci(lo)} to ${fmtSci(hi)}` : ""), same > 1 ? "gs-warn" : ""]]);
       return;
     }
     const nE = run.evals.length;
@@ -531,10 +533,10 @@ function mount(host: HTMLElement): void {
     else parts.push(["next:", run.next()]);
     if (p.other !== undefined && Number.isFinite(est) && Math.abs(est - p.other) < 1 && nE > 3)
       parts.push(["", `a local minimum: RSS ${p.f(p.other).toFixed(2)}, but RSS(${fx(p.xstar, 2)}) = ${p.fstar.toFixed(2)}`, "gs-warn"]);
-    if (st.multi) {
+    if (st.multi && st.multi.pts.length) {
       const best = st.multi.pts.reduce((u, v) => (v.f < u.f ? v : u));
-      parts.push(["multistart (6 sub-intervals, " + st.multi.evals + " evals):",
-        st.multi.pts.map(q => `${fx(q.x, 2)} (${q.f.toPrecision(4)})`).join(", ") + ` → best ${fx(best.x, 3)}`, "gs-ok"]);
+      parts.push([`multistart (Brent on 5 sub-intervals, ${st.multi.evals} evals), interior minima:`,
+        st.multi.pts.map(q => `${fx(q.x, 2)} (f ${q.f.toPrecision(4)})`).join(", ") + ` → best ${fx(best.x, 3)}`, "gs-ok"]);
     }
     line(parts);
   }

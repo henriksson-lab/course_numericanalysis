@@ -20,7 +20,7 @@
 #   fig01-chamber.svg     the oxygen field and the hypoxic core (m = 127)
 #   fig02-fillin.svg      non-zeros of the Cholesky factor vs unknowns, 2D and 3D
 #   fig03-smooth.svg      Jacobi error after 0, 10, 200 sweeps: it becomes smooth
-#   fig04-residuals.svg   residual vs iteration, m = 64: Jacobi, GS, CG, IC-CG
+#   fig04-residuals.svg   residual vs iteration, m = 63: Jacobi, GS, CG, IC-CG
 #   fig05-counts.svg      iterations vs grid size, log-log, with multigrid
 #   fig06-gmres.svg       perfused chamber (advection-diffusion): field, and
 #                         residuals of CG, GMRES and GMRES(20)
@@ -254,10 +254,10 @@ dev.off()
 
 ## ---- fig04: residual vs iteration, m = 64 ------------------------------------------
 
-m <- 64; A <- lap2(m); b <- rhs(m)
+m <- 63; A <- lap2(m); b <- rhs(m)
 rj <- jacobi(A, b, trace = TRUE); rg <- gauss_seidel(A, b, trace = TRUE)
 rc <- pcg(A, b); ri <- pcg(A, b, ic_prec(A, m)); rd <- pcg(A, b, function(r) r / diag(A))
-cat("m = 64: Jacobi", rj$it, " GS", rg$it, " CG", rc$it, " Jacobi-PCG", rd$it, " IC-CG", ri$it, "\n")
+cat("m = 63: Jacobi", rj$it, " GS", rg$it, " CG", rc$it, " Jacobi-PCG", rd$it, " IC-CG", ri$it, "\n")
 svg("fig04-residuals.svg", width = 11, height = 5.2)
 par_big(mar = c(5, 5.5, 1, 1))
 plot(NA, log = "xy", xlim = c(1, 2e4), ylim = c(1e-6, 1.5), yaxt = "n",
@@ -306,7 +306,7 @@ legend("topleft", bty = "n", cex = 1.2, lwd = 3, pch = c(19, 15, 17, 18, 19),
 dev.off()
 
 ## preconditioning experiment: uniform and aggregate chambers, m = 64 and 128
-for (m in c(64, 128)) {
+for (m in c(63, 127)) {
   for (case in c("uniform", "aggregate")) {
     A <- if (case == "uniform") lap2(m) else lapD(m, aggregate_D); b <- rhs(m)
     cat(case, m, " CG", pcg(A, b)$it, " Jacobi-PCG", pcg(A, b, function(r) r / diag(A))$it,
