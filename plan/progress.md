@@ -97,7 +97,7 @@ Brief: plan/xref-brief.md. Reports: plan/pass2/<group>.md.
 | parts8b-9a | 23–26 | done |
 | part9b | 27–30 | done |
 | part10a | 31–34 | done |
-| part10b-11 | 35–37 | running |
+| part10b-11 | 35–37 | done |
 - pass2 parts5-6: check eigen-algorithms recap slide (dense two-column) for overflow. Optional: finite-differences note that splines used sparser/noisier run; quadrature note on trapezoid for periodic functions.
 - For part10b-11 worker: iterative-solvers lec notes ~line 59 wrongly call its model the culture-chamber problem of steady-state-2d (it's a 1×1 mm gel, Φ=12) — reword; reaction-diffusion should state minutes vs seconds in one sentence.
 - Optional (audit): nonlinear-least-squares could add one sentence that the same methods fit growth/SIR models (several units point there). runge-kutta R tabs C2/C3/C6 still rely on C1/C4 functions (stated) — make self-contained in audit for consistency with Python.

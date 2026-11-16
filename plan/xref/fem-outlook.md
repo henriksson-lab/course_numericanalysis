@@ -1,35 +1,35 @@
 # Cross-references from fem-outlook
 
-- fem-outlook/lec.qmd:24 -> diffusion-explicit, steady-state-2d (Part 10 rectangular grids; About slide)
-- fem-outlook/lec.qmd:33 -> diffusion-implicit (Thomas solve, grid refinement as a check; notes)
-- fem-outlook/lec.qmd:56 -> diffusion-explicit (mass balance derivation of the diffusion equation; notes)
-- fem-outlook/lec.qmd:67 -> splines (piecewise linear interpolation; notes)
-- fem-outlook/lec.qmd:81 -> diffusion-explicit (no-flux wall via ghost point; notes)
-- fem-outlook/lec.qmd:99 -> finite-differences (second difference (-1, 2, -1)/h^2)
-- fem-outlook/lec.qmd:113 -> diffusion-explicit (ghost-point no-flux row; notes)
-- fem-outlook/lec.qmd:127 -> reaction-diffusion (length scale sqrt(D/k), synthesis-diffusion-degradation; notes)
-- fem-outlook/lec.qmd:174 -> structured-sparse (thomas() function), diffusion-implicit (thomas argument convention; notes)
-- fem-outlook/lec.qmd:195 -> diffusion-implicit (grid refinement without an exact solution; notes)
-- fem-outlook/lec.qmd:206 -> advection-diffusion (wiggles of central differences at high cell Peclet number; notes)
-- fem-outlook/lec.qmd:217 -> steady-state-2d (sparse direct solve), iterative-solvers (3D systems; notes)
-- fem-outlook/lec.qmd:229 -> newton-systems (Newton for Navier-Stokes at larger Re; notes)
-- fem-outlook/lec.qmd:236 -> advection-diffusion (Poiseuille profile taken as given; T-sensor w = 100 um, mean 1000 um/s)
-- fem-outlook/lec.qmd:244 -> advection-diffusion (coupling a computed velocity field into advection-diffusion; notes)
-- fem-outlook/lec.qmd:266 -> diffusion-explicit, diffusion-implicit, steady-state-2d, advection-diffusion (Part 10 finite-difference codes)
-- fem-outlook/lec.qmd:269 -> nonlinear-least-squares (fitting a model to data, Part 9)
-- fem-outlook/lec.qmd:280 -> steady-state-2d (mother-machine exercise: does the model answer the right question; notes)
-- fem-outlook/lec.qmd:292 -> iterative-solvers (Next: slide)
-- fem-outlook/exercise.qmd:36 -> structured-sparse (Thomas algorithm, Fact 4)
-- fem-outlook/exercise.qmd:46 -> structured-sparse (thomas R comment; same in Rust tabs at 144, 366, 529, 692)
-- fem-outlook/exercise.qmd:258 -> quadrature (trapezoid rule, Hint 1)
-- fem-outlook/exercise.qmd:266 -> diffusion-implicit (thomas argument convention, Hint 3)
-- fem-outlook/exercise.qmd:270 -> floating-point (do not test floats with ==, Hint 4)
-- fem-outlook/exercise.qmd:790 -> steady-state-2d (Where this leads)
-- fem-outlook/exercise.qmd:791 -> iterative-solvers (Where this leads)
-- fem-outlook/exercise.qmd:792 -> advection-diffusion (Where this leads: Poiseuille given vs computed)
-- fem-outlook/quiz.qmd:111 -> advection-diffusion (Q9: Poiseuille profile used as given)
-- fem-outlook/quiz.qmd:118 -> advection-diffusion (Q9 answer)
-- fem-outlook/quiz.qmd:130 -> nonlinear-least-squares (Q10: fitting needs many solves, Part 9)
+- fem-outlook/lec.qmd:24 -> diffusion-explicit, steady-state-2d (Part 10 rectangular grids; About slide) [ok; linked]
+- fem-outlook/lec.qmd:33 -> diffusion-implicit (Thomas solve, grid refinement as a check; notes) [ok; linked]
+- fem-outlook/lec.qmd:56 -> diffusion-explicit (mass balance derivation of the diffusion equation; notes) [ok; linked]
+- fem-outlook/lec.qmd:67 -> splines (piecewise linear interpolation; notes) [ok; linked]
+- fem-outlook/lec.qmd:81 -> diffusion-explicit (no-flux wall via ghost point; notes) [ok; linked]
+- fem-outlook/lec.qmd:99 -> finite-differences (second difference (-1, 2, -1)/h^2) [ok; linked, noted FD writes (1,-2,1)/h^2]
+- fem-outlook/lec.qmd:113 -> diffusion-explicit (ghost-point no-flux row; notes) [ok; linked]
+- fem-outlook/lec.qmd:127 -> reaction-diffusion (length scale sqrt(D/k), synthesis-diffusion-degradation; notes) [ok: reaction-diffusion λ = √(D/k) = 100 µm; linked, noted minutes]
+- fem-outlook/lec.qmd:174 -> structured-sparse (thomas() function), diffusion-implicit (thomas argument convention; notes) [ok; linked]
+- fem-outlook/lec.qmd:195 -> diffusion-implicit (grid refinement without an exact solution; notes) [ok; linked]
+- fem-outlook/lec.qmd:206 -> advection-diffusion (wiggles of central differences at high cell Peclet number; notes) [ok: cell Péclet > 2; linked]
+- fem-outlook/lec.qmd:217 -> steady-state-2d (sparse direct solve), iterative-solvers (3D systems; notes) [ok; linked]
+- fem-outlook/lec.qmd:229 -> newton-systems (Newton for Navier-Stokes at larger Re; notes) [ok; linked]
+- fem-outlook/lec.qmd:236 -> advection-diffusion (Poiseuille profile taken as given; T-sensor w = 100 um, mean 1000 um/s) [ok: T-sensor w = 100 µm, mean 1000 µm/s, Poiseuille given — matches advection-diffusion; linked]
+- fem-outlook/lec.qmd:244 -> advection-diffusion (coupling a computed velocity field into advection-diffusion; notes) [ok; linked]
+- fem-outlook/lec.qmd:266 -> diffusion-explicit, diffusion-implicit, steady-state-2d, advection-diffusion (Part 10 finite-difference codes) [ok; linked]
+- fem-outlook/lec.qmd:269 -> nonlinear-least-squares (fitting a model to data, Part 9) [ok; linked]
+- fem-outlook/lec.qmd:280 -> steady-state-2d (mother-machine exercise: does the model answer the right question; notes) [fixed: it is exercise C3 "Does the model answer the right question?" of steady-state-2d; linked to its exercise page]
+- fem-outlook/lec.qmd:292 -> iterative-solvers (Next: slide) [ok; linked]
+- fem-outlook/exercise.qmd:36 -> structured-sparse (Thomas algorithm, Fact 4) [ok; linked]
+- fem-outlook/exercise.qmd:46 -> structured-sparse (thomas R comment; same in Rust tabs at 144, 366, 529, 692) [ok: comment only]
+- fem-outlook/exercise.qmd:258 -> quadrature (trapezoid rule, Hint 1) [ok; linked]
+- fem-outlook/exercise.qmd:266 -> diffusion-implicit (thomas argument convention, Hint 3) [ok; linked]
+- fem-outlook/exercise.qmd:270 -> floating-point (do not test floats with ==, Hint 4) [ok; linked]
+- fem-outlook/exercise.qmd:790 -> steady-state-2d (Where this leads) [fixed: "the same steady problem" -> same kind (oxygen under a lid there); linked]
+- fem-outlook/exercise.qmd:791 -> iterative-solvers (Where this leads) [ok; linked]
+- fem-outlook/exercise.qmd:792 -> advection-diffusion (Where this leads: Poiseuille given vs computed) [ok; linked]
+- fem-outlook/quiz.qmd:111 -> advection-diffusion (Q9: Poiseuille profile used as given) [ok; linked]
+- fem-outlook/quiz.qmd:118 -> advection-diffusion (Q9 answer) [ok]
+- fem-outlook/quiz.qmd:130 -> nonlinear-least-squares (Q10: fitting needs many solves, Part 9) [ok]
 
 ## Running examples defined here
 

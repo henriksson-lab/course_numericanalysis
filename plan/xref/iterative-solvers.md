@@ -1,36 +1,36 @@
 # Cross-references from iterative-solvers
 
-- iterative-solvers/lec.qmd:24 -> structured-sparse (glimpse of Jacobi and CG at the end of that unit)
-- iterative-solvers/lec.qmd:32 -> structured-sparse, steady-state-2d (notes: prerequisites; 2D Laplacian rebuilt here in one slide)
-- iterative-solvers/lec.qmd:37 -> structured-sparse (recap slide: morphogen row, Jacobi ~4160 vs CG ~240 iterations, [1 2; 2 1] diverges, exercise C8 jacobi()/cg())
-- iterative-solvers/lec.qmd:59 -> steady-state-2d (notes: the culture-chamber oxygen problem, Michaelis-Menten version treated there)
-- iterative-solvers/lec.qmd:82 -> steady-state-2d (notes: Kronecker construction of the five-point Laplacian)
-- iterative-solvers/lec.qmd:106 -> structured-sparse (notes: CSC ~12 bytes per non-zero)
-- iterative-solvers/lec.qmd:125 -> bisection-fixedpoint (notes: splitting = fixed-point iteration, |g'| < 1 analogue)
-- iterative-solvers/lec.qmd:172 -> power-iteration (notes: repeated multiplication by T, residual ratio -> spectral radius)
-- iterative-solvers/lec.qmd:172 -> eigen-algorithms (notes: dense eigen())
-- iterative-solvers/lec.qmd:172 -> diffusion-explicit (notes: sine modes / eigenvalues of the Laplacian, cos(pi h))
-- iterative-solvers/lec.qmd:185 -> pivoting-conditioning (condition number kappa)
-- iterative-solvers/lec.qmd:190 -> diffusion-explicit (notes: same eigenvalues set the explicit time-step limit)
-- iterative-solvers/lec.qmd:213 -> pivoting-conditioning (notes: small residual is not small error, error <= kappa * residual)
-- iterative-solvers/lec.qmd:227 -> gradient-methods (notes: gradient descent zigzag on the quadratic; CG as its fix)
-- iterative-solvers/lec.qmd:227 -> eigen-algorithms (notes: Lanczos = CG's recurrence)
-- iterative-solvers/lec.qmd:238 -> convergence-cost (notes: linear convergence, slope on log plot)
-- iterative-solvers/lec.qmd:273 -> structured-sparse (notes: the Cholesky algorithm that IC(0) truncates)
-- iterative-solvers/lec.qmd:302 -> advection-diffusion (upwind scheme, Peclet number; perfused chamber)
-- iterative-solvers/lec.qmd:307 -> advection-diffusion (notes)
-- iterative-solvers/lec.qmd:333 -> least-squares-qr (notes: GMRES's small least-squares problem solved by QR)
-- iterative-solvers/lec.qmd:333 -> eigen-algorithms (notes: Arnoldi / ARPACK)
-- iterative-solvers/lec.qmd:344 -> fem-outlook (notes: algebraic multigrid on unstructured meshes)
-- iterative-solvers/lec.qmd:377 -> steady-state-2d, reaction-diffusion, fem-outlook (Summary notes)
-- iterative-solvers/exercise.qmd:21 -> structured-sparse (reuse jacobi()/cg() from exercise C8)
-- iterative-solvers/exercise.qmd:219 -> advection-diffusion (C5: upwind differences)
-- iterative-solvers/exercise.qmd:283 -> pivoting-conditioning (B4 solution: relative error <= kappa * relative residual)
-- iterative-solvers/exercise.qmd:421 -> power-iteration (C1 solution: residual ratio = spectral radius)
-- iterative-solvers/exercise.qmd:998 -> steady-state-2d, reaction-diffusion (Where this leads)
-- iterative-solvers/exercise.qmd:999 -> fem-outlook (Where this leads)
-- iterative-solvers/exercise.qmd:1000 -> eigen-algorithms (Where this leads: Lanczos, Arnoldi)
-- iterative-solvers/quiz.qmd:126 -> structured-sparse (Q10 hint: fill-in of the full Cholesky factor)
+- iterative-solvers/lec.qmd:24 -> structured-sparse (glimpse of Jacobi and CG at the end of that unit) [ok; linked]
+- iterative-solvers/lec.qmd:32 -> structured-sparse, steady-state-2d (notes: prerequisites; 2D Laplacian rebuilt here in one slide) [ok; linked]
+- iterative-solvers/lec.qmd:37 -> structured-sparse (recap slide: morphogen row, Jacobi ~4160 vs CG ~240 iterations, [1 2; 2 1] diverges, exercise C8 jacobi()/cg()) [ok: 4159/4158 Jacobi, 237 CG, ρ = 0.995, [1 2; 2 1] diverges, C8 jacobi()/cg() verified; linked]
+- iterative-solvers/lec.qmd:59 -> steady-state-2d (notes: the culture-chamber oxygen problem, Michaelis-Menten version treated there) [fixed: was "the culture-chamber problem of steady-state-2d"; now states it is a different problem (1 × 1 mm gel, Φ = 12) and relates it to the lid chamber (same 50 amol/s per cell, same five-point matrix)]
+- iterative-solvers/lec.qmd:82 -> steady-state-2d (notes: Kronecker construction of the five-point Laplacian) [fixed: "the Kronecker construction of steady-state-2d, on a square and without D/h^2"; linked]
+- iterative-solvers/lec.qmd:106 -> structured-sparse (notes: CSC ~12 bytes per non-zero) [ok; linked]
+- iterative-solvers/lec.qmd:125 -> bisection-fixedpoint (notes: splitting = fixed-point iteration, |g'| < 1 analogue) [ok; linked]
+- iterative-solvers/lec.qmd:172 -> power-iteration (notes: repeated multiplication by T, residual ratio -> spectral radius) [ok; linked]
+- iterative-solvers/lec.qmd:172 -> eigen-algorithms (notes: dense eigen()) [ok; linked]
+- iterative-solvers/lec.qmd:172 -> diffusion-explicit (notes: sine modes / eigenvalues of the Laplacian, cos(pi h)) [ok; linked]
+- iterative-solvers/lec.qmd:185 -> pivoting-conditioning (condition number kappa) [ok; linked]
+- iterative-solvers/lec.qmd:190 -> diffusion-explicit (notes: same eigenvalues set the explicit time-step limit) [ok; linked]
+- iterative-solvers/lec.qmd:213 -> pivoting-conditioning (notes: small residual is not small error, error <= kappa * residual) [ok; linked]
+- iterative-solvers/lec.qmd:227 -> gradient-methods (notes: gradient descent zigzag on the quadratic; CG as its fix) [ok; linked]
+- iterative-solvers/lec.qmd:227 -> eigen-algorithms (notes: Lanczos = CG's recurrence) [ok; linked]
+- iterative-solvers/lec.qmd:238 -> convergence-cost (notes: linear convergence, slope on log plot) [ok; linked]
+- iterative-solvers/lec.qmd:273 -> structured-sparse (notes: the Cholesky algorithm that IC(0) truncates) [ok; linked]
+- iterative-solvers/lec.qmd:302 -> advection-diffusion (upwind scheme, Peclet number; perfused chamber) [ok; linked]
+- iterative-solvers/lec.qmd:307 -> advection-diffusion (notes) [ok; linked]
+- iterative-solvers/lec.qmd:333 -> least-squares-qr (notes: GMRES's small least-squares problem solved by QR) [ok; linked]
+- iterative-solvers/lec.qmd:333 -> eigen-algorithms (notes: Arnoldi / ARPACK) [ok; linked]
+- iterative-solvers/lec.qmd:344 -> fem-outlook (notes: algebraic multigrid on unstructured meshes) [ok; linked]
+- iterative-solvers/lec.qmd:377 -> steady-state-2d, reaction-diffusion, fem-outlook (Summary notes) [fixed: reaction-diffusion uses FFT, not sparse matrices: reworded; linked]
+- iterative-solvers/exercise.qmd:21 -> structured-sparse (reuse jacobi()/cg() from exercise C8) [fixed: C8 stopped on absolute residual 1e-10, here relative 1e-6: stated; solutions define their own functions; linked to exercise page]
+- iterative-solvers/exercise.qmd:219 -> advection-diffusion (C5: upwind differences) [fixed: C8 stopped on absolute residual 1e-10, here relative 1e-6: stated; solutions define their own functions; linked to exercise page]
+- iterative-solvers/exercise.qmd:283 -> pivoting-conditioning (B4 solution: relative error <= kappa * relative residual) [ok; linked]
+- iterative-solvers/exercise.qmd:421 -> power-iteration (C1 solution: residual ratio = spectral radius) [ok; linked]
+- iterative-solvers/exercise.qmd:998 -> steady-state-2d, reaction-diffusion (Where this leads) [fixed: same rewording as lec:377; linked]
+- iterative-solvers/exercise.qmd:999 -> fem-outlook (Where this leads) [ok; linked]
+- iterative-solvers/exercise.qmd:1000 -> eigen-algorithms (Where this leads: Lanczos, Arnoldi) [ok; linked]
+- iterative-solvers/quiz.qmd:126 -> structured-sparse (Q10 hint: fill-in of the full Cholesky factor) [ok; linked]
 
 ## Running examples defined here
 
@@ -57,3 +57,5 @@ should be aligned.
 - **Perfused chamber**: flow in +x, Pe = 50 (u = 100 um/s, L = 1 mm,
   D = 2000 um^2/s), upwind; m = 63: GMRES 116, GMRES(20) 187, CG diverges
   (true relative residual 314 after 300 iterations); centre c = 0.8800808.
+
+Pass 2: the gel chamber stays (different problem from steady-state-2d's lid chamber); the difference is now stated in lec notes (Biology slide) and in the exercise Background.
