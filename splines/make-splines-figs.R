@@ -173,7 +173,7 @@ fits <- list(smooth.spline(t_od, y_od, df = 30),
 labs <- sprintf(c("too little: df = %.0f", "GCV: df = %.1f", "too much: df = %.0f"),
                 sapply(fits, `[[`, "df"))
 fig("fig06-lambda.svg", w = 13, h = 6.6, expr = {
-  par(mfrow = c(2, 3), mar = c(4.5, 5.6, 2.6, 1))
+  par(mfrow = c(2, 3), mar = c(4.5, 5.6, 2.6, 1), cex = 1, cex.axis = 1.2)
   for (k in 1:3) {
     plot(t_od, y_od, pch = 19, col = "grey55", xlab = "", ylab = if (k == 1) "OD600" else "",
          main = labs[k], cex.main = 1.6)

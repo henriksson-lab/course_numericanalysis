@@ -55,11 +55,11 @@ Same logistic curve as in Convergence and cost: K = 1.2, N0 = 0.05, r = 0.8 per 
 
 ![](fig02-local-vs-global.svg){width="72%" fig-align="center"}
 
-- 8 time points after stimulation of an immediate-early gene. The **degree-7 polynomial** through them swings to $\pm 10^5$ between the points.
+- 8 time points after stimulation of an immediate-early gene. The **degree-7 polynomial** through them swings down to $-3\times10^5$ between the points.
 - **Piecewise** methods only look at nearby points: a peak at 0.5 h does not disturb the curve at 12 h.
 
 ::: notes
-Recap of Polynomial interpolation in one picture. The data: expression in TPM of a gene that spikes 30 minutes after stimulation and returns to baseline, sampled at uneven times, which is typical for time courses (dense early, sparse late). The polynomial goes through every point but is useless in between, the Runge phenomenon on uneven points. Piecewise linear (green) and the cubic spline (blue) stay near the data. Note the blue curve dips slightly below the baseline near 3 hours; that is a failure we come back to.
+Recap of Polynomial interpolation in one picture. The data: expression in TPM of a gene that spikes 30 minutes after stimulation and returns to baseline, sampled at uneven times, which is typical for time courses (dense early, sparse late). The polynomial goes through every point but is useless in between, the Runge phenomenon on uneven points. Piecewise linear (green) and the cubic spline (blue) stay near the data. Note the blue curve dips below zero near 3 hours; that is a failure we come back to.
 :::
 
 ## Piecewise linear interpolation {.smaller}
@@ -179,7 +179,7 @@ f(3.1); f(3.1, deriv = 1)                     # value and slope at 3.1 h
 - **Check** for your own spline: it passes through the data, and $S'$ from the left equals $S'$ from the right at every $x_i$.
 
 ::: notes
-splinefun is the function-returning version; spline() returns points on a grid. Note the slope: 0.261 OD per hour at 3.1 h, but the true growth rate there is 0.214. The spline is exact in its arithmetic and still gives a poor slope, because it goes through every noisy point. Keep that in mind; we come back to it after the boundary conditions.
+splinefun is the function-returning version; spline() returns points on a grid. Note the slope: 0.261 OD per hour at 3.1 h, but the true growth rate there is 0.216. The spline is exact in its arithmetic and still gives a poor slope, because it goes through every noisy point. Keep that in mind; we come back to it after the boundary conditions.
 :::
 
 ## Boundary conditions: the two missing equations {.smaller}
@@ -203,7 +203,7 @@ Natural is the free end of the draughtsman's strip: no bending at the ends. It i
 ![](fig04-boundary.svg){width="78%" fig-align="center"}
 
 - 11 exact OD values, $h = 1$ h. Away from the ends all three agree.
-- **Natural** forces $S''(0) = 0$, but $N''(0) = 0.028$: the error near $t = 0$ is 5× larger than anywhere else.
+- **Natural** forces $S''(0) = 0$, but $N''(0) = 0.028$: the error near $t = 0$ is about 5× larger than anywhere else.
 
 ::: notes
 The error curves are spline minus the true logistic. The interior error has the same shape for all three, because the influence of an end condition decays by a factor of about 3.7 per interval (the ratio of the diagonal to the off-diagonal in the tridiagonal system). Only the first one or two intervals see the difference. Clamped with the true slopes, and not-a-knot, are both accurate at the ends. If what you care about is the start of the growth curve (the lag phase), the boundary condition matters.
@@ -319,7 +319,7 @@ fit
 - GCV replaces each $A_{ii}$ by the average $\text{df}/n$: cheaper, and less sensitive to single points. `cv = TRUE` gives ordinary CV (df = 9.8 here).
 
 ::: notes
-The idea: a good lambda predicts data you have not used. Leave-one-out needs n refits in principle, but for any linear smoother the left-out residual is the ordinary residual divided by 1 - A_ii, so one fit suffices. GCV (Craven and Wahba 1979) averages the leverages. Check the GCV formula on the output: 41 * 0.002054 / (41 - 9.416)^2 = 8.44e-5. Python's make_smoothing_spline(t, y) with lam = None also uses GCV and gives the same curve. smooth.spline searches over spar, a log-scale reparametrisation of lambda, with a 1D optimiser (golden section, as in Optimisation in one dimension).
+The idea: a good lambda predicts data you have not used. Leave-one-out needs n refits in principle, but for any linear smoother the left-out residual is the ordinary residual divided by 1 - A_ii, so one fit suffices. GCV (Craven and Wahba 1979) averages the leverages. Check the GCV formula on the output: 41 * 0.002054 / (41 - 9.416)^2 = 8.44e-5. Python's make_smoothing_spline(t, y) with lam = None also uses GCV and gives the same curve. smooth.spline searches over spar, a log-scale reparametrisation of lambda, with a one-dimensional optimiser (as in Optimisation in one dimension).
 :::
 
 ## GCV against the true error
@@ -354,7 +354,7 @@ predict.smooth.spline with deriv = 1 returns the slope of the fitted spline. The
 ![](fig09-pseudotime.svg){width="66%" fig-align="center"}
 
 - 300 cells, ordered by **pseudotime**; one gene, noisy. `smooth.spline(pt, ex)`: df = 12.9; peak at pseudotime 0.602 (true 0.6).
-- Same tool as the trend fits in single-cell trajectory packages (tradeSeq, Monocle), which fit penalised splines per gene.
+- Same tool as the trend fits in single-cell trajectory packages (tradeSeq, Monocle), which fit a spline trend per gene.
 
 ::: notes
 Pseudotime orders cells along a differentiation trajectory; each gene is a noisy function of pseudotime, with many cells but large cell-to-cell noise. Smoothing splines (or regression splines with fewer knots) are the standard way to get a trend, find where a gene peaks, or test whether it changes along the trajectory. With thousands of cells, smooth.spline uses fewer knots than data points (nknots) to keep the system small; the trade-off is the same. The exercise does this with 40 cells and compares GCV with leave-one-out CV.
@@ -368,7 +368,7 @@ Pseudotime orders cells along a differentiation trajectory; each gene is a noisy
 - GCV assumes **independent** errors. **Check:** lag-1 correlation of the residuals (`acf`); here $-0.60$. Use replicate wells, or fix df by hand.
 
 ::: notes
-Correlated errors are common in time series: one well measured repeatedly, or neighbouring cells in pseudotime sharing a batch. GCV cannot tell slow noise from signal, so it undersmooths. The residual check: strongly negative lag-1 correlation means the fit follows the noise (here -0.60; with independent errors -0.18 for the same fit size); strongly positive means runs of residuals with the same sign, i.e. bias from oversmoothing. For a real experiment the best check is biological replicates: a smoothing parameter that gives growth rates that differ between replicate wells by more than their noise is too small.
+Correlated errors are common in time series: one well measured repeatedly, or neighbouring cells in pseudotime sharing a batch. GCV cannot tell slow noise from signal, so it undersmooths. The residual check: strongly negative lag-1 correlation means the fit follows the noise (here -0.60; for the GCV fit to the independent-noise OD data of the earlier slides it is -0.18); strongly positive means runs of residuals with the same sign, i.e. bias from oversmoothing. For a real experiment the best check is biological replicates: a smoothing parameter that gives growth rates that differ between replicate wells by more than their noise is too small.
 :::
 
 ## R and Python {.smaller}

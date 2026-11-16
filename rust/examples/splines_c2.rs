@@ -72,3 +72,9 @@ fn main() {
     println!("{:e}", jump);
     println!("{:.6} {:.6}", spline_eval(&t, &y, &m, 3.1, 0), spline_eval(&t, &y, &m, 3.1, 1));
 }
+
+// Output:
+// diagonally dominant: true
+// 0e0
+// 5.551115123125783e-17
+// 0.407383 0.260897

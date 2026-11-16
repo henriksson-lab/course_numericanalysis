@@ -111,3 +111,9 @@ fn main() {
                  name, sci(lam, 3), f.df, at, height, cov / (va * vb).sqrt());
     }
 }
+
+// Output:
+// gcv    lam 1.114e-04  df 9.3566  at 0.598  height 2.9704  lag1 -0.0892
+// loocv  lam 1.166e-04  df 9.2672  at 0.598  height 2.9673  lag1 -0.0861
+// rough  lam 1.000e-06  df 22.5395  at 0.607  height 3.2220  lag1 -0.4113
+// stiff  lam 1.000e-02  df 3.7775  at 0.618  height 2.2811  lag1 0.5202

@@ -76,3 +76,10 @@ fn main() {
         println!("h = {:5.3}  linear {}  natural {}", h, sci(e_lin, 2), sci(e_nat, 2));
     }
 }
+
+// Output:
+// h = 2.000  linear 3.04e-02  natural 7.03e-03
+// h = 1.000  linear 9.10e-03  natural 1.31e-03
+// h = 0.500  linear 2.30e-03  natural 3.41e-04
+// h = 0.250  linear 5.75e-04  natural 8.58e-05
+// h = 0.125  linear 1.44e-04  natural 2.15e-05

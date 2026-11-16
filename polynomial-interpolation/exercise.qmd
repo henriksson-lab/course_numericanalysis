@@ -1,0 +1,1449 @@
+---
+title: "Exercise: polynomial interpolation"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- write down the interpolating polynomial through a few readings in **Lagrange** form and in **Newton** form (divided differences), by hand and in code, and check that the monomial (**Vandermonde**) route gives the same polynomial,
+- use the **interpolation error formula** to bound the error between readings, and to choose how far apart readings may be,
+- explain from the **node polynomial** why equally spaced readings and a high degree give the **Runge phenomenon**, and what **Chebyshev** times change,
+- show that interpolation **copies and amplifies noise**, and choose a least-squares **fit** instead,
+- evaluate an interpolant stably with the **barycentric** formula, and recognise when monomial coefficients have lost their digits.
+
+The by-hand part needs pen, paper and a calculator. The code part checks your hand answers and then goes to sizes where only code works.
+
+## Background
+
+We use the course's logistic OD curve as the **truth** that the readings are sampled from:
+
+$$N(t) = \frac{K}{1 + (K/N_0 - 1)e^{-rt}}, \qquad K = 1.2,\ N_0 = 0.05,\ r = 0.8 \text{ per hour}.$$
+
+In the lab you only have the readings; here we can measure every error exactly.
+
+**Facts used below:**
+
+1. **Existence and uniqueness.** Through $n+1$ points with distinct times $t_0, \dots, t_n$ there is exactly one polynomial $p$ of degree $\le n$ with $p(t_i) = y_i$. In the monomial basis its coefficients solve the **Vandermonde** system $V\mathbf c = \mathbf y$, $V_{ij} = t_i^{\,j}$.
+2. **Lagrange form.** $p(t) = \sum_i y_i L_i(t)$ with $L_i(t) = \prod_{j\ne i} \dfrac{t - t_j}{t_i - t_j}$. $L_i$ is 1 at $t_i$ and 0 at the other nodes, and $\sum_i L_i(t) = 1$.
+3. **Newton form.** $p(t) = a_0 + a_1(t - t_0) + a_2(t - t_0)(t - t_1) + \dots$ with $a_k = f[t_0, \dots, t_k]$, the **divided differences**: $f[t_i] = y_i$, $f[t_i, \dots, t_{i+k}] = \big(f[t_{i+1}, \dots, t_{i+k}] - f[t_i, \dots, t_{i+k-1}]\big)/(t_{i+k} - t_i)$. Adding a node adds one term.
+4. **Error formula.** $f(t) - p(t) = \dfrac{f^{(n+1)}(\xi)}{(n+1)!}\, w(t)$, with the **node polynomial** $w(t) = \prod_i (t - t_i)$ and some $\xi$ in the interval spanned by the nodes and $t$. For linear interpolation between readings $h$ apart: $|f - p| \le \tfrac{h^2}{8}\max|f''|$.
+5. **Chebyshev nodes.** On $[a, b]$: $t_k = \tfrac{a+b}{2} - \tfrac{b-a}{2}\cos\!\big(\tfrac{(2k+1)\pi}{2n+2}\big)$, $k = 0, \dots, n$. They make $\max|w|$ as small as possible, $2\big(\tfrac{b-a}{4}\big)^{n+1}$.
+6. **Noise.** If reading $i$ is off by $\delta_i$, the interpolant is off by $\sum_i \delta_i L_i(t)$. The worst case factor $\max_t \sum_i |L_i(t)|$ is the **Lebesgue constant**: 89 for 13 equally spaced nodes, 2.6 for 13 Chebyshev nodes.
+7. **Barycentric form.** $p(t) = \dfrac{\sum_j w_j y_j/(t - t_j)}{\sum_j w_j/(t - t_j)}$ with $w_j = 1/\prod_{k\ne j}(t_j - t_k)$. Multiplying all $w_j$ by the same constant changes nothing. For Chebyshev nodes $w_j = (-1)^j \sin\big(\tfrac{(2j+1)\pi}{2n+2}\big)$ (up to a constant).
+
+The basic tools in each language. R has no polynomial interpolation function in base; `lm` with as many `poly()` coefficients as points interpolates, and [`approx`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/approxfun.html) interpolates piecewise linearly. Python has [`numpy.polynomial.Polynomial.fit`](https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.Polynomial.fit.html) (least squares, which interpolates when `deg` is the number of points minus one), [`scipy.interpolate.BarycentricInterpolator`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.BarycentricInterpolator.html) and [`np.interp`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html). In Rust everything is hand-written.
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+K <- 1.2; N0 <- 0.05; r <- 0.8                 # the course's logistic OD curve
+od <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
+t <- c(0, 2, 4, 6, 8)                          # readings every 2 h
+y <- od(t)
+fit <- lm(y ~ poly(t, 4))                      # degree 4 through 5 points
+predict(fit, data.frame(t = c(3, 5)))          # interpolant at 3 h and 5 h
+#         1         2
+# 0.4026258 0.8312495
+approx(t, y, xout = c(3, 5))$y                 # piecewise linear, for comparison
+# [1] 0.4159873 0.8141777
+od(c(3, 5))                                    # truth
+# [1] 0.3887883 0.8443214
+```
+
+### Python
+
+```python
+import numpy as np
+from numpy.polynomial import Polynomial
+from scipy.interpolate import BarycentricInterpolator
+
+np.set_printoptions(precision=7)
+K, N0, r = 1.2, 0.05, 0.8                      # the course's logistic OD curve
+def od(t):
+    return K / (1 + (K / N0 - 1) * np.exp(-r * t))
+
+t = np.array([0.0, 2, 4, 6, 8])                # readings every 2 h
+y = od(t)
+p = Polynomial.fit(t, y, deg=4)                # degree 4 through 5 points
+print(p(np.array([3.0, 5.0])))                 # interpolant at 3 h and 5 h
+# [0.4026258 0.8312495]
+print(BarycentricInterpolator(t, y)([3.0, 5.0]))  # same polynomial, stable form
+# [0.4026258 0.8312495]
+print(np.interp([3.0, 5.0], t, y))             # piecewise linear, for comparison
+# [0.4159873 0.8141777]
+print(od(np.array([3.0, 5.0])))                # truth
+# [0.3887883 0.8443214]
+```
+
+### Rust
+
+```rust
+// rust/examples/polynomial_interpolation_background.rs  —  cargo run --example polynomial_interpolation_background
+// Background: degree-4 interpolant through five OD readings, and piecewise linear.
+// Rust has no interpolation in std or our crates: both are hand-written.
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const R: f64 = 0.8;
+
+fn od(t: f64) -> f64 {
+    K / (1.0 + (K / N0 - 1.0) * (-R * t).exp())
+}
+
+// barycentric formula (see the last lecture slide)
+fn interp(x: &[f64], y: &[f64], z: f64) -> f64 {
+    let (mut num, mut den) = (0.0, 0.0);
+    for j in 0..x.len() {
+        if z == x[j] {
+            return y[j];
+        }
+        let mut w = 1.0;
+        for k in 0..x.len() {
+            if k != j {
+                w /= x[j] - x[k];
+            }
+        }
+        num += w * y[j] / (z - x[j]);
+        den += w / (z - x[j]);
+    }
+    num / den
+}
+
+// piecewise linear, like R's approx() / np.interp (x increasing)
+fn linear(x: &[f64], y: &[f64], z: f64) -> f64 {
+    let i = (1..x.len()).find(|&i| z <= x[i]).unwrap();
+    y[i - 1] + (y[i] - y[i - 1]) * (z - x[i - 1]) / (x[i] - x[i - 1])
+}
+
+fn main() {
+    let t = [0.0, 2.0, 4.0, 6.0, 8.0]; // readings every 2 h
+    let y: Vec<f64> = t.iter().map(|&ti| od(ti)).collect();
+    for z in [3.0, 5.0] {
+        println!("t = {z}: interpolant {:.7}  linear {:.7}  truth {:.7}",
+                 interp(&t, &y, z), linear(&t, &y, z), od(z));
+    }
+}
+
+// Output:
+// t = 3: interpolant 0.4026258  linear 0.4159873  truth 0.3887883
+// t = 5: interpolant 0.8312495  linear 0.8141777  truth 0.8443214
+```
+
+:::
+
+Rust prints numbers in its own format (`2.38e-2` rather than `2.38e-02`, and all digits of a `{:?}` print); the values are the same unless the text says otherwise.
+
+## By hand
+
+**B1. Lagrange by hand.** Three readings, rounded: $(t, \text{OD}) = (0, 0.05), (2, 0.21), (4, 0.62)$.
+(a) Compute $L_0(1), L_1(1), L_2(1)$ and check that they add up to 1.
+(b) Compute $p(1)$. Then repeat (a) and (b) for $t = 3$.
+(c) The truth is $N(1) = 0.1059$ and $N(3) = 0.3888$. How large are the errors?
+(d) Which weight is negative at $t = 1$, and why does it make sense that the reading at 4 h pulls the estimate at 1 h *down*?
+
+**B2. Newton by hand.**
+(a) Build the divided-difference table for the three readings of B1 and write $p$ in Newton form. Check $p(3)$ against B1.
+(b) A fourth reading arrives: $(6, 1.01)$. Extend the table by one diagonal and write the cubic. Compute $p(3)$ again.
+(c) Explain why adding the term $a_3(t-0)(t-2)(t-4)$ cannot spoil the agreement at the first three readings.
+(d) Is the cubic better or worse than the quadratic at $t = 3$ (truth 0.3888)? Does more data always help at a given point?
+
+**B3. How far apart may readings be?** Use the error bound for linear interpolation (fact 4).
+(a) Show that $|(t - t_0)(t - t_1)|$ is largest at the midpoint of $[t_0, t_1]$, where it equals $h^2/4$, so $|f - p| \le \tfrac{h^2}{8}\max|f''|$.
+(b) For the OD curve, $\max|f''| = 0.074$ OD/h². How far apart may readings be if linear interpolation between them must be within 0.01 OD everywhere?
+(c) What happens to the bound when you read twice as often?
+(d) Check the bound on the lecture's example: readings at 2 h and 4 h, estimate at 3 h, actual error 0.027.
+
+**B4. The node polynomial.**
+(a) Five equally spaced nodes on $[-1, 1]$: $-1, -0.5, 0, 0.5, 1$. Compute $|w(0.25)|$ and $|w(0.75)|$. Which is larger, and by what factor?
+(b) The five Chebyshev nodes on $[-1, 1]$ are $\pm 0.9511$, $\pm 0.5878$ and $0$. Compute $|w(0.25)|$ and $|w(0.75)|$ again. (Hint: pair the nodes, $(t - a)(t + a) = t^2 - a^2$.) Compare with the smallest possible maximum, $2^{-4} = 0.0625$.
+(c) Turn the Chebyshev nodes into five sampling times for a 48-h growth run. Where do they cluster?
+
+**B5. Noise in the readings.** Three readings at 0, 2 and 4 h; the reading at 2 h is off by $+0.02$ OD.
+(a) By how much does the interpolant change at $t = 3$? At $t = 5$ (beyond the last reading)? Use the $L_1$ values from B1 or compute $L_1(5)$.
+(b) For 13 hourly readings over 12 h the Lebesgue constant is 89 (fact 6). With a noise of 0.02 OD per reading, what is the worst case error of the interpolant from noise alone? And for 13 Chebyshev times (Lebesgue constant 2.6)?
+(c) Three candidate models for 13 noisy readings (noise sd 0.02 OD): degree 12 (residuals all 0), degree 4 (residual sd 0.023), degree 2 (residual sd 0.081). Which do you use, and why not the other two?
+
+**B6. Barycentric by hand.** The same three readings as in B1.
+(a) Compute the barycentric weights $w_0, w_1, w_2$ and evaluate $p(3)$ with the barycentric formula. Compare with B1.
+(b) Multiply all three weights by 8. Does $p(3)$ change?
+(c) The fourth reading $(6, 1.01)$ arrives. Update the weights: divide each old $w_j$ by $(t_j - 6)$, and compute the new $w_3$. Evaluate $p(3)$ and compare with B2(b).
+
+## In code
+
+**C1. Three forms, one polynomial.** Use the five readings at $t = 0, 2, 4, 6, 8$ h from the true curve.
+(a) Write `lagrange(x, y, xx)`, `divdiff(x, y)` and `newton_eval(x, a, xx)`, and also solve the Vandermonde system. Evaluate all three at $t = 1, 3, 5, 7$ and compare with the truth.
+(b) Check your answers to B1 and B2 with your functions.
+
+**C2. The error formula, checked.** The derivatives of the logistic curve follow from $u = N/K$, $u' = r\,u(1 - u)$: if $u^{(k)} = r^k P_k(u)$ for a polynomial $P_k$, then $P_{k+1}(u) = P_k'(u)\,(u - u^2)$, starting from $P_1(u) = u - u^2$.
+(a) Compute $P_2, \dots, P_5$ as coefficient vectors, and from them $f''(3)$, $\max|f''|$ and $\max|f^{(5)}|$ on $[0, 8]$ (compare with the lecture: 0.0592, 0.074, 0.0983).
+(b) For the degree-4 interpolant of C1, compare the actual error $|f - p|$ with the bound $\tfrac{\max|f^{(5)}|}{5!}|w(t)|$ at $t = 1$ and $t = 3$, and check that the bound holds on a fine grid. How pessimistic is it?
+
+**C3. Runge on a 48-hour run.**
+(a) A 48-h run is read every 4 h (13 readings). Interpolate with the barycentric formula and evaluate on a grid with step 0.01 h. What is the lowest OD the interpolant claims, and when? What is the largest error?
+(b) Repeat with 13 Chebyshev times on $[0, 48]$.
+(c) Runge's own example: $f(x) = 1/(1 + 25x^2)$ on $[-1, 1]$. Compare the largest error for $n = 5, 10, 20$ with equally spaced and with Chebyshev nodes.
+
+**C4. Error against degree.** For $n = 4, 8, 12, 16, 20, 30, 40$, compute the largest error of the degree-$n$ interpolant for three designs: equally spaced on $[0, 8]$, equally spaced on $[0, 48]$, Chebyshev on $[0, 48]$. Plot the three on a log scale. Which converge? What happens to the first design at large $n$?
+
+**C5. When monomial coefficients fail.**
+(a) Build the Vandermonde matrix for the 13 readings of C3(a), times in hours. What is its condition number? What does `solve` do (R)? Force a solution (R: `solve(V, y, tol = 0)`; numpy never refuses) and compare its values with the barycentric interpolant.
+(b) At Chebyshev times on $[0, 48]$ for $n = 8, 12, 20, 30, 40, 60, 80$: compare the largest error of three ways to evaluate the *same* polynomial: monomials in hours, monomials in $s = (t - 24)/24 \in [-1, 1]$, and the barycentric formula with Chebyshev weights. Also print $\kappa$ of the rescaled Vandermonde matrix.
+
+**C6. Interpolation vs fitting.** Thirteen hourly readings with plate-reader noise (sd 0.02 OD):
+`y12 = 0.0375, 0.1095, 0.1959, 0.4207, 0.6259, 0.8279, 1.0188, 1.1207, 1.1673, 1.1736, 1.2210, 1.2037, 1.1857` at $t = 0, 1, \dots, 12$ h.
+(a) Interpolate (degree 12). What range of OD does the interpolant claim, and what is its largest error against the truth?
+(b) Fit least-squares polynomials of degree 2 to 8. For each, print the residual standard deviation $\sqrt{\text{RSS}/(13 - d - 1)}$ and the largest error against the truth. Which degree would you choose *without* knowing the truth?
+(c) Compare with piecewise linear interpolation.
+(d) A check that needs no truth: the largest difference between the interpolant and the degree-5 fit. Compare it with the noise level.
+
+**C7. A gene-expression time course.** An immediate-early gene is induced at $t = 0$; its fold change follows $g(t) = 1 + 6(e^{-0.25t} - e^{-1.5t})$. It is sampled at the usual uneven times $0, 0.5, 1, 2, 4, 8, 12, 24$ h.
+(a) Interpolate with one polynomial (degree 7) and with piecewise linear interpolation. Compare both with the truth at 3, 6, 10 and 18 h.
+(b) What range of fold changes does the polynomial claim between 0 and 24 h? Where is its largest error?
+(c) Leave out each interior time point in turn, interpolate from the others, and compare with the left-out value. Would this check have warned you without knowing $g$?
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — Lagrange and Newton by hand (B1, B2, B6)"}
+For $L_i(t)$: the numerator has a factor $(t - t_j)$ for every **other** node, the denominator the same factors with $t$ replaced by $t_i$. Check that the $L_i$ add up to 1. For the divided-difference table, each new entry is (lower-left minus upper-left) divided by (last time minus first time it covers); the top diagonal holds $a_0, a_1, \dots$. Barycentric weights are the reciprocals of the Lagrange denominators.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — the error bound (B3, B4, C2)"}
+$(t - t_0)(t - t_1)$ is a parabola that is zero at both readings; its extreme is halfway. For (b) solve $0.074\,h^2/8 \le 0.01$ for $h$. In B4, multiply the factors $(t - t_i)$ one by one; with the Chebyshev nodes, $w(t) = t(t^2 - 0.9511^2)(t^2 - 0.5878^2)$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — polynomials as coefficient vectors (C2)"}
+Store $a_0 + a_1u + a_2u^2 + \dots$ as `c(a0, a1, a2, ...)`. The derivative is `a[-1] * seq_len(length(a) - 1)`; a product is a convolution of the two vectors (write a double loop). In Python, [`numpy.polynomial.Polynomial`](https://numpy.org/doc/stable/reference/routines.polynomials.polynomial.html) does all of this: `P.deriv()`, `P * Q`, `P(u)`. R also has symbolic derivatives with [`D()`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/deriv.html), which you can apply five times to `quote(1.2 / (1 + 23 * exp(-0.8 * t)))` to check.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — barycentric interpolation and Chebyshev nodes (C3, C4)"}
+Copy `bary_weights` and `bary_eval` from the lecture (R), or use [`scipy.interpolate.BarycentricInterpolator`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.BarycentricInterpolator.html) / [`barycentric_interpolate`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.barycentric_interpolate.html) (Python). Do **not** use `scipy.interpolate.lagrange` for more than a handful of points: its [documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.lagrange.html) warns that it is numerically unstable (it returns monomial coefficients). Chebyshev nodes: `(a + b) / 2 - (b - a) / 2 * cos((2 * (0:n) + 1) * pi / (2 * n + 2))`; numpy has [`chebpts1`](https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebpts1.html) for $[-1, 1]$. Use `which.min` / `np.argmin` to find where the minimum is.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — Vandermonde and condition numbers (C5)"}
+R: [`outer(t, 0:n, "^")`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/outer.html), [`solve`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/solve.html) (its `tol` argument sets when it refuses), [`kappa(V, exact = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/kappa.html). Python: [`np.vander(t, n + 1, increasing=True)`](https://numpy.org/doc/stable/reference/generated/numpy.vander.html), `np.linalg.solve`, [`np.linalg.cond`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html). Rust: nalgebra's [`lu().solve`](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.LU.html) and [`svd`](https://docs.rs/nalgebra/latest/nalgebra/linalg/struct.SVD.html) for the singular values. Recall from *Least squares: normal equations vs QR*: expect to lose about $\log_{10}\kappa$ digits in the coefficients.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — least squares and linear interpolation (C6, C7)"}
+R: [`lm(y ~ poly(t, d))`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/poly.html) and [`predict`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/predict.lm.html) with `data.frame(t = tt)`; `resid(fit)` for the residuals. Python: [`Polynomial.fit(t, y, deg=d)`](https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.Polynomial.fit.html), which rescales $t$ internally (like `poly()`), and evaluate with `fit(tt)`. Piecewise linear: [`approx(t, y, xout = tt)$y`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/approxfun.html) / [`np.interp(tt, t, y)`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html). Rust: rescale $s = (t - 6)/6$ and solve the least-squares problem with nalgebra's SVD (`svd(true, true).solve(&b, 1e-12)`). To leave out point $i$: `x[-i]` (R), a boolean mask (Python).
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $L_0(1) = \frac{(1-2)(1-4)}{(0-2)(0-4)} = \frac{3}{8}$, $L_1(1) = \frac{(1-0)(1-4)}{(2-0)(2-4)} = \frac{-3}{-4} = \frac34$, $L_2(1) = \frac{(1-0)(1-2)}{(4-0)(4-2)} = -\frac18$. Sum: $\frac38 + \frac68 - \frac18 = 1$.
+(b) $p(1) = \frac38(0.05) + \frac34(0.21) - \frac18(0.62) = 0.01875 + 0.1575 - 0.0775 = 0.09875$. At $t = 3$: $L_0(3) = \frac{(1)(-1)}{8} = -\frac18$, $L_1(3) = \frac{(3)(-1)}{-4} = \frac34$, $L_2(3) = \frac{(3)(1)}{8} = \frac38$ (the mirror image of $t = 1$), so $p(3) = -0.00625 + 0.1575 + 0.2325 = 0.38375$.
+(c) At 1 h: $0.0988 - 0.1059 = -0.007$ (7 % too low). At 3 h: $0.3838 - 0.3888 = -0.005$.
+(d) $L_2(1) = -\frac18$. The rise from 2 h to 4 h (0.41) is much steeper than from 0 h to 2 h (0.16), so the parabola curves upwards. A curve that bends upwards lies *below* its chord, so at 1 h the estimate (0.099) is below the straight-line value 0.13. The truth, 0.106, is indeed below 0.13: the growth curve is accelerating there.
+
+**B2.**
+(a)
+
+| $t_i$ | $y_i$ | 1st | 2nd |
+|---|---|---|---|
+| 0 | **0.05** | | |
+| | | $\frac{0.21 - 0.05}{2} = $ **0.08** | |
+| 2 | 0.21 | | $\frac{0.205 - 0.08}{4 - 0} = $ **0.03125** |
+| | | $\frac{0.62 - 0.21}{2} = 0.205$ | |
+| 4 | 0.62 | | |
+
+$p(t) = 0.05 + 0.08\,t + 0.03125\,t(t - 2)$; $p(3) = 0.05 + 0.24 + 0.09375 = 0.38375$, as in B1.
+(b) New diagonal: $f[4, 6] = (1.01 - 0.62)/2 = 0.195$; $f[2, 4, 6] = (0.195 - 0.205)/4 = -0.0025$; $f[0, 2, 4, 6] = (-0.0025 - 0.03125)/6 = -0.005625$. The cubic is $p_3(t) = p(t) - 0.005625\,t(t-2)(t-4)$, and $p_3(3) = 0.38375 - 0.005625\cdot 3\cdot 1\cdot(-1) = 0.400625$.
+(c) The new term contains the factors $(t - 0)(t - 2)(t - 4)$, so it is zero at the three old readings: the old interpolation conditions still hold, whatever $a_3$ is. $a_3$ is fixed by the new reading alone.
+(d) Worse: the error grows from $-0.005$ to $+0.012$. (With unrounded readings the numbers are $-0.003$ and $+0.013$, so this is not a rounding artefact.) More data improves the interpolant on average over the interval, not at every point: the error formula has a new derivative and a new factor $(3 - 6)$ in $w(3)$. Higher degree is not automatically better.
+
+**B3.**
+(a) $q(t) = (t - t_0)(t - t_1)$ is a parabola with zeros at $t_0$ and $t_1$; by symmetry its extreme is at the midpoint $t_0 + h/2$, where $|q| = \frac h2\cdot\frac h2 = \frac{h^2}{4}$. With $\frac{|f''(\xi)|}{2}$ in front: $|f - p| \le \frac{h^2}{8}\max|f''|$.
+(b) $0.074\,h^2/8 \le 0.01 \Rightarrow h^2 \le 1.08 \Rightarrow h \le 1.04$ h. Hourly readings suffice for 0.01 OD everywhere on the curve.
+(c) The bound has $h^2$: reading twice as often cuts the bound (and, for smooth curves, the error) by **4**. Linear interpolation is second order.
+(d) $h = 2$: bound $0.074 \cdot 4/8 = 0.037$. The actual error at 3 h, 0.027, is below the bound. (Using $f''(3) = 0.059$ instead of the maximum gives 0.030, closer still.)
+
+**B4.**
+(a) $w(0.25) = (1.25)(0.75)(0.25)(-0.25)(-0.75) = 0.0439$. $w(0.75) = (1.75)(1.25)(0.75)(0.25)(-0.25) = -0.1025$. Near the end $|w|$ is **2.3 times** larger (the lecture had the same factor for $t = 1$ vs $t = 3$ on $[0, 8]$).
+(b) $w(t) = t\,(t^2 - 0.9045)(t^2 - 0.3455)$. $w(0.25) = 0.25\cdot(-0.842)\cdot(-0.283) = 0.0596$. $w(0.75) = 0.75\cdot(-0.342)\cdot(0.217) = -0.0557$. Both are close to the minimum possible maximum, 0.0625: Chebyshev nodes make $|w|$ **level**. (The equispaced maximum is 0.113, at $t = \pm 0.82$.) The price: in the middle the Chebyshev $|w|$ is a bit larger (0.0596 vs 0.0439).
+(c) $t_k = 24 - 24 x_k$ with $x_k = 0.9511, 0.5878, 0, -0.5878, -0.9511$: $t = 1.17, 9.89, 24.00, 38.11, 46.83$ h. They cluster near the start and the end of the run.
+
+**B5.**
+(a) The change is $0.02\,L_1(t)$. At $t = 3$: $0.02 \cdot \frac34 = 0.015$. At $t = 5$: $L_1(5) = \frac{(5 - 0)(5 - 4)}{(2 - 0)(2 - 4)} = -1.25$, so the change is $-0.025$: larger than the noise, and of the opposite sign. Beyond the readings the basis polynomials grow quickly.
+(b) Worst case $89 \times 0.02 = 1.8$ OD, larger than the whole curve. Chebyshev: $2.6 \times 0.02 = 0.05$ OD. (The worst case needs the noise signs to line up with the signs of the $L_i$; C6 shows a typical case, 0.39 OD.)
+(c) Degree 4. Degree 12 has as many coefficients as readings and fits the noise exactly (residual 0 is *below* the known noise level). Degree 2 has residual sd 0.081, four times the noise: the model misses the shape. Degree 4's residual sd, 0.023, matches the noise: choose the **lowest degree whose residual spread is about the measurement noise**.
+
+**B6.**
+(a) $w_0 = \frac{1}{(0-2)(0-4)} = \frac18$, $w_1 = \frac{1}{(2-0)(2-4)} = -\frac14$, $w_2 = \frac{1}{(4-0)(4-2)} = \frac18$. At $t = 3$:
+numerator $\frac{(1/8)(0.05)}{3} + \frac{(-1/4)(0.21)}{1} + \frac{(1/8)(0.62)}{-1} = 0.002083 - 0.0525 - 0.0775 = -0.127917$;
+denominator $\frac{1/8}{3} + \frac{-1/4}{1} + \frac{1/8}{-1} = 0.041667 - 0.375 = -0.333333$;
+$p(3) = 0.38375$, as in B1.
+(b) No: numerator and denominator are both multiplied by 8. That is why the simple Chebyshev weights $(-1)^j\sin(\ldots)$ work, and why weights can be rescaled to avoid overflow.
+(c) $w_0 = \frac{1/8}{0 - 6} = -\frac1{48}$, $w_1 = \frac{-1/4}{2 - 6} = \frac1{16}$, $w_2 = \frac{1/8}{4 - 6} = -\frac1{16}$, $w_3 = \frac{1}{(6-0)(6-2)(6-4)} = \frac1{48}$. Numerator at 3: $-0.000347 + 0.013125 + 0.03875 - 0.007014 = 0.044514$; denominator: $-0.006944 + 0.0625 + 0.0625 - 0.006944 = 0.111111$; $p(3) = 0.400625$, as in B2(b). The update costs $O(n)$, like adding a Newton term.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+K <- 1.2; N0 <- 0.05; r <- 0.8
+od <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
+t <- c(0, 2, 4, 6, 8); y <- od(t)
+lagrange <- function(x, y, xx) {
+  sapply(xx, function(z) {
+    L <- sapply(seq_along(x), function(i) prod((z - x[-i]) / (x[i] - x[-i])))
+    sum(L * y)
+  })
+}
+divdiff <- function(x, y) {
+  n <- length(x); a <- y
+  for (k in 2:n)
+    for (i in n:k) a[i] <- (a[i] - a[i - 1]) / (x[i] - x[i - k + 1])
+  a
+}
+newton_eval <- function(x, a, xx) {
+  n <- length(a); p <- a[n]
+  for (k in (n - 1):1) p <- a[k] + (xx - x[k]) * p
+  p
+}
+# (a) three forms at 1, 3, 5, 7 h
+tq <- c(1, 3, 5, 7)
+cf <- solve(outer(t, 0:4, "^"), y)
+p_mono <- drop(outer(tq, 0:4, "^") %*% cf)
+p_lag  <- lagrange(t, y, tq)
+p_new  <- newton_eval(t, divdiff(t, y), tq)
+cat(sprintf("%2.0f  %.7f  %.7f  %.7f  truth %.7f  error %+.4f\n",
+            tq, p_mono, p_lag, p_new, od(tq), p_lag - od(tq)), sep = "")
+#  1  0.0831025  0.0831025  0.0831025  truth 0.1058708  error -0.0228
+#  3  0.4026258  0.4026258  0.4026258  truth 0.3887883  error +0.0138
+#  5  0.8312495  0.8312495  0.8312495  truth 0.8443214  error -0.0131
+#  7  1.1255073  1.1255073  1.1255073  truth 1.1059389  error +0.0196
+# (b) check B1 and B2
+lagrange(c(0, 2, 4), c(0.05, 0.21, 0.62), c(1, 3))
+# [1] 0.09875 0.38375
+divdiff(c(0, 2, 4, 6), c(0.05, 0.21, 0.62, 1.01))
+# [1]  0.050000  0.080000  0.031250 -0.005625
+newton_eval(c(0, 2, 4, 6), divdiff(c(0, 2, 4, 6), c(0.05, 0.21, 0.62, 1.01)), 3)
+# [1] 0.400625
+```
+
+### Python
+
+```python
+import numpy as np
+
+K, N0, r = 1.2, 0.05, 0.8
+def od(t):
+    return K / (1 + (K / N0 - 1) * np.exp(-r * t))
+
+t = np.array([0.0, 2, 4, 6, 8]); y = od(t)
+
+def lagrange(x, y, xx):
+    out = []
+    for z in np.atleast_1d(xx):
+        L = [np.prod((z - np.delete(x, i)) / (x[i] - np.delete(x, i)))
+             for i in range(len(x))]
+        out.append(np.sum(np.array(L) * y))
+    return np.array(out)
+
+def divdiff(x, y):
+    n = len(x); a = np.array(y, dtype=float)
+    for k in range(1, n):
+        for i in range(n - 1, k - 1, -1):
+            a[i] = (a[i] - a[i - 1]) / (x[i] - x[i - k])
+    return a
+
+def newton_eval(x, a, xx):
+    p = a[-1] * np.ones_like(np.asarray(xx, dtype=float))
+    for k in range(len(a) - 2, -1, -1):
+        p = a[k] + (xx - x[k]) * p
+    return p
+
+# (a) three forms at 1, 3, 5, 7 h
+tq = np.array([1.0, 3, 5, 7])
+cf = np.linalg.solve(np.vander(t, 5, increasing=True), y)
+p_mono = np.vander(tq, 5, increasing=True) @ cf
+p_lag = lagrange(t, y, tq)
+p_new = newton_eval(t, divdiff(t, y), tq)
+for i in range(4):
+    print(f"{tq[i]:2.0f}  {p_mono[i]:.7f}  {p_lag[i]:.7f}  {p_new[i]:.7f}  "
+          f"truth {od(tq[i]):.7f}  error {p_lag[i] - od(tq[i]):+.4f}")
+#  1  0.0831025  0.0831025  0.0831025  truth 0.1058708  error -0.0228
+#  3  0.4026258  0.4026258  0.4026258  truth 0.3887883  error +0.0138
+#  5  0.8312495  0.8312495  0.8312495  truth 0.8443214  error -0.0131
+#  7  1.1255073  1.1255073  1.1255073  truth 1.1059389  error +0.0196
+# (b) check B1 and B2
+print(lagrange(np.array([0.0, 2, 4]), np.array([0.05, 0.21, 0.62]), [1.0, 3.0]))
+# [0.09875 0.38375]
+x4 = np.array([0.0, 2, 4, 6]); y4 = np.array([0.05, 0.21, 0.62, 1.01])
+print(divdiff(x4, y4))
+# [ 0.05      0.08      0.03125  -0.005625]
+print(newton_eval(x4, divdiff(x4, y4), 3.0))
+# 0.40062499999999995
+```
+
+### Rust
+
+```rust
+// rust/examples/polynomial_interpolation_c1.rs  —  cargo run --example polynomial_interpolation_c1
+// C1: three forms of the same interpolating polynomial.
+use nalgebra::{DMatrix, DVector};
+
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const R: f64 = 0.8;
+
+fn od(t: f64) -> f64 {
+    K / (1.0 + (K / N0 - 1.0) * (-R * t).exp())
+}
+
+fn lagrange(x: &[f64], y: &[f64], z: f64) -> f64 {
+    let mut p = 0.0;
+    for i in 0..x.len() {
+        let mut li = 1.0;
+        for j in 0..x.len() {
+            if j != i {
+                li *= (z - x[j]) / (x[i] - x[j]);
+            }
+        }
+        p += li * y[i];
+    }
+    p
+}
+
+fn divdiff(x: &[f64], y: &[f64]) -> Vec<f64> {
+    let n = x.len();
+    let mut a = y.to_vec();
+    for k in 1..n {
+        for i in (k..n).rev() {
+            a[i] = (a[i] - a[i - 1]) / (x[i] - x[i - k]);
+        }
+    }
+    a
+}
+
+fn newton_eval(x: &[f64], a: &[f64], z: f64) -> f64 {
+    let n = a.len();
+    let mut p = a[n - 1];
+    for k in (0..n - 1).rev() {
+        p = a[k] + (z - x[k]) * p;
+    }
+    p
+}
+
+fn main() {
+    let t = [0.0, 2.0, 4.0, 6.0, 8.0];
+    let y: Vec<f64> = t.iter().map(|&ti| od(ti)).collect();
+    // (a) monomial coefficients from the Vandermonde system (nalgebra LU)
+    let v = DMatrix::from_fn(5, 5, |i, j| t[i].powi(j as i32));
+    let cf = v.lu().solve(&DVector::from_vec(y.clone())).unwrap();
+    let a = divdiff(&t, &y);
+    for z in [1.0f64, 3.0, 5.0, 7.0] {
+        let p_mono: f64 = (0..5).map(|j| cf[j] * z.powi(j as i32)).sum();
+        let p_lag = lagrange(&t, &y, z);
+        let p_new = newton_eval(&t, &a, z);
+        println!("{z:2.0}  {p_mono:.7}  {p_lag:.7}  {p_new:.7}  truth {:.7}  error {:+.4}",
+                 od(z), p_lag - od(z));
+    }
+    // (b) check B1 and B2
+    let (x3, y3) = ([0.0, 2.0, 4.0], [0.05, 0.21, 0.62]);
+    println!("{:?}", [lagrange(&x3, &y3, 1.0), lagrange(&x3, &y3, 3.0)]);
+    let (x4, y4) = ([0.0, 2.0, 4.0, 6.0], [0.05, 0.21, 0.62, 1.01]);
+    let a4 = divdiff(&x4, &y4);
+    println!("{:?}", a4);
+    println!("{}", newton_eval(&x4, &a4, 3.0));
+}
+
+// Output:
+//  1  0.0831025  0.0831025  0.0831025  truth 0.1058708  error -0.0228
+//  3  0.4026258  0.4026258  0.4026258  truth 0.3887883  error +0.0138
+//  5  0.8312495  0.8312495  0.8312495  truth 0.8443214  error -0.0131
+//  7  1.1255073  1.1255073  1.1255073  truth 1.1059389  error +0.0196
+// [0.09875000000000002, 0.38375]
+// [0.05, 0.07999999999999999, 0.03125000000000001, -0.0056250000000000015]
+// 0.40062499999999995
+```
+
+:::
+
+All three forms agree to every printed digit: they are the same polynomial. (The last digits of the B2 check differ in print only: R shows 7 significant digits, Python and Rust all of them.) The error is largest near the ends (1 h and 7 h), as the node polynomial predicts.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+K <- 1.2; N0 <- 0.05; r <- 0.8
+od <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
+# polynomials in u as coefficient vectors c(a0, a1, a2, ...)
+pmul  <- function(a, b) {
+  out <- rep(0, length(a) + length(b) - 1)
+  for (i in seq_along(a)) {
+    j <- i:(i + length(b) - 1); out[j] <- out[j] + a[i] * b
+  }
+  out
+}
+pder  <- function(a) a[-1] * seq_len(length(a) - 1)
+peval <- function(a, x) sapply(x, function(z) sum(a * z^(seq_along(a) - 1)))
+P <- list(c(0, 1, -1))                       # P1(u) = u - u^2
+for (k in 2:5) P[[k]] <- pmul(pder(P[[k - 1]]), c(0, 1, -1))
+deriv_od <- function(t, k) K * r^k * peval(P[[k]], od(t) / K)
+deriv_od(3, 2)                               # f''(3)
+# [1] 0.05921243
+tt <- seq(0, 8, by = 0.001)
+M2 <- max(abs(deriv_od(tt, 2))); M5 <- max(abs(deriv_od(tt, 5)))
+c(M2, M5)
+# [1] 0.07390083 0.09830398
+# degree-4 interpolant through 0, 2, 4, 6, 8 (Newton form from C1)
+t <- c(0, 2, 4, 6, 8); y <- od(t)
+a <- y; for (k in 2:5) for (i in 5:k) a[i] <- (a[i] - a[i - 1]) / (t[i] - t[i - k + 1])
+p <- function(x) { s <- a[5]; for (k in 4:1) s <- a[k] + (x - t[k]) * s; s }
+w <- function(x) sapply(x, function(z) prod(z - t))
+actual <- abs(od(tt) - p(tt)); bound <- M5 / factorial(5) * abs(w(tt))
+for (tq in c(1, 3)) cat(sprintf("t = %g: actual %.4f  bound %.4f\n", tq,
+                                abs(od(tq) - p(tq)), M5 / 120 * abs(w(tq))))
+# t = 1: actual 0.0228  bound 0.0860
+# t = 3: actual 0.0138  bound 0.0369
+all(actual <= bound)
+# [1] TRUE
+max(actual / bound, na.rm = TRUE)
+# [1] 0.3897302
+```
+
+### Python
+
+```python
+import math
+import numpy as np
+from numpy.polynomial import Polynomial
+
+K, N0, r = 1.2, 0.05, 0.8
+def od(t):
+    return K / (1 + (K / N0 - 1) * np.exp(-r * t))
+
+g = Polynomial([0, 1, -1])                   # u - u^2
+P = {1: g}                                   # P1(u) = u - u^2
+for k in range(2, 6):
+    P[k] = P[k - 1].deriv() * g
+def deriv_od(t, k):
+    return K * r**k * P[k](od(t) / K)
+
+print(deriv_od(3.0, 2))                      # f''(3)
+# 0.05921243167654073
+tt = np.arange(0, 8.0005, 0.001)
+M2 = np.max(np.abs(deriv_od(tt, 2))); M5 = np.max(np.abs(deriv_od(tt, 5)))
+print(M2, M5)
+# 0.0739008337696633 0.0983039819173343
+# degree-4 interpolant through 0, 2, 4, 6, 8 (Newton form from C1)
+t = np.array([0.0, 2, 4, 6, 8]); y = od(t)
+a = y.copy()
+for k in range(1, 5):
+    for i in range(4, k - 1, -1):
+        a[i] = (a[i] - a[i - 1]) / (t[i] - t[i - k])
+def p(x):
+    s = a[4]
+    for k in range(3, -1, -1):
+        s = a[k] + (x - t[k]) * s
+    return s
+def w(x):
+    return np.prod(np.subtract.outer(np.atleast_1d(x), t), axis=1)
+actual = np.abs(od(tt) - p(tt)); bound = M5 / math.factorial(5) * np.abs(w(tt))
+for tq in [1.0, 3.0]:
+    print(f"t = {tq:g}: actual {abs(od(tq) - p(tq)):.4f}  "
+          f"bound {M5 / 120 * abs(w(tq)[0]):.4f}")
+# t = 1: actual 0.0228  bound 0.0860
+# t = 3: actual 0.0138  bound 0.0369
+print(np.all(actual <= bound))
+# True
+ok = bound > 0
+print(np.max(actual[ok] / bound[ok]))
+# 0.38973016106780506
+```
+
+### Rust
+
+```rust
+// rust/examples/polynomial_interpolation_c2.rs  —  cargo run --example polynomial_interpolation_c2
+// C2: check the interpolation error formula for the degree-4 interpolant.
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const R: f64 = 0.8;
+
+fn od(t: f64) -> f64 {
+    K / (1.0 + (K / N0 - 1.0) * (-R * t).exp())
+}
+
+// polynomials in u as coefficient vectors [a0, a1, a2, ...]
+fn pmul(a: &[f64], b: &[f64]) -> Vec<f64> {
+    let mut out = vec![0.0; a.len() + b.len() - 1];
+    for i in 0..a.len() {
+        for j in 0..b.len() {
+            out[i + j] += a[i] * b[j];
+        }
+    }
+    out
+}
+fn pder(a: &[f64]) -> Vec<f64> {
+    (1..a.len()).map(|i| a[i] * i as f64).collect()
+}
+fn peval(a: &[f64], x: f64) -> f64 {
+    a.iter().rev().fold(0.0, |s, &c| s * x + c) // Horner
+}
+
+fn main() {
+    let g = [0.0, 1.0, -1.0]; // u - u^2
+    let mut p_list = vec![g.to_vec()]; // P1
+    for k in 1..5 {
+        let next = pmul(&pder(&p_list[k - 1]), &g);
+        p_list.push(next);
+    }
+    let deriv_od = |t: f64, k: usize| K * R.powi(k as i32) * peval(&p_list[k - 1], od(t) / K);
+    println!("{}", deriv_od(3.0, 2)); // f''(3)
+    let tt: Vec<f64> = (0..=8000).map(|i| i as f64 * 0.001).collect();
+    let m2 = tt.iter().map(|&t| deriv_od(t, 2).abs()).fold(0.0, f64::max);
+    let m5 = tt.iter().map(|&t| deriv_od(t, 5).abs()).fold(0.0, f64::max);
+    println!("{m2} {m5}");
+    // degree-4 interpolant through 0, 2, 4, 6, 8 (Newton form from C1)
+    let t = [0.0, 2.0, 4.0, 6.0, 8.0];
+    let mut a: Vec<f64> = t.iter().map(|&ti| od(ti)).collect();
+    for k in 1..5 {
+        for i in (k..5).rev() {
+            a[i] = (a[i] - a[i - 1]) / (t[i] - t[i - k]);
+        }
+    }
+    let p = |x: f64| (0..4).rev().fold(a[4], |s, k| a[k] + (x - t[k]) * s);
+    let w = |x: f64| t.iter().map(|&ti| x - ti).product::<f64>();
+    for tq in [1.0, 3.0] {
+        println!("t = {tq}: actual {:.4}  bound {:.4}", (od(tq) - p(tq)).abs(),
+                 m5 / 120.0 * w(tq).abs());
+    }
+    let actual: Vec<f64> = tt.iter().map(|&x| (od(x) - p(x)).abs()).collect();
+    let bound: Vec<f64> = tt.iter().map(|&x| m5 / 120.0 * w(x).abs()).collect();
+    println!("{}", actual.iter().zip(&bound).all(|(a, b)| a <= b));
+    let ratio = actual.iter().zip(&bound).filter(|(_, b)| **b > 0.0)
+        .map(|(a, b)| a / b).fold(0.0, f64::max);
+    println!("{ratio}");
+}
+
+// Output:
+// 0.05921243167654073
+// 0.0739008337696633 0.09830398191733435
+// t = 1: actual 0.0228  bound 0.0860
+// t = 3: actual 0.0138  bound 0.0369
+// true
+// 0.3897301610678049
+```
+
+:::
+
+$P_2(u) = (1 - 2u)(u - u^2)$ gives $f''(3) = 0.0592$, the value used on the slides and in *Convergence and cost*. The bound holds everywhere on the grid, and the actual error is never more than 39 % of it: the bound uses the **largest** fifth derivative on $[0, 8]$, while the $\xi$ that matters is usually somewhere with a smaller one. As a design tool (B3) a factor 2–3 of pessimism is fine.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+K <- 1.2; N0 <- 0.05; r <- 0.8
+od <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
+bary_weights <- function(x) sapply(seq_along(x), function(j) 1 / prod(x[j] - x[-j]))
+bary_eval <- function(x, y, w, xx) sapply(xx, function(z) {
+  d <- z - x
+  if (any(d == 0)) return(y[d == 0])
+  sum(w * y / d) / sum(w / d)
+})
+interp <- function(x, y, xx) bary_eval(x, y, bary_weights(x), xx)
+cheb <- function(n, a, b) (a + b) / 2 - (b - a) / 2 * cos((2 * (0:n) + 1) * pi / (2 * n + 2))
+# (a) 48 h run, a reading every 4 h
+t48 <- seq(0, 48, by = 4); tt <- seq(0, 48, by = 0.01)
+pe <- interp(t48, od(t48), tt)
+cat(sprintf("equispaced: min %.4f at %.2f h, max error %.4f\n",
+            min(pe), tt[which.min(pe)], max(abs(pe - od(tt)))))
+# equispaced: min -0.1483 at 0.87 h, max error 0.2519
+# (b) 13 Chebyshev times
+tc <- cheb(12, 0, 48)
+pc <- interp(tc, od(tc), tt)
+cat(sprintf("Chebyshev:  min %.4f, max error %.4f\n", min(pc), max(abs(pc - od(tt)))))
+# Chebyshev:  min 0.0563, max error 0.0386
+# (c) Runge's function
+runge <- function(x) 1 / (1 + 25 * x^2)
+xx <- seq(-1, 1, length.out = 2001)
+for (n in c(5, 10, 20)) {
+  xe <- seq(-1, 1, length.out = n + 1); xc <- cheb(n, -1, 1)
+  cat(sprintf("n = %2d: equispaced %.4g   Chebyshev %.4g\n", n,
+              max(abs(interp(xe, runge(xe), xx) - runge(xx))),
+              max(abs(interp(xc, runge(xc), xx) - runge(xx)))))
+}
+# n =  5: equispaced 0.4327   Chebyshev 0.5559
+# n = 10: equispaced 1.916   Chebyshev 0.1092
+# n = 20: equispaced 59.82   Chebyshev 0.01533
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.interpolate import BarycentricInterpolator
+
+K, N0, r = 1.2, 0.05, 0.8
+def od(t):
+    return K / (1 + (K / N0 - 1) * np.exp(-r * t))
+def cheb(n, a, b):
+    return (a + b) / 2 - (b - a) / 2 * np.cos((2 * np.arange(n + 1) + 1) * np.pi / (2 * n + 2))
+def interp(x, y, xx):     # rng: scipy shuffles nodes when computing weights
+    return BarycentricInterpolator(x, y, rng=0)(xx)
+
+# (a) 48 h run, a reading every 4 h
+t48 = np.arange(0, 49, 4.0); tt = np.linspace(0, 48, 4801)
+pe = interp(t48, od(t48), tt)
+print(f"equispaced: min {pe.min():.4f} at {tt[np.argmin(pe)]:.2f} h, "
+      f"max error {np.max(np.abs(pe - od(tt))):.4f}")
+# equispaced: min -0.1483 at 0.87 h, max error 0.2519
+# (b) 13 Chebyshev times
+tc = cheb(12, 0, 48)
+pc = interp(tc, od(tc), tt)
+print(f"Chebyshev:  min {pc.min():.4f}, max error {np.max(np.abs(pc - od(tt))):.4f}")
+# Chebyshev:  min 0.0563, max error 0.0386
+# (c) Runge's function
+def runge(x):
+    return 1 / (1 + 25 * x**2)
+xx = np.linspace(-1, 1, 2001)
+for n in [5, 10, 20]:
+    xe = np.linspace(-1, 1, n + 1); xc = cheb(n, -1, 1)
+    ee = np.max(np.abs(interp(xe, runge(xe), xx) - runge(xx)))
+    ec = np.max(np.abs(interp(xc, runge(xc), xx) - runge(xx)))
+    print(f"n = {n:2d}: equispaced {ee:.4g}   Chebyshev {ec:.4g}")
+# n =  5: equispaced 0.4327   Chebyshev 0.5559
+# n = 10: equispaced 1.916   Chebyshev 0.1092
+# n = 20: equispaced 59.82   Chebyshev 0.01533
+```
+
+### Rust
+
+```rust
+// rust/examples/polynomial_interpolation_c3.rs  —  cargo run --example polynomial_interpolation_c3
+// C3: the Runge phenomenon on the 48 h run, and Runge's function.
+use std::f64::consts::PI;
+
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const R: f64 = 0.8;
+
+fn od(t: f64) -> f64 {
+    K / (1.0 + (K / N0 - 1.0) * (-R * t).exp())
+}
+
+fn bary_weights(x: &[f64]) -> Vec<f64> {
+    (0..x.len())
+        .map(|j| 1.0 / (0..x.len()).filter(|&k| k != j).map(|k| x[j] - x[k]).product::<f64>())
+        .collect()
+}
+fn bary_eval(x: &[f64], y: &[f64], w: &[f64], z: f64) -> f64 {
+    let (mut num, mut den) = (0.0, 0.0);
+    for j in 0..x.len() {
+        let d = z - x[j];
+        if d == 0.0 {
+            return y[j]; // z is a node
+        }
+        num += w[j] * y[j] / d;
+        den += w[j] / d;
+    }
+    num / den
+}
+fn interp(x: &[f64], y: &[f64], zs: &[f64]) -> Vec<f64> {
+    let w = bary_weights(x);
+    zs.iter().map(|&z| bary_eval(x, y, &w, z)).collect()
+}
+fn cheb(n: usize, a: f64, b: f64) -> Vec<f64> {
+    (0..=n)
+        .map(|k| (a + b) / 2.0 - (b - a) / 2.0 * ((2 * k + 1) as f64 * PI / (2 * n + 2) as f64).cos())
+        .collect()
+}
+fn max_abs_diff(p: &[f64], q: &[f64]) -> f64 {
+    p.iter().zip(q).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max)
+}
+
+fn main() {
+    // (a) 48 h run, a reading every 4 h
+    let t48: Vec<f64> = (0..=12).map(|i| 4.0 * i as f64).collect();
+    let y48: Vec<f64> = t48.iter().map(|&t| od(t)).collect();
+    let tt: Vec<f64> = (0..=4800).map(|i| i as f64 * 0.01).collect();
+    let truth: Vec<f64> = tt.iter().map(|&t| od(t)).collect();
+    let pe = interp(&t48, &y48, &tt);
+    let imin = (0..pe.len()).min_by(|&i, &j| pe[i].total_cmp(&pe[j])).unwrap();
+    println!("equispaced: min {:.4} at {:.2} h, max error {:.4}",
+             pe[imin], tt[imin], max_abs_diff(&pe, &truth));
+    // (b) 13 Chebyshev times
+    let tc = cheb(12, 0.0, 48.0);
+    let yc: Vec<f64> = tc.iter().map(|&t| od(t)).collect();
+    let pc = interp(&tc, &yc, &tt);
+    let pcmin = pc.iter().cloned().fold(f64::INFINITY, f64::min);
+    println!("Chebyshev:  min {:.4}, max error {:.4}", pcmin, max_abs_diff(&pc, &truth));
+    // (c) Runge's function
+    let runge = |x: f64| 1.0 / (1.0 + 25.0 * x * x);
+    let xx: Vec<f64> = (0..=2000).map(|i| -1.0 + i as f64 * 0.001).collect();
+    let rx: Vec<f64> = xx.iter().map(|&x| runge(x)).collect();
+    for n in [5usize, 10, 20] {
+        let xe: Vec<f64> = (0..=n).map(|i| -1.0 + 2.0 * i as f64 / n as f64).collect();
+        let xc = cheb(n, -1.0, 1.0);
+        let ye: Vec<f64> = xe.iter().map(|&x| runge(x)).collect();
+        let yc: Vec<f64> = xc.iter().map(|&x| runge(x)).collect();
+        println!("n = {n:2}: equispaced {:.4}   Chebyshev {:.4}",
+                 max_abs_diff(&interp(&xe, &ye, &xx), &rx),
+                 max_abs_diff(&interp(&xc, &yc, &xx), &rx));
+    }
+}
+
+// Output:
+// equispaced: min -0.1483 at 0.87 h, max error 0.2519
+// Chebyshev:  min 0.0563, max error 0.0386
+// n =  5: equispaced 0.4327   Chebyshev 0.5559
+// n = 10: equispaced 1.9156   Chebyshev 0.1092
+// n = 20: equispaced 59.8223   Chebyshev 0.0153
+```
+
+:::
+
+(a) The interpolant claims OD $= -0.148$ at 0.87 h, between the first two readings, although every reading is exact. (b) With the same number of readings at Chebyshev times the largest error drops from 0.25 to 0.039 and the curve stays positive. (c) Runge's function shows the effect in its pure form: with equal spacing the error **grows** with $n$ (60 at $n = 20$), with Chebyshev nodes it falls. At $n = 5$ both are poor; Chebyshev nodes do not make a low degree good, they make a high degree safe.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# needs od(), interp() and cheb() from C3
+maxerr <- function(x, a, b) {
+  tt <- seq(a, b, length.out = 4001)
+  max(abs(interp(x, od(x), tt) - od(tt)))
+}
+ns  <- c(4, 8, 12, 16, 20, 30, 40)
+e8  <- sapply(ns, function(n) maxerr(seq(0, 8, length.out = n + 1), 0, 8))
+e48 <- sapply(ns, function(n) maxerr(seq(0, 48, length.out = n + 1), 0, 48))
+c48 <- sapply(ns, function(n) maxerr(cheb(n, 0, 48), 0, 48))
+cat(sprintf("%2d  %9.2e  %9.2e  %9.2e\n", ns, e8, e48, c48), sep = "")
+#  4   2.38e-02   1.93e-01   2.10e-01
+#  8   2.37e-03   3.05e-01   9.89e-02
+# 12   3.23e-04   2.52e-01   3.86e-02
+# 16   4.88e-05   1.32e-01   1.44e-02
+# 20   7.78e-06   3.42e-01   4.07e-03
+# 30   8.76e-08   2.00e-01   2.70e-04
+# 40   4.86e-07   5.83e-01   1.79e-05
+plot(ns, e48, log = "y", type = "b", pch = 19, col = "red", ylim = c(1e-8, 1),
+     xlab = "degree n", ylab = "max |error|")
+lines(ns, c48, type = "b", pch = 17, col = "blue")
+lines(ns, e8, type = "b", pch = 15, col = "darkgreen")
+```
+
+### Python
+
+```python
+import matplotlib.pyplot as plt
+# needs od(), interp() and cheb() from C3
+def maxerr(x, a, b):
+    tt = np.linspace(a, b, 4001)
+    return np.max(np.abs(interp(x, od(x), tt) - od(tt)))
+
+ns = [4, 8, 12, 16, 20, 30, 40]
+e8 = [maxerr(np.linspace(0, 8, n + 1), 0, 8) for n in ns]
+e48 = [maxerr(np.linspace(0, 48, n + 1), 0, 48) for n in ns]
+c48 = [maxerr(cheb(n, 0, 48), 0, 48) for n in ns]
+for i, n in enumerate(ns):
+    print(f"{n:2d}  {e8[i]:9.2e}  {e48[i]:9.2e}  {c48[i]:9.2e}")
+#  4   2.38e-02   1.93e-01   2.10e-01
+#  8   2.37e-03   3.05e-01   9.89e-02
+# 12   3.23e-04   2.52e-01   3.86e-02
+# 16   4.88e-05   1.32e-01   1.44e-02
+# 20   7.78e-06   3.42e-01   4.07e-03
+# 30   8.76e-08   2.00e-01   2.70e-04
+# 40   1.16e-06   5.83e-01   1.79e-05
+plt.semilogy(ns, e48, "o-r", ns, c48, "^-b", ns, e8, "s-g")
+plt.xlabel("degree n"); plt.ylabel("max |error|")
+plt.show()
+```
+
+### Rust
+
+```rust
+// rust/examples/polynomial_interpolation_c4.rs  —  cargo run --example polynomial_interpolation_c4
+// C4: max error against the degree n, three sampling designs.
+use std::f64::consts::PI;
+
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const R: f64 = 0.8;
+
+fn od(t: f64) -> f64 {
+    K / (1.0 + (K / N0 - 1.0) * (-R * t).exp())
+}
+
+fn bary_weights(x: &[f64]) -> Vec<f64> {
+    (0..x.len())
+        .map(|j| 1.0 / (0..x.len()).filter(|&k| k != j).map(|k| x[j] - x[k]).product::<f64>())
+        .collect()
+}
+fn bary_eval(x: &[f64], y: &[f64], w: &[f64], z: f64) -> f64 {
+    let (mut num, mut den) = (0.0, 0.0);
+    for j in 0..x.len() {
+        let d = z - x[j];
+        if d == 0.0 {
+            return y[j]; // z is a node
+        }
+        num += w[j] * y[j] / d;
+        den += w[j] / d;
+    }
+    num / den
+}
+fn interp(x: &[f64], y: &[f64], zs: &[f64]) -> Vec<f64> {
+    let w = bary_weights(x);
+    zs.iter().map(|&z| bary_eval(x, y, &w, z)).collect()
+}
+fn cheb(n: usize, a: f64, b: f64) -> Vec<f64> {
+    (0..=n)
+        .map(|k| (a + b) / 2.0 - (b - a) / 2.0 * ((2 * k + 1) as f64 * PI / (2 * n + 2) as f64).cos())
+        .collect()
+}
+fn max_abs_diff(p: &[f64], q: &[f64]) -> f64 {
+    p.iter().zip(q).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max)
+}
+
+
+fn maxerr(x: &[f64], a: f64, b: f64) -> f64 {
+    let tt: Vec<f64> = (0..=4000).map(|i| a + (b - a) * i as f64 / 4000.0).collect();
+    let y: Vec<f64> = x.iter().map(|&t| od(t)).collect();
+    let truth: Vec<f64> = tt.iter().map(|&t| od(t)).collect();
+    max_abs_diff(&interp(x, &y, &tt), &truth)
+}
+fn equi(n: usize, a: f64, b: f64) -> Vec<f64> {
+    (0..=n).map(|i| a + (b - a) * i as f64 / n as f64).collect()
+}
+
+fn main() {
+    for n in [4usize, 8, 12, 16, 20, 30, 40] {
+        let e8 = maxerr(&equi(n, 0.0, 8.0), 0.0, 8.0);
+        let e48 = maxerr(&equi(n, 0.0, 48.0), 0.0, 48.0);
+        let c48 = maxerr(&cheb(n, 0.0, 48.0), 0.0, 48.0);
+        println!("{n:2}  {e8:9.2e}  {e48:9.2e}  {c48:9.2e}");
+    }
+    // No plotting here: write the table to a file and plot it in R or Python.
+}
+
+// Output:
+//  4    2.38e-2    1.93e-1    2.10e-1
+//  8    2.37e-3    3.05e-1    9.89e-2
+// 12    3.23e-4    2.52e-1    3.86e-2
+// 16    4.88e-5    1.32e-1    1.44e-2
+// 20    7.78e-6    3.42e-1    4.07e-3
+// 30    8.78e-8    2.00e-1    2.70e-4
+// 40    4.89e-7    5.83e-1    1.79e-5
+```
+
+:::
+
+The plot is the "More readings make it worse" slide. On $[0, 8]$ the equally spaced interpolant converges (about a factor 1.6 per extra reading) until $n \approx 30$, then the error **rises** again: rounding errors in the readings are amplified by the Lebesgue constant of equispaced nodes, which grows like $2^n$. (Those last entries are rounding noise, which is why R, Python and Rust disagree there.) On $[0, 48]$ the equally spaced interpolant never converges; the Chebyshev one does, geometrically.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# needs od(), interp(), bary_eval() and cheb() from C3
+t48 <- seq(0, 48, by = 4)                     # (a) hours, a reading every 4 h
+V <- outer(t48, 0:12, "^")
+kappa(V, exact = TRUE)
+# [1] 8.403126e+20
+cf <- try(solve(V, od(t48)))                  # refuses
+# Error in solve.default(V, od(t48)) :
+#   system is computationally singular: reciprocal condition number = 5.66168e-23
+cf <- solve(V, od(t48), tol = 0)              # forced
+tt <- seq(0, 48, by = 0.01)
+max(abs(outer(tt, 0:12, "^") %*% cf - interp(t48, od(t48), tt)))
+# [1] 2.985265e-09
+# (b) Chebyshev times: monomials (hours, rescaled) vs barycentric
+xx <- seq(0, 48, length.out = 2001)
+mono_err <- function(x, y, xe) {              # forced solve, then evaluate
+  cf <- solve(outer(x, 0:(length(x) - 1), "^"), y, tol = 0)
+  max(abs(outer(xe, 0:(length(x) - 1), "^") %*% cf - od(xx)))
+}
+for (n in c(8, 12, 20, 30, 40, 60, 80)) {
+  k <- 0:n; tc <- cheb(n, 0, 48); y <- od(tc)
+  w <- (-1)^k * sin((2 * k + 1) * pi / (2 * n + 2))   # Chebyshev weights
+  cat(sprintf("n = %2d  kappa %8.2e  hours %8.2e  rescaled %8.2e  bary %8.2e\n",
+      n, kappa(outer((tc - 24) / 24, 0:n, "^"), exact = TRUE),
+      mono_err(tc, y, xx), mono_err((tc - 24) / 24, y, (xx - 24) / 24),
+      max(abs(bary_eval(tc, y, w, xx) - od(xx)))))
+}
+# n =  8  kappa 6.27e+02  hours 9.89e-02  rescaled 9.89e-02  bary 9.89e-02
+# n = 12  kappa 2.06e+04  hours 3.86e-02  rescaled 3.86e-02  bary 3.86e-02
+# n = 20  kappa 2.31e+07  hours 4.09e-03  rescaled 4.07e-03  bary 4.07e-03
+# n = 30  kappa 1.52e+11  hours 3.44e-01  rescaled 2.70e-04  bary 2.70e-04
+# n = 40  kappa 1.01e+15  hours 3.64e-02  rescaled 1.82e-05  bary 1.79e-05
+# n = 60  kappa 4.48e+19  hours 4.84e-02  rescaled 1.24e-05  bary 7.83e-08
+# n = 80  kappa 8.64e+19  hours 4.17e-01  rescaled 2.04e-06  bary 3.40e-10
+```
+
+### Python
+
+```python
+# needs od(), interp() and cheb() from C3
+t48 = np.arange(0, 49, 4.0)                    # (a) hours, a reading every 4 h
+V = np.vander(t48, 13, increasing=True)
+print(f"{np.linalg.cond(V):.6e}")
+# 8.403126e+20
+cf = np.linalg.solve(V, od(t48))               # numpy never refuses
+tt = np.linspace(0, 48, 4801)
+print(np.max(np.abs(np.vander(tt, 13, increasing=True) @ cf - interp(t48, od(t48), tt))))
+# 1.5833288569133686e-09
+# (b) Chebyshev times: monomials (hours, rescaled) vs barycentric
+xx = np.linspace(0, 48, 2001)
+def mono_err(x, y, xe):
+    cf = np.linalg.solve(np.vander(x, len(x), increasing=True), y)
+    return np.max(np.abs(np.vander(xe, len(x), increasing=True) @ cf - od(xx)))
+for n in [8, 12, 20, 30, 40, 60, 80]:
+    tc = cheb(n, 0, 48); y = od(tc)
+    kap = np.linalg.cond(np.vander((tc - 24) / 24, n + 1, increasing=True))
+    print(f"n = {n:2d}  kappa {kap:8.2e}  hours {mono_err(tc, y, xx):8.2e}  "
+          f"rescaled {mono_err((tc - 24) / 24, y, (xx - 24) / 24):8.2e}  "
+          f"bary {np.max(np.abs(interp(tc, y, xx) - od(xx))):8.2e}")
+# n =  8  kappa 6.27e+02  hours 9.89e-02  rescaled 9.89e-02  bary 9.89e-02
+# n = 12  kappa 2.06e+04  hours 3.86e-02  rescaled 3.86e-02  bary 3.86e-02
+# n = 20  kappa 2.31e+07  hours 4.08e-03  rescaled 4.07e-03  bary 4.07e-03
+# n = 30  kappa 1.52e+11  hours 7.15e-02  rescaled 2.70e-04  bary 2.70e-04
+# n = 40  kappa 1.01e+15  hours 4.19e-02  rescaled 1.79e-05  bary 1.79e-05
+# n = 60  kappa 2.37e+18  hours 8.59e-02  rescaled 7.31e-05  bary 7.83e-08
+# n = 80  kappa 7.78e+18  hours 4.03e-01  rescaled 4.48e-06  bary 3.40e-10
+```
+
+### Rust
+
+```rust
+// rust/examples/polynomial_interpolation_c5.rs  —  cargo run --example polynomial_interpolation_c5
+// C5: monomial coefficients (Vandermonde + LU) against the barycentric formula.
+use nalgebra::{DMatrix, DVector};
+use std::f64::consts::PI;
+
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const R: f64 = 0.8;
+
+fn od(t: f64) -> f64 {
+    K / (1.0 + (K / N0 - 1.0) * (-R * t).exp())
+}
+
+fn bary_weights(x: &[f64]) -> Vec<f64> {
+    (0..x.len())
+        .map(|j| 1.0 / (0..x.len()).filter(|&k| k != j).map(|k| x[j] - x[k]).product::<f64>())
+        .collect()
+}
+fn bary_eval(x: &[f64], y: &[f64], w: &[f64], z: f64) -> f64 {
+    let (mut num, mut den) = (0.0, 0.0);
+    for j in 0..x.len() {
+        let d = z - x[j];
+        if d == 0.0 {
+            return y[j]; // z is a node
+        }
+        num += w[j] * y[j] / d;
+        den += w[j] / d;
+    }
+    num / den
+}
+fn interp(x: &[f64], y: &[f64], zs: &[f64]) -> Vec<f64> {
+    let w = bary_weights(x);
+    zs.iter().map(|&z| bary_eval(x, y, &w, z)).collect()
+}
+fn cheb(n: usize, a: f64, b: f64) -> Vec<f64> {
+    (0..=n)
+        .map(|k| (a + b) / 2.0 - (b - a) / 2.0 * ((2 * k + 1) as f64 * PI / (2 * n + 2) as f64).cos())
+        .collect()
+}
+fn max_abs_diff(p: &[f64], q: &[f64]) -> f64 {
+    p.iter().zip(q).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max)
+}
+
+
+fn vander(x: &[f64], m: usize) -> DMatrix<f64> {
+    DMatrix::from_fn(x.len(), m, |i, j| x[i].powi(j as i32))
+}
+fn cond(a: &DMatrix<f64>) -> f64 {
+    let s = a.clone().svd(false, false).singular_values;
+    s.max() / s.min()
+}
+// solve V c = y by LU (nalgebra never refuses unless exactly singular), evaluate at xe
+fn mono_vals(x: &[f64], y: &[f64], xe: &[f64]) -> Vec<f64> {
+    let m = x.len();
+    let cf = vander(x, m).lu().solve(&DVector::from_column_slice(y)).unwrap();
+    (vander(xe, m) * cf).iter().cloned().collect()
+}
+
+fn main() {
+    // (a) hours, a reading every 4 h
+    let t48: Vec<f64> = (0..=12).map(|i| 4.0 * i as f64).collect();
+    let y48: Vec<f64> = t48.iter().map(|&t| od(t)).collect();
+    println!("{:.6e}", cond(&vander(&t48, 13)));
+    let tt: Vec<f64> = (0..=4800).map(|i| i as f64 * 0.01).collect();
+    println!("{:e}", max_abs_diff(&mono_vals(&t48, &y48, &tt), &interp(&t48, &y48, &tt)));
+    // (b) Chebyshev times: monomials (hours, rescaled) vs barycentric
+    let xx: Vec<f64> = (0..=2000).map(|i| 48.0 * i as f64 / 2000.0).collect();
+    let truth: Vec<f64> = xx.iter().map(|&t| od(t)).collect();
+    let ss: Vec<f64> = xx.iter().map(|&t| (t - 24.0) / 24.0).collect();
+    for n in [8usize, 12, 20, 30, 40, 60, 80] {
+        let tc = cheb(n, 0.0, 48.0);
+        let y: Vec<f64> = tc.iter().map(|&t| od(t)).collect();
+        let s: Vec<f64> = tc.iter().map(|&t| (t - 24.0) / 24.0).collect();
+        let w: Vec<f64> = (0..=n)   // Chebyshev weights
+            .map(|k| (-1f64).powi(k as i32) * ((2 * k + 1) as f64 * PI / (2 * n + 2) as f64).sin())
+            .collect();
+        let pb: Vec<f64> = xx.iter().map(|&z| bary_eval(&tc, &y, &w, z)).collect();
+        println!("n = {n:2}  kappa {:8.2e}  hours {:8.2e}  rescaled {:8.2e}  bary {:8.2e}",
+                 cond(&vander(&s, n + 1)),
+                 max_abs_diff(&mono_vals(&tc, &y, &xx), &truth),
+                 max_abs_diff(&mono_vals(&s, &y, &ss), &truth),
+                 max_abs_diff(&pb, &truth));
+    }
+}
+
+// Output:
+// inf
+// 2.042807256685819e-9
+// n =  8  kappa   6.27e2  hours  9.89e-2  rescaled  9.89e-2  bary  9.89e-2
+// n = 12  kappa   2.06e4  hours  3.86e-2  rescaled  3.86e-2  bary  3.86e-2
+// n = 20  kappa   2.31e7  hours  4.08e-3  rescaled  4.07e-3  bary  4.07e-3
+// n = 30  kappa  1.52e11  hours  1.57e-2  rescaled  2.70e-4  bary  2.70e-4
+// n = 40  kappa  1.01e15  hours  1.42e-2  rescaled  1.82e-5  bary  1.79e-5
+// n = 60  kappa      inf  hours  1.96e-1  rescaled  1.08e-5  bary  7.83e-8
+// n = 80  kappa      inf  hours  5.68e-2  rescaled  3.48e-6  bary 3.40e-10
+```
+
+:::
+
+(a) $\kappa(V) = 8.4\times10^{20}$, above $1/\varepsilon \approx 4.5\times10^{15}$, so R's `solve` refuses. Forced, the polynomial values still agree with the barycentric interpolant to about $10^{-9}$: LU gives coefficients that reproduce the readings well (a small residual), even though the coefficients themselves have few correct digits. numpy and nalgebra do not refuse at all; the condition number is the only warning you get.
+(b) Up to $n = 20$ all three ways agree. With times in hours the values become garbage from $n \approx 30$. Rescaled to $[-1, 1]$ the monomials last until $\kappa \approx 10^{15}$ ($n \approx 40$) and then **stall** around $10^{-5}$, while the barycentric formula keeps converging to $3\times10^{-10}$. The garbage columns differ between R, Python and Rust (different LU and rounding), and beyond $\kappa \approx 10^{16}$ the computed condition number itself is meaningless: nalgebra's SVD returns a smallest singular value of exactly 0 and $\kappa = \infty$. The polynomial is fine; its representation in powers of $t$ is not.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# needs od() and interp() from C3
+t12 <- 0:12
+y12 <- c(0.0375, 0.1095, 0.1959, 0.4207, 0.6259, 0.8279, 1.0188, 1.1207,
+         1.1673, 1.1736, 1.2210, 1.2037, 1.1857)     # hourly, noise sd 0.02
+tt <- seq(0, 12, by = 0.01)
+p_int <- interp(t12, y12, tt)                        # (a) degree 12
+cat(sprintf("interpolant: range %.3f to %.3f, max error %.4f\n",
+            min(p_int), max(p_int), max(abs(p_int - od(tt)))))
+# interpolant: range -0.077 to 1.278, max error 0.3939
+for (d in 2:8) {                                     # (b) least squares
+  fit <- lm(y12 ~ poly(t12, d))
+  p_fit <- predict(fit, data.frame(t12 = tt))
+  cat(sprintf("degree %d: residual sd %.4f, max error %.4f\n",
+              d, sqrt(sum(resid(fit)^2) / (13 - d - 1)), max(abs(p_fit - od(tt)))))
+}
+# degree 2: residual sd 0.0813, max error 0.1537
+# degree 3: residual sd 0.0583, max error 0.0752
+# degree 4: residual sd 0.0232, max error 0.0296
+# degree 5: residual sd 0.0243, max error 0.0316
+# degree 6: residual sd 0.0175, max error 0.0189
+# degree 7: residual sd 0.0186, max error 0.0157
+# degree 8: residual sd 0.0208, max error 0.0163
+p_lin <- approx(t12, y12, xout = tt)$y               # (c) piecewise linear
+max(abs(p_lin - od(tt)))
+# [1] 0.03191174
+p5 <- predict(lm(y12 ~ poly(t12, 5)), data.frame(t12 = tt))
+max(abs(p_int - p5))                                 # (d) check without truth
+# [1] 0.3861193
+```
+
+### Python
+
+```python
+from numpy.polynomial import Polynomial
+# needs od() and interp() from C3
+t12 = np.arange(13.0)
+y12 = np.array([0.0375, 0.1095, 0.1959, 0.4207, 0.6259, 0.8279, 1.0188, 1.1207,
+                1.1673, 1.1736, 1.2210, 1.2037, 1.1857])   # hourly, noise sd 0.02
+tt = np.linspace(0, 12, 1201)
+p_int = interp(t12, y12, tt)                               # (a) degree 12
+print(f"interpolant: range {p_int.min():.3f} to {p_int.max():.3f}, "
+      f"max error {np.max(np.abs(p_int - od(tt))):.4f}")
+# interpolant: range -0.077 to 1.278, max error 0.3939
+for d in range(2, 9):                                      # (b) least squares
+    fit = Polynomial.fit(t12, y12, deg=d)
+    res = y12 - fit(t12)
+    print(f"degree {d}: residual sd {np.sqrt(np.sum(res**2) / (13 - d - 1)):.4f}, "
+          f"max error {np.max(np.abs(fit(tt) - od(tt))):.4f}")
+# degree 2: residual sd 0.0813, max error 0.1537
+# degree 3: residual sd 0.0583, max error 0.0752
+# degree 4: residual sd 0.0232, max error 0.0296
+# degree 5: residual sd 0.0243, max error 0.0316
+# degree 6: residual sd 0.0175, max error 0.0189
+# degree 7: residual sd 0.0186, max error 0.0157
+# degree 8: residual sd 0.0208, max error 0.0163
+p_lin = np.interp(tt, t12, y12)                            # (c) piecewise linear
+print(np.max(np.abs(p_lin - od(tt))))
+# 0.03191173670615177
+p5 = Polynomial.fit(t12, y12, deg=5)(tt)
+print(np.max(np.abs(p_int - p5)))                          # (d) check without truth
+# 0.38611928147202157
+```
+
+### Rust
+
+```rust
+// rust/examples/polynomial_interpolation_c6.rs  —  cargo run --example polynomial_interpolation_c6
+// C6: interpolation vs least-squares fitting of noisy readings.
+use nalgebra::{DMatrix, DVector};
+
+const K: f64 = 1.2;
+const N0: f64 = 0.05;
+const R: f64 = 0.8;
+
+fn od(t: f64) -> f64 {
+    K / (1.0 + (K / N0 - 1.0) * (-R * t).exp())
+}
+
+fn bary_weights(x: &[f64]) -> Vec<f64> {
+    (0..x.len())
+        .map(|j| 1.0 / (0..x.len()).filter(|&k| k != j).map(|k| x[j] - x[k]).product::<f64>())
+        .collect()
+}
+fn bary_eval(x: &[f64], y: &[f64], w: &[f64], z: f64) -> f64 {
+    let (mut num, mut den) = (0.0, 0.0);
+    for j in 0..x.len() {
+        let d = z - x[j];
+        if d == 0.0 {
+            return y[j]; // z is a node
+        }
+        num += w[j] * y[j] / d;
+        den += w[j] / d;
+    }
+    num / den
+}
+fn interp(x: &[f64], y: &[f64], zs: &[f64]) -> Vec<f64> {
+    let w = bary_weights(x);
+    zs.iter().map(|&z| bary_eval(x, y, &w, z)).collect()
+}
+fn max_abs_diff(p: &[f64], q: &[f64]) -> f64 {
+    p.iter().zip(q).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max)
+}
+
+
+// least-squares polynomial of degree d in s = (t - 6) / 6 (rescaled, like poly())
+fn ls_fit(t: &[f64], y: &[f64], d: usize) -> DVector<f64> {
+    let a = DMatrix::from_fn(t.len(), d + 1, |i, j| ((t[i] - 6.0) / 6.0).powi(j as i32));
+    a.svd(true, true).solve(&DVector::from_column_slice(y), 1e-12).unwrap()
+}
+fn ls_eval(cf: &DVector<f64>, t: f64) -> f64 {
+    let s = (t - 6.0) / 6.0;
+    cf.iter().rev().fold(0.0, |acc, &c| acc * s + c)
+}
+
+fn main() {
+    let t12: Vec<f64> = (0..=12).map(|i| i as f64).collect();
+    let y12 = [0.0375, 0.1095, 0.1959, 0.4207, 0.6259, 0.8279, 1.0188, 1.1207,
+               1.1673, 1.1736, 1.2210, 1.2037, 1.1857]; // hourly, noise sd 0.02
+    let tt: Vec<f64> = (0..=1200).map(|i| i as f64 * 0.01).collect();
+    let truth: Vec<f64> = tt.iter().map(|&t| od(t)).collect();
+    let p_int = interp(&t12, &y12, &tt); // (a) degree 12
+    let (lo, hi) = p_int.iter().fold((f64::INFINITY, f64::NEG_INFINITY),
+                                     |(lo, hi), &v| (lo.min(v), hi.max(v)));
+    println!("interpolant: range {lo:.3} to {hi:.3}, max error {:.4}",
+             max_abs_diff(&p_int, &truth));
+    for d in 2..=8 { // (b) least squares
+        let cf = ls_fit(&t12, &y12, d);
+        let rss: f64 = t12.iter().zip(&y12).map(|(&t, &y)| (y - ls_eval(&cf, t)).powi(2)).sum();
+        let p_fit: Vec<f64> = tt.iter().map(|&t| ls_eval(&cf, t)).collect();
+        println!("degree {d}: residual sd {:.4}, max error {:.4}",
+                 (rss / (13 - d - 1) as f64).sqrt(), max_abs_diff(&p_fit, &truth));
+    }
+    // (c) piecewise linear
+    let p_lin: Vec<f64> = tt.iter().map(|&z| {
+        let i = (1..13).find(|&i| z <= t12[i]).unwrap();
+        y12[i - 1] + (y12[i] - y12[i - 1]) * (z - t12[i - 1])
+    }).collect();
+    println!("{}", max_abs_diff(&p_lin, &truth));
+    // (d) check without truth
+    let cf5 = ls_fit(&t12, &y12, 5);
+    let p5: Vec<f64> = tt.iter().map(|&t| ls_eval(&cf5, t)).collect();
+    println!("{}", max_abs_diff(&p_int, &p5));
+}
+
+// Output:
+// interpolant: range -0.077 to 1.278, max error 0.3939
+// degree 2: residual sd 0.0813, max error 0.1537
+// degree 3: residual sd 0.0583, max error 0.0752
+// degree 4: residual sd 0.0232, max error 0.0296
+// degree 5: residual sd 0.0243, max error 0.0316
+// degree 6: residual sd 0.0175, max error 0.0189
+// degree 7: residual sd 0.0186, max error 0.0157
+// degree 8: residual sd 0.0208, max error 0.0163
+// 0.03191173670615177
+// 0.3861192814720227
+```
+
+:::
+
+(a) The interpolant passes through all 13 readings and is off by up to 0.39 OD (near 11.7 h), dipping below zero near the start. Without noise, the same design gave 0.008 (lecture): the noise of 0.02 was amplified about 20 times. (b) The residual sd drops to the noise level (0.02) at degree 4 and stays there; that is the degree to choose without the truth (B5(c)). Degrees 4 to 8 all have errors of 0.016–0.032, ten times better than interpolation. (c) Piecewise linear is as good as the fits here (0.032): it cannot overshoot, it only copies the noise at each reading. (d) The interpolant and a reasonable fit differ by 0.39 OD, 20 times the noise: a clear warning, available without knowing the truth.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# needs interp() from C3
+g <- function(t) 1 + 6 * (exp(-0.25 * t) - exp(-1.5 * t))   # fold change
+ts <- c(0, 0.5, 1, 2, 4, 8, 12, 24)                         # sampling times (h)
+y <- g(ts)
+tq <- c(3, 6, 10, 18)                                       # (a)
+cat(sprintf("t = %2g  poly %9.3f  linear %6.3f  truth %6.3f\n",
+            tq, interp(ts, y, tq), approx(ts, y, xout = tq)$y, g(tq)), sep = "")
+# t =  3  poly     3.903  linear  3.766  truth  3.768
+# t =  6  poly     0.542  linear  2.502  truth  2.338
+# t = 10  poly    11.343  linear  1.555  truth  1.493
+# t = 18  poly -1120.455  linear  1.157  truth  1.067
+tt <- seq(0, 24, by = 0.01); p <- interp(ts, y, tt)        # (b)
+cat(sprintf("range %.1f to %.1f, max error %.1f at %.2f h\n",
+            min(p), max(p), max(abs(p - g(tt))), tt[which.max(abs(p - g(tt)))]))
+# range -2241.4 to 13.1, max error 2242.4 at 21.44 h
+for (i in 2:7) {                                            # (c) leave one out
+  cat(sprintf("leave out %4g h: poly %+9.3f  linear %+6.3f\n", ts[i],
+              interp(ts[-i], y[-i], ts[i]) - y[i],
+              approx(ts[-i], y[-i], xout = ts[i])$y - y[i]))
+}
+# leave out  0.5 h: poly    -0.139  linear -0.794
+# leave out    1 h: poly    +0.139  linear -0.580
+# leave out    2 h: poly    -0.413  linear -0.387
+# leave out    4 h: poly    +2.805  linear +0.305
+# leave out    8 h: poly   -33.655  linear +0.434
+# leave out   12 h: poly  +304.098  linear +0.314
+```
+
+### Python
+
+```python
+# needs interp() from C3
+def g(t):
+    return 1 + 6 * (np.exp(-0.25 * t) - np.exp(-1.5 * t))  # fold change
+ts = np.array([0, 0.5, 1, 2, 4, 8, 12, 24])                 # sampling times (h)
+y = g(ts)
+tq = np.array([3.0, 6, 10, 18])                             # (a)
+for q, pp, ll in zip(tq, interp(ts, y, tq), np.interp(tq, ts, y)):
+    print(f"t = {q:2g}  poly {pp:9.3f}  linear {ll:6.3f}  truth {g(q):6.3f}")
+# t =  3  poly     3.903  linear  3.766  truth  3.768
+# t =  6  poly     0.542  linear  2.502  truth  2.338
+# t = 10  poly    11.343  linear  1.555  truth  1.493
+# t = 18  poly -1120.455  linear  1.157  truth  1.067
+tt = np.linspace(0, 24, 2401); p = interp(ts, y, tt)       # (b)
+err = np.abs(p - g(tt))
+print(f"range {p.min():.1f} to {p.max():.1f}, max error {err.max():.1f} "
+      f"at {tt[np.argmax(err)]:.2f} h")
+# range -2241.4 to 13.1, max error 2242.4 at 21.44 h
+for i in range(1, 7):                                       # (c) leave one out
+    keep = np.arange(8) != i
+    print(f"leave out {ts[i]:4g} h: "
+          f"poly {interp(ts[keep], y[keep], [ts[i]])[0] - y[i]:+9.3f}  "
+          f"linear {np.interp(ts[i], ts[keep], y[keep]) - y[i]:+6.3f}")
+# leave out  0.5 h: poly    -0.139  linear -0.794
+# leave out    1 h: poly    +0.139  linear -0.580
+# leave out    2 h: poly    -0.413  linear -0.387
+# leave out    4 h: poly    +2.805  linear +0.305
+# leave out    8 h: poly   -33.655  linear +0.434
+# leave out   12 h: poly  +304.098  linear +0.314
+```
+
+### Rust
+
+```rust
+// rust/examples/polynomial_interpolation_c7.rs  —  cargo run --example polynomial_interpolation_c7
+// C7: a gene-expression time course with uneven sampling times.
+fn bary_weights(x: &[f64]) -> Vec<f64> {
+    (0..x.len())
+        .map(|j| 1.0 / (0..x.len()).filter(|&k| k != j).map(|k| x[j] - x[k]).product::<f64>())
+        .collect()
+}
+fn bary_eval(x: &[f64], y: &[f64], w: &[f64], z: f64) -> f64 {
+    let (mut num, mut den) = (0.0, 0.0);
+    for j in 0..x.len() {
+        let d = z - x[j];
+        if d == 0.0 {
+            return y[j]; // z is a node
+        }
+        num += w[j] * y[j] / d;
+        den += w[j] / d;
+    }
+    num / den
+}
+fn interp(x: &[f64], y: &[f64], zs: &[f64]) -> Vec<f64> {
+    let w = bary_weights(x);
+    zs.iter().map(|&z| bary_eval(x, y, &w, z)).collect()
+}
+fn linear(x: &[f64], y: &[f64], z: f64) -> f64 { // like approx() / np.interp
+    let i = (1..x.len()).find(|&i| z <= x[i]).unwrap();
+    y[i - 1] + (y[i] - y[i - 1]) * (z - x[i - 1]) / (x[i] - x[i - 1])
+}
+
+fn main() {
+    let g = |t: f64| 1.0 + 6.0 * ((-0.25 * t).exp() - (-1.5 * t).exp()); // fold change
+    let ts = [0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 12.0, 24.0]; // sampling times (h)
+    let y: Vec<f64> = ts.iter().map(|&t| g(t)).collect();
+    let tq = [3.0, 6.0, 10.0, 18.0]; // (a)
+    let pq = interp(&ts, &y, &tq);
+    for i in 0..4 {
+        println!("t = {:2}  poly {:9.3}  linear {:6.3}  truth {:6.3}",
+                 tq[i], pq[i], linear(&ts, &y, tq[i]), g(tq[i]));
+    }
+    let tt: Vec<f64> = (0..=2400).map(|i| i as f64 * 0.01).collect(); // (b)
+    let p = interp(&ts, &y, &tt);
+    let err: Vec<f64> = tt.iter().zip(&p).map(|(&t, &v)| (v - g(t)).abs()).collect();
+    let imax = (0..err.len()).max_by(|&i, &j| err[i].total_cmp(&err[j])).unwrap();
+    let pmin = p.iter().cloned().fold(f64::INFINITY, f64::min);
+    let pmax = p.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    println!("range {pmin:.1} to {pmax:.1}, max error {:.1} at {:.2} h", err[imax], tt[imax]);
+    for i in 1..7 { // (c) leave one out
+        let (xs, ys): (Vec<f64>, Vec<f64>) = (0..8).filter(|&k| k != i).map(|k| (ts[k], y[k])).unzip();
+        println!("leave out {:4} h: poly {:+9.3}  linear {:+6.3}", ts[i],
+                 interp(&xs, &ys, &[ts[i]])[0] - y[i], linear(&xs, &ys, ts[i]) - y[i]);
+    }
+}
+
+// Output:
+// t =  3  poly     3.903  linear  3.766  truth  3.768
+// t =  6  poly     0.542  linear  2.502  truth  2.338
+// t = 10  poly    11.343  linear  1.555  truth  1.493
+// t = 18  poly -1120.455  linear  1.157  truth  1.067
+// range -2241.4 to 13.1, max error 2242.4 at 21.44 h
+// leave out  0.5 h: poly    -0.139  linear -0.794
+// leave out    1 h: poly    +0.139  linear -0.580
+// leave out    2 h: poly    -0.413  linear -0.387
+// leave out    4 h: poly    +2.805  linear +0.305
+// leave out    8 h: poly   -33.655  linear +0.434
+// leave out   12 h: poly  +304.098  linear +0.314
+```
+
+:::
+
+(a) In the densely sampled early part (3 h) the polynomial is usable; in the gaps it is nonsense: 0.54 instead of 2.34 at 6 h, and $-1120$ at 18 h. Piecewise linear is within 0.17 at these four times (0.28 at worst on the whole grid, at 0.2 h where the curve rises steeply). (b) The polynomial swings to $-2241$ at 21.4 h, in the 12–24 h gap. Log-spaced sampling is the opposite of Chebyshev sampling at the late end: the nodes are dense at the start and very sparse at the end, so $|w(t)|$ is enormous in the last gap. (c) Yes: leaving out the 8 h or 12 h sample changes the polynomial's prediction there by 34 and 304 fold, compared with about 0.3–0.4 for the linear interpolant. A leave-one-out difference far above the biological variation is the warning sign.
+:::
+
+## Where this leads
+
+- ***Splines*** (next unit): piecewise cubic polynomials through the same readings keep the error formula local (only $h$ and nearby derivatives matter), cannot produce Runge oscillations, and **smoothing splines** handle noisy readings with a controlled bias–noise trade-off. The growth rate as the derivative of a smoothed OD curve is done there.
+- ***Fourier series and the FFT***: interpolation with sines and cosines instead of powers, the natural basis for periodic data such as circadian time courses.
+- ***Numerical differentiation*** and ***Numerical integration*** (Part 7): a finite difference is the derivative of an interpolating polynomial (a divided difference), and Simpson's rule integrates the quadratic interpolant. Gaussian quadrature chooses its nodes cleverly, as Chebyshev points did here.
+- Least-squares polynomial fits and their conditioning were the subject of *Least squares: normal equations vs QR*.

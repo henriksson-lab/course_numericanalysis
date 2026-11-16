@@ -56,3 +56,7 @@ fn main() {
     println!("{}", spline_eval(&t, &y, &m, 3.1, 0));
     println!("{}", spline_eval(&t, &y, &m, 3.1, 1));               // its slope
 }
+
+// Output:
+// 0.40738344095929624
+// 0.26089744002572207

@@ -95,7 +95,7 @@ One-slide recap of first-course linear algebra. The characteristic polynomial wo
 
 Write the start as a combination of eigenvectors: $\mathbf x_0 = (1, 0) = \tfrac38(2, 1) + \tfrac18(2, -3)$. Each multiplication by $L$ multiplies each part by its own eigenvalue:
 
-$$L^k\mathbf x_0 = \tfrac38\,(1.5)^k\,(2, 1) + \tfrac18\,(-0.5)^k\,(2, -3) = (1.5)^k\Big[\tfrac38(2,1) + \tfrac18\big(-\tfrac13\big)^k(2,-3)\Big]$$
+$$L^k\mathbf x_0 = \tfrac38\,(1.5)^k\,(2, 1) + \tfrac18\,(-0.5)^k\,(2, -3) \;=\; (1.5)^k\Big[\tfrac38(2,1) + \tfrac18\big(-\tfrac13\big)^k(2,-3)\Big]$$
 
 | $k$ | $L^k\mathbf x_0$ | total ratio | error in $\lambda$ |
 |---|---|---|---|
@@ -154,21 +154,33 @@ power_it <- function(A, x, tol = 1e-10, maxit = 1000) {
 }
 ```
 
+- Stop on the **residual** $\|A\mathbf x - \lambda\mathbf x\|$: it is zero exactly for an eigenpair, and it is cheap (we have $A\mathbf x$ already).
+- Always return the iteration count and the residual, so the caller can see whether it converged.
+
+::: notes
+Ten lines, one matrix-vector product per step. drop() turns the one-column matrix from %*% into a plain vector. The residual uses the old x and the new y, so it costs nothing extra. Why the residual and not the change between iterates: we will see a case where the change is tiny and the answer is still wrong. The convergence check matters more than usual here, because power iteration can fail silently (two slides on).
+:::
+
+## Power iteration on the fish {.smaller}
+
 ```r
-out <- power_it(L, c(0, 1, 0, 0));  out$lambda;  round(out$x, 4);  out$k
+out <- power_it(L, c(0, 1, 0, 0))          # start: one-year-olds only
+out$lambda;  round(out$x, 4);  out$k
 # [1] 1.177359
 # [1] 0.6945 0.1770 0.0902 0.0383
 # [1] 55
-ev <- eigen(L);  ev$values[1];  v <- Re(ev$vectors[, 1]);  round(v / sum(v), 4)
+ev <- eigen(L)
+ev$values[1]
 # [1] 1.177359+0i
+v <- Re(ev$vectors[, 1]);  round(v / sum(v), 4)
 # [1] 0.6945 0.1770 0.0902 0.0383
 ```
 
-- Stop on the **residual** $\|A\mathbf x - \lambda\mathbf x\|$: it is zero exactly for an eigenpair, and it is cheap (we have $A\mathbf x$ already).
-- [`eigen`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html) agrees. It returns **complex** numbers (`+0i`) because a nonsymmetric matrix can have complex eigenvalues, and a unit-length eigenvector, here rescaled to proportions.
+- Long-term growth **17.7 % per year**; at equilibrium 69 % of the fish are age 0.
+- [`eigen`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html) agrees. It returns **complex** numbers (`+0i`) because a nonsymmetric matrix can have complex eigenvalues, and an eigenvector of length 1 with arbitrary sign: rescale before interpreting.
 
 ::: notes
-Ten lines, one matrix-vector product per step. The answer: lambda_1 = 1.177, the population grows 17.7 % per year in the long run; 69.5 % of the fish are age 0 at equilibrium. eigen() computes all four eigenvalues with a completely different algorithm (next unit) and agrees to all printed digits. Its eigenvector is scaled to length 1 and may come with a minus sign, so always rescale before interpreting (v / sum(v)). Re() drops the zero imaginary part. Why the residual and not the change between iterates: we will see a case where the change is tiny and the answer is still wrong.
+The answer: lambda_1 = 1.177, the population grows 17.7 % per year in the long run; 69.5 % of the fish are age 0 at equilibrium. eigen() computes all four eigenvalues with a completely different algorithm (next unit) and agrees to all printed digits. Its eigenvector is scaled to length 1 and may come with a minus sign, so always rescale before interpreting (v / sum(v)). Re() drops the zero imaginary part. 55 iterations: why that many is the next slide.
 :::
 
 ## How fast? $|\lambda_2 / \lambda_1|$ per step {.smaller}
@@ -187,7 +199,7 @@ Error against iteration on a log scale, as for every iterative method in the cou
 
 A salmon-like fish that spawns **once**, at age 3, and dies: first row $(0, 0, 0, 12)$.
 
-![](fig03-semelparous.svg){width="80%" fig-align="center"}
+![](fig03-semelparous.svg){width="62%" fig-align="center"}
 
 ```r
 Ls <- L;  Ls[1, ] <- c(0, 0, 0, 12)        # spawn once at age 3, then die

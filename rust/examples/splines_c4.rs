@@ -99,3 +99,8 @@ fn main() {
                  name, f(3.0), vmin, tt[imin], vmax);
     }
 }
+
+// Output:
+// natural   at_3h  -1.083  min  -1.100  t_min  3.06  max 41.725
+// monotone  at_3h   2.311  min   0.500  t_min  8.00  max 40.000
+// log2      at_3h   2.034  min   0.496  t_min 17.07  max 52.756

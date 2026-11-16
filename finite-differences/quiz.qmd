@@ -1,0 +1,143 @@
+---
+title: "Quiz: numerical differentiation"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of numerical differentiation. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** Why does the central difference $\dfrac{f(x+h) - f(x-h)}{2h}$ have error $O(h^2)$, while the forward difference has error $O(h)$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Write the Taylor series of $f(x+h)$ and $f(x-h)$ and subtract them. Which terms cancel?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+In $f(x+h) - f(x-h)$ all even-power terms cancel, including $\tfrac{h^2}{2}f''$. After dividing by $2h$ the first leftover term is $\tfrac{h^2}{6}f'''$. In the forward difference nothing cancels the $\tfrac{h^2}{2}f''$ term, which becomes $\tfrac{h}{2}f''$ after dividing by $h$. Symmetry buys one order.
+:::
+
+---
+
+**Q2.** You halve $h$ in a second-order formula, and the error goes from $4\times10^{-6}$ to $1\times10^{-6}$. You halve it again, and the error goes to $3\times10^{-6}$. What happened?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which kind of error grows when $h$ shrinks?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The first halving was in the truncation regime (error divided by $4 = 2^2$). The second step crossed the bottom of the V into the **rounding** regime, where the error grows like $\varepsilon/h$ and jumps around. The best step lies between the two. Use the larger step, or extrapolate (Richardson) instead of shrinking $h$.
+:::
+
+---
+
+**Q3.** Rule of thumb: the best step is about $\varepsilon^{1/2}$ for a forward difference, $\varepsilon^{1/3}$ for a central difference, $\varepsilon^{1/4}$ for the second difference $(1, -2, 1)/h^2$. Explain the pattern in one sentence. Roughly how many correct digits does each give?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Balance truncation $C h^p$ against rounding $\varepsilon / h^k$ for the $k$-th derivative.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Setting $h^p = \varepsilon/h^k$ gives $h^* = \varepsilon^{1/(p+k)}$: $p + k = 2, 3, 4$. The best error is $\varepsilon^{p/(p+k)}$: about $10^{-8}$ (8 digits), $10^{-11}$ (11 digits) and $10^{-8}$ (8 digits). A higher-order formula allows a larger step and keeps more digits; a higher derivative loses more.
+:::
+
+---
+
+**Q4.** A colleague computes the second derivative of a log-likelihood with `(f(x + h) - 2 * f(x) + f(x - h)) / h^2` and `h <- 1e-8`, "because that is the standard step". What will they get?
+
+::: {.callout-tip collapse="true" title="Hint"}
+How large is the rounding error of the numerator, and what do you divide it by?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Garbage. The numerator is a difference of three nearly equal numbers, with rounding error about $4\varepsilon|f| \approx 10^{-15}|f|$; dividing by $h^2 = 10^{-16}$ gives an error of order $10|f|$. In the lecture, the curvature of the OD curve came out as $-0.56$ instead of $+0.059$: wrong size **and** wrong sign. Use $h \approx \varepsilon^{1/4}\max(|x|, 1) \approx 10^{-4}\max(|x|,1)$, or `numDeriv::hessian`.
+:::
+
+---
+
+**Q5.** $D(0.1) = 1.0040$ and $D(0.05) = 1.0010$ are central-difference estimates of a derivative. Give a better estimate, and say what assumption it relies on.
+
+::: {.callout-tip collapse="true" title="Hint"}
+The central difference has error $c_2 h^2 + O(h^4)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Richardson: $\tfrac{4\cdot1.0010 - 1.0040}{3} = \tfrac{4.0040 - 1.0040}{3} = 1.0000$. It assumes the error really behaves like $c_2h^2$ at these steps: a smooth function, both steps in the truncation regime, no measurement noise. (Check: the error ratio should be about 4. Here $D(0.1) - 1 = 0.004$ and $D(0.05) - 1 = 0.001$: ratio 4.)
+:::
+
+---
+
+**Q6.** A plate reader measures OD every 10 minutes with noise sd 0.005. Your new reader measures every **1 minute** with the same noise. You compute the growth rate as the central difference of neighbouring points. Does the growth rate get more or less accurate, and by what factor?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The noise in $(y_{i+1} - y_{i-1})/(2\Delta t)$ has sd $\sigma/(\sqrt2\,\Delta t)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+**Less** accurate, by a factor of 10: the noise sd goes from $0.021$ to $0.21$ OD/h, about the size of the growth rate itself. Differentiation amplifies noise by $1/\Delta t$. The extra data only help if you use them to average: a wider stencil, a local fit over many points, or a smoothing spline.
+:::
+
+---
+
+**Q7.** Why does smoothing the data before differentiating help, and what does it cost? Name one check that tells you whether your smoothing is reasonable.
+
+::: {.callout-tip collapse="true" title="Hint"}
+Think of the V again: what plays the role of rounding, and what the role of truncation?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Smoothing averages many measurements, so the noise in the derivative falls (the "rounding" side of the V). The cost is bias (the "truncation" side): peaks become lower and wider, and the ends of the curve are less reliable. Check: compute the derivative with two different smoothing levels (stencil widths, spline `df`) and plot both; features that appear in both are real, features that move or vanish are noise. And look for impossible values, such as negative growth rates in mid-exponential phase.
+:::
+
+---
+
+**Q8.** You fit a model with 50 parameters by maximum likelihood; one evaluation of the log-likelihood takes 1 second. How long does one gradient take by forward differences, by central differences, and by reverse-mode automatic differentiation?
+
+::: {.callout-tip collapse="true" title="Hint"}
+One difference per parameter. Reverse mode costs a small multiple of one evaluation, whatever the number of parameters.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Forward: $51$ evaluations, about 51 s. Central: 100 s. Reverse-mode AD: a few evaluations' worth, roughly 2–4 s. With hundreds of optimiser iterations, this is the difference between minutes and hours, and why Stan, TMB, JAX and PyTorch use AD.
+:::
+
+---
+
+**Q9.** `optim(par, fn, method = "BFGS")` without a gradient returns. What is the cheapest check that it really stopped at a maximum (or minimum), and why might it not have?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What should the gradient be at an optimum, and how does `optim` compute it?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Evaluate an accurate gradient at the returned point, e.g. `numDeriv::grad(fn, fit$par)`, and check that it is small compared with the gradient at the start. `optim` uses central differences with a fixed **absolute** step `ndeps = 1e-3`; for parameters much smaller than 1 that step is a large fraction of the parameter, the gradient has a large truncation error, and BFGS stops at the wrong place. Fix: supply `gr`, or set `parscale` to the parameter sizes.
+:::
+
+---
+
+**Q10.** You wrote an analytic gradient for your model by hand. How do you test it, and what result tells you it has a bug?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Compare it with something that cannot have the same bug.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Compare it, component by component, with a central-difference gradient (or `numDeriv::grad`) at a few random parameter values. Correct code agrees to a relative difference of about $10^{-7}$ to $10^{-10}$. A component that differs by order 1 (e.g. 85 % in the exercise, where a factor $t$ was missing) points at the wrong partial derivative. Do not test only at the optimum, where both gradients are near zero.
+:::
+
+---
+
+**Q11.** What is the complex-step derivative $\operatorname{Im} f(x + ih)/h$, why can it use $h = 10^{-20}$, and when can you not use it?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Where did the rounding error of the forward difference come from?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Taylor: $f(x + ih) = f(x) + ihf'(x) - \tfrac{h^2}{2}f''(x) + \dots$, so the imaginary part divided by $h$ is $f'(x) + O(h^2)$. There is **no subtraction** of nearly equal numbers, so no cancellation, and a tiny $h$ makes the truncation error vanish: the result is exact to rounding. It only works if every operation in $f$ accepts complex numbers; `abs`, `max`, comparisons, and compiled solvers (like an ODE solver) break it.
+:::

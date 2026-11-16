@@ -1,0 +1,155 @@
+---
+title: "Quiz: splines"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+Short questions to test your understanding of splines and smoothing. Try each on paper first, then open the answer.
+
+---
+
+**Q1.** A time course has 25 time points. Why is a cubic spline through them usually better than the single polynomial of degree 24 through the same points?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What happens to a high-degree interpolating polynomial between the points, especially near the ends (*Polynomial interpolation*)? Which data points influence the spline at a given time?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+The degree-24 polynomial passes through every point but can oscillate wildly between them (the Runge phenomenon), especially near the ends and with uneven spacing; a peak at one time disturbs the curve everywhere. A spline is a separate cubic on each interval, joined smoothly, so its shape near $t$ is decided mainly by the data near $t$, and it does not oscillate the same way.
+:::
+
+---
+
+**Q2.** You halve the spacing $h$ between exact samples of a smooth curve. By roughly what factor does the maximum error fall for (a) piecewise linear interpolation, (b) a cubic spline with not-a-knot or clamped ends, (c) the slope of that spline, (d) a natural spline whose function has $f'' \ne 0$ at the ends?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The orders are 2, 4, 3 and 2. Halving $h$ divides an $O(h^p)$ error by $2^p$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+(a) 4 (order 2). (b) 16 (order 4). (c) 8 (order 3: one order is lost per derivative). (d) 4: the natural end condition $S'' = 0$ is wrong at the ends, and the $O(h^2)$ error there dominates, although the interior is still $O(h^4)$.
+:::
+
+---
+
+**Q3.** A cubic spline through $n$ points has $4(n-1)$ unknown coefficients. How many conditions do interpolation and continuity of $S'$ and $S''$ give, and where do the remaining ones come from?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Count per interval (interpolation) and per interior point (continuity).
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Interpolation: $2(n-1)$ (each cubic matches both its end values). Continuity of $S'$ and $S''$ at the $n - 2$ interior points: $2(n-2)$. Total $4n - 6$, two short. The two missing conditions are the **boundary conditions**, one at each end: natural ($S'' = 0$), clamped ($S'$ given) or not-a-knot ($S'''$ continuous at the second and second-to-last point).
+:::
+
+---
+
+**Q4.** To build a cubic spline through $10^6$ points, a program solves a linear system for the second derivatives $M_i$. What structure does the matrix have, how does the cost grow with $n$, and why does the solver not need pivoting?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Each equation links $M_{i-1}$, $M_i$ and $M_{i+1}$ with coefficients $h_{i-1}$, $2(h_{i-1} + h_i)$, $h_i$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Tridiagonal (and symmetric). The Thomas algorithm (*Structure: symmetric, banded, sparse*) solves it in $O(n)$, about $8n$ operations: milliseconds for $10^6$ points, against $O(n^3)$ for a dense solve. The matrix is strictly diagonally dominant, $2(h_{i-1} + h_i) > h_{i-1} + h_i$, for every spacing, so elimination without pivoting never meets a small pivot.
+:::
+
+---
+
+**Q5.** You and a colleague interpolate the same expression time course, you with `splinefun(t, y)` in R, she with `CubicSpline(t, y)` in Python. Your values agree in the middle of the time course but differ in the first and last interval. Who made a mistake?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Look up the default end condition of each function.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Nobody. R's default end condition is `"fmm"` (a cubic fitted through the 4 points at each end), Python's is not-a-knot. Different end conditions give different splines; the difference is largest in the end intervals and dies out by a factor of about 3.7 per interval towards the middle. To get identical results, choose the same end condition explicitly, e.g. `method = "natural"` and `bc_type="natural"`.
+:::
+
+---
+
+**Q6.** What does a **natural** spline assume about the data at the two ends? Give an example from the OD growth curve where a **clamped** spline is better, and one where clamping makes things worse.
+
+::: {.callout-tip collapse="true" title="Hint"}
+What is $S''$ at the ends of a natural spline? What is the true slope at the start and at the plateau of a logistic curve?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+A natural spline assumes zero curvature at the ends, $S''(x_1) = S''(x_n) = 0$. That is rarely exactly true, which makes the error near the ends $O(h^2)$. At the plateau of a growth curve the slope really is about 0, so clamping $S'(t_\text{end}) = 0$ is sensible. Clamping $S'(0) = 0$ at the start is wrong when the culture is already growing ($N'(0) = 0.038$ OD/h here): in the exercise this made the error near $t = 0$ five times larger than with natural ends. A clamp is only as good as the slope you put in.
+:::
+
+---
+
+**Q7.** A cubic spline through a gene's time course (40 TPM at 0.5 h, 6 TPM at 2 h, 1 TPM at 4 h, 0.5 TPM later) gives $-1.6$ TPM at 3 h. What went wrong, and what are two fixes?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does continuity of $S''$ force a curve to do after a steep drop that then has to flatten out?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Overshoot: after the steep fall, the spline cannot flatten out abruptly while keeping $S''$ continuous, so it swings below the data. Nothing in a spline keeps it positive. Fixes: (1) a **monotone** (shape-preserving) piecewise cubic, R `splinefun(method = "monoH.FC")`, Python `PchipInterpolator`, which stays between neighbouring data values but gives up continuity of $S''$; (2) interpolate $\log_2$ expression and transform back, which guarantees positive values but can overshoot the peak. Piecewise linear interpolation never overshoots. Always plot the interpolant on a fine grid.
+:::
+
+---
+
+**Q8.** A lab buys a plate reader that reads OD every 5 min instead of every 15 min, with the same noise (sd 0.01). They estimate the growth rate by central differences. Do the estimates get better or worse? And the slope of an interpolating spline?
+
+::: {.callout-tip collapse="true" title="Hint"}
+The noise of a central difference is $\sigma/(\sqrt2\,h)$.
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+Worse. The noise sd of the central difference grows from $0.01/(\sqrt2\cdot0.25) = 0.028$ to $0.01\cdot12/\sqrt2 = 0.085$ OD/h, a third of the maximum growth rate 0.24. The truncation error falls, but it was already small. The interpolating spline goes through every noisy read, so its slope gets worse in the same way. More data help only if you **smooth** (a smoothing spline uses all reads near $t$), not if you difference neighbouring reads. Same V-shaped trade-off as in *Convergence and cost*, with measurement noise in place of rounding error.
+:::
+
+---
+
+**Q9.** A smoothing spline minimises $\sum_i (y_i - f(t_i))^2 + \lambda\int f''(t)^2\,dt$. What is the fit for $\lambda = 0$ and for $\lambda\to\infty$, and what is its df in each case (with $n$ data points)? Why is df more useful to report than $\lambda$?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which curves have $\int f''^2 = 0$? What happens to $\lambda$ if you measure time in minutes instead of hours?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+$\lambda = 0$: the interpolating natural cubic spline, df $= n$. $\lambda\to\infty$: only curves with $f'' = 0$ are allowed, so the least-squares straight line, df $= 2$. df (the trace of the hat matrix) does not depend on the units of $t$ or $y$ or on the software, while $\lambda$ does: changing hours to minutes multiplies the right $\lambda$ by $60^3$, and R rescales $t$ to $[0, 1]$ while Python does not (Python's `lam` = R's `lambda` × (range of $t$)$^3$).
+:::
+
+---
+
+**Q10.** Why can you not choose $\lambda$ by making the residual sum of squares as small as possible? What do CV and GCV do instead?
+
+::: {.callout-tip collapse="true" title="Hint"}
+Which $\lambda$ gives RSS $= 0$?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+RSS is smallest (zero) at $\lambda = 0$, the spline that interpolates the noise. Leave-one-out CV measures how well the fit predicts each point **left out** of the fit, $\frac1n\sum_i\big((y_i - \hat y_i)/(1 - A_{ii})\big)^2$; GCV replaces each $A_{ii}$ by the average df$/n$, giving $n\,\text{RSS}/(n - \text{df})^2$. Both penalise a fit that follows individual points, and both are minimised at a $\lambda$ that balances bias against noise.
+:::
+
+---
+
+**Q11.** For one well's OD curve, `smooth.spline` reports df $= 27$ out of 41 reads, and the fitted growth rate wiggles. The lag-1 correlation of the residuals is $-0.6$. What is a likely cause, and what can you do?
+
+::: {.callout-tip collapse="true" title="Hint"}
+What does GCV assume about the measurement errors? Can it tell slow drift from signal?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+GCV assumes **independent** errors. If the reads drift (condensation, settling cells, temperature), neighbouring errors are correlated, GCV takes the drift for signal and undersmooths. The strongly negative residual correlation says the curve is chasing individual reads. Fix: choose df by hand (e.g. the df that GCV chooses on wells with independent noise, or one that gives consistent growth rates across replicate wells), and check that conclusions do not change for df ±30 %. A strongly **positive** lag-1 correlation would point the other way: runs of residuals of the same sign, a too-stiff fit (bias).
+:::
+
+---
+
+**Q12.** In which situation would you **not** use a smoothing spline for the growth rate of a culture, and what would you use instead?
+
+::: {.callout-tip collapse="true" title="Hint"}
+A smoothing spline assumes nothing about the shape of the curve. When do you know the shape?
+:::
+
+::: {.callout-note collapse="true" title="Answer"}
+When you trust a model for the curve, for example logistic growth. Then fitting the model directly by nonlinear least squares (*Nonlinear least squares and ODE fitting*, Part 9) uses that knowledge, gives the growth rate $r$ and capacity $K$ with uncertainties, and is less affected by noise. A smoothing spline is the model-free tool: use it when the curve may not follow the model (diauxic shifts, lag phases, death phases), or to check the model fit.
+:::

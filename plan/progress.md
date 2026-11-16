@@ -15,7 +15,7 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 | 10 | structured-sparse | done | done | done |
 | 11 | least-squares-qr | done | done | done |
 | 12 | svd | done | done | done |
-| 13 | power-iteration | running | | |
+| 13 | power-iteration | done | running | |
 | 14 | eigen-algorithms | running | | |
 | 15 | polynomial-interpolation | running | | |
 | 16 | splines | running | | |
@@ -39,3 +39,4 @@ Pipeline per unit: (A) content incl. R/Python/Rust → (B) demo + Explore + slid
 - svd: tool names EPIC, quanTIseq, MuSiC (slide) and CIBERSORT (notes) as constrained-LS deconvolution — from memory, verify. Only 4/27 slides screenshotted. scipy 1.15.2 nnls bug noted in C6 (may go stale). Install: nnls (R).
 - least-squares-qr demo: drag interaction untested headless.
 - structured-sparse: Thomas signature thomas(a,b,c,d) and morphogen-row example to be reused in Part 10. Rust sprs lacks sparse Cholesky/solve — dense/handwritten substitutes, stated.
+- power-iteration: Rayleigh quotient iteration included (slide + C7) — check overlap with eigen-algorithms in pass 2. Cell-state chain 'after Gupta et al. 2011' illustrative. Timing claim 17 s vs 0.3 s single run.

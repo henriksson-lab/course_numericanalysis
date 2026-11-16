@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-html/tabby.min.js"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/light-border.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-662ae1889177880cb371f83234c0a158.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
+  <meta name="generator" content="quarto-1.7.30">
+
+  <meta name="author" content="Numerical analysis for biologists">
+  <title>Numerical analysis for biologists – How eigen() works, and big problems</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reset.css">
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/reveal.css">
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+      }
+    pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+    div.sourceCode
+      { color: #24292e;  }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span { color: #24292e; } /* Normal */
+    code span.al { color: #ff5555; font-weight: bold; } /* Alert */
+    code span.an { color: #6a737d; } /* Annotation */
+    code span.at { color: #d73a49; } /* Attribute */
+    code span.bn { color: #005cc5; } /* BaseN */
+    code span.bu { color: #d73a49; } /* BuiltIn */
+    code span.cf { color: #d73a49; } /* ControlFlow */
+    code span.ch { color: #032f62; } /* Char */
+    code span.cn { color: #005cc5; } /* Constant */
+    code span.co { color: #6a737d; } /* Comment */
+    code span.cv { color: #6a737d; } /* CommentVar */
+    code span.do { color: #6a737d; } /* Documentation */
+    code span.dt { color: #d73a49; } /* DataType */
+    code span.dv { color: #005cc5; } /* DecVal */
+    code span.er { color: #ff5555; text-decoration: underline; } /* Error */
+    code span.ex { color: #d73a49; font-weight: bold; } /* Extension */
+    code span.fl { color: #005cc5; } /* Float */
+    code span.fu { color: #6f42c1; } /* Function */
+    code span.im { color: #032f62; } /* Import */
+    code span.in { color: #6a737d; } /* Information */
+    code span.kw { color: #d73a49; } /* Keyword */
+    code span.op { color: #24292e; } /* Operator */
+    code span.ot { color: #6f42c1; } /* Other */
+    code span.pp { color: #d73a49; } /* Preprocessor */
+    code span.re { color: #6a737d; } /* RegionMarker */
+    code span.sc { color: #005cc5; } /* SpecialChar */
+    code span.ss { color: #032f62; } /* SpecialString */
+    code span.st { color: #032f62; } /* String */
+    code span.va { color: #e36209; } /* Variable */
+    code span.vs { color: #032f62; } /* VerbatimString */
+    code span.wa { color: #ff5555; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../site_libs/revealjs/dist/theme/quarto-bf56578b9c06c165c166475cd19dbcd1.css">
+  <script>window.backupDefine = window.define; window.define = undefined;</script><script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css">
+  <link href="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
+  <link href="../site_libs/revealjs/plugin/quarto-support/footer.css" rel="stylesheet">
+  <style type="text/css">
+    .reveal div.sourceCode {
+      margin: 0;
+      overflow: auto;
+    }
+    .reveal div.hanging-indent {
+      margin-left: 1em;
+      text-indent: -1em;
+    }
+    .reveal .slide:not(.center) {
+      height: 100%;
+    }
+    .reveal .slide.scrollable {
+      overflow-y: auto;
+    }
+    .reveal .footnotes {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .reveal .slide .absolute {
+      position: absolute;
+      display: block;
+    }
+    .reveal .footnotes ol {
+      counter-reset: ol;
+      list-style-type: none; 
+      margin-left: 0;
+    }
+    .reveal .footnotes ol li:before {
+      counter-increment: ol;
+      content: counter(ol) ". "; 
+    }
+    .reveal .footnotes ol li > p:first-child {
+      display: inline-block;
+    }
+    .reveal .slide ul,
+    .reveal .slide ol {
+      margin-bottom: 0.5em;
+    }
+    .reveal .slide ul li,
+    .reveal .slide ol li {
+      margin-top: 0.4em;
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide ul[role="tablist"] li {
+      margin-bottom: 0;
+    }
+    .reveal .slide ul li > *:first-child,
+    .reveal .slide ol li > *:first-child {
+      margin-block-start: 0;
+    }
+    .reveal .slide ul li > *:last-child,
+    .reveal .slide ol li > *:last-child {
+      margin-block-end: 0;
+    }
+    .reveal .slide .columns:nth-child(3) {
+      margin-block-start: 0.8em;
+    }
+    .reveal blockquote {
+      box-shadow: none;
+    }
+    .reveal .tippy-content>* {
+      margin-top: 0.2em;
+      margin-bottom: 0.7em;
+    }
+    .reveal .tippy-content>*:last-child {
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide > img.stretch.quarto-figure-center,
+    .reveal .slide > img.r-stretch.quarto-figure-center {
+      display: block;
+      margin-left: auto;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-left,
+    .reveal .slide > img.r-stretch.quarto-figure-left  {
+      display: block;
+      margin-left: 0;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-right,
+    .reveal .slide > img.r-stretch.quarto-figure-right  {
+      display: block;
+      margin-left: auto;
+      margin-right: 0; 
+    }
+  </style>
+</head>
+<body class="quarto-light">
+  <div class="reveal">
+    <div class="slides">
+
+<section id="title-slide" class="quarto-title-block center">
+  <h1 class="title">How <code>eigen()</code> works, and big problems</h1>
+  <p class="subtitle">Part 5 — Eigenvalue problems</p>
+
+<div class="quarto-title-authors">
+<div class="quarto-title-author">
+<div class="quarto-title-author-name">
+Numerical analysis for biologists 
+</div>
+</div>
+</div>
+
+</section>
+<section id="about-this-lecture" class="slide level2 smaller">
+<h2>About this lecture</h2>
+<p>In <em>Power iteration and friends</em> we found <strong>one</strong> eigenvalue at a time by multiplying a vector by <span class="math inline">A</span> again and again. This lecture is about what <code>eigen()</code> does to get <strong>all</strong> of them, and what to do when the matrix is too big for that.</p>
+<ul>
+<li>The <strong>QR algorithm</strong>: factor <span class="math inline">A = QR</span>, multiply back as <span class="math inline">RQ</span>, repeat. It is power iteration on all vectors at once.</li>
+<li>Two tricks make it fast: <strong>Hessenberg reduction</strong> first, and <strong>shifts</strong>.</li>
+<li><strong>Symmetric</strong> matrices are easy: real eigenvalues that move very little under rounding. <strong>Nonsymmetric</strong> ones can have <strong>complex</strong> eigenvalues, and their eigenvalues can be very <strong>sensitive</strong>.</li>
+<li>For a large <strong>sparse</strong> matrix we want only a <strong>few</strong> eigenpairs: <strong>Krylov</strong> methods (<strong>Lanczos</strong>), as in <code>irlba</code>, <code>RSpectra</code> and <code>scipy.sparse.linalg.eigsh</code>.</li>
+<li>Biology: <strong>PCA of 20 000 cells × 2 000 genes</strong> without forming a dense or covariance matrix, and a <strong>transit-compartment</strong> model whose eigenvalues a perturbation of <span class="math inline">10^{-10}</span> moves by 0.1.</li>
+</ul>
+<aside class="notes">
+<p>This is the second of the two eigenvalue units. The previous one gave the building blocks: power iteration, the convergence rate |lambda2/lambda1|, Rayleigh quotients and shifts. Here those blocks are assembled into the algorithm every library uses for dense matrices, and then replaced by a different family (Krylov) when the matrix is large and sparse. The two biology examples carry the two halves: the transit chain shows that a nonsymmetric eigenvalue can be untrustworthy even when the algorithm did nothing wrong; the single-cell PCA shows why nobody computes all the eigenvalues of a big matrix.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="a-biology-problem-first" class="slide level2 smaller">
+<h2>A biology problem first</h2>
+<p>A single-cell RNA-seq experiment: 20 000 cells, 2 000 highly variable genes, log-transformed counts. Most entries are <strong>zero</strong>.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(Matrix)</span>
+<span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a><span class="fu">dim</span>(X)                                           <span class="co"># cells x genes (simulated)</span></span>
+<span id="cb1-3"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 20000  2000</span></span>
+<span id="cb1-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">nnzero</span>(X) <span class="sc">/</span> <span class="fu">length</span>(X)                            <span class="co"># fraction of non-zero entries</span></span>
+<span id="cb1-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.1296979</span></span>
+<span id="cb1-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">object.size</span>(X), <span class="at">units =</span> <span class="st">"MB"</span>)             <span class="co"># sparse storage</span></span>
+<span id="cb1-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] "59.4 Mb"</span></span>
+<span id="cb1-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">object.size</span>(<span class="fu">as.matrix</span>(X)), <span class="at">units =</span> <span class="st">"MB"</span>)  <span class="co"># the same matrix, dense</span></span>
+<span id="cb1-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] "305.2 Mb"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>PCA wants the top 10–50 eigenvectors of the gene–gene covariance matrix. The usual route <strong>centres</strong> <span class="math inline">X</span>: subtract each gene’s mean. That makes every entry non-zero: the matrix becomes <strong>dense</strong>.</li>
+<li><code>prcomp(as.matrix(X))</code> takes 22 s and 1.4 GB of extra memory here. The method at the end of this lecture takes 0.4 s and 11 MB.</li>
+<li>With 100 000 cells (a typical atlas) the dense matrix alone is 1.6 GB.</li>
+</ul>
+<aside class="notes">
+<p>The matrix is simulated (code in the exercise, C6): 10 cell types, a gamma-distributed mean expression per gene, a random fold change per type and gene, a log-normal library size per cell, Poisson counts, then log1p. About 13 % of entries are non-zero, which is typical after selecting variable genes (raw count matrices are often 5 % or less). Sparse storage (Matrix’s dgCMatrix, compressed sparse column) keeps only the non-zeros and their row indices, 12 bytes per entry; dense keeps 8 bytes for every entry. The timings were measured with single-threaded BLAS; your machine will give other numbers, but the ratio is what matters.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="recap-pca-in-one-slide" class="slide level2 smaller">
+<h2>Recap: PCA in one slide</h2>
+<div class="columns">
+<div class="column" style="width:52%;">
+<p><img data-src="fig01-pca-cells.svg" style="width:100.0%"></p>
+</div><div class="column" style="width:48%;">
+<ul>
+<li>Centre the columns: <span class="math inline">X_c = X - \mathbf 1\boldsymbol\mu^T</span> (cells × genes).</li>
+<li>The <strong>principal axes</strong> are the eigenvectors <span class="math inline">\mathbf v_i</span> of <span class="math inline">X_c^TX_c</span> (a 2000 × 2000 symmetric matrix); the variance along <span class="math inline">\mathbf v_i</span> is <span class="math inline">\lambda_i/(n-1)</span>.</li>
+<li>Equivalently, <span class="math inline">\mathbf v_i</span> are the right singular vectors of <span class="math inline">X_c</span>, <span class="math inline">\sigma_i = \sqrt{\lambda_i}</span>, and the <strong>scores</strong> are <span class="math inline">X_c\mathbf v_i</span>.</li>
+<li>We need <span class="math inline">\mathbf v_1, \dots, \mathbf v_{10}</span>, not all 2000.</li>
+</ul>
+</div></div>
+<p>How to choose the number of PCs, scaling and interpretation: the sister course. Here: how the numbers are <strong>computed</strong>.</p>
+<aside class="notes">
+<p>One slide only, because PCA is taught in the sister course and its link to the SVD is the aside at the end of The SVD, rank deficiency and regularisation. The point here is purely computational: PCA is an eigenvalue problem for a symmetric matrix, and we need only the top few eigenpairs. PC1 in this simulation is mostly library size (sequencing depth), as in real data before normalisation; PC2 separates two cell types. The scores come from irlba, the method at the end of the lecture.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="recap-power-iteration" class="slide level2 smaller">
+<h2>Recap: power iteration</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a aria-hidden="true" tabindex="-1"></a>A <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="dv">4</span>, <span class="dv">1</span>, <span class="dv">0</span>,</span>
+<span id="cb2-2"><a aria-hidden="true" tabindex="-1"></a>              <span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">1</span>,</span>
+<span id="cb2-3"><a aria-hidden="true" tabindex="-1"></a>              <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>), <span class="dv">3</span>)              <span class="co"># symmetric 3 x 3</span></span>
+<span id="cb2-4"><a aria-hidden="true" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">1</span>)</span>
+<span id="cb2-5"><a aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>) { x <span class="ot">&lt;-</span> A <span class="sc">%*%</span> x; x <span class="ot">&lt;-</span> x <span class="sc">/</span> <span class="fu">sqrt</span>(<span class="fu">sum</span>(x<span class="sc">^</span><span class="dv">2</span>)) }</span>
+<span id="cb2-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sum</span>(x <span class="sc">*</span> (A <span class="sc">%*%</span> x))                     <span class="co"># Rayleigh quotient</span></span>
+<span id="cb2-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 4.732051</span></span>
+<span id="cb2-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">eigen</span>(A)<span class="sc">$</span>values</span>
+<span id="cb2-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 4.732051 3.000000 1.267949</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Repeated multiplication by <span class="math inline">A</span> turns any start vector towards the eigenvector of the <strong>largest</strong> <span class="math inline">|\lambda|</span>; the error shrinks by <span class="math inline">|\lambda_2/\lambda_1|</span> per step (here <span class="math inline">3/4.73 = 0.63</span>).</li>
+<li>One eigenpair per run. For the next one we must remove the first (deflation), and errors pile up.</li>
+<li><code>eigen()</code> returns all three, accurate to the last digit, in microseconds. How?</li>
+</ul>
+<aside class="notes">
+<p>Recap from Power iteration and friends; do not re-teach. This matrix (eigenvalues 3 + sqrt 3, 3, 3 - sqrt 3) is our small test case throughout the lecture. The questions for the next slides: how to get all eigenvalues at once, and how to make the convergence much faster than 0.63 per step.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-qr-algorithm" class="slide level2 smaller">
+<h2>The QR algorithm</h2>
+<p>Factor, then multiply the factors back in the <strong>other order</strong>:</p>
+<p><span class="math display">A_0 = A, \qquad A_k = Q_kR_k, \qquad A_{k+1} = R_kQ_k.</span></p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>Ak <span class="ot">&lt;-</span> A</span>
+<span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>) {</span>
+<span id="cb3-3"><a aria-hidden="true" tabindex="-1"></a>  f  <span class="ot">&lt;-</span> <span class="fu">qr</span>(Ak)                     <span class="co"># Ak = Q R (Householder, as in lm)</span></span>
+<span id="cb3-4"><a aria-hidden="true" tabindex="-1"></a>  Ak <span class="ot">&lt;-</span> <span class="fu">qr.R</span>(f) <span class="sc">%*%</span> <span class="fu">qr.Q</span>(f)        <span class="co"># A_{k+1} = R Q</span></span>
+<span id="cb3-5"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(Ak, <span class="dv">6</span>)</span>
+<span id="cb3-7"><a aria-hidden="true" tabindex="-1"></a><span class="co">#          [,1]  [,2]     [,3]</span></span>
+<span id="cb3-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,] 4.732051 1e-06 0.000000</span></span>
+<span id="cb3-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,] 0.000001 3e+00 0.000000</span></span>
+<span id="cb3-10"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [3,] 0.000000 0e+00 1.267949</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><span class="math inline">R_kQ_k = Q_k^T(Q_kR_k)Q_k = Q_k^TA_kQ_k</span>: each step is a <strong>similarity</strong> transform, so the eigenvalues never change.</li>
+<li>The off-diagonal entries go to 0, and the <strong>eigenvalues appear on the diagonal</strong>.</li>
+</ul>
+<aside class="notes">
+<p>The algorithm is due to Francis and Kublanovskaya (1961) and is one of the top-ten algorithms of the 20th century. Every step costs one QR factorisation (we met Householder QR in Least squares: normal equations vs QR). Because Q is orthogonal, multiplying by Q^T on the left and Q on the right is a change of basis that keeps eigenvalues; it is also perfectly conditioned, so rounding errors are not magnified. After 30 steps the off-diagonals are 1e-6 and 1e-11: the diagonal is right to about 12 digits (for a symmetric matrix the error in the diagonal is the square of the off-diagonal).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="why-it-works-power-iteration-on-all-vectors-at-once" class="slide level2 smaller">
+<h2>Why it works: power iteration on all vectors at once</h2>
+<p>Accumulate the <span class="math inline">Q</span>s: <span class="math inline">\;\hat Q_k = Q_1Q_2\cdots Q_k</span>. Then <span class="math inline">A^k = \hat Q_k\hat R_k</span>: <span class="math inline">\hat Q_k</span> is the <span class="math inline">Q</span> of <span class="math inline">A^k</span>.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a aria-hidden="true" tabindex="-1"></a>Ak <span class="ot">&lt;-</span> A; Qk <span class="ot">&lt;-</span> <span class="fu">diag</span>(<span class="dv">3</span>)</span>
+<span id="cb4-2"><a aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>) {</span>
+<span id="cb4-3"><a aria-hidden="true" tabindex="-1"></a>  f <span class="ot">&lt;-</span> <span class="fu">qr</span>(Ak); Qk <span class="ot">&lt;-</span> Qk <span class="sc">%*%</span> <span class="fu">qr.Q</span>(f); Ak <span class="ot">&lt;-</span> <span class="fu">qr.R</span>(f) <span class="sc">%*%</span> <span class="fu">qr.Q</span>(f)</span>
+<span id="cb4-4"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb4-5"><a aria-hidden="true" tabindex="-1"></a>A5 <span class="ot">&lt;-</span> A <span class="sc">%*%</span> A <span class="sc">%*%</span> A <span class="sc">%*%</span> A <span class="sc">%*%</span> A</span>
+<span id="cb4-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(Qk <span class="sc">-</span> <span class="fu">qr.Q</span>(<span class="fu">qr</span>(A5))))             <span class="co"># same Q as A^5</span></span>
+<span id="cb4-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 5.551115e-16</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The columns of <span class="math inline">A^k</span> are power iteration started from <span class="math inline">\mathbf e_1, \mathbf e_2, \mathbf e_3</span>. QR <strong>orthonormalises</strong> them: column 1 → eigenvector 1, column 2 → the part orthogonal to it → eigenvector 2, …</li>
+<li>This is <strong>simultaneous (subspace) iteration</strong>. The QR algorithm does it without ever forming <span class="math inline">A^k</span> (which would overflow and lose all but the top direction).</li>
+</ul>
+<aside class="notes">
+<p>This is the key insight and the reason the previous unit came first. Column j of Q-hat converges to eigenvector j, at a rate set by the ratio of neighbouring eigenvalues. A_k = Q-hat^T A Q-hat is then A in the eigenvector basis: diagonal. Forming A^k explicitly is hopeless for large k: all columns line up with the top eigenvector to machine precision, and QR of that matrix cannot recover the others. The QR algorithm re-orthonormalises at every step, so the information is never lost. (Signs of Q columns can differ between implementations; here they happen to agree.)</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="how-fast" class="slide level2 smaller">
+<h2>How fast?</h2>
+
+<img data-src="fig02-qr-convergence.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:68.0%"><ul>
+<li>Entry <span class="math inline">a_{i+1,i}</span> shrinks like <span class="math inline">|\lambda_{i+1}/\lambda_i|^k</span>: the <strong>power-iteration rate</strong> for each pair of neighbours.</li>
+<li>Close eigenvalues → slow. <span class="math inline">\lambda_2/\lambda_1 = 0.99</span> needs about 3500 steps for 16 digits.</li>
+</ul>
+<aside class="notes">
+<p>The dashed lines are the predicted rates, the points the actual |a21| and |a32|. On a log axis both are straight lines: linear convergence, as for power iteration. A ratio of 0.63 needs about 80 steps for 1e-16, 0.42 about 40. For a matrix with clustered eigenvalues (a covariance matrix with many similar noise eigenvalues, for example) the unshifted algorithm would be useless. Two slides from now: shifts fix this.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="when-it-stalls" class="slide level2 smaller">
+<h2>When it stalls</h2>
+<p>A cell that switches deterministically between two states every generation: transition matrix with eigenvalues <span class="math inline">+1</span> and <span class="math inline">-1</span>.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a aria-hidden="true" tabindex="-1"></a>P <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>,</span>
+<span id="cb5-2"><a aria-hidden="true" tabindex="-1"></a>              <span class="dv">1</span>, <span class="dv">0</span>), <span class="dv">2</span>)</span>
+<span id="cb5-3"><a aria-hidden="true" tabindex="-1"></a>f <span class="ot">&lt;-</span> <span class="fu">qr</span>(P)</span>
+<span id="cb5-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">qr.Q</span>(f)</span>
+<span id="cb5-5"><a aria-hidden="true" tabindex="-1"></a><span class="co">#      [,1] [,2]</span></span>
+<span id="cb5-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,]    0   -1</span></span>
+<span id="cb5-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,]   -1    0</span></span>
+<span id="cb5-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">diag</span>(<span class="fu">qr.R</span>(f))                          <span class="co"># R = -I</span></span>
+<span id="cb5-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -1 -1</span></span>
+<span id="cb5-10"><a aria-hidden="true" tabindex="-1"></a><span class="fu">qr.R</span>(f) <span class="sc">%*%</span> <span class="fu">qr.Q</span>(f)                    <span class="co"># A_1 = A_0: nothing ever changes</span></span>
+<span id="cb5-11"><a aria-hidden="true" tabindex="-1"></a><span class="co">#      [,1] [,2]</span></span>
+<span id="cb5-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,]    0    1</span></span>
+<span id="cb5-13"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,]    1    0</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><span class="math inline">|\lambda_2/\lambda_1| = 1</span>: power iteration cannot separate the two, and neither can the QR algorithm. The matrix is already its own QR fixed point.</li>
+<li>The <strong>check</strong>: off-diagonal entries that do not shrink. The fix: a <strong>shift</strong>.</li>
+</ul>
+<aside class="notes">
+<p>The same failure as power iteration on a periodic Markov chain (Power iteration and friends): eigenvalues of equal size. Q = -P and R = -I, so RQ = P. In practice exact ties in magnitude are rare except for structure (periodic chains, matrices with symmetric spectra, complex pairs on the next slides), but near-ties are common, and they give the slow convergence of the previous slide. Shifting the matrix by mu changes the eigenvalues to 1 - mu and -1 - mu, which have different sizes for any mu other than 0.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="first-trick-hessenberg-form" class="slide level2 smaller">
+<h2>First trick: Hessenberg form</h2>
+
+<img data-src="fig04-structure.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:72.0%"><ul>
+<li>One QR step on a full <span class="math inline">n \times n</span> matrix costs <span class="math inline">O(n^3)</span>. First reduce <span class="math inline">A</span> by Householder reflections to <strong>Hessenberg</strong> form (zeros below the first subdiagonal): <span class="math inline">O(n^3)</span>, <strong>once</strong>.</li>
+<li>QR steps <strong>keep</strong> the Hessenberg form, and a step costs only <span class="math inline">O(n^2)</span> (one Givens rotation per subdiagonal entry).</li>
+<li>Symmetric <span class="math inline">A</span> → <strong>tridiagonal</strong>: a QR step costs <span class="math inline">O(n)</span>.</li>
+</ul>
+<aside class="notes">
+<p>One slide, as promised: the details are in Trefethen and Bau, lectures 26 and 28. The reduction applies the same Householder reflections from the left and from the right (H A H), so it is a similarity and keeps the eigenvalues; it cannot go all the way to triangular in a finite number of steps (that would solve a polynomial of degree n by a formula, which is impossible for n &gt;= 5), but it can reach Hessenberg. After that, every QR step only has to remove n - 1 subdiagonal entries. Remember the tridiagonal picture: Lanczos at the end of the lecture builds exactly such a matrix.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="second-trick-shifts-and-deflation" class="slide level2 smaller">
+<h2>Second trick: shifts and deflation</h2>
+
+<img data-src="fig03-shifts.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:62.0%"><ul>
+<li><strong>Shift</strong>: factor <span class="math inline">A_k - \mu I = QR</span>, then <span class="math inline">A_{k+1} = RQ + \mu I</span>. Still a similarity; the rate for the last entry becomes <span class="math inline">|\lambda_n - \mu| / |\lambda_{n-1} - \mu|</span>. With <span class="math inline">\mu = a_{nn}</span> (a Rayleigh quotient) that ratio goes to 0: digits triple per step.</li>
+<li><strong>Deflate</strong>: once <span class="math inline">|a_{n,n-1}| &lt; 10^{-12}</span>, <span class="math inline">a_{nn}</span> is an eigenvalue. Drop the last row and column and continue. Our 3 × 3: <strong>62</strong> steps unshifted, <strong>7</strong> shifted.</li>
+</ul>
+<aside class="notes">
+<p>This is shifted inverse iteration from Power iteration and friends, in disguise: the last column of the QR algorithm does inverse iteration with shift mu. With the Rayleigh-quotient shift mu = a_nn, a symmetric matrix converges cubically: here the last subdiagonal goes 7e-3, 1e-7, 6e-22. The plain Rayleigh shift can fail: for [[2,1],[1,2]] a_nn = 2 lies exactly between the eigenvalues 1 and 3 and the iteration stalls, as in the previous slide. LAPACK uses the Wilkinson shift (the eigenvalue of the trailing 2x2 block closer to a_nn), which always converges for symmetric matrices; the exercise (C2) tries both. For real nonsymmetric matrices LAPACK uses two shifts at once (the Francis double shift) so that complex shifts can be handled in real arithmetic.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="what-eigen-actually-does" class="slide level2 smaller">
+<h2>What <code>eigen()</code> actually does</h2>
+<p><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/eigen.html"><code>eigen()</code></a> calls LAPACK:</p>
+<ul>
+<li><strong>symmetric</strong> (<code>dsyevr</code>): reduce to tridiagonal, then a shifted QR-type method; about <span class="math inline">\tfrac{4}{3}n^3</span> flops for values, more for vectors.</li>
+<li><strong>nonsymmetric</strong> (<code>dgeev</code>): balance, reduce to Hessenberg, Francis double-shift QR, then eigenvectors; about <span class="math inline">10n^3</span> flops or more.</li>
+</ul>
+<table class="caption-top">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th><span class="math inline">n</span></th>
+<th>symmetric, values + vectors</th>
+<th>symmetric, values only</th>
+<th>nonsymmetric</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>500</td>
+<td>0.04 s</td>
+<td>0.01 s</td>
+<td>0.19 s</td>
+</tr>
+<tr class="even">
+<td>1 000</td>
+<td>0.23 s</td>
+<td>0.11 s</td>
+<td>1.05 s</td>
+</tr>
+<tr class="odd">
+<td>2 000</td>
+<td>1.78 s</td>
+<td>0.74 s</td>
+<td>5.79 s</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Doubling <span class="math inline">n</span>: about <strong>8×</strong> the time and 4× the memory. A 20 000 × 20 000 cell–cell matrix: about half an hour and 3.2 GB.</li>
+<li>Tell <code>eigen</code> what you know: <code>symmetric = TRUE</code>, <code>only.values = TRUE</code>.</li>
+</ul>
+<aside class="notes">
+<p>Timings from one desktop with single-threaded OpenBLAS; multithreaded BLAS is faster but scales the same way. Without symmetric = TRUE, eigen checks isSymmetric itself, which is fine for exact symmetry but a matrix that is symmetric only up to rounding (computed as t(X) %*% X in a different order, for example) is then treated as nonsymmetric: slower, and possibly with tiny imaginary parts. numpy has the same split: np.linalg.eigh / eigvalsh for symmetric, np.linalg.eig for general. The O(n^3) cost connects to Convergence and cost (Part 1): for n beyond a few thousand, dense eigen is no longer an option, which is the second half of this lecture.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="symmetric-vs-nonsymmetric" class="slide level2 smaller">
+<h2>Symmetric vs nonsymmetric</h2>
+<table class="caption-top">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>symmetric (<span class="math inline">A = A^T</span>)</th>
+<th>nonsymmetric</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>eigenvalues</td>
+<td>real</td>
+<td>real, or complex conjugate <strong>pairs</strong></td>
+</tr>
+<tr class="even">
+<td>eigenvectors</td>
+<td>orthogonal</td>
+<td>not orthogonal; may be missing (<strong>defective</strong>)</td>
+</tr>
+<tr class="odd">
+<td>QR algorithm ends at</td>
+<td>diagonal</td>
+<td>upper triangular with 2 × 2 blocks</td>
+</tr>
+<tr class="even">
+<td>effect of a perturbation of size <span class="math inline">\delta</span></td>
+<td>eigenvalues move at most <span class="math inline">\delta</span></td>
+<td>can move much more than <span class="math inline">\delta</span></td>
+</tr>
+<tr class="odd">
+<td>LAPACK / R / numpy</td>
+<td><code>dsyevr</code>, <code>eigen(symmetric = TRUE)</code>, <code>eigh</code></td>
+<td><code>dgeev</code>, <code>eigen</code>, <code>eig</code></td>
+</tr>
+<tr class="even">
+<td>in biology</td>
+<td>covariance, distance and kernel matrices, graph Laplacians</td>
+<td>Jacobians, Leslie matrices, Markov transition matrices, compartment models</td>
+</tr>
+</tbody>
+</table>
+<aside class="notes">
+<p>This table organises the rest of the dense part. Symmetric problems are the pleasant case in every row. Most matrices in dynamical biology (Jacobians of ODE models at a steady state, population projection matrices, transition matrices of Markov chains, compartment models in pharmacokinetics) are not symmetric, and each row of the right column causes a problem we look at next: complex eigenvalues, and sensitivity.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="complex-eigenvalues-oscillations" class="slide level2 smaller">
+<h2>Complex eigenvalues: oscillations</h2>
+<p>Predator–prey model linearised at its steady state (Jacobian <span class="math inline">J</span>):</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a aria-hidden="true" tabindex="-1"></a>J <span class="ot">&lt;-</span> <span class="fu">rbind</span>(<span class="fu">c</span>(<span class="sc">-</span><span class="fl">0.1</span>, <span class="sc">-</span><span class="dv">1</span>),        <span class="co"># prey: self-limitation, eaten by predators</span></span>
+<span id="cb6-2"><a aria-hidden="true" tabindex="-1"></a>           <span class="fu">c</span>( <span class="fl">0.5</span>,  <span class="dv">0</span>))        <span class="co"># predators: grow by eating prey</span></span>
+<span id="cb6-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">eigen</span>(J)<span class="sc">$</span>values</span>
+<span id="cb6-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -0.05+0.7053368i -0.05-0.7053368i</span></span>
+<span id="cb6-5"><a aria-hidden="true" tabindex="-1"></a><span class="dv">2</span> <span class="sc">*</span> pi <span class="sc">/</span> <span class="fu">Im</span>(<span class="fu">eigen</span>(J)<span class="sc">$</span>values[<span class="dv">1</span>])     <span class="co"># period of the oscillation</span></span>
+<span id="cb6-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 8.908064</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>A <strong>real</strong> matrix with <strong>complex</strong> eigenvalues <span class="math inline">-0.05 \pm 0.705i</span>: a damped oscillation. Real part &lt; 0: perturbations die out. Imaginary part: the frequency.</li>
+<li>This is not rounding noise: complex eigenvalues are the answer.</li>
+</ul>
+<aside class="notes">
+<p>The interpretation of Jacobian eigenvalues (stable node, spiral, centre, saddle) belongs to Equilibria, stability and the phase plane in Part 8; here it is enough that complex eigenvalues mean oscillation and their real part decides growth or decay. The period of the linearised oscillation is 2 pi / 0.705 = 8.9 time units, and the amplitude decays like exp(-0.05 t), a factor exp(-0.05 * 8.9) = 0.64 per cycle. Note: a symmetric matrix can never produce this, so a symmetric model of an interaction (A affects B as much as B affects A) cannot oscillate.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="real-arithmetic-cannot-split-a-complex-pair" class="slide level2 smaller">
+<h2>Real arithmetic cannot split a complex pair</h2>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a aria-hidden="true" tabindex="-1"></a>Jk <span class="ot">&lt;-</span> J</span>
+<span id="cb7-2"><a aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">50</span>) { f <span class="ot">&lt;-</span> <span class="fu">qr</span>(Jk); Jk <span class="ot">&lt;-</span> <span class="fu">qr.R</span>(f) <span class="sc">%*%</span> <span class="fu">qr.Q</span>(f) }</span>
+<span id="cb7-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(Jk, <span class="dv">4</span>)                         <span class="co"># after 50 steps: still a full 2 x 2 block</span></span>
+<span id="cb7-4"><a aria-hidden="true" tabindex="-1"></a><span class="co">#         [,1]    [,2]</span></span>
+<span id="cb7-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1,] -0.2314 -0.9291</span></span>
+<span id="cb7-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [2,]  0.5709  0.1314</span></span>
+<span id="cb7-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">eigen</span>(Jk)<span class="sc">$</span>values                     <span class="co"># ...but its eigenvalues are right</span></span>
+<span id="cb7-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] -0.05+0.7053368i -0.05-0.7053368i</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The two eigenvalues have the <strong>same modulus</strong>, so (as for <span class="math inline">P</span>) the QR iteration never makes <span class="math inline">a_{21}</span> small; the block keeps rotating.</li>
+<li>LAPACK stops at the <strong>real Schur form</strong>: upper triangular with 2 × 2 blocks on the diagonal, one per complex pair, and reads each pair off its block.</li>
+</ul>
+<aside class="notes">
+<p>Another case of |lambda1| = |lambda2|: complex conjugates always have equal modulus. Run 51 steps instead of 50 and the block looks completely different; it never settles. That is not a failure of the method: real orthogonal transformations can never produce a complex diagonal entry. The eigenvalues of a 2x2 block come from the quadratic formula (trace and determinant), which is what LAPACK does at the end. In the exercise (C3) students see this in all three languages.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="sensitivity-a-transit-compartment-model" class="slide level2 smaller">
+<h2>Sensitivity: a transit-compartment model</h2>
+<p>A drug passes through 10 <strong>transit compartments</strong> (rate 1 per hour) before it reaches the blood. A tiny <strong>recirculation</strong> from the last compartment back to the first:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a aria-hidden="true" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="dv">10</span></span>
+<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a>K <span class="ot">&lt;-</span> <span class="fu">diag</span>(<span class="sc">-</span><span class="dv">1</span>, n)</span>
+<span id="cb8-3"><a aria-hidden="true" tabindex="-1"></a>K[<span class="fu">cbind</span>(<span class="dv">2</span><span class="sc">:</span>n, <span class="dv">1</span><span class="sc">:</span>(n <span class="sc">-</span> <span class="dv">1</span>))] <span class="ot">&lt;-</span> <span class="dv">1</span>          <span class="co"># compartment i-1 feeds compartment i</span></span>
+<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">eigen</span>(K)<span class="sc">$</span>values</span>
+<span id="cb8-5"><a aria-hidden="true" tabindex="-1"></a><span class="co">#  [1] -1 -1 -1 -1 -1 -1 -1 -1 -1 -1</span></span>
+<span id="cb8-6"><a aria-hidden="true" tabindex="-1"></a>K[<span class="dv">1</span>, n] <span class="ot">&lt;-</span> <span class="fl">1e-10</span>                       <span class="co"># recirculation: a fraction of 1e-10</span></span>
+<span id="cb8-7"><a aria-hidden="true" tabindex="-1"></a>ev <span class="ot">&lt;-</span> <span class="fu">eigen</span>(K)<span class="sc">$</span>values</span>
+<span id="cb8-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">range</span>(<span class="fu">Mod</span>(ev <span class="sc">+</span> <span class="dv">1</span>))                     <span class="co"># distance of every eigenvalue from -1</span></span>
+<span id="cb8-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.1 0.1</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>A change of <span class="math inline">10^{-10}</span> in one entry moves <strong>every</strong> eigenvalue by <strong>0.1</strong>: a factor <span class="math inline">10^9</span>.</p>
+<aside class="notes">
+<p>Transit compartments are the standard way to model an absorption delay in pharmacokinetics (and maturation stages of cells, e.g.&nbsp;in models of neutrophil production after chemotherapy). The matrix is lower bidiagonal with -1 on the diagonal: all eigenvalues are -1, but there is only one eigenvector (the matrix is defective, a single Jordan block). The 1e-10 in the top-right corner could be enterohepatic recirculation, a modelling choice, or just a rounding error in an entry. Ask the audience to guess how far the eigenvalues move before revealing the output.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="why-so-sensitive" class="slide level2 smaller">
+<h2>Why so sensitive?</h2>
+<div class="columns">
+<div class="column" style="width:50%;">
+<p><img data-src="fig05-sensitivity.svg" style="width:100.0%"></p>
+</div><div class="column" style="width:50%;">
+<ul>
+<li>The characteristic polynomial is <span class="math inline">(\lambda + 1)^{10} - \varepsilon = 0</span>, so <span class="math inline">|\lambda + 1| = \varepsilon^{1/10}</span>: the 10 eigenvalues sit on a <strong>circle</strong> of radius <span class="math inline">\varepsilon^{1/10}</span>.</li>
+<li><span class="math inline">\varepsilon = 10^{-10}</span> → 0.1. Even <strong>rounding</strong>, <span class="math inline">\varepsilon \approx 10^{-16}</span>, gives 0.025.</li>
+<li>With <span class="math inline">n</span> compartments the change is <span class="math inline">\varepsilon^{1/n}</span>: the longer the chain, the worse.</li>
+<li>A <strong>symmetric</strong> matrix with the same perturbation: eigenvalues move by at most <span class="math inline">10^{-10}</span>.</li>
+</ul>
+</div></div>
+<aside class="notes">
+<p>The general statement: for a symmetric matrix, a perturbation E moves each eigenvalue by at most ||E|| (Weyl). For a diagonalisable nonsymmetric matrix A = V D V^-1, by at most kappa(V) ||E|| (Bauer-Fike), where kappa(V) is the condition number of the eigenvector matrix (Pivoting, norms and conditioning). For a defective matrix kappa(V) is infinite and the change goes like the n-th root of epsilon, as here. Biologically: the dynamics (decay of the drug pulse over hours) are perfectly well determined; only the individual eigenvalues are ill-conditioned. Questions like “is the slowest decay rate 0.9 or 1.0” are not answerable from such a matrix. The matrix exponential and the simulated time course are a much better-conditioned description.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-check-is-this-eigenvalue-trustworthy" class="slide level2 smaller">
+<h2>The check: is this eigenvalue trustworthy?</h2>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">kappa</span>(<span class="fu">eigen</span>(K)<span class="sc">$</span>vectors)                   <span class="co"># condition number of the eigenvectors</span></span>
+<span id="cb9-2"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 1184131481</span></span>
+<span id="cb9-3"><a aria-hidden="true" tabindex="-1"></a>S <span class="ot">&lt;-</span> A; S[<span class="dv">1</span>, <span class="dv">3</span>] <span class="ot">&lt;-</span> S[<span class="dv">3</span>, <span class="dv">1</span>] <span class="ot">&lt;-</span> <span class="fl">1e-10</span>       <span class="co"># symmetric A, same perturbation</span></span>
+<span id="cb9-4"><a aria-hidden="true" tabindex="-1"></a><span class="fu">eigen</span>(S)<span class="sc">$</span>values <span class="sc">-</span> <span class="fu">eigen</span>(A)<span class="sc">$</span>values</span>
+<span id="cb9-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  3.333334e-11 -6.666623e-11  3.333334e-11</span></span>
+<span id="cb9-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
+<span id="cb9-7"><a aria-hidden="true" tabindex="-1"></a>Kp <span class="ot">&lt;-</span> K <span class="sc">+</span> <span class="fl">1e-12</span> <span class="sc">*</span> <span class="fu">matrix</span>(<span class="fu">rnorm</span>(n<span class="sc">^</span><span class="dv">2</span>), n)   <span class="co"># perturb at 1e-12 and recompute</span></span>
+<span id="cb9-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">range</span>(<span class="fu">Mod</span>(<span class="fu">eigen</span>(Kp)<span class="sc">$</span>values <span class="sc">+</span> <span class="dv">1</span>))          <span class="co"># was exactly 0.1 for all ten</span></span>
+<span id="cb9-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 0.09994035 0.09995391</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><code>kappa(V)</code> near 1: eigenvalues are as accurate as the matrix. <code>kappa(V)</code> of <span class="math inline">10^9</span>: up to 9 digits lost.</li>
+<li><strong>Perturb and recompute</strong>: change the entries at the level of their uncertainty and see how far the eigenvalues move. Here <span class="math inline">10^{-12}</span> in, <span class="math inline">5\times10^{-5}</span> out.</li>
+</ul>
+<aside class="notes">
+<p>Two checks a student can always run. kappa of the eigenvector matrix is cheap for small matrices and directly bounds the amplification (Bauer-Fike). The perturbation test works for anything, including when only eigenvalues are available (as in Rust’s nalgebra, which has no nonsymmetric eigenvectors). Perturb at the level of the real uncertainty of the entries: for measured rate constants that is a few per cent, not 1e-12. For a symmetric matrix both checks always pass, which is one more reason to use a symmetric formulation when the problem allows it.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="big-problems-keep-every-power-iteration-vector" class="slide level2 smaller">
+<h2>Big problems: keep every power-iteration vector</h2>
+<p>For the single-cell matrix: dense <span class="math inline">X_c</span> is 20 000 × 2 000 and we want 10 eigenpairs of <span class="math inline">C = X_c^TX_c</span> (2 000 × 2 000).</p>
+<ul>
+<li>Power iteration keeps only the <strong>last</strong> vector <span class="math inline">A^{m-1}\mathbf q</span> and throws away <span class="math inline">\mathbf q, A\mathbf q, \dots</span></li>
+<li>A <strong>Krylov subspace</strong> keeps them all: <span class="math inline">\mathcal K_m = \text{span}\{\mathbf q, A\mathbf q, A^2\mathbf q, \dots, A^{m-1}\mathbf q\}</span>.</li>
+<li>Find the best approximations to eigenvectors <strong>inside</strong> <span class="math inline">\mathcal K_m</span>: with an orthonormal basis <span class="math inline">Q_m</span>, take the eigenpairs of the small <span class="math inline">m \times m</span> matrix <span class="math inline">T_m = Q_m^TAQ_m</span> (<strong>Ritz values</strong>).</li>
+<li>The method only ever needs <strong><span class="math inline">A</span> times a vector</strong>. <span class="math inline">C\mathbf v = X_c^T(X_c\mathbf v)</span>, and <span class="math inline">X_c\mathbf v = X\mathbf v - \mathbf 1(\boldsymbol\mu^T\mathbf v)</span>: sparse <span class="math inline">X</span>, never centred, never formed.</li>
+<li>Cost per step: two sparse products, <span class="math inline">4 \times \text{nnz}(X) \approx 2\times10^7</span> flops. <span class="math inline">m = 30</span> steps instead of <span class="math inline">10^{10}</span> flops for dense <code>eigen</code>.</li>
+</ul>
+<aside class="notes">
+<p>This is the idea behind every large-scale eigensolver (and behind CG and GMRES for linear systems, Iterative linear solvers in depth in Part 11). The Krylov subspace after m steps contains the power-iteration vector, so the Ritz value is never worse than power iteration, and usually far better because it can combine the vectors. Matrix-free: the function that computes C v is all the method sees. That is what lets us centre implicitly; centring X explicitly would make it dense and cost 320 MB. With 100 000 cells, the cost per step grows linearly in the number of non-zeros, while dense methods grow like n^2 in memory.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="lanczos-a-three-term-recurrence" class="slide level2 smaller">
+<h2>Lanczos: a three-term recurrence</h2>
+<p>For symmetric <span class="math inline">A</span>, the orthonormal Krylov basis obeys <span class="math inline">\beta_j\mathbf q_{j+1} = A\mathbf q_j - \alpha_j\mathbf q_j - \beta_{j-1}\mathbf q_{j-1}</span>, and <span class="math inline">T_m</span> is <strong>tridiagonal</strong>:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a aria-hidden="true" tabindex="-1"></a>lanczos <span class="ot">&lt;-</span> <span class="cf">function</span>(Afun, n, m) {           <span class="co"># Afun(v) returns A %*% v</span></span>
+<span id="cb10-2"><a aria-hidden="true" tabindex="-1"></a>  Q <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="dv">0</span>, n, m); a <span class="ot">&lt;-</span> b <span class="ot">&lt;-</span> <span class="fu">numeric</span>(m)</span>
+<span id="cb10-3"><a aria-hidden="true" tabindex="-1"></a>  q <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="dv">1</span>, n) <span class="sc">/</span> <span class="fu">sqrt</span>(n); q_old <span class="ot">&lt;-</span> <span class="dv">0</span>; bj <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb10-4"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (j <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>m) {</span>
+<span id="cb10-5"><a aria-hidden="true" tabindex="-1"></a>    Q[, j] <span class="ot">&lt;-</span> q</span>
+<span id="cb10-6"><a aria-hidden="true" tabindex="-1"></a>    w <span class="ot">&lt;-</span> <span class="fu">Afun</span>(q) <span class="sc">-</span> bj <span class="sc">*</span> q_old                 <span class="co"># three-term recurrence</span></span>
+<span id="cb10-7"><a aria-hidden="true" tabindex="-1"></a>    a[j] <span class="ot">&lt;-</span> <span class="fu">sum</span>(w <span class="sc">*</span> q); w <span class="ot">&lt;-</span> w <span class="sc">-</span> a[j] <span class="sc">*</span> q</span>
+<span id="cb10-8"><a aria-hidden="true" tabindex="-1"></a>    bj <span class="ot">&lt;-</span> <span class="fu">sqrt</span>(<span class="fu">sum</span>(w<span class="sc">^</span><span class="dv">2</span>)); b[j] <span class="ot">&lt;-</span> bj</span>
+<span id="cb10-9"><a aria-hidden="true" tabindex="-1"></a>    q_old <span class="ot">&lt;-</span> q; q <span class="ot">&lt;-</span> w <span class="sc">/</span> bj</span>
+<span id="cb10-10"><a aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb10-11"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">alpha =</span> a, <span class="at">beta =</span> b[<span class="sc">-</span>m], <span class="at">Q =</span> Q)        <span class="co"># T = tridiag(beta, alpha, beta)</span></span>
+<span id="cb10-12"><a aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>Each step: <strong>one</strong> product with <span class="math inline">A</span>, and orthogonalisation against only the <strong>two</strong> previous vectors.</li>
+<li><code>ritz(L, m)</code> (exercise C5) = <code>eigen()</code> of the <span class="math inline">m \times m</span> tridiagonal <span class="math inline">T_m</span>.</li>
+</ul>
+<aside class="notes">
+<p>Lanczos (1950). The three-term recurrence is a consequence of symmetry: A q_j is automatically orthogonal to all q_i with i &lt; j - 1 in exact arithmetic. So the work per step is one matrix-vector product plus O(n), and the m x m matrix T is tridiagonal, the same shape as after the Hessenberg reduction for symmetric matrices. In fact, run to m = n, Lanczos is a tridiagonal reduction. For a nonsymmetric matrix the analogue is the Arnoldi method (full orthogonalisation, Hessenberg T), which is what ARPACK and RSpectra::eigs use for general matrices.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="ritz-values-converge-from-the-outside-in" class="slide level2 smaller">
+<h2>Ritz values converge from the outside in</h2>
+<p>A test spectrum like a PCA: 3 strong eigenvalues (10, 9, 8) above a bulk of 197 between 0 and 5.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a aria-hidden="true" tabindex="-1"></a>spec <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">10</span>, <span class="dv">9</span>, <span class="dv">8</span>, <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">5</span>, <span class="at">length.out =</span> <span class="dv">197</span>))</span>
+<span id="cb11-2"><a aria-hidden="true" tabindex="-1"></a>L <span class="ot">&lt;-</span> <span class="fu">lanczos</span>(<span class="cf">function</span>(v) spec <span class="sc">*</span> v, <span class="dv">200</span>, <span class="dv">60</span>)    <span class="co"># A = diag(spec), never stored</span></span>
+<span id="cb11-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">ritz</span>(L, <span class="dv">5</span>)[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>]</span>
+<span id="cb11-4"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 9.756289 7.024457 4.037090 1.931158</span></span>
+<span id="cb11-5"><a aria-hidden="true" tabindex="-1"></a><span class="fu">ritz</span>(L, <span class="dv">10</span>)[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>]</span>
+<span id="cb11-6"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 9.999992 8.999718 7.998994 4.814935</span></span>
+<span id="cb11-7"><a aria-hidden="true" tabindex="-1"></a><span class="fu">ritz</span>(L, <span class="dv">20</span>)[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>]</span>
+<span id="cb11-8"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 10.000000  9.000000  8.000000  4.982533</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li>The <strong>extreme</strong>, <strong>well-separated</strong> eigenvalues converge first: 6 digits of all three after 10–20 products. The bulk converges slowly.</li>
+<li>That is exactly the PCA situation: a few large, separated eigenvalues above a noise bulk.</li>
+</ul>
+<aside class="notes">
+<p>The test matrix is diagonal, so we know the answer; Lanczos does not know it is diagonal, it only sees products. After 5 steps the largest Ritz value is already 9.76; after 10 steps it is right to 6 digits. The rate depends on the gap between the wanted eigenvalue and the rest of the spectrum, relative to the spread of the spectrum (Kaniel-Paige theory, which uses Chebyshev polynomials): a much better rate than power iteration’s lambda2/lambda1. Eigenvalues inside the bulk would need many more steps. Shift-and-invert (Power iteration and friends) turns interior eigenvalues into extreme ones, at the price of a sparse solve per step.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="failure-loss-of-orthogonality" class="slide level2 smaller">
+<h2>Failure: loss of orthogonality</h2>
+
+<img data-src="fig06-lanczos.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:80.0%"><ul>
+<li>In floating point the <span class="math inline">\mathbf q_j</span> slowly lose orthogonality (<span class="math inline">Q^TQ - I</span> reaches 0.68 after 60 steps). Converged eigenvalues reappear as <strong>ghost</strong> copies: the plain run reports 10, 10, 10, 9, 9, 8, 8.</li>
+<li>Fixes: <strong>reorthogonalise</strong> against all previous <span class="math inline">\mathbf q_i</span> (cost <span class="math inline">O(nm)</span> per step), and <strong>restart</strong> after a fixed number of steps to keep <span class="math inline">m</span> small. <strong>Check</strong>: a duplicate eigenvalue that the problem has no reason to have.</li>
+</ul>
+<aside class="notes">
+<p>Paige showed in the 1970s that the loss of orthogonality is not random: it happens exactly when a Ritz value converges. The ghost copies are converged to full accuracy, so a naive user sees 10 reported three times and concludes the eigenvalue is triple. Full reorthogonalisation (one extra line: w &lt;- w - Q %*% crossprod(Q, w)) removes the problem; the exercise does both. Production codes use selective or partial reorthogonalisation and implicit restarts: ARPACK (implicitly restarted Lanczos/Arnoldi, used by RSpectra and scipy’s eigsh) and irlba (augmented implicitly restarted Lanczos bidiagonalisation, which works on X directly instead of X^T X, for the reason in The SVD, rank deficiency and regularisation).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="the-library-calls" class="slide level2 smaller">
+<h2>The library calls</h2>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(RSpectra)</span>
+<span id="cb12-2"><a aria-hidden="true" tabindex="-1"></a>mu <span class="ot">&lt;-</span> <span class="fu">colMeans</span>(X)</span>
+<span id="cb12-3"><a aria-hidden="true" tabindex="-1"></a>Cv <span class="ot">&lt;-</span> <span class="cf">function</span>(v, args) {                     <span class="co"># Xc^T Xc v, X stays sparse</span></span>
+<span id="cb12-4"><a aria-hidden="true" tabindex="-1"></a>  w <span class="ot">&lt;-</span> <span class="fu">as.vector</span>(X <span class="sc">%*%</span> v) <span class="sc">-</span> <span class="fu">sum</span>(mu <span class="sc">*</span> v)        <span class="co"># Xc v  = X v  - 1 (mu . v)</span></span>
+<span id="cb12-5"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">as.vector</span>(<span class="fu">crossprod</span>(X, w)) <span class="sc">-</span> mu <span class="sc">*</span> <span class="fu">sum</span>(w)     <span class="co"># Xc^T w = X^T w - mu (1 . w)</span></span>
+<span id="cb12-6"><a aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-7"><a aria-hidden="true" tabindex="-1"></a>e <span class="ot">&lt;-</span> <span class="fu">eigs_sym</span>(Cv, <span class="at">k =</span> <span class="dv">10</span>, <span class="at">n =</span> <span class="fu">ncol</span>(X))          <span class="co"># top 10 eigenpairs, 27 products</span></span>
+<span id="cb12-8"><a aria-hidden="true" tabindex="-1"></a><span class="fu">sqrt</span>(e<span class="sc">$</span>values[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>])</span>
+<span id="cb12-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 335.2194 294.3642 275.4889 268.5457</span></span>
+<span id="cb12-10"><a aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(irlba)</span>
+<span id="cb12-11"><a aria-hidden="true" tabindex="-1"></a><span class="fu">irlba</span>(X, <span class="at">nv =</span> <span class="dv">10</span>, <span class="at">center =</span> mu)<span class="sc">$</span>d[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>]           <span class="co"># top 10 singular triplets of Xc</span></span>
+<span id="cb12-12"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 335.2194 294.3642 275.4889 268.5457</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><a href="https://cran.r-project.org/package=RSpectra"><code>RSpectra::eigs_sym</code></a> takes a matrix or a <strong>function</strong> (matrix-free); <code>svds</code> does the SVD. <a href="https://cran.r-project.org/package=irlba"><code>irlba</code></a> works on <span class="math inline">X</span> and centres implicitly.</li>
+<li>Python: <code>scipy.sparse.linalg.eigsh</code> and <code>svds</code>, with a <code>LinearOperator</code> for the centred matrix.</li>
+</ul>
+<aside class="notes">
+<p>Both give the same singular values as the dense SVD to all printed digits. eigs_sym needed 27 products with C (each two sparse products with X); irlba needed 84 products with X or X^T. sqrt of the eigenvalues of Xc^T Xc are the singular values of Xc, which is what irlba returns; divide the eigenvalues by n - 1 for variances. irlba also has prcomp_irlba, a drop-in for prcomp. Seurat’s RunPCA and scanpy’s pca call exactly these (irlba in R, ARPACK via scipy svds in Python).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="back-to-the-cells-time-and-memory" class="slide level2 smaller">
+<h2>Back to the cells: time and memory</h2>
+
+<img data-src="fig07-pca-cost.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:90.0%"><ul>
+<li>Same top 10 singular values (to 15 digits) from every route.</li>
+<li>The dense routes need the <strong>centred dense</strong> matrix (305 MB) and its copies: about 1.1–1.4 GB extra. The truncated ones need <span class="math inline">X</span> plus a few dozen vectors.</li>
+<li><code>eigen</code> of the 2000 × 2000 covariance is not bad here, because there are only 2000 genes. With all 20 000 genes it would be 1000× slower.</li>
+</ul>
+<aside class="notes">
+<p>Measured on one machine with single-threaded BLAS (with 40 threads, prcomp drops to about 8 s, irlba stays near 0.5 s: the truncated methods spend their time in sparse products, which do not use BLAS threads). Peak memory is the process maximum minus the 230 MB for R and the data. The covariance route has a second problem: it squares the condition number (Least squares: normal equations vs QR, The SVD unit). For the top PCs this does not matter; for small singular values it does. The scaling argument is the important one: dense methods cost O(n p^2) time and O(n p) memory whatever the sparsity; Lanczos costs O(nnz) per step and O((n + p) m) memory.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="checks-for-truncated-eigensolvers" class="slide level2 smaller">
+<h2>Checks for truncated eigensolvers</h2>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
+<span id="cb13-2"><a aria-hidden="true" tabindex="-1"></a>r <span class="ot">&lt;-</span> <span class="fu">irlba</span>(X, <span class="at">nv =</span> <span class="dv">10</span>, <span class="at">center =</span> mu)</span>
+<span id="cb13-3"><a aria-hidden="true" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">sapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">10</span>, <span class="cf">function</span>(i)                  <span class="co"># residual ||C v - sigma^2 v|| / sigma^2</span></span>
+<span id="cb13-4"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">sqrt</span>(<span class="fu">sum</span>((<span class="fu">Cv</span>(r<span class="sc">$</span>v[, i]) <span class="sc">-</span> r<span class="sc">$</span>d[i]<span class="sc">^</span><span class="dv">2</span> <span class="sc">*</span> r<span class="sc">$</span>v[, i])<span class="sc">^</span><span class="dv">2</span>)) <span class="sc">/</span> r<span class="sc">$</span>d[i]<span class="sc">^</span><span class="dv">2</span>))</span>
+<span id="cb13-5"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1] 9.557529e-15</span></span>
+<span id="cb13-6"><a aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(r<span class="sc">$</span>mprod, <span class="fu">irlba</span>(X, <span class="at">nv =</span> <span class="dv">20</span>, <span class="at">center =</span> mu)<span class="sc">$</span>mprod)   <span class="co"># products with X or X^T</span></span>
+<span id="cb13-7"><a aria-hidden="true" tabindex="-1"></a><span class="co"># [1]  84 336                                 # PCs 11-20 are in the noise bulk</span></span>
+<span id="cb13-8"><a aria-hidden="true" tabindex="-1"></a>r3 <span class="ot">&lt;-</span> <span class="fu">irlba</span>(X, <span class="at">nv =</span> <span class="dv">10</span>, <span class="at">center =</span> mu, <span class="at">maxit =</span> <span class="dv">3</span>, <span class="at">work =</span> <span class="dv">12</span>)</span>
+<span id="cb13-9"><a aria-hidden="true" tabindex="-1"></a><span class="co"># Warning message: ... did not converge--results might be invalid!; try increasing maxit or work</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<ul>
+<li><strong>Residual</strong> <span class="math inline">\|C\mathbf v - \lambda\mathbf v\|/\lambda</span>: small means a true eigenpair (of something very close to <span class="math inline">C</span>).</li>
+<li>Asking for eigenvalues <strong>inside a cluster</strong> costs many more products, and they are poorly determined anyway.</li>
+<li>Read the <strong>warnings</strong> and convergence flags (<code>irlba</code>, <code>eigs_sym$nconv</code>, <code>eigsh</code> raises <code>ArpackNoConvergence</code>).</li>
+</ul>
+<aside class="notes">
+<p>The residual check costs one matrix-vector product per eigenpair and is the single most useful check: if it is small, (lambda, v) is an exact eigenpair of a matrix within that distance of C (backward error, Error, conditioning and stability). The second line shows a real effect: the singular values after the tenth are 72.44, 72.41, 72.05, …, a tight cluster from the noise, and resolving them costs four times as many products. They also carry no biology. irlba starts from a random vector, so mprod varies slightly between runs (set.seed for reproducibility). The warning on the last line is easy to miss in a long pipeline.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="checklist-eigenvalues-you-can-trust" class="slide level2 smaller">
+<h2>Checklist: eigenvalues you can trust</h2>
+<ul>
+<li><strong>Symmetric?</strong> Say so: <code>eigen(symmetric = TRUE)</code>, <code>eigh</code>. Faster, real, orthogonal, well-conditioned.</li>
+<li><strong>Complex eigenvalues</strong> from a real matrix → oscillation, not an error. Do not drop the imaginary part.</li>
+<li><strong>Nonsymmetric</strong> → check <code>kappa(eigen(A)$vectors)</code>, or perturb the entries at the level of their uncertainty and recompute.</li>
+<li><strong>Repeated eigenvalues</strong> in a nonsymmetric model (chains, cascades) → expect sensitivity like <span class="math inline">\varepsilon^{1/n}</span>.</li>
+<li><strong>Large and sparse</strong>, only a few eigenpairs needed → <code>RSpectra::eigs_sym</code>, <code>irlba</code> / <code>eigsh</code>, <code>svds</code>. Never densify, never centre explicitly.</li>
+<li><strong>Truncated solver</strong> → check residuals, convergence warnings, and duplicate eigenvalues (ghosts).</li>
+<li><strong>Many wanted eigenvalues in a cluster</strong> → slow and poorly determined; ask whether you need them.</li>
+</ul>
+<aside class="notes">
+<p>A summary of the failure modes and the check for each. The order follows the lecture: dense symmetric, dense nonsymmetric, large sparse.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="summary" class="slide level2 smaller">
+<h2>Summary</h2>
+<ul>
+<li>The <strong>QR algorithm</strong> (<span class="math inline">A_k = Q_kR_k</span>, <span class="math inline">A_{k+1} = R_kQ_k</span>) is simultaneous power iteration with re-orthonormalisation. Subdiagonals shrink like <span class="math inline">|\lambda_{i+1}/\lambda_i|^k</span>; equal moduli stall it.</li>
+<li><strong>Hessenberg</strong> (tridiagonal if symmetric) reduction makes a step <span class="math inline">O(n^2)</span> (<span class="math inline">O(n)</span>); <strong>shifts</strong> make convergence quadratic or cubic; <strong>deflation</strong> removes found eigenvalues. Dense <code>eigen()</code> costs <span class="math inline">O(n^3)</span>.</li>
+<li><strong>Symmetric</strong>: real eigenvalues, perturbations of size <span class="math inline">\delta</span> move them at most <span class="math inline">\delta</span>. <strong>Nonsymmetric</strong>: complex pairs (oscillations, 2 × 2 blocks), and eigenvalues that can move like <span class="math inline">\kappa(V)\,\delta</span> or <span class="math inline">\delta^{1/n}</span>.</li>
+<li><strong>Krylov / Lanczos</strong>: keep all power-iteration vectors, need only <span class="math inline">A\mathbf v</span>; extreme eigenvalues converge first. Reorthogonalise and restart (ARPACK, <code>irlba</code>).</li>
+<li><strong>Single-cell PCA</strong>: matrix-free, implicitly centred, top 10 PCs in 0.4 s and 11 MB instead of 22 s and 1.4 GB.</li>
+</ul>
+<p><strong>Next:</strong> Part 6, <em>Polynomial interpolation</em>.</p>
+<aside class="notes">
+<p>The two halves of the lecture have one idea in common: everything is power iteration, made fast either by orthogonal similarity transforms on a dense matrix (QR algorithm) or by keeping the whole Krylov subspace (Lanczos). The checks to remember: kappa(V) or perturb-and-recompute for nonsymmetric problems, and the residual for truncated solvers.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+
+
+</section>
+    </div>
+  <div class="quarto-auto-generated-content" style="display: none;">
+<div class="footer footer-default">
+
+</div>
+</div></div>
+
+  <script>window.backupDefine = window.define; window.define = undefined;</script>
+  <script src="../site_libs/revealjs/dist/reveal.js"></script>
+  <!-- reveal.js plugins -->
+  <script src="../site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.js"></script>
+  <script src="../site_libs/revealjs/plugin/pdf-export/pdfexport.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/reveal-menu/quarto-menu.js"></script>
+  <script src="../site_libs/revealjs/plugin/quarto-support/support.js"></script>
+  
+
+  <script src="../site_libs/revealjs/plugin/notes/notes.js"></script>
+  <script src="../site_libs/revealjs/plugin/search/search.js"></script>
+  <script src="../site_libs/revealjs/plugin/zoom/zoom.js"></script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://revealjs.com/config/
+      Reveal.initialize({
+'controlsAuto': false,
+'previewLinksAuto': false,
+'pdfSeparateFragments': false,
+'autoAnimateEasing': "ease",
+'autoAnimateDuration': 1,
+'autoAnimateUnmatched': true,
+'jumpToSlide': true,
+'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
+'smaller': false,
+ 
+        // Display controls in the bottom right corner
+        controls: true,
+
+        // Help the user learn the controls by providing hints, for example by
+        // bouncing the down arrow when they first encounter a vertical slide
+        controlsTutorial: false,
+
+        // Determines where controls appear, "edges" or "bottom-right"
+        controlsLayout: 'edges',
+
+        // Visibility rule for backwards navigation arrows; "faded", "hidden"
+        // or "visible"
+        controlsBackArrows: 'visible',
+
+        // Display a presentation progress bar
+        progress: true,
+
+        // Display the page number of the current slide
+        slideNumber: 'c/t',
+
+        // 'all', 'print', or 'speaker'
+        showSlideNumber: 'all',
+
+        // Add the current slide number to the URL hash so that reloading the
+        // page/copying the URL will return you to the same slide
+        hash: true,
+
+        // Start with 1 for the hash rather than 0
+        hashOneBasedIndex: false,
+
+        // Flags if we should monitor the hash and change slides accordingly
+        respondToHashChanges: true,
+
+        // Push each slide change to the browser history
+        history: false,
+
+        // Enable keyboard shortcuts for navigation
+        keyboard: true,
+
+        // Enable the slide overview mode
+        overview: true,
+
+        // Disables the default reveal.js slide layout (scaling and centering)
+        // so that you can use custom CSS layout
+        disableLayout: false,
+
+        // Vertical centering of slides
+        center: false,
+
+        // Enables touch navigation on devices with touch input
+        touch: true,
+
+        // Loop the presentation
+        loop: false,
+
+        // Change the presentation direction to be RTL
+        rtl: false,
+
+        // see https://revealjs.com/vertical-slides/#navigation-mode
+        navigationMode: 'linear',
+
+        // Randomizes the order of slides each time the presentation loads
+        shuffle: false,
+
+        // Turns fragments on and off globally
+        fragments: true,
+
+        // Flags whether to include the current fragment in the URL,
+        // so that reloading brings you to the same fragment position
+        fragmentInURL: false,
+
+        // Flags if the presentation is running in an embedded mode,
+        // i.e. contained within a limited portion of the screen
+        embedded: false,
+
+        // Flags if we should show a help overlay when the questionmark
+        // key is pressed
+        help: true,
+
+        // Flags if it should be possible to pause the presentation (blackout)
+        pause: true,
+
+        // Flags if speaker notes should be visible to all viewers
+        showNotes: false,
+
+        // Global override for autoplaying embedded media (null/true/false)
+        autoPlayMedia: null,
+
+        // Global override for preloading lazy-loaded iframes (null/true/false)
+        preloadIframes: null,
+
+        // Number of milliseconds between automatically proceeding to the
+        // next slide, disabled when set to 0, this value can be overwritten
+        // by using a data-autoslide attribute on your slides
+        autoSlide: 0,
+
+        // Stop auto-sliding after user input
+        autoSlideStoppable: true,
+
+        // Use this method for navigation when auto-sliding
+        autoSlideMethod: null,
+
+        // Specify the average time in seconds that you think you will spend
+        // presenting each slide. This is used to show a pacing timer in the
+        // speaker view
+        defaultTiming: null,
+
+        // Enable slide navigation via mouse wheel
+        mouseWheel: false,
+
+        // The display mode that will be used to show slides
+        display: 'block',
+
+        // Hide cursor if inactive
+        hideInactiveCursor: true,
+
+        // Time before the cursor is hidden (in ms)
+        hideCursorTime: 5000,
+
+        // Opens links in an iframe preview overlay
+        previewLinks: false,
+
+        // Transition style (none/fade/slide/convex/concave/zoom)
+        transition: 'none',
+
+        // Transition speed (default/fast/slow)
+        transitionSpeed: 'default',
+
+        // Transition style for full page slide backgrounds
+        // (none/fade/slide/convex/concave/zoom)
+        backgroundTransition: 'none',
+
+        // Number of slides away from the current that are visible
+        viewDistance: 3,
+
+        // Number of slides away from the current that are visible on mobile
+        // devices. It is advisable to set this to a lower number than
+        // viewDistance in order to save resources.
+        mobileViewDistance: 2,
+
+        // The "normal" size of the presentation, aspect ratio will be preserved
+        // when the presentation is scaled to fit different resolutions. Can be
+        // specified using percentage units.
+        width: 1280,
+
+        height: 720,
+
+        // Factor of the display size that should remain empty around the content
+        margin: 0.1,
+
+        // reveal.js plugins
+        plugins: [QuartoLineHighlight, PdfExport, RevealMenu, QuartoSupport,
+
+          RevealNotes,
+          RevealSearch,
+          RevealZoom
+        ]
+      });
+    </script>
+    <script id="quarto-html-after-body" type="application/javascript">
+      window.document.addEventListener("DOMContentLoaded", function (event) {
+        const tabsets =  window.document.querySelectorAll(".panel-tabset-tabby")
+        tabsets.forEach(function(tabset) {
+          const tabby = new Tabby('#' + tabset.id);
+        });
+        const isCodeAnnotation = (el) => {
+          for (const clz of el.classList) {
+            if (clz.startsWith('code-annotation-')) {                     
+              return true;
+            }
+          }
+          return false;
+        }
+        const onCopySuccess = function(e) {
+          // button target
+          const button = e.trigger;
+          // don't keep focus
+          button.blur();
+          // flash "checked"
+          button.classList.add('code-copy-button-checked');
+          var currentTitle = button.getAttribute("title");
+          button.setAttribute("title", "Copied!");
+          let tooltip;
+          if (window.bootstrap) {
+            button.setAttribute("data-bs-toggle", "tooltip");
+            button.setAttribute("data-bs-placement", "left");
+            button.setAttribute("data-bs-title", "Copied!");
+            tooltip = new bootstrap.Tooltip(button, 
+              { trigger: "manual", 
+                customClass: "code-copy-button-tooltip",
+                offset: [0, -8]});
+            tooltip.show();    
+          }
+          setTimeout(function() {
+            if (tooltip) {
+              tooltip.hide();
+              button.removeAttribute("data-bs-title");
+              button.removeAttribute("data-bs-toggle");
+              button.removeAttribute("data-bs-placement");
+            }
+            button.setAttribute("title", currentTitle);
+            button.classList.remove('code-copy-button-checked');
+          }, 1000);
+          // clear code selection
+          e.clearSelection();
+        }
+        const getTextToCopy = function(trigger) {
+            const codeEl = trigger.previousElementSibling.cloneNode(true);
+            for (const childEl of codeEl.children) {
+              if (isCodeAnnotation(childEl)) {
+                childEl.remove();
+              }
+            }
+            return codeEl.innerText;
+        }
+        const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+          text: getTextToCopy
+        });
+        clipboard.on('success', onCopySuccess);
+        if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+          const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+            text: getTextToCopy,
+            container: window.document.getElementById('quarto-embedded-source-code-modal')
+          });
+          clipboardModal.on('success', onCopySuccess);
+        }
+          var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+          var mailtoRegex = new RegExp(/^mailto:/);
+            var filterRegex = new RegExp('/' + window.location.host + '/');
+          var isInternal = (href) => {
+              return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+          }
+          // Inspect non-navigation links and adorn them if external
+         var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+          for (var i=0; i<links.length; i++) {
+            const link = links[i];
+            if (!isInternal(link.href)) {
+              // undo the damage that might have been done by quarto-nav.js in the case of
+              // links that we want to consider external
+              if (link.dataset.originalHref !== undefined) {
+                link.href = link.dataset.originalHref;
+              }
+            }
+          }
+        function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+          const config = {
+            allowHTML: true,
+            maxWidth: 500,
+            delay: 100,
+            arrow: false,
+            appendTo: function(el) {
+                return el.closest('section.slide') || el.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'light-border',
+            placement: 'bottom-start',
+          };
+          if (contentFn) {
+            config.content = contentFn;
+          }
+          if (onTriggerFn) {
+            config.onTrigger = onTriggerFn;
+          }
+          if (onUntriggerFn) {
+            config.onUntrigger = onUntriggerFn;
+          }
+            config['offset'] = [0,0];
+            config['maxWidth'] = 700;
+          window.tippy(el, config); 
+        }
+        const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+        for (var i=0; i<noterefs.length; i++) {
+          const ref = noterefs[i];
+          tippyHover(ref, function() {
+            // use id or data attribute instead here
+            let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+            try { href = new URL(href).hash; } catch {}
+            const id = href.replace(/^#\/?/, "");
+            const note = window.document.getElementById(id);
+            if (note) {
+              return note.innerHTML;
+            } else {
+              return "";
+            }
+          });
+        }
+        const findCites = (el) => {
+          const parentEl = el.parentElement;
+          if (parentEl) {
+            const cites = parentEl.dataset.cites;
+            if (cites) {
+              return {
+                el,
+                cites: cites.split(' ')
+              };
+            } else {
+              return findCites(el.parentElement)
+            }
+          } else {
+            return undefined;
+          }
+        };
+        var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+        for (var i=0; i<bibliorefs.length; i++) {
+          const ref = bibliorefs[i];
+          const citeInfo = findCites(ref);
+          if (citeInfo) {
+            tippyHover(citeInfo.el, function() {
+              var popup = window.document.createElement('div');
+              citeInfo.cites.forEach(function(cite) {
+                var citeDiv = window.document.createElement('div');
+                citeDiv.classList.add('hanging-indent');
+                citeDiv.classList.add('csl-entry');
+                var biblioDiv = window.document.getElementById('ref-' + cite);
+                if (biblioDiv) {
+                  citeDiv.innerHTML = biblioDiv.innerHTML;
+                }
+                popup.appendChild(citeDiv);
+              });
+              return popup.innerHTML;
+            });
+          }
+        }
+      });
+      </script>
+    
+
+</body></html>

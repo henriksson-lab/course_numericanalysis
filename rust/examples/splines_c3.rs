@@ -89,3 +89,8 @@ fn main() {
         println!("{} {} {}", name, sci(all, 4), sci(early, 4));
     }
 }
+
+// Output:
+// natural 1.3134e-03 1.3134e-03
+// clamped 2.2759e-04 3.0589e-05
+// flat    6.5444e-03 6.5444e-03

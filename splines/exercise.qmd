@@ -1,0 +1,1396 @@
+---
+title: "Exercise: splines"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- interpolate with **piecewise linear** functions and bound their error by $\tfrac{h^2}{8}\max|f''|$,
+- explain why a **cubic spline** needs exactly two extra conditions, and set up and solve its **tridiagonal** system for the second derivatives $M_i$, by hand for 3–4 points and in code with the Thomas algorithm,
+- choose between **natural**, **clamped** and **not-a-knot** end conditions, and know which one R and Python use by default,
+- measure the **order** of spline interpolation on a log–log error table,
+- detect and fix **overshoot** (negative expression) with a monotone interpolant or a log scale,
+- explain why interpolation and finite differences **amplify noise**, and estimate a growth rate from noisy OD data with a **smoothing spline**,
+- choose the smoothing parameter by **GCV** or **cross-validation**, report **df**, and check the residuals.
+
+The by-hand part uses pen and paper (a calculator helps in B1 and B6). The code part checks the hand answers and then works at sizes where only code works.
+
+## Background
+
+**Data.** Two running examples. The **OD curve** from *Convergence and cost*: a logistic $N(t) = K / \big(1 + (K/N_0 - 1)e^{-rt}\big)$ with $K = 1.2$, $N_0 = 0.05$, $r = 0.8$ per hour, read by a plate reader every 15 min for 10 h (41 reads) with measurement noise of sd 0.01. Its true growth rate is $N'(t) = rN(1 - N/K)$, at most $rK/4 = 0.24$ OD/h at $t = 3.92$ h. A **gene time course**: an immediate-early gene measured at 0, 0.5, 1, 2, 4, 8, 12 and 24 h after stimulation (C4), and a gene along **pseudotime** in 40 cells (C6).
+
+**Facts used below:**
+
+1. **Piecewise linear.** On $[x_i, x_{i+1}]$ with $h = x_{i+1} - x_i$: $p(x) = y_i + \frac{y_{i+1} - y_i}{h}(x - x_i)$, error $|f(x) - p(x)| \le \frac{h^2}{8}\max|f''|$: order 2.
+2. **Cubic spline.** A cubic on each of the $n - 1$ intervals with $S(x_i) = y_i$ and $S, S', S''$ continuous: $4n - 4$ unknowns, $4n - 6$ conditions, so **two** end conditions are needed.
+3. **Second-derivative form.** With $M_i = S''(x_i)$, $h_i = x_{i+1} - x_i$, $s_i = (y_{i+1} - y_i)/h_i$, $A = (x_{i+1} - x)/h_i$, $B = (x - x_i)/h_i$:
+   $$S(x) = A y_i + B y_{i+1} + \tfrac{h_i^2}{6}\big[(A^3 - A)M_i + (B^3 - B)M_{i+1}\big],$$
+   $$S'(x) = s_i + \tfrac{h_i}{6}\big[-(3A^2 - 1)M_i + (3B^2 - 1)M_{i+1}\big].$$
+4. **The system.** Continuity of $S'$ at each interior $x_i$:
+   $$h_{i-1}M_{i-1} + 2(h_{i-1} + h_i)M_i + h_iM_{i+1} = 6(s_i - s_{i-1}).$$
+   Tridiagonal and strictly diagonally dominant, so the **Thomas algorithm** (*Structure: symmetric, banded, sparse*) solves it in $O(n)$ without pivoting.
+5. **End conditions.** *Natural*: $M_1 = M_n = 0$. *Clamped* (slopes $d_1$, $d_n$ given): $2h_1M_1 + h_1M_2 = 6(s_1 - d_1)$ and $h_{n-1}M_{n-1} + 2h_{n-1}M_n = 6(d_n - s_{n-1})$. *Not-a-knot*: $S'''$ continuous at $x_2$ and $x_{n-1}$. Defaults: R `splinefun`/`spline` use `"fmm"` (end cubics through 4 points), Python `CubicSpline` uses not-a-knot. Natural ends are $O(h^2)$ near the ends; the others $O(h^4)$; the spline's slope is $O(h^3)$.
+6. **Noise.** A difference quotient of data with independent noise of sd $\sigma$: forward $(y_{i+1} - y_i)/h$ has noise sd $\sqrt2\,\sigma/h$; central $(y_{i+1} - y_{i-1})/(2h)$ has $\sigma/(\sqrt2\,h)$. Smaller $h$ means **more** noise.
+7. **Smoothing spline.** Minimise $\sum_i (y_i - f(t_i))^2 + \lambda\int f''(t)^2\,dt$. The minimiser is a natural cubic spline with knots at the data; $\hat{\mathbf y} = A\mathbf y$ with the **hat matrix** $A$; **df** $= \operatorname{tr}A$ runs from 2 ($\lambda\to\infty$, straight line) to $n$ ($\lambda = 0$, interpolation).
+8. **Choosing $\lambda$.** Leave-one-out $\text{CV}(\lambda) = \frac1n\sum_i\big((y_i - \hat y_i)/(1 - A_{ii})\big)^2$; $\text{GCV}(\lambda) = n\,\text{RSS}/(n - \text{df})^2$. R's `smooth.spline` rescales $t$ to $[0, 1]$, so Python's (and our Rust) `lam` $=$ R's `lambda` $\times$ (range of $t$)$^3$.
+
+The OD data and the basic calls in each language:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+t <- seq(0, 10, by = 0.25)                         # every 15 min
+y <- c(0.040, 0.058, 0.076, 0.077, 0.108, 0.127, 0.152, 0.191, 0.200,
+       0.263, 0.284, 0.327, 0.382, 0.446, 0.502, 0.556, 0.610, 0.672,
+       0.749, 0.794, 0.839, 0.883, 0.934, 0.958, 1.004, 1.032, 1.076,
+       1.097, 1.105, 1.111, 1.144, 1.155, 1.163, 1.171, 1.167, 1.182,
+       1.193, 1.184, 1.177, 1.197, 1.199)
+f <- splinefun(t, y, method = "natural")   # interpolating cubic spline
+f(3.1)
+# [1] 0.4073834
+f(3.1, deriv = 1)                          # its slope
+# [1] 0.2608974
+fit <- smooth.spline(t, y)                 # smoothing spline, lambda by GCV
+fit$df
+# [1] 9.416379
+predict(fit, 3.1, deriv = 1)$y
+# [1] 0.2167979
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.interpolate import CubicSpline, make_smoothing_spline
+
+t = np.arange(41) * 0.25                           # every 15 min
+y = np.array([0.040, 0.058, 0.076, 0.077, 0.108, 0.127, 0.152, 0.191, 0.200,
+              0.263, 0.284, 0.327, 0.382, 0.446, 0.502, 0.556, 0.610, 0.672,
+              0.749, 0.794, 0.839, 0.883, 0.934, 0.958, 1.004, 1.032, 1.076,
+              1.097, 1.105, 1.111, 1.144, 1.155, 1.163, 1.171, 1.167, 1.182,
+              1.193, 1.184, 1.177, 1.197, 1.199])
+f = CubicSpline(t, y, bc_type="natural")   # interpolating cubic spline
+print(f(3.1))
+# 0.4073834409592962
+print(f(3.1, 1))                           # its slope
+# 0.260897440025722
+fit = make_smoothing_spline(t, y)          # smoothing spline, lam by GCV
+print(fit.derivative()(3.1))
+# 0.21679846628926008
+```
+
+### Rust
+
+```rust
+// rust/examples/splines_background.rs  —  cargo run --example splines_background
+// Background: a natural cubic spline through the noisy OD data, hand-written
+// (second derivatives from a tridiagonal solve, then the cubic on each interval).
+
+// Thomas algorithm (Structure: symmetric, banded, sparse); a[0] and c[n-1] unused
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+// second derivatives M of the natural spline (M[0] = M[n-1] = 0)
+fn spline_m(x: &[f64], y: &[f64]) -> Vec<f64> {
+    let n = x.len();
+    let h: Vec<f64> = (0..n - 1).map(|i| x[i + 1] - x[i]).collect();
+    let s: Vec<f64> = (0..n - 1).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
+    let a: Vec<f64> = h[..n - 2].to_vec();                       // h_{i-1}
+    let c: Vec<f64> = h[1..].to_vec();                           // h_i
+    let b: Vec<f64> = (0..n - 2).map(|i| 2.0 * (a[i] + c[i])).collect();
+    let d: Vec<f64> = (0..n - 2).map(|i| 6.0 * (s[i + 1] - s[i])).collect();
+    let mut m = vec![0.0];
+    m.extend(thomas(&a, &b, &c, &d));
+    m.push(0.0);
+    m
+}
+
+// value (deriv = 0) or slope (deriv = 1) of the spline at t
+fn spline_eval(x: &[f64], y: &[f64], m: &[f64], t: f64, deriv: u8) -> f64 {
+    let i = x.partition_point(|&xi| xi <= t).clamp(1, x.len() - 1) - 1;
+    let h = x[i + 1] - x[i];
+    let (a, b) = ((x[i + 1] - t) / h, (t - x[i]) / h);
+    if deriv == 0 {
+        a * y[i] + b * y[i + 1] + ((a * a * a - a) * m[i] + (b * b * b - b) * m[i + 1]) * h * h / 6.0
+    } else {
+        (y[i + 1] - y[i]) / h + (-(3.0 * a * a - 1.0) * m[i] + (3.0 * b * b - 1.0) * m[i + 1]) * h / 6.0
+    }
+}
+
+fn main() {
+    let t: Vec<f64> = (0..41).map(|i| i as f64 * 0.25).collect();   // every 15 min
+    let y = [0.040, 0.058, 0.076, 0.077, 0.108, 0.127, 0.152, 0.191, 0.200,
+             0.263, 0.284, 0.327, 0.382, 0.446, 0.502, 0.556, 0.610, 0.672,
+             0.749, 0.794, 0.839, 0.883, 0.934, 0.958, 1.004, 1.032, 1.076,
+             1.097, 1.105, 1.111, 1.144, 1.155, 1.163, 1.171, 1.167, 1.182,
+             1.193, 1.184, 1.177, 1.197, 1.199];
+    let m = spline_m(&t, &y);
+    println!("{}", spline_eval(&t, &y, &m, 3.1, 0));
+    println!("{}", spline_eval(&t, &y, &m, 3.1, 1));               // its slope
+}
+
+// Output:
+// 0.40738344095929624
+// 0.26089744002572207
+```
+
+:::
+
+The true growth rate at 3.1 h is 0.216 OD/h: the interpolating spline's slope (0.261) is far off, the smoothing spline's (0.217) close. Python's `make_smoothing_spline` does not report df; C6 computes it. Rust has no spline in our crate list, so the Rust tabs are hand-written: the tridiagonal solve above for interpolation, and a small dense solve with `nalgebra` for the smoothing spline (C5, C6).
+
+## By hand
+
+**B1. Piecewise linear.** The exact logistic gives $N(2) = 0.2126$ and $N(3) = 0.3888$; on $[2, 3]$, $\max|N''| = 0.0739$.
+(a) Interpolate linearly at $t = 2.5$. The true value is $N(2.5) = 0.2918$. What is the error?
+(b) Compare with the bound $\tfrac{h^2}{8}\max|N''|$.
+(c) How often must the plate reader measure (spacing $h$) for the linear-interpolation error to stay below 0.001 OD everywhere? Use $\max|N''| = 0.0739$ on all of $[0, 10]$.
+(d) What is the slope of the interpolant on $[2, 3]$? The true $N'(2.5) = 0.1767$. Which finite-difference formula is this slope?
+
+**B2. Counting conditions.** The 41 OD reads are interpolated by a cubic spline.
+(a) How many cubic pieces, how many unknown coefficients, how many conditions from interpolation and from continuity of $S'$ and $S''$?
+(b) Someone suggests: "instead of end conditions, also make $S'''$ continuous at every interior point". What would $S$ then be, and why does that not work for 41 points?
+
+**B3. A natural spline through three points.** Data $(0, 0), (1, 1), (2, 0)$.
+(a) Write down the single equation for $M_2$ (natural: $M_1 = M_3 = 0$) and solve it.
+(b) Compute $S(0.5)$. Compare with linear interpolation and with the parabola through the three points.
+(c) Compute $S'(0)$ and $S'(1)$ from the formula for $S'$. Is the answer for $S'(1)$ what you expect?
+
+**B4. Four points: Thomas by hand.** Data $(0, 0), (1, 1), (2, 0), (3, 1)$, natural ends.
+(a) Write the $2\times2$ system for $M_2, M_3$. Is it diagonally dominant?
+(b) Solve it with one Thomas forward sweep and back substitution.
+(c) Compute $S(1.5)$ and $S(0.5)$.
+(d) Uneven spacing: data $(0, 0), (1, 1), (3, 0)$, natural ends. Find $M_2$.
+
+**B5. End conditions.**
+(a) For the data of B4, the **not-a-knot** spline with 4 points is the single cubic through all four points. Find it (Newton form from *Polynomial interpolation*) and evaluate it at 0.5. Compare with the natural spline's $S(0.5)$ from B4.
+(b) For the OD curve, $N'(0) = rN_0(1 - N_0/K) = 0.0383$ and $N''(0) = 0.028$; at 10 h the culture is close to its plateau. Which end condition is wrong at $t = 0$: natural, or clamped with $S'(0) = 0$? Which end condition is reasonable at $t = 10$?
+(c) A colleague interpolates the same data in R with `splinefun(x, y)` and you in Python with `CubicSpline(x, y)`. Where will your curves differ, and why?
+
+**B6. How differences amplify noise.** OD noise sd $\sigma = 0.01$.
+(a) Read every $h = 0.25$ h: noise sd of a forward and of a central difference? Compare with the maximum growth rate 0.24.
+(b) A faster plate reader measures every 5 min ($h = 1/12$ h). What happens to the noise of the central difference?
+(c) The truncation error of the central difference is about $\tfrac{h^2}{6}|N'''|$ with $\max|N'''| = 0.0768$. Write the total error $E(h) = \tfrac{h^2}{6}\cdot0.0768 + \tfrac{\sigma}{\sqrt2\,h}$, find the best $h$ and the smallest error. Compare with the V-shaped error plot of *Convergence and cost*: what plays the role of machine epsilon?
+
+**B7. Smoothing and GCV.** $n = 41$ OD reads.
+(a) What does a smoothing spline become for $\lambda = 0$? For $\lambda \to \infty$? What is df in each case?
+(b) Four fits give (df, RSS) $= (6.0,\ 0.00472)$, $(9.4,\ 0.00206)$, $(12.0,\ 0.00179)$, $(20.0,\ 0.00104)$. Compute GCV for each. Which fit does GCV choose?
+(c) Why can we not choose $\lambda$ by minimising the RSS?
+(d) If time is measured in minutes instead of hours, what happens to the best $\lambda$ (in Python's units) and to the best df?
+
+## In code
+
+**C1. The order of interpolation.** Sample the exact logistic $N(t)$ on $[0, 10]$ with spacing $h = 2, 1, 0.5, 0.25, 0.125$. For each $h$, compute the maximum error on a fine grid (step 0.01) of piecewise linear interpolation ([`approx`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/approxfun.html); Python [`np.interp`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html)), the natural cubic spline, and the default cubic spline of your language ([`splinefun`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/splinefun.html); Python [`CubicSpline`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.CubicSpline.html)). Read off the order of each from the ratios of successive errors. Compare B1(c) with your table.
+
+**C2. Your own natural spline.** Write `natural_M(x, y)` (the system of Fact 4, solved with `thomas` from *Structure: symmetric, banded, sparse*) and `spline_eval(x, y, M, t, deriv)` (Fact 3). For the 41 OD reads:
+(a) compare values and slopes with the library natural spline on a fine grid,
+(b) check that the spline passes through the data, and that $S'$ from the left equals $S'$ from the right at every interior point,
+(c) check B3 and B4 with your function (careful: does `thomas` work for a $1\times1$ system?).
+
+**C3. Clamped ends.** Write `clamped_M(x, y, d0, dn)`: the $n\times n$ tridiagonal system with the clamped first and last rows of Fact 5. Interpolate the exact $N(t)$ at $t = 0, 1, \dots, 10$ with (i) natural ends, (ii) clamped ends with the true slopes $N'(0)$, $N'(10)$, (iii) clamped ends with slope 0 at both ends ("the culture is flat at the start"), (iv) your language's default. Print the maximum error on $[0, 10]$ and on the first hour. Check (ii) against R's [`pracma::cubicspline(x, y, xi, endp2nd = TRUE, der = c(d0, dn))`](https://search.r-project.org/CRAN/refmans/pracma/html/cubicspline.html) or Python's `CubicSpline(x, y, bc_type=((1, d0), (1, dn)))`.
+
+**C4. Overshoot in a gene time course.** An immediate-early gene, in TPM, at `tg = c(0, 0.5, 1, 2, 4, 8, 12, 24)` h: `eg = c(1, 40, 32, 6, 1, 0.5, 0.5, 0.5)`. Interpolate with the default cubic spline, the natural spline, a **monotone** interpolant (R `splinefun(method = "monoH.FC")`, Python [`PchipInterpolator`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.PchipInterpolator.html)), and a cubic spline of $\log_2$ expression transformed back. For each, print the value at 3 h, the minimum and where it is, and the maximum on a grid of step 0.01 h. Which interpolants give impossible values? What does each fix cost?
+
+**C5. Growth rate from noisy OD.** With the 41 noisy reads, estimate $N'(t)$ in three ways and print the rms error against the true $rN(1 - N/K)$ at the read times: (i) central differences, (ii) the slope of the interpolating natural spline, (iii) the slope of a smoothing spline with $\lambda$ chosen by GCV ([`smooth.spline`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/smooth.spline.html) and [`predict(..., deriv = 1)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/predict.smooth.spline.html); Python [`make_smoothing_spline`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.make_smoothing_spline.html) and `.derivative()`). From (iii), estimate the maximum growth rate and when it occurs (true: 0.24 at 3.92 h). Then repeat (iii) with fixed `lam = 10` and `lam = 0.005` (R: `lambda = lam / 1000`; why 1000?). Which is too smooth, which too rough?
+
+**C6. A gene along pseudotime: choosing $\lambda$.** Expression of one gene in 40 cells ordered by pseudotime (data in the solution below; copy them from there). Fit smoothing splines with $\lambda$ chosen (i) by GCV, (ii) by leave-one-out CV, and with fixed (iii) `lam = 1e-6` and (iv) `lam = 1e-2` (Python units). For each, report $\lambda$ and df, the pseudotime of the peak and its height (true: 0.6 and 3.0), and the **lag-1 correlation** of the residuals (sorted by pseudotime). Which fits does the residual check flag, and in which direction? (Python has no df or CV output: build the hat matrix column by column, by smoothing the unit vectors $\mathbf e_j$, and use Fact 8.)
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — piecewise linear (B1, C1)"}
+The bound comes from the error formula of *Polynomial interpolation* with two points: $\tfrac12 f''(\xi)(x - x_i)(x - x_{i+1})$, and $|(x - x_i)(x - x_{i+1})| \le h^2/4$ in the middle. For C1, R's [`approx(x, y, xout)$y`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/approxfun.html), Python [`np.interp(xout, x, y)`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html) (note the argument order). The order is $\log_2$ of the ratio of successive errors when $h$ halves.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — setting up the spline system (B3, B4, C2)"}
+List $h_i$ and the slopes $s_i$ first; the right-hand side of row $i$ is 6 × (slope after $x_i$ − slope before $x_i$). For three points there is one interior point and one equation. For the evaluation, find the interval with [`findInterval(t, x, all.inside = TRUE)`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/findInterval.html) (R) or `np.searchsorted(x, t, side="right") - 1`, clipped to $0, \dots, n-2$ (Python). In Python, copy `b` and `d` inside `thomas`, or it overwrites the caller's arrays. R's `thomas` loops over `2:n`, which for $n = 1$ counts **down** from 2 to 1.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — end conditions (B5, C3)"}
+For the clamped system the first row has $b_1 = 2h_1$, $c_1 = h_1$, $d_1 = 6(s_1 - d_0)$ and the last row $a_n = h_{n-1}$, $b_n = 2h_{n-1}$, $d_n = 6(d_n - s_{n-1})$; in between the rows of Fact 4. Python: [`CubicSpline(x, y, bc_type="natural")`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.CubicSpline.html), `bc_type=((1, d0), (1, dn))` for clamped; the default is `"not-a-knot"`. R: [`splinefun(x, y, method = "natural")`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/splinefun.html); the default is `"fmm"`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — overshoot (C4)"}
+R: `splinefun(tg, eg, method = "monoH.FC")` (Fritsch–Carlson), or `"hyman"` for monotone data only. Python: [`PchipInterpolator(tg, eg)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.PchipInterpolator.html). For the log scale, interpolate `log2(eg)` and apply `2^` to the result. `which.min` (R) and `np.argmin` (Python) give the position of the minimum on the grid.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — noise and the best step (B6)"}
+Variances add for independent errors: $\operatorname{Var}(y_{i+1} - y_{i-1}) = 2\sigma^2$. Set $E'(h) = 0$: $\tfrac{2h}{6}\cdot0.0768 = \tfrac{\sigma}{\sqrt2\,h^2}$, so $h^3 = \tfrac{3\sigma}{\sqrt2\cdot0.0768}$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — smoothing splines (B7, C5, C6)"}
+R: [`smooth.spline(t, y)`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/smooth.spline.html) chooses $\lambda$ by GCV; `cv = TRUE` uses leave-one-out CV; `df =` or `lambda =` fix it. `fit$df`, `fit$lambda`, `residuals(fit)`, and [`predict(fit, x, deriv = 1)$y`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/predict.smooth.spline.html). Python: [`make_smoothing_spline(t, y, lam=None)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.make_smoothing_spline.html) (GCV) returns a spline object `f`; `f(x)` and `f.derivative()(x)`. Units: R rescales $t$ to $[0, 1]$; the penalty $\int f''^2\,dt$ scales like (time unit)$^{-3}$, so Python's `lam` = R's `lambda` × (range of $t$)$^3$. The lag-1 correlation of residuals `e`: `cor(e[-1], e[-n])` (R), `np.corrcoef(e[1:], e[:-1])[0, 1]` (Python).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — the smoothing spline in Rust (C5, C6)"}
+The Reinsch form: with $Q$ ($n\times(n-2)$; column $j$ has $1/h_{j-1}$, $-1/h_{j-1} - 1/h_j$, $1/h_j$ in rows $j-1, j, j+1$) and $R$ ($(n-2)\times(n-2)$ tridiagonal; $(h_{j-1} + h_j)/3$ on the diagonal, $h_j/6$ next to it), solve $(R + \lambda Q^TQ)\boldsymbol\gamma = Q^T\mathbf y$; the fitted values are $\mathbf g = \mathbf y - \lambda Q\boldsymbol\gamma$ and $\boldsymbol\gamma$ are the second derivatives at the interior knots, so the natural spline through $\mathbf g$ with $M = (0, \boldsymbol\gamma, 0)$ is the fit. The hat matrix is $A = I - \lambda Q(R + \lambda Q^TQ)^{-1}Q^T$. With $n = 40$ a dense [`nalgebra`](https://docs.rs/nalgebra/latest/nalgebra/) inverse is fine; minimise GCV over $\log_{10}\lambda$ with a grid and golden-section search (*Optimisation in one dimension*).
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) $p(2.5) = \tfrac12(0.2126 + 0.3888) = 0.3007$. Error $0.3007 - 0.2918 = 0.0089$ (the line lies above the curve, which bends upwards on $[2, 3]$).
+(b) $\tfrac{1^2}{8}\cdot0.0739 = 0.0092$. The bound holds and is nearly reached, because $|N''|$ is close to its maximum on this interval.
+(c) $\tfrac{h^2}{8}\cdot0.0739 \le 0.001 \Rightarrow h^2 \le 0.108 \Rightarrow h \le 0.33$ h: one read every 20 min. C1 confirms: $h = 0.25$ gives $5.8\times10^{-4}$.
+(d) $(0.3888 - 0.2126)/1 = 0.1762$: the **central difference** at 2.5 with step $0.5$ (or the forward difference at 2). Close to $0.1767$ for exact data; with noisy data it inherits all the noise of B6.
+
+**B2.**
+(a) 40 cubics, 160 coefficients. Interpolation: 2 per piece, 80. Continuity of $S'$ and of $S''$ at the 39 interior points: 39 + 39. Total 158: two are missing.
+(b) If $S$, $S'$, $S''$ and $S'''$ all match at $x_2$, the two neighbouring cubics have the same Taylor expansion there and so are **the same cubic**. Continuing along, $S$ is one cubic, which has only 4 coefficients and cannot pass through 41 points. (Requiring it only at $x_2$ and $x_{n-1}$ is exactly the not-a-knot condition.)
+
+**B3.**
+(a) $h_1 = h_2 = 1$, $s_1 = 1$, $s_2 = -1$: $1\cdot M_1 + 2(1 + 1)M_2 + 1\cdot M_3 = 6(-1 - 1)$, so $4M_2 = -12$, $M_2 = -3$.
+(b) On $[0, 1]$ at $x = 0.5$: $A = B = 0.5$, $A^3 - A = B^3 - B = -0.375$. $S(0.5) = 0.5\cdot0 + 0.5\cdot1 + \tfrac16[-0.375\cdot0 + (-0.375)(-3)] = 0.5 + 0.1875 = 0.6875$. Linear: $0.5$. Parabola $1 - (x - 1)^2$: $0.75$. The spline lies between: it bends, but less than the parabola, because its curvature is forced to 0 at the ends.
+(c) $S'(0)$: $A = 1, B = 0$: $s_1 + \tfrac16[-(3 - 1)\cdot0 + (0 - 1)(-3)] = 1 + 0.5 = 1.5$ (parabola: 2). $S'(1)$ on $[0, 1]$: $A = 0$, $B = 1$: $1 + \tfrac16[-(0 - 1)\cdot0 + (3 - 1)(-3)] = 1 - 1 = 0$. Expected: the data are symmetric about $x = 1$, so the peak of the spline is at $x = 1$.
+
+**B4.**
+(a) $s = (1, -1, 1)$, all $h = 1$:
+$$\begin{pmatrix}4 & 1\\ 1 & 4\end{pmatrix}\begin{pmatrix}M_2\\ M_3\end{pmatrix} = \begin{pmatrix}6(-1 - 1)\\ 6(1 + 1)\end{pmatrix} = \begin{pmatrix}-12\\ 12\end{pmatrix}.$$
+Diagonally dominant: $4 > 1$ in both rows (always true for splines: $2(h_{i-1} + h_i) > h_{i-1} + h_i$).
+(b) Forward sweep: $w = 1/4$, $b_2 = 4 - \tfrac14\cdot1 = 3.75$, $d_2 = 12 - \tfrac14(-12) = 15$. Back substitution: $M_3 = 15/3.75 = 4$, $M_2 = (-12 - 1\cdot4)/4 = -4$.
+(c) $S(1.5)$ on $[1, 2]$: $0.5\cdot1 + 0.5\cdot0 + \tfrac16(-0.375)(-4 + 4) = 0.5$ (symmetry). $S(0.5)$ on $[0, 1]$: $0.5 + \tfrac16(-0.375)(0 - 4) = 0.5 + 0.25 = 0.75$.
+(d) $h_1 = 1$, $h_2 = 2$, $s_1 = 1$, $s_2 = -0.5$: $2(1 + 2)M_2 = 6(-0.5 - 1) = -9$, $M_2 = -1.5$.
+
+**B5.**
+(a) Divided differences of $y = 0, 1, 0, 1$ at $x = 0, 1, 2, 3$: first $1, -1, 1$; second $-1, 1$; third $2/3$. $p(x) = x - x(x - 1) + \tfrac23x(x - 1)(x - 2)$. $p(0.5) = 0.5 + 0.25 + \tfrac23(0.5)(-0.5)(-1.5) = 0.5 + 0.25 + 0.25 = 1.0$. Natural: $0.75$. In the end interval the choice matters a lot for wiggly data; in C1 the end condition decides the order of convergence.
+(b) Natural assumes $N''(0) = 0$, but it is 0.028: a small error (C3: $1.3\times10^{-3}$ with $h = 1$). Clamped with $S'(0) = 0$ is **worse**: the true slope is 0.038, and forcing 0 bends the first interval the wrong way (C3: $6.5\times10^{-3}$). At $t = 10$ the culture is close to the plateau, $N'(10) = 0.007$, so $S'(10) = 0$ is a reasonable clamp there. A clamp is only as good as the slope you put in.
+(c) In the first and last one or two intervals. R's default is `"fmm"`, Python's is not-a-knot; both use the data near the ends, but differently. In the interior the influence of the end condition dies out by a factor of about 3.7 per interval.
+
+**B6.**
+(a) Forward: $\sqrt2\cdot0.01/0.25 = 0.057$ (24 % of 0.24). Central: $0.01/(\sqrt2\cdot0.25) = 0.028$ (12 %).
+(b) $h = 1/12$: central $0.01\cdot12/\sqrt2 = 0.085$, 35 % of the maximum rate. Three times as many reads, three times **more** noise in each difference.
+(c) $E(h) = 0.0128\,h^2 + 0.00707/h$. $h^3 = 3\cdot0.01/(\sqrt2\cdot0.0768) = 0.276$, $h^* = 0.65$ h. $E(h^*) = 0.0054 + 0.0109 = 0.016$, about 7 % of the maximum rate, even with the best step. Same V as in *Convergence and cost*, with the measurement noise $\sigma = 0.01$ in the place of $\varepsilon|N| \approx 10^{-16}$: the bottom of the V moves from $h \approx 10^{-5}$ to $h \approx 0.65$, and the best error from $10^{-12}$ to $0.016$. The smoothing spline in C5 does better (0.0067) because it uses all the reads near $t$, not just two.
+
+**B7.**
+(a) $\lambda = 0$: the interpolating natural spline, df $= n = 41$. $\lambda\to\infty$: $\int f''^2 = 0$ is forced, so $f$ is a straight line, the least-squares line, df $= 2$.
+(b) $\text{GCV} = 41\,\text{RSS}/(41 - \text{df})^2$: df 6: $41\cdot0.00472/35^2 = 1.58\times10^{-4}$; df 9.4: $41\cdot0.00206/31.6^2 = 8.46\times10^{-5}$; df 12: $41\cdot0.00179/29^2 = 8.73\times10^{-5}$; df 20: $41\cdot0.00104/21^2 = 9.67\times10^{-5}$. GCV chooses df $= 9.4$ (as `smooth.spline` does). Note how flat GCV is between 9 and 12.
+(c) RSS always decreases as $\lambda$ decreases; its minimum is 0 at $\lambda = 0$, the interpolating spline that fits the noise. The denominator $(n - \text{df})^2$ in GCV (and leaving points out in CV) is what penalises fitting the noise.
+(d) With $t$ in minutes, $f''$ (per minute²) is $3600$ times smaller and $dt$ is 60 times larger, so $\int f''^2\,dt$ is $60^3 = 216\,000$ times smaller. The same curve needs a $\lambda$ that is $216\,000$ times larger. The df, the fitted curve and the GCV choice do not change. That is why df is the number to report.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+K <- 1.2; N0 <- 0.05; r <- 0.8
+od <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
+tt <- seq(0, 10, by = 0.01)                        # fine grid for the max error
+for (h in c(2, 1, 0.5, 0.25, 0.125)) {
+  x <- seq(0, 10, by = h); y <- od(x)
+  e_lin <- max(abs(approx(x, y, tt)$y - od(tt)))
+  e_nat <- max(abs(splinefun(x, y, method = "natural")(tt) - od(tt)))
+  e_def <- max(abs(splinefun(x, y)(tt) - od(tt)))  # R default, "fmm"
+  cat(sprintf("h = %5.3f  linear %.2e  natural %.2e  default %.2e\n",
+              h, e_lin, e_nat, e_def))
+}
+# h = 2.000  linear 3.04e-02  natural 7.03e-03  default 2.20e-02
+# h = 1.000  linear 9.10e-03  natural 1.31e-03  default 2.53e-04
+# h = 0.500  linear 2.30e-03  natural 3.41e-04  default 1.47e-05
+# h = 0.250  linear 5.75e-04  natural 8.58e-05  default 1.25e-06
+# h = 0.125  linear 1.44e-04  natural 2.15e-05  default 8.16e-08
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.interpolate import CubicSpline
+
+K, N0, r = 1.2, 0.05, 0.8
+od = lambda t: K / (1 + (K / N0 - 1) * np.exp(-r * t))
+tt = np.linspace(0, 10, 1001)                      # fine grid for the max error
+for h in [2, 1, 0.5, 0.25, 0.125]:
+    x = np.linspace(0, 10, round(10 / h) + 1); y = od(x)
+    e_lin = np.max(np.abs(np.interp(tt, x, y) - od(tt)))
+    e_nat = np.max(np.abs(CubicSpline(x, y, bc_type="natural")(tt) - od(tt)))
+    e_def = np.max(np.abs(CubicSpline(x, y)(tt) - od(tt)))   # default: not-a-knot
+    print(f"h = {h:5.3f}  linear {e_lin:.2e}  natural {e_nat:.2e}  default {e_def:.2e}")
+# h = 2.000  linear 3.04e-02  natural 7.03e-03  default 2.14e-02
+# h = 1.000  linear 9.10e-03  natural 1.31e-03  default 2.27e-04
+# h = 0.500  linear 2.30e-03  natural 3.41e-04  default 1.34e-05
+# h = 0.250  linear 5.75e-04  natural 8.58e-05  default 9.90e-07
+# h = 0.125  linear 1.44e-04  natural 2.15e-05  default 6.35e-08
+```
+
+### Rust
+
+```rust
+// rust/examples/splines_c1.rs  —  cargo run --example splines_c1
+// C1: max interpolation error vs spacing h on the exact logistic OD curve,
+// piecewise linear and natural cubic spline (both hand-written).
+
+// scientific notation as R and Python print it: 3.04e-02 rather than Rust's 3.04e-2
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+// Thomas algorithm (Structure: symmetric, banded, sparse); a[0] and c[n-1] unused
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+// second derivatives M of the natural spline (M[0] = M[n-1] = 0)
+fn spline_m(x: &[f64], y: &[f64]) -> Vec<f64> {
+    let n = x.len();
+    let h: Vec<f64> = (0..n - 1).map(|i| x[i + 1] - x[i]).collect();
+    let s: Vec<f64> = (0..n - 1).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
+    let a: Vec<f64> = h[..n - 2].to_vec();                       // h_{i-1}
+    let c: Vec<f64> = h[1..].to_vec();                           // h_i
+    let b: Vec<f64> = (0..n - 2).map(|i| 2.0 * (a[i] + c[i])).collect();
+    let d: Vec<f64> = (0..n - 2).map(|i| 6.0 * (s[i + 1] - s[i])).collect();
+    let mut m = vec![0.0];
+    m.extend(thomas(&a, &b, &c, &d));
+    m.push(0.0);
+    m
+}
+
+// value (deriv = 0) or slope (deriv = 1) of the spline at t
+fn spline_eval(x: &[f64], y: &[f64], m: &[f64], t: f64, deriv: u8) -> f64 {
+    let i = x.partition_point(|&xi| xi <= t).clamp(1, x.len() - 1) - 1;
+    let h = x[i + 1] - x[i];
+    let (a, b) = ((x[i + 1] - t) / h, (t - x[i]) / h);
+    if deriv == 0 {
+        a * y[i] + b * y[i + 1] + ((a * a * a - a) * m[i] + (b * b * b - b) * m[i + 1]) * h * h / 6.0
+    } else {
+        (y[i + 1] - y[i]) / h + (-(3.0 * a * a - 1.0) * m[i] + (3.0 * b * b - 1.0) * m[i + 1]) * h / 6.0
+    }
+}
+
+// piecewise linear interpolation (R approx, numpy interp)
+fn lin_eval(x: &[f64], y: &[f64], t: f64) -> f64 {
+    let i = x.partition_point(|&xi| xi <= t).clamp(1, x.len() - 1) - 1;
+    y[i] + (y[i + 1] - y[i]) * (t - x[i]) / (x[i + 1] - x[i])
+}
+
+fn main() {
+    let (k, n0, r) = (1.2, 0.05, 0.8);
+    let od = |t: f64| k / (1.0 + (k / n0 - 1.0) * (-r * t).exp());
+    let tt: Vec<f64> = (0..=1000).map(|i| i as f64 / 100.0).collect();   // fine grid
+    for h in [2.0, 1.0, 0.5, 0.25, 0.125] {
+        let m_pts = (10.0 / h) as usize;
+        let x: Vec<f64> = (0..=m_pts).map(|i| i as f64 * h).collect();
+        let y: Vec<f64> = x.iter().map(|&xi| od(xi)).collect();
+        let m = spline_m(&x, &y);
+        let (mut e_lin, mut e_nat) = (0.0_f64, 0.0_f64);
+        for &t in &tt {
+            e_lin = e_lin.max((lin_eval(&x, &y, t) - od(t)).abs());
+            e_nat = e_nat.max((spline_eval(&x, &y, &m, t, 0) - od(t)).abs());
+        }
+        println!("h = {:5.3}  linear {}  natural {}", h, sci(e_lin, 2), sci(e_nat, 2));
+    }
+}
+
+// Output:
+// h = 2.000  linear 3.04e-02  natural 7.03e-03
+// h = 1.000  linear 9.10e-03  natural 1.31e-03
+// h = 0.500  linear 2.30e-03  natural 3.41e-04
+// h = 0.250  linear 5.75e-04  natural 8.58e-05
+// h = 0.125  linear 1.44e-04  natural 2.15e-05
+```
+
+:::
+
+Ratios from $h = 0.5$ to $0.25$ to $0.125$: linear $2.30/0.575 = 4.0$ and $4.0$ (order 2); natural $3.41/0.858 = 4.0$ and $4.0$ (order 2: the end error dominates); default $14.7/1.25 = 11.8$ and $15.3$ (R), $13.5$ and $15.6$ (Python): approaching 16, order 4. At $h = 2$ (6 points) nothing is in the asymptotic regime yet. The natural spline beats the default one at $h = 2$ but loses by a factor 260 at $h = 0.125$. B1(c) predicted $h \le 0.33$ for linear error below 0.001; the table gives $2.3\times10^{-3}$ at $h = 0.5$ and $5.8\times10^{-4}$ at $0.25$. Rust has only the two hand-written interpolants; their numbers agree with R and Python to all printed digits.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+thomas <- function(a, b, c, d) {                  # from Structure: symmetric, banded, sparse
+  n <- length(d)
+  for (i in 2:n) {
+    w <- a[i] / b[i - 1]; b[i] <- b[i] - w * c[i - 1]; d[i] <- d[i] - w * d[i - 1]
+  }
+  x <- numeric(n); x[n] <- d[n] / b[n]
+  for (i in (n - 1):1) x[i] <- (d[i] - c[i] * x[i + 1]) / b[i]
+  x
+}
+natural_M <- function(x, y) {                     # second derivatives, M_1 = M_n = 0
+  n <- length(x); h <- diff(x); s <- diff(y) / h
+  hl <- h[-(n - 1)]; hr <- h[-1]                  # h_{i-1} and h_i, i = 2..n-1
+  c(0, thomas(hl, 2 * (hl + hr), hr, 6 * diff(s)), 0)
+}
+spline_eval <- function(x, y, M, t, deriv = 0) {
+  i <- findInterval(t, x, all.inside = TRUE)
+  h <- x[i + 1] - x[i]; A <- (x[i + 1] - t) / h; B <- (t - x[i]) / h
+  if (deriv == 0)
+    A * y[i] + B * y[i + 1] + ((A^3 - A) * M[i] + (B^3 - B) * M[i + 1]) * h^2 / 6
+  else
+    (y[i + 1] - y[i]) / h + (-(3 * A^2 - 1) * M[i] + (3 * B^2 - 1) * M[i + 1]) * h / 6
+}
+M <- natural_M(t, y)                              # t, y: the OD reads (Background)
+tt <- seq(0, 10, by = 0.01)
+f <- splinefun(t, y, method = "natural")
+max(abs(spline_eval(t, y, M, tt) - f(tt)))                         # values
+# [1] 2.220446e-16
+max(abs(spline_eval(t, y, M, tt, deriv = 1) - f(tt, deriv = 1)))   # slopes
+# [1] 1.110223e-16
+max(abs(spline_eval(t, y, M, t) - y))                              # through the data?
+# [1] 0
+n <- length(t); h <- diff(t); s <- diff(y) / h; k <- 2:(n - 1)
+left  <- s[k - 1] + (M[k - 1] + 2 * M[k]) * h[k - 1] / 6           # S' just left of t_k
+right <- s[k] - (2 * M[k] + M[k + 1]) * h[k] / 6                   # S' just right of t_k
+max(abs(left - right))
+# [1] 5.551115e-17
+natural_M(c(0, 1, 2, 3), c(0, 1, 0, 1))                           # B4
+# [1]  0 -4  4  0
+natural_M(c(0, 1, 2), c(0, 1, 0))                                 # B3: 1 x 1 system
+# Error in b[i] <- b[i] - w * c[i - 1] : replacement has length zero
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.interpolate import CubicSpline
+# t, y: the OD reads (Background)
+
+def thomas(a, b, c, d):                           # from Structure: symmetric, banded, sparse
+    b, d = b.astype(float).copy(), d.astype(float).copy()
+    n = len(d)
+    for i in range(1, n):
+        w = a[i] / b[i - 1]; b[i] -= w * c[i - 1]; d[i] -= w * d[i - 1]
+    x = np.zeros(n); x[-1] = d[-1] / b[-1]
+    for i in range(n - 2, -1, -1):
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i]
+    return x
+
+def natural_M(x, y):                              # second derivatives, M_0 = M_{n-1} = 0
+    h = np.diff(x); s = np.diff(y) / h
+    hl, hr = h[:-1], h[1:]                        # h_{i-1} and h_i
+    return np.concatenate([[0], thomas(hl, 2 * (hl + hr), hr, 6 * np.diff(s)), [0]])
+
+def spline_eval(x, y, M, t, deriv=0):
+    i = np.clip(np.searchsorted(x, t, side="right") - 1, 0, len(x) - 2)
+    h = x[i + 1] - x[i]; A = (x[i + 1] - t) / h; B = (t - x[i]) / h
+    if deriv == 0:
+        return A * y[i] + B * y[i + 1] + ((A**3 - A) * M[i] + (B**3 - B) * M[i + 1]) * h**2 / 6
+    return (y[i + 1] - y[i]) / h + (-(3 * A**2 - 1) * M[i] + (3 * B**2 - 1) * M[i + 1]) * h / 6
+
+M = natural_M(t, y)
+tt = np.linspace(0, 10, 1001)
+f = CubicSpline(t, y, bc_type="natural")
+print(np.max(np.abs(spline_eval(t, y, M, tt) - f(tt))))               # values
+# 4.440892098500626e-16
+print(np.max(np.abs(spline_eval(t, y, M, tt, 1) - f(tt, 1))))         # slopes
+# 1.1102230246251565e-16
+print(np.max(np.abs(spline_eval(t, y, M, t) - y)))                    # through the data?
+# 0.0
+h = np.diff(t); s = np.diff(y) / h; k = np.arange(1, len(t) - 1)
+left = s[k - 1] + (M[k - 1] + 2 * M[k]) * h[k - 1] / 6               # S' just left of t_k
+right = s[k] - (2 * M[k] + M[k + 1]) * h[k] / 6                      # S' just right of t_k
+print(np.max(np.abs(left - right)))
+# 5.551115123125783e-17
+print(natural_M(np.array([0., 1, 2, 3]), np.array([0., 1, 0, 1])))  # B4
+# [ 0. -4.  4.  0.]
+print(natural_M(np.array([0., 1, 2]), np.array([0., 1, 0])))        # B3: 1 x 1 system
+# [ 0. -3.  0.]
+```
+
+### Rust
+
+```rust
+// rust/examples/splines_c2.rs  —  cargo run --example splines_c2
+// C2: the hand-written natural spline through the noisy OD data, and its checks:
+// diagonal dominance, interpolation, continuity of S' at the knots.
+// (Rust has no library spline in our crate list, so there is no library to compare with.)
+
+// Thomas algorithm (Structure: symmetric, banded, sparse); a[0] and c[n-1] unused
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+// second derivatives M of the natural spline (M[0] = M[n-1] = 0)
+fn spline_m(x: &[f64], y: &[f64]) -> Vec<f64> {
+    let n = x.len();
+    let h: Vec<f64> = (0..n - 1).map(|i| x[i + 1] - x[i]).collect();
+    let s: Vec<f64> = (0..n - 1).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
+    let a: Vec<f64> = h[..n - 2].to_vec();                       // h_{i-1}
+    let c: Vec<f64> = h[1..].to_vec();                           // h_i
+    let b: Vec<f64> = (0..n - 2).map(|i| 2.0 * (a[i] + c[i])).collect();
+    let d: Vec<f64> = (0..n - 2).map(|i| 6.0 * (s[i + 1] - s[i])).collect();
+    let mut m = vec![0.0];
+    m.extend(thomas(&a, &b, &c, &d));
+    m.push(0.0);
+    m
+}
+
+// value (deriv = 0) or slope (deriv = 1) of the spline at t
+fn spline_eval(x: &[f64], y: &[f64], m: &[f64], t: f64, deriv: u8) -> f64 {
+    let i = x.partition_point(|&xi| xi <= t).clamp(1, x.len() - 1) - 1;
+    let h = x[i + 1] - x[i];
+    let (a, b) = ((x[i + 1] - t) / h, (t - x[i]) / h);
+    if deriv == 0 {
+        a * y[i] + b * y[i + 1] + ((a * a * a - a) * m[i] + (b * b * b - b) * m[i + 1]) * h * h / 6.0
+    } else {
+        (y[i + 1] - y[i]) / h + (-(3.0 * a * a - 1.0) * m[i] + (3.0 * b * b - 1.0) * m[i + 1]) * h / 6.0
+    }
+}
+
+fn main() {
+    let t: Vec<f64> = (0..41).map(|i| i as f64 * 0.25).collect();
+    let y = [0.040, 0.058, 0.076, 0.077, 0.108, 0.127, 0.152, 0.191, 0.200,
+             0.263, 0.284, 0.327, 0.382, 0.446, 0.502, 0.556, 0.610, 0.672,
+             0.749, 0.794, 0.839, 0.883, 0.934, 0.958, 1.004, 1.032, 1.076,
+             1.097, 1.105, 1.111, 1.144, 1.155, 1.163, 1.171, 1.167, 1.182,
+             1.193, 1.184, 1.177, 1.197, 1.199];
+    let n = t.len();
+    let m = spline_m(&t, &y);
+    let h: Vec<f64> = (0..n - 1).map(|i| t[i + 1] - t[i]).collect();
+    let s: Vec<f64> = (0..n - 1).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
+    // diagonal dominance: 2 (h_{i-1} + h_i) > h_{i-1} + h_i in every row
+    let dom = (1..n - 1).all(|k| 2.0 * (h[k - 1] + h[k]) > h[k - 1] + h[k]);
+    println!("diagonally dominant: {}", dom);
+    let interp = (0..n).map(|i| (spline_eval(&t, &y, &m, t[i], 0) - y[i]).abs())
+        .fold(0.0_f64, f64::max);
+    println!("{:e}", interp);                                       // through the data?
+    let mut jump = 0.0_f64;
+    for k in 1..n - 1 {
+        let left = s[k - 1] + (m[k - 1] + 2.0 * m[k]) * h[k - 1] / 6.0; // S' just left of t_k
+        let right = s[k] - (2.0 * m[k] + m[k + 1]) * h[k] / 6.0;        // S' just right of t_k
+        jump = jump.max((left - right).abs());
+    }
+    println!("{:e}", jump);
+    println!("{:.6} {:.6}", spline_eval(&t, &y, &m, 3.1, 0), spline_eval(&t, &y, &m, 3.1, 1));
+}
+
+// Output:
+// diagonally dominant: true
+// 0e0
+// 5.551115123125783e-17
+// 0.407383 0.260897
+```
+
+:::
+
+The hand-written spline agrees with the library to rounding level, passes exactly through the data, and has a continuous slope: the system of Fact 4 is exactly "slope from the left = slope from the right". In R, `thomas` fails for a single unknown (B3), because `2:1` counts down; guard it with `if (n == 1) return(d / b)`. The Python loop `range(1, 1)` is empty, so it works. The Rust version has no library to compare with; it checks diagonal dominance, interpolation and the slope jumps, and reproduces the Background values at 3.1 h.
+
+**C3.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+clamped_M <- function(x, y, d0, dn) {             # S'(x_1) = d0, S'(x_n) = dn
+  n <- length(x); h <- diff(x); s <- diff(y) / h
+  a  <- c(0, h)                                   # a[i] = h_{i-1}
+  b  <- c(2 * h[1], 2 * (h[-(n - 1)] + h[-1]), 2 * h[n - 1])
+  cc <- c(h, 0)                                   # c[i] = h_i
+  d  <- c(6 * (s[1] - d0), 6 * diff(s), 6 * (dn - s[n - 1]))
+  thomas(a, b, cc, d)
+}
+# thomas, natural_M, spline_eval from C2
+K <- 1.2; N0 <- 0.05; r <- 0.8
+od   <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
+rate <- function(t) r * od(t) * (1 - od(t) / K)
+x <- 0:10; y <- od(x)
+tt <- seq(0, 10, by = 0.01); early <- tt <= 1
+err <- function(S) c(all = max(abs(S - od(tt))), first_hour = max(abs(S - od(tt))[early]))
+rbind(natural = err(spline_eval(x, y, natural_M(x, y), tt)),
+      clamped = err(spline_eval(x, y, clamped_M(x, y, rate(0), rate(10)), tt)),
+      flat    = err(spline_eval(x, y, clamped_M(x, y, 0, 0), tt)),
+      default = err(splinefun(x, y)(tt)))
+#                  all   first_hour
+# natural 0.0013133512 1.313351e-03
+# clamped 0.0002275886 3.058918e-05
+# flat    0.0065443510 6.544351e-03
+# default 0.0002532774 2.161325e-04
+library(pracma)                                    # check the clamped spline
+max(abs(spline_eval(x, y, clamped_M(x, y, rate(0), rate(10)), tt) -
+        cubicspline(x, y, tt, endp2nd = TRUE, der = rate(c(0, 10)))))
+# [1] 2.220446e-16
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.interpolate import CubicSpline
+# thomas, natural_M, spline_eval from C2
+
+def clamped_M(x, y, d0, dn):                      # S'(x_0) = d0, S'(x_{n-1}) = dn
+    h = np.diff(x); s = np.diff(y) / h
+    a = np.concatenate([[0], h])                  # a[i] = h_{i-1}
+    b = np.concatenate([[2 * h[0]], 2 * (h[:-1] + h[1:]), [2 * h[-1]]])
+    c = np.concatenate([h, [0]])                  # c[i] = h_i
+    d = np.concatenate([[6 * (s[0] - d0)], 6 * np.diff(s), [6 * (dn - s[-1])]])
+    return thomas(a, b, c, d)
+
+K, N0, r = 1.2, 0.05, 0.8
+od = lambda t: K / (1 + (K / N0 - 1) * np.exp(-r * t))
+rate = lambda t: r * od(t) * (1 - od(t) / K)
+x = np.arange(11.0); y = od(x)
+tt = np.linspace(0, 10, 1001); early = tt <= 1
+def err(S):
+    e = np.abs(S - od(tt)); return f"{e.max():.4e} {e[early].max():.4e}"
+print("natural", err(spline_eval(x, y, natural_M(x, y), tt)))
+print("clamped", err(spline_eval(x, y, clamped_M(x, y, rate(0), rate(10)), tt)))
+print("flat   ", err(spline_eval(x, y, clamped_M(x, y, 0, 0), tt)))
+print("default", err(CubicSpline(x, y)(tt)))
+cs = CubicSpline(x, y, bc_type=((1, rate(0)), (1, rate(10))))   # check the clamped spline
+print(np.max(np.abs(spline_eval(x, y, clamped_M(x, y, rate(0), rate(10)), tt) - cs(tt))))
+# natural 1.3134e-03 1.3134e-03
+# clamped 2.2759e-04 3.0589e-05
+# flat    6.5444e-03 6.5444e-03
+# default 2.2717e-04 1.8388e-05
+# 4.440892098500626e-16
+```
+
+### Rust
+
+```rust
+// rust/examples/splines_c3.rs  —  cargo run --example splines_c3
+// C3: natural vs clamped end conditions on 11 exact OD values (h = 1 h), hand-written.
+// Rust has no not-a-knot / fmm library spline here, so the "default" row is missing.
+
+// scientific notation as R and Python print it: 1.3134e-03 rather than Rust's 1.3134e-3
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+// Thomas algorithm (Structure: symmetric, banded, sparse); a[0] and c[n-1] unused
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+// second derivatives M of the natural spline (M[0] = M[n-1] = 0)
+fn spline_m(x: &[f64], y: &[f64]) -> Vec<f64> {
+    let n = x.len();
+    let h: Vec<f64> = (0..n - 1).map(|i| x[i + 1] - x[i]).collect();
+    let s: Vec<f64> = (0..n - 1).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
+    let a: Vec<f64> = h[..n - 2].to_vec();                       // h_{i-1}
+    let c: Vec<f64> = h[1..].to_vec();                           // h_i
+    let b: Vec<f64> = (0..n - 2).map(|i| 2.0 * (a[i] + c[i])).collect();
+    let d: Vec<f64> = (0..n - 2).map(|i| 6.0 * (s[i + 1] - s[i])).collect();
+    let mut m = vec![0.0];
+    m.extend(thomas(&a, &b, &c, &d));
+    m.push(0.0);
+    m
+}
+
+// value (deriv = 0) or slope (deriv = 1) of the spline at t
+fn spline_eval(x: &[f64], y: &[f64], m: &[f64], t: f64, deriv: u8) -> f64 {
+    let i = x.partition_point(|&xi| xi <= t).clamp(1, x.len() - 1) - 1;
+    let h = x[i + 1] - x[i];
+    let (a, b) = ((x[i + 1] - t) / h, (t - x[i]) / h);
+    if deriv == 0 {
+        a * y[i] + b * y[i + 1] + ((a * a * a - a) * m[i] + (b * b * b - b) * m[i + 1]) * h * h / 6.0
+    } else {
+        (y[i + 1] - y[i]) / h + (-(3.0 * a * a - 1.0) * m[i] + (3.0 * b * b - 1.0) * m[i + 1]) * h / 6.0
+    }
+}
+
+// clamped spline: S'(x_0) = d0, S'(x_{n-1}) = dn; full n x n tridiagonal system
+fn clamped_m(x: &[f64], y: &[f64], d0: f64, dn: f64) -> Vec<f64> {
+    let n = x.len();
+    let h: Vec<f64> = (0..n - 1).map(|i| x[i + 1] - x[i]).collect();
+    let s: Vec<f64> = (0..n - 1).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
+    let mut a = vec![0.0]; a.extend(&h);                  // a[i] = h_{i-1}
+    let mut c = h.clone(); c.push(0.0);                   // c[i] = h_i
+    let mut b = vec![2.0 * h[0]];
+    b.extend((1..n - 1).map(|i| 2.0 * (h[i - 1] + h[i])));
+    b.push(2.0 * h[n - 2]);
+    let mut d = vec![6.0 * (s[0] - d0)];
+    d.extend((1..n - 1).map(|i| 6.0 * (s[i] - s[i - 1])));
+    d.push(6.0 * (dn - s[n - 2]));
+    thomas(&a, &b, &c, &d)
+}
+
+fn main() {
+    let (k, n0, r) = (1.2, 0.05, 0.8);
+    let od = |t: f64| k / (1.0 + (k / n0 - 1.0) * (-r * t).exp());
+    let rate = |t: f64| r * od(t) * (1.0 - od(t) / k);
+    let x: Vec<f64> = (0..=10).map(|i| i as f64).collect();
+    let y: Vec<f64> = x.iter().map(|&xi| od(xi)).collect();
+    let tt: Vec<f64> = (0..=1000).map(|i| i as f64 / 100.0).collect();
+    let cases = [("natural", spline_m(&x, &y)),
+                 ("clamped", clamped_m(&x, &y, rate(0.0), rate(10.0))),
+                 ("flat   ", clamped_m(&x, &y, 0.0, 0.0))];
+    for (name, m) in cases.iter() {
+        let (mut all, mut early) = (0.0_f64, 0.0_f64);
+        for &t in &tt {
+            let e = (spline_eval(&x, &y, m, t, 0) - od(t)).abs();
+            all = all.max(e);
+            if t <= 1.0 { early = early.max(e); }
+        }
+        println!("{} {} {}", name, sci(all, 4), sci(early, 4));
+    }
+}
+
+// Output:
+// natural 1.3134e-03 1.3134e-03
+// clamped 2.2759e-04 3.0589e-05
+// flat    6.5444e-03 6.5444e-03
+```
+
+:::
+
+With the true end slopes, the clamped spline is the most accurate near $t = 0$ (error $3\times10^{-5}$), 40 times better than natural there. Its worst error, $2.3\times10^{-4}$, is now in the interior and the same as for the default (fmm, not-a-knot) splines. Clamping a **wrong** slope (0 at $t = 0$, where the culture already grows at 0.038 OD/h) is the worst choice of all, 5 times worse than natural. Natural is a safe "know nothing" choice; clamped is best only when the slope is really known. The library check confirms the hand-written clamped system (pracma's `endp2nd = TRUE` means "the end-point derivatives are given in `der`").
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+tg <- c(0, 0.5, 1, 2, 4, 8, 12, 24)               # hours after stimulation
+eg <- c(1, 40, 32, 6, 1, 0.5, 0.5, 0.5)           # TPM
+tt <- seq(0, 24, by = 0.01)
+fits <- list(default  = splinefun(tg, eg),        # "fmm"
+             natural  = splinefun(tg, eg, method = "natural"),
+             monotone = splinefun(tg, eg, method = "monoH.FC"),
+             log2     = function(t) 2^splinefun(tg, log2(eg))(t))
+round(sapply(fits, function(f) c(at_3h = f(3), min = min(f(tt)),
+                                 t_min = tt[which.min(f(tt))], max = max(f(tt)))), 3)
+#       default natural monotone   log2
+# at_3h  -1.641  -1.083    1.726  1.943
+# min    -1.645  -1.100    0.500  0.490
+# t_min   3.030   3.060    8.000 10.380
+# max    40.764  41.725   41.488 47.985
+approx(tg, eg, 3)$y                               # piecewise linear
+# [1] 3.5
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.interpolate import CubicSpline, PchipInterpolator
+
+tg = np.array([0, 0.5, 1, 2, 4, 8, 12, 24])       # hours after stimulation
+eg = np.array([1, 40, 32, 6, 1, 0.5, 0.5, 0.5])   # TPM
+tt = np.linspace(0, 24, 2401)
+fits = {"default": CubicSpline(tg, eg),           # not-a-knot
+        "natural": CubicSpline(tg, eg, bc_type="natural"),
+        "monotone": PchipInterpolator(tg, eg),
+        "log2": lambda t: 2**CubicSpline(tg, np.log2(eg))(t)}
+for name, f in fits.items():
+    v = f(tt)
+    print(f"{name:9s} at_3h {float(f(3)):7.3f}  min {v.min():7.3f}  t_min {tt[v.argmin()]:5.2f}  max {v.max():6.3f}")
+# default   at_3h  -1.727  min  -1.730  t_min  3.02  max 40.640
+# natural   at_3h  -1.083  min  -1.100  t_min  3.06  max 41.725
+# monotone  at_3h   2.311  min   0.500  t_min  8.00  max 40.000
+# log2      at_3h   1.930  min   0.497  t_min  9.86  max 47.321
+print(np.interp(3, tg, eg))                       # piecewise linear
+# 3.5
+```
+
+### Rust
+
+```rust
+// rust/examples/splines_c4.rs  —  cargo run --example splines_c4
+// C4: overshoot of a cubic spline through a gene time course, and two fixes:
+// a monotone (PCHIP, as scipy's PchipInterpolator) interpolant and a spline of log2.
+// All hand-written; the natural spline stands in for the library default.
+
+// Thomas algorithm (Structure: symmetric, banded, sparse); a[0] and c[n-1] unused
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+// second derivatives M of the natural spline (M[0] = M[n-1] = 0)
+fn spline_m(x: &[f64], y: &[f64]) -> Vec<f64> {
+    let n = x.len();
+    let h: Vec<f64> = (0..n - 1).map(|i| x[i + 1] - x[i]).collect();
+    let s: Vec<f64> = (0..n - 1).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
+    let a: Vec<f64> = h[..n - 2].to_vec();                       // h_{i-1}
+    let c: Vec<f64> = h[1..].to_vec();                           // h_i
+    let b: Vec<f64> = (0..n - 2).map(|i| 2.0 * (a[i] + c[i])).collect();
+    let d: Vec<f64> = (0..n - 2).map(|i| 6.0 * (s[i + 1] - s[i])).collect();
+    let mut m = vec![0.0];
+    m.extend(thomas(&a, &b, &c, &d));
+    m.push(0.0);
+    m
+}
+
+// value (deriv = 0) or slope (deriv = 1) of the spline at t
+fn spline_eval(x: &[f64], y: &[f64], m: &[f64], t: f64, deriv: u8) -> f64 {
+    let i = x.partition_point(|&xi| xi <= t).clamp(1, x.len() - 1) - 1;
+    let h = x[i + 1] - x[i];
+    let (a, b) = ((x[i + 1] - t) / h, (t - x[i]) / h);
+    if deriv == 0 {
+        a * y[i] + b * y[i + 1] + ((a * a * a - a) * m[i] + (b * b * b - b) * m[i + 1]) * h * h / 6.0
+    } else {
+        (y[i + 1] - y[i]) / h + (-(3.0 * a * a - 1.0) * m[i] + (3.0 * b * b - 1.0) * m[i + 1]) * h / 6.0
+    }
+}
+
+// PCHIP slopes (Fritsch-Butland weighted harmonic mean, scipy's end rule)
+fn pchip_slopes(x: &[f64], y: &[f64]) -> Vec<f64> {
+    let n = x.len();
+    let h: Vec<f64> = (0..n - 1).map(|i| x[i + 1] - x[i]).collect();
+    let s: Vec<f64> = (0..n - 1).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
+    let mut d = vec![0.0; n];
+    for k in 1..n - 1 {
+        if s[k - 1] * s[k] > 0.0 {                 // same sign: harmonic mean
+            let (w1, w2) = (2.0 * h[k] + h[k - 1], h[k] + 2.0 * h[k - 1]);
+            d[k] = (w1 + w2) / (w1 / s[k - 1] + w2 / s[k]);
+        }                                          // local extremum: slope 0
+    }
+    let end = |h0: f64, h1: f64, s0: f64, s1: f64| {
+        let d0 = ((2.0 * h0 + h1) * s0 - h0 * s1) / (h0 + h1);
+        if d0.signum() != s0.signum() { 0.0 }
+        else if s0.signum() != s1.signum() && d0.abs() > 3.0 * s0.abs() { 3.0 * s0 }
+        else { d0 }
+    };
+    d[0] = end(h[0], h[1], s[0], s[1]);
+    d[n - 1] = end(h[n - 2], h[n - 3], s[n - 2], s[n - 3]);
+    d
+}
+
+// cubic Hermite interpolant with values y and slopes d at the knots
+fn hermite_eval(x: &[f64], y: &[f64], d: &[f64], t: f64) -> f64 {
+    let i = x.partition_point(|&xi| xi <= t).clamp(1, x.len() - 1) - 1;
+    let h = x[i + 1] - x[i];
+    let u = (t - x[i]) / h;
+    let (h00, h10) = ((1.0 + 2.0 * u) * (1.0 - u).powi(2), u * (1.0 - u).powi(2));
+    let (h01, h11) = (u * u * (3.0 - 2.0 * u), u * u * (u - 1.0));
+    h00 * y[i] + h10 * h * d[i] + h01 * y[i + 1] + h11 * h * d[i + 1]
+}
+
+fn main() {
+    let tg: [f64; 8] = [0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 12.0, 24.0];   // hours after stimulation
+    let eg: [f64; 8] = [1.0, 40.0, 32.0, 6.0, 1.0, 0.5, 0.5, 0.5];   // TPM
+    let lg: Vec<f64> = eg.iter().map(|v| v.log2()).collect();
+    let (m, ml, dp) = (spline_m(&tg, &eg), spline_m(&tg, &lg), pchip_slopes(&tg, &eg));
+    let fits: [(&str, Box<dyn Fn(f64) -> f64>); 3] = [
+        ("natural", Box::new(|t| spline_eval(&tg, &eg, &m, t, 0))),
+        ("monotone", Box::new(|t| hermite_eval(&tg, &eg, &dp, t))),
+        ("log2", Box::new(|t| 2f64.powf(spline_eval(&tg, &lg, &ml, t, 0)))),
+    ];
+    let tt: Vec<f64> = (0..=2400).map(|i| i as f64 / 100.0).collect();
+    for (name, f) in fits.iter() {
+        let v: Vec<f64> = tt.iter().map(|&t| f(t)).collect();
+        let (imin, vmin) = v.iter().enumerate().fold((0, f64::INFINITY),
+            |acc, (i, &vi)| if vi < acc.1 - 1e-12 { (i, vi) } else { acc });
+        let vmax = v.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        println!("{:9} at_3h {:7.3}  min {:7.3}  t_min {:5.2}  max {:6.3}",
+                 name, f(3.0), vmin, tt[imin], vmax);
+    }
+}
+
+// Output:
+// natural   at_3h  -1.083  min  -1.100  t_min  3.06  max 41.725
+// monotone  at_3h   2.311  min   0.500  t_min  8.00  max 40.000
+// log2      at_3h   2.034  min   0.496  t_min 17.07  max 52.756
+```
+
+:::
+
+Both ordinary cubic splines predict **negative** expression around 3 h, the bottom of the swing after the steep fall from 32 to 6 to 1 TPM. The monotone interpolants stay within the data on every interval (minimum exactly 0.5; PCHIP's maximum is exactly the largest data value, 40. R's monoH.FC only guarantees monotonicity where the data are monotone and overshoots the peak slightly, to 41.5). They give up continuity of $S''$. The log-scale spline is always positive, but it overshoots the **peak** (48 instead of 40 TPM) and dips slightly below the 0.5 TPM baseline later. The R and Python numbers differ for the default and log2 rows because the default end conditions differ (fmm vs not-a-knot), and for "monotone" because R's Fritsch–Carlson and scipy's PCHIP choose the slopes differently. The Rust row "log2" uses the natural spline and so matches neither default; its monotone row matches scipy's PCHIP. With only 8 time points, no interpolant knows what happened between 2 h and 4 h; plot it and report that it is an interpolation.
+
+**C5.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+K <- 1.2; N0 <- 0.05; r <- 0.8                    # t, y: the OD reads (Background)
+od   <- function(t) K / (1 + (K / N0 - 1) * exp(-r * t))
+rate <- function(t) r * od(t) * (1 - od(t) / K)
+rms  <- function(e) sqrt(mean(e^2))
+n <- length(t)
+cd <- (y[3:n] - y[1:(n - 2)]) / 0.5               # central differences
+rms(cd - rate(t[2:(n - 1)]))
+# [1] 0.02427257
+fi <- splinefun(t, y, method = "natural")         # interpolating spline
+rms(fi(t, deriv = 1) - rate(t))
+# [1] 0.03827564
+fit <- smooth.spline(t, y)                        # smoothing spline, GCV
+c(lam = fit$lambda * 1000, df = fit$df)           # lam in Python's units
+#       lam        df
+# 0.1355283 9.4163790
+rms(predict(fit, t, deriv = 1)$y - rate(t))
+# [1] 0.006655973
+tf <- seq(0, 10, by = 0.01)
+g <- predict(fit, tf, deriv = 1)$y
+c(max(g), tf[which.max(g)])                       # true: 0.24 at 3.92 h
+# [1] 0.2388003 4.0100000
+for (lam in c(10, 0.005)) {
+  f <- smooth.spline(t, y, lambda = lam / 1000)   # R rescales t to [0, 1]
+  cat("lam", lam, " df", round(f$df, 2), " rms", rms(predict(f, t, deriv = 1)$y - rate(t)), "\n")
+}
+# lam 10  df 3.88  rms 0.03972868
+# lam 0.005  df 19.96  rms 0.01613127
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.interpolate import CubicSpline, make_smoothing_spline
+# t, y: the OD reads (Background)
+
+K, N0, r = 1.2, 0.05, 0.8
+od = lambda t: K / (1 + (K / N0 - 1) * np.exp(-r * t))
+rate = lambda t: r * od(t) * (1 - od(t) / K)
+rms = lambda e: np.sqrt(np.mean(e**2))
+cd = (y[2:] - y[:-2]) / 0.5                       # central differences
+print(rms(cd - rate(t[1:-1])))
+# 0.024272570200055993
+fi = CubicSpline(t, y, bc_type="natural")         # interpolating spline
+print(rms(fi(t, 1) - rate(t)))
+# 0.03827563713866127
+fit = make_smoothing_spline(t, y)                 # smoothing spline, GCV
+print(rms(fit.derivative()(t) - rate(t)))
+# 0.006655528692101643
+tf = np.linspace(0, 10, 1001)
+g = fit.derivative()(tf)
+print(g.max(), tf[g.argmax()])                    # true: 0.24 at 3.92 h
+# 0.23880204237797847 4.01
+for lam in [10, 0.005]:
+    f = make_smoothing_spline(t, y, lam=lam)
+    print("lam", lam, " rms", rms(f.derivative()(t) - rate(t)))
+# lam 10  rms 0.039728810509387404
+# lam 0.005  rms 0.016126791453247632
+```
+
+### Rust
+
+```rust
+// rust/examples/splines_c5.rs  —  cargo run --example splines_c5
+// C5: growth rate from the noisy OD reads: central differences, the slope of the
+// interpolating spline, and the slope of a smoothing spline with lam chosen by GCV.
+// Hand-written (nalgebra for the small dense solve); scipy's make_smoothing_spline
+// solves the same problem.
+use nalgebra::{DMatrix, DVector};
+
+// Thomas algorithm (Structure: symmetric, banded, sparse); a[0] and c[n-1] unused
+fn thomas(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
+    let n = d.len();
+    let (mut b, mut d) = (b.to_vec(), d.to_vec());
+    for i in 1..n {
+        let w = a[i] / b[i - 1];
+        b[i] -= w * c[i - 1];
+        d[i] -= w * d[i - 1];
+    }
+    let mut x = vec![0.0; n];
+    x[n - 1] = d[n - 1] / b[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = (d[i] - c[i] * x[i + 1]) / b[i];
+    }
+    x
+}
+
+// second derivatives M of the natural spline (M[0] = M[n-1] = 0)
+fn spline_m(x: &[f64], y: &[f64]) -> Vec<f64> {
+    let n = x.len();
+    let h: Vec<f64> = (0..n - 1).map(|i| x[i + 1] - x[i]).collect();
+    let s: Vec<f64> = (0..n - 1).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
+    let a: Vec<f64> = h[..n - 2].to_vec();                       // h_{i-1}
+    let c: Vec<f64> = h[1..].to_vec();                           // h_i
+    let b: Vec<f64> = (0..n - 2).map(|i| 2.0 * (a[i] + c[i])).collect();
+    let d: Vec<f64> = (0..n - 2).map(|i| 6.0 * (s[i + 1] - s[i])).collect();
+    let mut m = vec![0.0];
+    m.extend(thomas(&a, &b, &c, &d));
+    m.push(0.0);
+    m
+}
+
+// value (deriv = 0) or slope (deriv = 1) of the spline at t
+fn spline_eval(x: &[f64], y: &[f64], m: &[f64], t: f64, deriv: u8) -> f64 {
+    let i = x.partition_point(|&xi| xi <= t).clamp(1, x.len() - 1) - 1;
+    let h = x[i + 1] - x[i];
+    let (a, b) = ((x[i + 1] - t) / h, (t - x[i]) / h);
+    if deriv == 0 {
+        a * y[i] + b * y[i + 1] + ((a * a * a - a) * m[i] + (b * b * b - b) * m[i + 1]) * h * h / 6.0
+    } else {
+        (y[i + 1] - y[i]) / h + (-(3.0 * a * a - 1.0) * m[i] + (3.0 * b * b - 1.0) * m[i + 1]) * h / 6.0
+    }
+}
+
+
+// Smoothing spline (Reinsch form): minimise sum (y_i - g_i)^2 + lam * int S''^2.
+// With Q (n x n-2) and R (n-2 x n-2, tridiagonal) built from the spacings,
+// solve (R + lam Q^T Q) gamma = Q^T y; fitted values g = y - lam Q gamma;
+// gamma are the second derivatives at the interior knots (natural spline).
+struct Fit { g: Vec<f64>, m: Vec<f64>, df: f64 }
+
+fn smooth_fit(x: &[f64], y: &[f64], lam: f64) -> Fit {
+    let n = x.len();
+    let h: Vec<f64> = (0..n - 1).map(|i| x[i + 1] - x[i]).collect();
+    let mut q = DMatrix::<f64>::zeros(n, n - 2);
+    let mut r = DMatrix::<f64>::zeros(n - 2, n - 2);
+    for j in 0..n - 2 {                            // column j <-> interior knot j+1
+        q[(j, j)] = 1.0 / h[j];
+        q[(j + 1, j)] = -1.0 / h[j] - 1.0 / h[j + 1];
+        q[(j + 2, j)] = 1.0 / h[j + 1];
+        r[(j, j)] = (h[j] + h[j + 1]) / 3.0;
+        if j + 1 < n - 2 { r[(j, j + 1)] = h[j + 1] / 6.0; r[(j + 1, j)] = h[j + 1] / 6.0; }
+    }
+    let yv = DVector::from_column_slice(y);
+    let binv = (&r + lam * q.transpose() * &q).try_inverse().unwrap();
+    let gamma = &binv * (q.transpose() * &yv);
+    let g = &yv - lam * &q * &gamma;
+    let s = lam * &q * &binv * q.transpose();      // hat matrix A = I - S
+    let df: f64 = (0..n).map(|i| 1.0 - s[(i, i)]).sum();  // trace of A
+    let mut m = vec![0.0];
+    m.extend(gamma.iter());
+    m.push(0.0);
+    Fit { g: g.iter().cloned().collect(), m, df }
+}
+
+fn gcv(x: &[f64], y: &[f64], lam: f64) -> f64 {
+    let f = smooth_fit(x, y, lam);
+    let n = x.len() as f64;
+    let rss: f64 = y.iter().zip(&f.g).map(|(a, b)| (a - b).powi(2)).sum();
+    n * rss / (n - f.df).powi(2)
+}
+
+// minimise a function of log10(lam): coarse grid, then golden section
+fn minimise_log(fun: &dyn Fn(f64) -> f64, lo: f64, hi: f64) -> f64 {
+    let grid: Vec<f64> = (0..=90).map(|i| lo + (hi - lo) * i as f64 / 90.0).collect();
+    let k = (0..grid.len()).min_by(|&a, &b| fun(grid[a]).partial_cmp(&fun(grid[b])).unwrap()).unwrap();
+    let (mut a, mut b) = (grid[k.saturating_sub(1)], grid[(k + 1).min(90)]);
+    let phi = (5f64.sqrt() - 1.0) / 2.0;
+    while b - a > 1e-8 {
+        let (c, d) = (b - phi * (b - a), a + phi * (b - a));
+        if fun(c) < fun(d) { b = d } else { a = c }
+    }
+    0.5 * (a + b)
+}
+
+fn main() {
+    let t: Vec<f64> = (0..41).map(|i| i as f64 * 0.25).collect();
+    let y = [0.040, 0.058, 0.076, 0.077, 0.108, 0.127, 0.152, 0.191, 0.200,
+             0.263, 0.284, 0.327, 0.382, 0.446, 0.502, 0.556, 0.610, 0.672,
+             0.749, 0.794, 0.839, 0.883, 0.934, 0.958, 1.004, 1.032, 1.076,
+             1.097, 1.105, 1.111, 1.144, 1.155, 1.163, 1.171, 1.167, 1.182,
+             1.193, 1.184, 1.177, 1.197, 1.199];
+    let (k, n0, r) = (1.2, 0.05, 0.8);
+    let od = |t: f64| k / (1.0 + (k / n0 - 1.0) * (-r * t).exp());
+    let rate = |t: f64| r * od(t) * (1.0 - od(t) / k);
+    let rms = |e: &[f64]| (e.iter().map(|v| v * v).sum::<f64>() / e.len() as f64).sqrt();
+    let n = t.len();
+    let cd: Vec<f64> = (1..n - 1).map(|i| (y[i + 1] - y[i - 1]) / 0.5 - rate(t[i])).collect();
+    println!("{}", rms(&cd));                                  // central differences
+    let m = spline_m(&t, &y);                                   // interpolating spline
+    let e: Vec<f64> = t.iter().map(|&ti| spline_eval(&t, &y, &m, ti, 1) - rate(ti)).collect();
+    println!("{}", rms(&e));
+    let l10 = minimise_log(&|l| gcv(&t, &y, 10f64.powf(l)), -6.0, 3.0);
+    let fit = smooth_fit(&t, &y, 10f64.powf(l10));             // smoothing spline, GCV
+    println!("lam {:.4}  df {:.4}", 10f64.powf(l10), fit.df);
+    let e: Vec<f64> = t.iter().map(|&ti| spline_eval(&t, &fit.g, &fit.m, ti, 1) - rate(ti)).collect();
+    println!("{}", rms(&e));
+    let (mut best, mut at) = (f64::NEG_INFINITY, 0.0);
+    for i in 0..=1000 {
+        let ti = i as f64 / 100.0;
+        let d = spline_eval(&t, &fit.g, &fit.m, ti, 1);
+        if d > best { best = d; at = ti; }
+    }
+    println!("{:.7} {:.2}", best, at);                          // true: 0.24 at 3.92 h
+    for lam in [10.0, 0.005] {
+        let f = smooth_fit(&t, &y, lam);
+        let e: Vec<f64> = t.iter().map(|&ti| spline_eval(&t, &f.g, &f.m, ti, 1) - rate(ti)).collect();
+        println!("lam {:5}  df {:.2}  rms {}", lam, f.df, rms(&e));
+    }
+}
+
+// Output:
+// 0.02427257020005599
+// 0.03827563713866127
+// lam 0.1355  df 9.4168
+// 0.0066555280451817056
+// 0.2388020 4.01
+// lam    10  df 3.88  rms 0.03972881050939488
+// lam 0.005  df 19.96  rms 0.016126791453247698
+```
+
+:::
+
+| method | rms error of $N'(t)$ (OD/h) |
+|---|---|
+| central differences | 0.024 |
+| slope of interpolating spline | 0.038 |
+| smoothing spline, GCV (df 9.4) | **0.0067** |
+| smoothing spline, `lam = 10` (df 3.9) | 0.040 (too smooth: bias) |
+| smoothing spline, `lam = 0.005` (df 20) | 0.016 (too rough: noise) |
+
+The interpolating spline is the worst: it bends to hit every noisy read. The GCV smoothing spline is 3.6 times better than central differences and finds the maximum growth rate within 0.5 % (0.2388 against 0.24) and its time within 6 min (4.01 h against 3.92 h). The factor 1000 is $(\text{range of } t)^3 = 10^3$: R rescales time to $[0, 1]$ before applying $\lambda$. R, Python and the hand-written Rust find the same GCV minimum ($\lambda = 0.1355$, df 9.42) and agree in the rms error to 6 digits; the tiny differences come from the different ways the three solve the same banded system.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+pt <- c(0.013, 0.062, 0.108, 0.126, 0.177, 0.186, 0.202, 0.206, 0.212, 0.266,
+        0.267, 0.340, 0.372, 0.380, 0.382, 0.384, 0.386, 0.411, 0.482, 0.494,
+        0.498, 0.573, 0.600, 0.629, 0.652, 0.661, 0.668, 0.687, 0.718, 0.724,
+        0.770, 0.777, 0.794, 0.827, 0.870, 0.898, 0.908, 0.935, 0.945, 0.992)
+ex <- c(1.32, 1.27, 1.03, 0.30, 1.22, 0.98, 0.95, 0.49, 0.84, 1.16,
+        1.49, 1.06, 1.33, 1.21, 0.76, 1.11, 1.12, 1.39, 2.46, 2.48,
+        2.20, 2.85, 3.24, 3.12, 2.53, 2.45, 2.76, 2.70, 2.04, 2.32,
+        1.69, 1.28, 1.49, 0.81, 1.58, 1.73, 0.90, 0.65, 1.21, 0.95)
+g <- seq(0, 1, by = 0.001)
+peak <- function(fit) { p <- predict(fit, g)$y; c(df = fit$df, at = g[which.max(p)], height = max(p)) }
+lag1 <- function(fit) { e <- residuals(fit); cor(e[-1], e[-length(e)]) }
+L <- diff(range(pt))^3                            # R's lambda = lam / L
+fits <- list(gcv   = smooth.spline(pt, ex),
+             loocv = smooth.spline(pt, ex, cv = TRUE),
+             rough = smooth.spline(pt, ex, lambda = 1e-6 / L),
+             stiff = smooth.spline(pt, ex, lambda = 1e-2 / L))
+t(signif(sapply(fits, function(f) c(lam = f$lambda * L, peak(f), lag1 = lag1(f))), 4))
+#             lam     df    at height     lag1
+# gcv   0.0001113  9.359 0.598  2.970 -0.08928
+# loocv 0.0001166  9.269 0.598  2.967 -0.08621
+# rough 0.0000010 22.550 0.607  3.222 -0.41120
+# stiff 0.0100000  3.778 0.618  2.281  0.52010
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.interpolate import make_smoothing_spline
+
+pt = np.array([0.013, 0.062, 0.108, 0.126, 0.177, 0.186, 0.202, 0.206, 0.212, 0.266,
+               0.267, 0.340, 0.372, 0.380, 0.382, 0.384, 0.386, 0.411, 0.482, 0.494,
+               0.498, 0.573, 0.600, 0.629, 0.652, 0.661, 0.668, 0.687, 0.718, 0.724,
+               0.770, 0.777, 0.794, 0.827, 0.870, 0.898, 0.908, 0.935, 0.945, 0.992])
+ex = np.array([1.32, 1.27, 1.03, 0.30, 1.22, 0.98, 0.95, 0.49, 0.84, 1.16,
+               1.49, 1.06, 1.33, 1.21, 0.76, 1.11, 1.12, 1.39, 2.46, 2.48,
+               2.20, 2.85, 3.24, 3.12, 2.53, 2.45, 2.76, 2.70, 2.04, 2.32,
+               1.69, 1.28, 1.49, 0.81, 1.58, 1.73, 0.90, 0.65, 1.21, 0.95])
+n = len(pt)
+def hat(lam):           # a linear smoother: column j is the fit to the unit vector e_j
+    return np.column_stack([make_smoothing_spline(pt, e, lam=lam)(pt) for e in np.eye(n)])
+def scores(lam):
+    A = hat(lam); res = ex - A @ ex; df = np.trace(A)
+    return n * np.sum(res**2) / (n - df)**2, np.mean((res / (1 - np.diag(A)))**2)
+grid = 10.0**np.arange(-7, -0.99, 0.05)
+S = np.array([scores(l) for l in grid])
+lam_gcv, lam_cv = grid[S[:, 0].argmin()], grid[S[:, 1].argmin()]
+g = np.linspace(0, 1, 1001)
+for name, lam in [("gcv", lam_gcv), ("loocv", lam_cv), ("rough", 1e-6), ("stiff", 1e-2)]:
+    f = make_smoothing_spline(pt, ex, lam=lam); p = f(g); e = ex - f(pt)
+    print(f"{name:6s} lam {lam:.3e}  df {np.trace(hat(lam)):.4f}  at {g[p.argmax()]:.3f}"
+          f"  height {p.max():.4f}  lag1 {np.corrcoef(e[1:], e[:-1])[0, 1]:.4f}")
+# gcv    lam 1.122e-04  df 9.3423  at 0.598  height 2.9699  lag1 -0.0887
+# loocv  lam 1.122e-04  df 9.3423  at 0.598  height 2.9699  lag1 -0.0887
+# rough  lam 1.000e-06  df 22.5395  at 0.607  height 3.2220  lag1 -0.4113
+# stiff  lam 1.000e-02  df 3.7775  at 0.618  height 2.2811  lag1 0.5202
+```
+
+### Rust
+
+```rust
+// rust/examples/splines_c6.rs  —  cargo run --example splines_c6
+// C6: smoothing a gene along pseudotime; lam by GCV and by leave-one-out CV,
+// a too-rough and a too-stiff fit, and the lag-1 residual correlation check.
+// Hand-written smoothing spline (nalgebra for the dense solve), as in C5.
+use nalgebra::{DMatrix, DVector};
+
+// scientific notation as R and Python print it: 1.114e-04 rather than Rust's 1.114e-4
+fn sci(x: f64, digits: usize) -> String {
+    let s = format!("{:.*e}", digits, x);
+    let (m, e) = s.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    format!("{}e{}{:02}", m, if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+// value (deriv = 0) or slope (deriv = 1) of the spline at t
+fn spline_eval(x: &[f64], y: &[f64], m: &[f64], t: f64, deriv: u8) -> f64 {
+    let i = x.partition_point(|&xi| xi <= t).clamp(1, x.len() - 1) - 1;
+    let h = x[i + 1] - x[i];
+    let (a, b) = ((x[i + 1] - t) / h, (t - x[i]) / h);
+    if deriv == 0 {
+        a * y[i] + b * y[i + 1] + ((a * a * a - a) * m[i] + (b * b * b - b) * m[i + 1]) * h * h / 6.0
+    } else {
+        (y[i + 1] - y[i]) / h + (-(3.0 * a * a - 1.0) * m[i] + (3.0 * b * b - 1.0) * m[i + 1]) * h / 6.0
+    }
+}
+
+// Smoothing spline (Reinsch form): minimise sum (y_i - g_i)^2 + lam * int S''^2.
+// With Q (n x n-2) and R (n-2 x n-2, tridiagonal) built from the spacings,
+// solve (R + lam Q^T Q) gamma = Q^T y; fitted values g = y - lam Q gamma;
+// gamma are the second derivatives at the interior knots (natural spline).
+struct Fit { g: Vec<f64>, m: Vec<f64>, hat_diag: Vec<f64>, df: f64 }
+
+fn smooth_fit(x: &[f64], y: &[f64], lam: f64) -> Fit {
+    let n = x.len();
+    let h: Vec<f64> = (0..n - 1).map(|i| x[i + 1] - x[i]).collect();
+    let mut q = DMatrix::<f64>::zeros(n, n - 2);
+    let mut r = DMatrix::<f64>::zeros(n - 2, n - 2);
+    for j in 0..n - 2 {                            // column j <-> interior knot j+1
+        q[(j, j)] = 1.0 / h[j];
+        q[(j + 1, j)] = -1.0 / h[j] - 1.0 / h[j + 1];
+        q[(j + 2, j)] = 1.0 / h[j + 1];
+        r[(j, j)] = (h[j] + h[j + 1]) / 3.0;
+        if j + 1 < n - 2 { r[(j, j + 1)] = h[j + 1] / 6.0; r[(j + 1, j)] = h[j + 1] / 6.0; }
+    }
+    let yv = DVector::from_column_slice(y);
+    let binv = (&r + lam * q.transpose() * &q).try_inverse().unwrap();
+    let gamma = &binv * (q.transpose() * &yv);
+    let g = &yv - lam * &q * &gamma;
+    let s = lam * &q * &binv * q.transpose();      // hat matrix A = I - S
+    let hat_diag: Vec<f64> = (0..n).map(|i| 1.0 - s[(i, i)]).collect();
+    let df = hat_diag.iter().sum();
+    let mut m = vec![0.0];
+    m.extend(gamma.iter());
+    m.push(0.0);
+    Fit { g: g.iter().cloned().collect(), m, hat_diag, df }
+}
+
+fn gcv(x: &[f64], y: &[f64], lam: f64) -> f64 {
+    let f = smooth_fit(x, y, lam);
+    let n = x.len() as f64;
+    let rss: f64 = y.iter().zip(&f.g).map(|(a, b)| (a - b).powi(2)).sum();
+    n * rss / (n - f.df).powi(2)
+}
+
+// minimise a function of log10(lam): coarse grid, then golden section
+fn minimise_log(fun: &dyn Fn(f64) -> f64, lo: f64, hi: f64) -> f64 {
+    let grid: Vec<f64> = (0..=90).map(|i| lo + (hi - lo) * i as f64 / 90.0).collect();
+    let k = (0..grid.len()).min_by(|&a, &b| fun(grid[a]).partial_cmp(&fun(grid[b])).unwrap()).unwrap();
+    let (mut a, mut b) = (grid[k.saturating_sub(1)], grid[(k + 1).min(90)]);
+    let phi = (5f64.sqrt() - 1.0) / 2.0;
+    while b - a > 1e-8 {
+        let (c, d) = (b - phi * (b - a), a + phi * (b - a));
+        if fun(c) < fun(d) { b = d } else { a = c }
+    }
+    0.5 * (a + b)
+}
+
+// leave-one-out CV: for a linear smoother the LOO residual is r_i / (1 - A_ii)
+fn loocv(x: &[f64], y: &[f64], lam: f64) -> f64 {
+    let f = smooth_fit(x, y, lam);
+    let n = x.len() as f64;
+    (0..x.len()).map(|i| ((y[i] - f.g[i]) / (1.0 - f.hat_diag[i])).powi(2)).sum::<f64>() / n
+}
+
+fn main() {
+    let pt = [0.013, 0.062, 0.108, 0.126, 0.177, 0.186, 0.202, 0.206, 0.212, 0.266,
+              0.267, 0.340, 0.372, 0.380, 0.382, 0.384, 0.386, 0.411, 0.482, 0.494,
+              0.498, 0.573, 0.600, 0.629, 0.652, 0.661, 0.668, 0.687, 0.718, 0.724,
+              0.770, 0.777, 0.794, 0.827, 0.870, 0.898, 0.908, 0.935, 0.945, 0.992];
+    let ex = [1.32, 1.27, 1.03, 0.30, 1.22, 0.98, 0.95, 0.49, 0.84, 1.16,
+              1.49, 1.06, 1.33, 1.21, 0.76, 1.11, 1.12, 1.39, 2.46, 2.48,
+              2.20, 2.85, 3.24, 3.12, 2.53, 2.45, 2.76, 2.70, 2.04, 2.32,
+              1.69, 1.28, 1.49, 0.81, 1.58, 1.73, 0.90, 0.65, 1.21, 0.95];
+    let lam_gcv = 10f64.powf(minimise_log(&|l| gcv(&pt, &ex, 10f64.powf(l)), -7.0, -1.0));
+    let lam_cv = 10f64.powf(minimise_log(&|l| loocv(&pt, &ex, 10f64.powf(l)), -7.0, -1.0));
+    for (name, lam) in [("gcv", lam_gcv), ("loocv", lam_cv), ("rough", 1e-6), ("stiff", 1e-2)] {
+        let f = smooth_fit(&pt, &ex, lam);
+        let (mut height, mut at) = (f64::NEG_INFINITY, 0.0);
+        for i in 0..=1000 {
+            let g = i as f64 / 1000.0;
+            let v = spline_eval(&pt, &f.g, &f.m, g, 0);
+            if v > height { height = v; at = g; }
+        }
+        let e: Vec<f64> = ex.iter().zip(&f.g).map(|(a, b)| a - b).collect();
+        let (a, b) = (&e[1..], &e[..e.len() - 1]);
+        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+        let (ma, mb) = (mean(a), mean(b));
+        let cov: f64 = a.iter().zip(b).map(|(p, q)| (p - ma) * (q - mb)).sum();
+        let va: f64 = a.iter().map(|p| (p - ma).powi(2)).sum();
+        let vb: f64 = b.iter().map(|q| (q - mb).powi(2)).sum();
+        println!("{:6} lam {}  df {:.4}  at {:.3}  height {:.4}  lag1 {:.4}",
+                 name, sci(lam, 3), f.df, at, height, cov / (va * vb).sqrt());
+    }
+}
+
+// Output:
+// gcv    lam 1.114e-04  df 9.3566  at 0.598  height 2.9704  lag1 -0.0892
+// loocv  lam 1.166e-04  df 9.2672  at 0.598  height 2.9673  lag1 -0.0861
+// rough  lam 1.000e-06  df 22.5395  at 0.607  height 3.2220  lag1 -0.4113
+// stiff  lam 1.000e-02  df 3.7775  at 0.618  height 2.2811  lag1 0.5202
+```
+
+:::
+
+GCV and leave-one-out CV agree closely (df 9.4 and 9.3) and both put the peak at pseudotime 0.598 with height 2.97, close to the truth (0.6, 3.0). The rough fit (df 22.5) finds a spurious higher, sharper peak (3.22): it follows a few high cells. The stiff fit (df 3.8) flattens the peak to 2.28 and moves it. The residual check flags both: the rough fit has strongly **negative** lag-1 correlation ($-0.41$: residuals alternate in sign, the curve chases individual cells), the stiff fit strongly **positive** ($+0.52$: long runs of residuals with the same sign, a systematic misfit, i.e. bias). The good fits have $|r_1| < 0.1$, well inside the $\pm2/\sqrt{40} = \pm0.32$ expected for independent noise. Python searches a grid with step 0.05 in $\log_{10}\lambda$ and lands on the same grid point for GCV and CV; R and Rust use a one-dimensional optimiser and agree to 3–4 digits. R's df for the rough fit differs from Python and Rust in the third decimal: R's `smooth.spline` computes it with a slightly different (B-spline) representation.
+:::
+
+## Where this leads
+
+- ***Fourier series and the FFT* (Part 6):** a global basis of sines and cosines for periodic data such as circadian expression, and smoothing a noisy trace by dropping high frequencies, a different way of trading bias against noise.
+- ***Numerical differentiation* (Part 7):** finite differences, their truncation-versus-noise V (B6) and Richardson extrapolation, for functions you can evaluate exactly.
+- ***Numerical integration* (Part 7):** integrating a spline exactly is one way to get an area under a sampled curve (AUC).
+- ***Nonlinear least squares and ODE fitting* (Part 9):** when you have a model (here the logistic), fitting it directly uses that knowledge and gives $r$ and $K$ with uncertainties; a smoothing spline is the model-free alternative.
+- ***The SVD, rank deficiency and regularisation* (Part 4):** the roughness penalty is a regularisation, like ridge regression; df plays the role of the effective number of parameters there too.
