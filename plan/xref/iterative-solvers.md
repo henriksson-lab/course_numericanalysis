@@ -1,36 +1,43 @@
 # Cross-references from iterative-solvers
 
-- iterative-solvers/lec.qmd:24 -> structured-sparse (glimpse of Jacobi and CG at the end of that unit) [ok; linked]
-- iterative-solvers/lec.qmd:32 -> structured-sparse, steady-state-2d (notes: prerequisites; 2D Laplacian rebuilt here in one slide) [ok; linked]
-- iterative-solvers/lec.qmd:37 -> structured-sparse (recap slide: morphogen row, Jacobi ~4160 vs CG ~240 iterations, [1 2; 2 1] diverges, exercise C8 jacobi()/cg()) [ok: 4159/4158 Jacobi, 237 CG, ρ = 0.995, [1 2; 2 1] diverges, C8 jacobi()/cg() verified; linked]
-- iterative-solvers/lec.qmd:59 -> steady-state-2d (notes: the culture-chamber oxygen problem, Michaelis-Menten version treated there) [fixed: was "the culture-chamber problem of steady-state-2d"; now states it is a different problem (1 × 1 mm gel, Φ = 12) and relates it to the lid chamber (same 50 amol/s per cell, same five-point matrix)]
-- iterative-solvers/lec.qmd:82 -> steady-state-2d (notes: Kronecker construction of the five-point Laplacian) [fixed: "the Kronecker construction of steady-state-2d, on a square and without D/h^2"; linked]
-- iterative-solvers/lec.qmd:106 -> structured-sparse (notes: CSC ~12 bytes per non-zero) [ok; linked]
-- iterative-solvers/lec.qmd:125 -> bisection-fixedpoint (notes: splitting = fixed-point iteration, |g'| < 1 analogue) [ok; linked]
-- iterative-solvers/lec.qmd:172 -> power-iteration (notes: repeated multiplication by T, residual ratio -> spectral radius) [ok; linked]
-- iterative-solvers/lec.qmd:172 -> eigen-algorithms (notes: dense eigen()) [ok; linked]
-- iterative-solvers/lec.qmd:172 -> diffusion-explicit (notes: sine modes / eigenvalues of the Laplacian, cos(pi h)) [ok; linked]
-- iterative-solvers/lec.qmd:185 -> pivoting-conditioning (condition number kappa) [ok; linked]
-- iterative-solvers/lec.qmd:190 -> diffusion-explicit (notes: same eigenvalues set the explicit time-step limit) [ok; linked]
-- iterative-solvers/lec.qmd:213 -> pivoting-conditioning (notes: small residual is not small error, error <= kappa * residual) [ok; linked]
-- iterative-solvers/lec.qmd:227 -> gradient-methods (notes: gradient descent zigzag on the quadratic; CG as its fix) [ok; linked]
-- iterative-solvers/lec.qmd:227 -> eigen-algorithms (notes: Lanczos = CG's recurrence) [ok; linked]
-- iterative-solvers/lec.qmd:238 -> convergence-cost (notes: linear convergence, slope on log plot) [ok; linked]
-- iterative-solvers/lec.qmd:273 -> structured-sparse (notes: the Cholesky algorithm that IC(0) truncates) [ok; linked]
-- iterative-solvers/lec.qmd:302 -> advection-diffusion (upwind scheme, Peclet number; perfused chamber) [ok; linked]
-- iterative-solvers/lec.qmd:307 -> advection-diffusion (notes) [ok; linked]
-- iterative-solvers/lec.qmd:333 -> least-squares-qr (notes: GMRES's small least-squares problem solved by QR) [ok; linked]
-- iterative-solvers/lec.qmd:333 -> eigen-algorithms (notes: Arnoldi / ARPACK) [ok; linked]
-- iterative-solvers/lec.qmd:344 -> fem-outlook (notes: algebraic multigrid on unstructured meshes) [ok; linked]
-- iterative-solvers/lec.qmd:377 -> steady-state-2d, reaction-diffusion, fem-outlook (Summary notes) [fixed: reaction-diffusion uses FFT, not sparse matrices: reworded; linked]
-- iterative-solvers/exercise.qmd:21 -> structured-sparse (reuse jacobi()/cg() from exercise C8) [fixed: C8 stopped on absolute residual 1e-10, here relative 1e-6: stated; solutions define their own functions; linked to exercise page]
-- iterative-solvers/exercise.qmd:219 -> advection-diffusion (C5: upwind differences) [fixed: C8 stopped on absolute residual 1e-10, here relative 1e-6: stated; solutions define their own functions; linked to exercise page]
-- iterative-solvers/exercise.qmd:283 -> pivoting-conditioning (B4 solution: relative error <= kappa * relative residual) [ok; linked]
-- iterative-solvers/exercise.qmd:421 -> power-iteration (C1 solution: residual ratio = spectral radius) [ok; linked]
-- iterative-solvers/exercise.qmd:998 -> steady-state-2d, reaction-diffusion (Where this leads) [fixed: same rewording as lec:377; linked]
-- iterative-solvers/exercise.qmd:999 -> fem-outlook (Where this leads) [ok; linked]
-- iterative-solvers/exercise.qmd:1000 -> eigen-algorithms (Where this leads: Lanczos, Arnoldi) [ok; linked]
-- iterative-solvers/quiz.qmd:126 -> structured-sparse (Q10 hint: fill-in of the full Cholesky factor) [ok; linked]
+Unit moved from Part 11 (optional) to Part 10 (core), between advection-diffusion
+and reaction-diffusion. Recap and "About this lecture" now lean on
+steady-state-2d (Kronecker Laplacian, sparse Cholesky fill-in table: nnz(A) 252 649,
+nnz(L) 1 475 954 at h = 12.5 µm) and advection-diffusion (upwind weights 1 + P,
+marching instead of a 2D solve); both verified against those lectures.
+Next unit: reaction-diffusion; fem-outlook referred to as Part 11 (optional).
+
+- iterative-solvers/lec.qmd:24 -> steady-state-2d, advection-diffusion (About this lecture {.smaller}) [linked]
+- iterative-solvers/lec.qmd:33 -> structured-sparse, steady-state-2d, advection-diffusion (About this lecture {.smaller}) [linked]
+- iterative-solvers/lec.qmd:38 -> structured-sparse (Recap: what we already have {.smaller}) [linked]
+- iterative-solvers/lec.qmd:39 -> steady-state-2d (Recap: what we already have {.smaller}) [linked]
+- iterative-solvers/lec.qmd:40 -> advection-diffusion (Recap: what we already have {.smaller}) [linked]
+- iterative-solvers/lec.qmd:58 -> steady-state-2d (Biology: oxygen in a culture chamber {.smaller}) [linked]
+- iterative-solvers/lec.qmd:81 -> steady-state-2d (The matrix: a 2D Laplacian {.smaller}) [linked]
+- iterative-solvers/lec.qmd:124 -> bisection-fixedpoint (Jacobi and Gauss–Seidel as splittings {.smaller}) [linked]
+- iterative-solvers/lec.qmd:171 -> power-iteration, eigen-algorithms, diffusion-explicit (The rate is a spectral radius {.smaller}) [linked]
+- iterative-solvers/lec.qmd:184 -> pivoting-conditioning (Why they slow down as the grid is refined {.smaller}) [linked]
+- iterative-solvers/lec.qmd:189 -> diffusion-explicit (Why they slow down as the grid is refined {.smaller}) [linked]
+- iterative-solvers/lec.qmd:212 -> pivoting-conditioning (Failure: a small step is not a small error {.smaller}) [linked]
+- iterative-solvers/lec.qmd:226 -> gradient-methods, eigen-algorithms (Conjugate gradient: the Krylov idea {.smaller}) [linked]
+- iterative-solvers/lec.qmd:237 -> convergence-cost (CG against the splittings {.smaller}) [linked]
+- iterative-solvers/lec.qmd:272 -> structured-sparse (Preconditioning {.smaller}) [linked]
+- iterative-solvers/lec.qmd:301 -> advection-diffusion (Flow through the chamber: $A$ is not symmetric {.smaller}) [linked]
+- iterative-solvers/lec.qmd:306 -> advection-diffusion (Flow through the chamber: $A$ is not symmetric {.smaller}) [linked]
+- iterative-solvers/lec.qmd:332 -> least-squares-qr, eigen-algorithms (GMRES in one slide {.smaller}) [linked]
+- iterative-solvers/lec.qmd:389 -> fem-outlook (Multigrid in one picture {.smaller}) [linked]
+- iterative-solvers/lec.qmd:422 -> reaction-diffusion (Summary {.smaller}) [linked]
+- iterative-solvers/lec.qmd:425 -> steady-state-2d, reaction-diffusion, fem-outlook (Summary {.smaller}) [linked]
+- iterative-solvers/exercise.qmd:23 -> structured-sparse (Goal) [linked]
+- iterative-solvers/exercise.qmd:27 -> steady-state-2d (Background) [linked]
+- iterative-solvers/exercise.qmd:241 -> advection-diffusion (In code) [linked]
+- iterative-solvers/exercise.qmd:332 -> pivoting-conditioning (Solutions) [linked]
+- iterative-solvers/exercise.qmd:487 -> power-iteration (Solutions) [linked]
+- iterative-solvers/exercise.qmd:1411 -> reaction-diffusion (Where this leads) [linked]
+- iterative-solvers/exercise.qmd:1412 -> steady-state-2d (Where this leads) [linked]
+- iterative-solvers/exercise.qmd:1413 -> fem-outlook (Where this leads) [linked]
+- iterative-solvers/exercise.qmd:1414 -> eigen-algorithms (Where this leads) [linked]
+- iterative-solvers/quiz.qmd:126 -> structured-sparse (None) [linked]
 
 ## Running examples defined here
 
@@ -57,5 +64,14 @@ should be aligned.
 - **Perfused chamber**: flow in +x, Pe = 50 (u = 100 um/s, L = 1 mm,
   D = 2000 um^2/s), upwind; m = 63: GMRES 116, GMRES(20) 187, CG diverges
   (true relative residual 314 after 300 iterations); centre c = 0.8800808.
+  Restarted: GMRES(10) 147, GMRES(20) 187, GMRES(50) 284; BiCGSTAB 88 steps
+  (R; Python 86, Rust 88).
+- **Signal chamber** (added when the unit became core, Part 10): the perfused
+  chamber with a linearised positive feedback, A - sigma h^2 I, sigma = 100
+  (same right-hand side). m = 63: GMRES(10), GMRES(20) stall at relative
+  residual 0.976 / 0.973 after 3000 iterations; GMRES(50) 800; full GMRES 123;
+  BiCGSTAB 103 (R; Python 100, Rust 101). Smooth bump v = sin(pi x) sin(pi y):
+  v'Av/v'v = 0.005759 (perfused), -0.018655 (signal). sigma = 200: BiCGSTAB
+  fails, full GMRES 133.
 
 Pass 2: the gel chamber stays (different problem from steady-state-2d's lid chamber); the difference is now stated in lec notes (Biology slide) and in the exercise Background.

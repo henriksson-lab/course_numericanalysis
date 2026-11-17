@@ -103,7 +103,7 @@ What property of $A$ does CG assume? What does the advection term do to it?
 :::
 
 ::: {.callout-note collapse="true" title="Answer"}
-The advection term couples each point only to its upstream neighbour, so $A \ne A^T$, and CG's derivation (minimising a quadratic) no longer holds: in the lecture the true residual grew to 314. Check `isSymmetric(A)` before using CG, and always compute the true relative residual of the returned $\mathbf{x}$. Use **GMRES** (or BiCGSTAB) instead: 116 iterations there, 187 with restarts every 20.
+The advection term couples each point only to its upstream neighbour, so $A \ne A^T$, and CG's derivation (minimising a quadratic) no longer holds: in the lecture the true residual grew to 314. Check `isSymmetric(A)` before using CG, and always compute the true relative residual of the returned $\mathbf{x}$. Use **GMRES** instead: 116 iterations there, 187 with restarts every 20. If memory is short, **BiCGSTAB** has fixed memory (seven vectors) and needed 88 steps of two products each; its residual jumps around, so check the final true residual.
 :::
 
 ---
@@ -132,14 +132,14 @@ IC(0) runs the Cholesky algorithm but throws away every entry that would fall ou
 
 ---
 
-**Q11.** GMRES never lets the residual grow. Why not always use GMRES, even for SPD matrices? And what is the risk of restarting it?
+**Q11.** GMRES never lets the residual grow. Why not always use full GMRES, even for SPD matrices? What can go wrong when you restart it, how do you notice, and which property of $A$ rules the problem out?
 
 ::: {.callout-tip collapse="true" title="Hint"}
-What does GMRES store after $k$ iterations?
+What does GMRES store after $k$ iterations? Think of the signal chamber, where positive feedback subtracts $\sigma h^2$ from the diagonal, and of $\mathbf{v}^TA\mathbf{v}$.
 :::
 
 ::: {.callout-note collapse="true" title="Answer"}
-GMRES stores an orthonormal basis of the Krylov space, one vector of length $n$ per iteration, and orthogonalises each new vector against all old ones, so memory and work per step grow with $k$ ($n = 10^6$, $k = 300$: 2.4 GB). For SPD matrices CG reaches the same accuracy in about the same number of iterations (99 vs 100 on the chamber) with four vectors. Restarting after $k$ steps (GMRES($k$)) caps the memory but throws away the subspace; convergence slows (187 instead of 116 in the lecture) and on hard problems can **stall** completely. The cure is a better preconditioner.
+GMRES stores an orthonormal basis of the Krylov space, one vector of length $n$ per iteration, and orthogonalises each new vector against all old ones, so memory and work per step grow with $k$ ($n = 10^6$, $k = 300$: 2.4 GB). For SPD matrices CG reaches the same accuracy in about the same number of iterations (99 vs 100 on the chamber) with four vectors. Restarting after $k$ steps (GMRES($k$)) caps the memory but throws away the subspace; convergence slows (187 instead of 116 in the lecture) and can **stall** completely: on the signal chamber ($\sigma = 100$) GMRES(10) and GMRES(20) sat at a relative residual of 0.97 for 3000 iterations, while full GMRES needed 123. You notice it as a **flat residual curve** (and `maxit` reached). It cannot happen when $\mathbf{v}^TA\mathbf{v} > 0$ for every $\mathbf{v} \ne \mathbf{0}$ (the symmetric part of $A$ is positive definite, as for diffusion with or without flow); positive feedback broke that ($\mathbf{v}^TA\mathbf{v} < 0$ for a smooth bump). The cure is a better preconditioner, or full GMRES if memory allows; a longer restart is not reliably better (GMRES(50) needed 284 iterations on the perfused chamber, GMRES(10) 147).
 :::
 
 ---

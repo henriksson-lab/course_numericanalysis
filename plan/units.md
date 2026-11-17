@@ -39,6 +39,6 @@ Use these exact titles when referring to units. Folder = slug.
 | 33 | `diffusion-implicit` | Implicit schemes and the method of lines | Part 10: Diffusion and heat: finite-difference PDEs |
 | 34 | `steady-state-2d` | Steady state in two dimensions | Part 10: Diffusion and heat: finite-difference PDEs |
 | 35 | `advection-diffusion` | Flow plus diffusion | Part 10: Diffusion and heat: finite-difference PDEs |
-| 36 | `reaction-diffusion` | Reaction–diffusion and pattern formation | Part 10: Diffusion and heat: finite-difference PDEs |
-| 37 | `fem-outlook` | Beyond rectangles: finite elements and flow | Part 11: Further reading (optional) |
-| 38 | `iterative-solvers` | Iterative linear solvers in depth | Part 11: Further reading (optional) |
+| 36 | `iterative-solvers` | Iterative linear solvers in depth | Part 10: Diffusion and heat: finite-difference PDEs |
+| 37 | `reaction-diffusion` | Reaction–diffusion and pattern formation | Part 10: Diffusion and heat: finite-difference PDEs |
+| 38 | `fem-outlook` | Beyond rectangles: finite elements and flow | Part 11: Further reading (optional) |

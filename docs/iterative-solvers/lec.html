@@ -205,21 +205,12 @@
   </style>
 </head>
 <body class="quarto-light">
-<style>
-.further-reading-banner { background: #c0392b; color: #fff; padding: .5em 1em; text-align: center; font-size: .95rem; }
-/* reveal.js slides: a thin fixed strip at the top */
-.reveal-viewport .further-reading-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 30; padding: .2em 1em; font-size: 14px; font-family: "Source Sans Pro", system-ui, sans-serif; }
-</style>
-<div class="further-reading-banner">
-<strong>Further reading: not part of the course.</strong>
-This material is not included in the course, but it is relevant if you want to learn more about the topic.
-</div>
   <div class="reveal">
     <div class="slides">
 
 <section id="title-slide" class="quarto-title-block center">
   <h1 class="title">Iterative linear solvers in depth</h1>
-  <p class="subtitle">Part 11 — Further reading (optional)</p>
+  <p class="subtitle">Part 10 — Diffusion and heat: finite-difference PDEs</p>
 
 <div class="quarto-title-authors">
 <div class="quarto-title-author">
@@ -230,17 +221,18 @@ Numerical analysis for biologists
 </div>
 
 </section>
-<section id="about-this-lecture" class="slide level2">
+<section id="about-this-lecture" class="slide level2 smaller">
 <h2>About this lecture</h2>
-<p><a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a> ended with a glimpse of Jacobi and conjugate gradient. This optional lecture explains <strong>why</strong> they behave as they do, and what is used in practice.</p>
+<p><a href="../steady-state-2d/lec.html"><em>Steady state in two dimensions</em></a> solved its 2D grids with a sparse direct solver and watched the Cholesky factor fill in. <a href="../advection-diffusion/lec.html"><em>Flow plus diffusion</em></a> avoided a 2D solve altogether by marching downstream. This lecture is about the solvers used when the direct solve is too big, or the flow cannot be marched.</p>
 <ul>
-<li>On 2D and especially <strong>3D grids</strong>, a sparse direct solve fills in: memory and time explode. Iterative methods only need products <span class="math inline">A\mathbf{x}</span>.</li>
+<li>On fine 2D and especially <strong>3D grids</strong>, the factor fills in: memory and time explode. Iterative methods only need products <span class="math inline">A\mathbf{x}</span>.</li>
 <li><strong>Jacobi</strong> and <strong>Gauss–Seidel</strong> are <em>splittings</em>. Their speed is the <strong>spectral radius</strong> of an iteration matrix (eigenvalues again), and it gets worse as the grid is refined.</li>
-<li><strong>Conjugate gradient</strong> (SPD matrices) needs about <span class="math inline">\sqrt{\kappa}</span> iterations; <strong>preconditioning</strong> makes <span class="math inline">\kappa</span> smaller; <strong>GMRES</strong> handles nonsymmetric matrices; <strong>multigrid</strong> needs the same number of iterations on every grid.</li>
-<li>Biology: <strong>oxygen in a cell-laden gel</strong>, refined until each grid point is one cell, and then in 3D.</li>
+<li><strong>Conjugate gradient</strong> (SPD matrices) needs about <span class="math inline">\sqrt{\kappa}</span> iterations; <strong>preconditioning</strong> makes <span class="math inline">\kappa</span> smaller; <strong>multigrid</strong> needs the same number of iterations on every grid.</li>
+<li><strong>Flow</strong> makes <span class="math inline">A</span> nonsymmetric: <strong>GMRES</strong>, its restarted version (which can <strong>stall</strong>), and <strong>BiCGSTAB</strong>.</li>
+<li>Biology: <strong>oxygen in a cell-laden gel</strong>, refined until each grid point is one cell; then <strong>perfused</strong>, and with a signal that amplifies itself.</li>
 </ul>
 <aside class="notes">
-<p>This is further reading: not required for the rest of the course. It assumes the sparse-matrix material of <a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a> (Part 3), eigenvalues from Part 5, and the 2D Laplacian of <a href="../steady-state-2d/lec.html"><em>Steady state in two dimensions</em></a> (Part 10), which we rebuild here in one slide so that the lecture can be read on its own. The message to take away is the last bullet: the number of iterations depends on the condition number, and the condition number of a diffusion matrix grows as the grid is refined. Everything else (preconditioning, multigrid) is an attack on that growth.</p>
+<p>This is the fifth unit of Part 10. It uses the sparse matrices and fill-in of <a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a> (Part 3) and <a href="../steady-state-2d/lec.html"><em>Steady state in two dimensions</em></a>, eigenvalues from Part 5, and the upwind differences of <a href="../advection-diffusion/lec.html"><em>Flow plus diffusion</em></a>. The matrix is rebuilt in one slide, so nothing has to be looked up. The message to take away: the number of iterations depends on the condition number, and the condition number of a diffusion matrix grows as the grid is refined. Preconditioning and multigrid are attacks on that growth. For nonsymmetric matrices a second message: there is no method that is both cheap in memory and guaranteed to work, so we learn the checks that show a solver has stalled.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -253,18 +245,17 @@ Numerical analysis for biologists
           display:block!important;
       }</style></aside>
 </section>
-<section id="recap-the-glimpse-from-part-3" class="slide level2 smaller">
-<h2>Recap: the glimpse from Part 3</h2>
-<p>From <a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a>, on the morphogen in a row of 1000 cells:</p>
+<section id="recap-what-we-already-have" class="slide level2 smaller">
+<h2>Recap: what we already have</h2>
 <ul>
-<li>An iterative method improves a guess using only <span class="math inline">A\mathbf{x}</span>: <span class="math inline">O(\text{nnz})</span> work per step, <strong>no fill-in</strong>, no factor stored.</li>
-<li><strong>Jacobi:</strong> <span class="math inline">\mathbf{x} \leftarrow \mathbf{x} + D^{-1}(\mathbf{b} - A\mathbf{x})</span>, <span class="math inline">D</span> = diagonal of <span class="math inline">A</span>. It took about <strong>4160</strong> iterations; <strong>CG</strong> took about <strong>240</strong>.</li>
-<li>Jacobi gains digits at a fixed rate (linear convergence) and <strong>diverges</strong> for <span class="math inline">\begin{pmatrix}1&amp;2\\2&amp;1\end{pmatrix}</span>; CG needs <span class="math inline">A</span> <strong>SPD</strong>.</li>
-<li>Check: monitor the <strong>residual</strong> <span class="math inline">\|\mathbf{b} - A\mathbf{x}\|</span>, stop on a tolerance, report when the iteration limit is hit.</li>
+<li><a href="../structured-sparse/lec.html"><em>Structure: symmetric, banded, sparse</em></a> (morphogen in 1000 cells): <strong>Jacobi</strong> <span class="math inline">\mathbf{x} \leftarrow \mathbf{x} + D^{-1}(\mathbf{b} - A\mathbf{x})</span> took about <strong>4160</strong> iterations, <strong>CG</strong> about <strong>240</strong>. Jacobi <strong>diverges</strong> for <span class="math inline">\begin{pmatrix}1&amp;2\\2&amp;1\end{pmatrix}</span>; CG needs <span class="math inline">A</span> <strong>SPD</strong>.</li>
+<li><a href="../steady-state-2d/lec.html"><em>Steady state in two dimensions</em></a>: the five-point Laplacian by <code>kronecker</code>, solved by sparse Cholesky with a fill-reducing ordering. At <span class="math inline">h = 12.5</span> µm the factor already has <strong>6×</strong> the non-zeros of <span class="math inline">A</span>, and the ratio grows with refinement.</li>
+<li><a href="../advection-diffusion/lec.html"><em>Flow plus diffusion</em></a>: upwind differences give the upstream neighbour weight <span class="math inline">1 + P</span>, the downstream one 1: <strong><span class="math inline">A \ne A^T</span></strong>. Marching avoided the 2D solve, but only by dropping diffusion along the flow.</li>
+<li>Check from all three: monitor the <strong>residual</strong> <span class="math inline">\|\mathbf{b} - A\mathbf{x}\|</span>, stop on a tolerance, report when the iteration limit is hit.</li>
 </ul>
-<p>Open questions from then: <em>why</em> 4160 and 240? Why does Jacobi diverge for the <span class="math inline">2\times2</span> matrix? And what if <span class="math inline">A</span> is not symmetric?</p>
+<p>Open questions: <em>why</em> 4160 and 240? When does the direct solve stop being an option? What if <span class="math inline">A</span> is not symmetric?</p>
 <aside class="notes">
-<p>One-slide recap; the exercise of that unit (C8) had the students write jacobi() and cg() in about 10 lines each, so we do not repeat the code here. Today’s answers: 4160 comes from the spectral radius of the Jacobi iteration matrix (0.995 there); 240 from the square root of the condition number; the 2 x 2 diverges because its iteration matrix has an eigenvalue -2; and for nonsymmetric matrices we use GMRES.</p>
+<p>One-slide recap. The exercise of Structure: symmetric, banded, sparse (C8) had the students write jacobi() and cg() in about 10 lines each, and the Rust tabs of Steady state in two dimensions already used a hand-written CG because sprs has no direct solver; we do not repeat the code here. The fill-in numbers are from the table of Steady state in two dimensions (nnz(A) = 252 649, nnz(L) reordered = 1 475 954 at h = 12.5 µm); its browser demo solves the chamber by nonlinear SOR, a Gauss-Seidel variant explained on the next slides. Today’s answers: 4160 comes from the spectral radius of the Jacobi iteration matrix (0.995 there); 240 from the square root of the condition number; the 2 x 2 diverges because its iteration matrix has an eigenvalue -2; the direct solve stops being an option in 3D; and for nonsymmetric matrices we use GMRES or BiCGSTAB.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -286,7 +277,7 @@ Numerical analysis for biologists
 <li>At <span class="math inline">h = 7.8</span> µm (about one grid point per cell): <strong>16 129 unknowns</strong>. Centre <span class="math inline">c = 0.116</span>; 14 % of the gel is hypoxic.</li>
 </ul>
 <aside class="notes">
-<p>This is not the chamber of <a href="../steady-state-2d/lec.html"><em>Steady state in two dimensions</em></a> (Part 10). That unit follows oxygen under a gas-impermeable lid over a cell monolayer (4 mm x 2 mm seen from above, oxygen in µM, Michaelis-Menten uptake solved by Newton); here the cells are embedded in a 1 mm x 1 mm gel, consume at a uniform zero-order rate, and the equation is scaled so that the matrix has integer entries. The per-cell consumption (50 amol/s) is the same assumption in both, the matrix is the same five-point Laplacian, and both ask the same question: how hypoxic does the middle get? Numbers, all order-of-magnitude: D = 2000 µm^2/s for oxygen in water, c0 = 0.2 mM (air-saturated medium), about 1e8 cells per mL each consuming about 50 amol O2 per second gives q of about 5 µM/s, and with L = 1 mm that is Phi = q L^2 / (D c0) = 12. The real experiments [O1, O2] use gas-impermeable barriers or a PDMS membrane to shape the gradient on purpose; here we just ask how hypoxic the middle of a thick gel gets. The point for this lecture: a question about cells needs a grid with roughly one point per cell, and in 3D that is a million unknowns per cubic millimetre.</p>
+<p>This is not the chamber of <a href="../steady-state-2d/lec.html"><em>Steady state in two dimensions</em></a>. That unit follows oxygen under a gas-impermeable lid over a cell monolayer (4 mm x 2 mm seen from above, oxygen in µM, Michaelis-Menten uptake solved by Newton); here the cells are embedded in a 1 mm x 1 mm gel, consume at a uniform zero-order rate, and the equation is scaled so that the matrix has integer entries. The per-cell consumption (50 amol/s) is the same assumption in both, the matrix is the same five-point Laplacian, and both ask the same question: how hypoxic does the middle get? Numbers, all order-of-magnitude: D = 2000 µm^2/s for oxygen in water, c0 = 0.2 mM (air-saturated medium), about 1e8 cells per mL each consuming about 50 amol O2 per second gives q of about 5 µM/s, and with L = 1 mm that is Phi = q L^2 / (D c0) = 12. The real experiments [O1, O2] use gas-impermeable barriers or a PDMS membrane to shape the gradient on purpose; here we just ask how hypoxic the middle of a thick gel gets. The point for this lecture: a question about cells needs a grid with roughly one point per cell, and in 3D that is a million unknowns per cubic millimetre.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -502,7 +493,7 @@ Numerical analysis for biologists
 <h2>Why they slow down as the grid is refined</h2>
 <div class="columns">
 <div class="column" style="width:55%;">
-<p><img data-src="fig03-smooth.svg" style="width:100.0%"> Gauss–Seidel error, <span class="math inline">m = 31</span>.</p>
+<p><img data-src="fig03-smooth.png" style="width:100.0%"> Gauss–Seidel error, <span class="math inline">m = 31</span>.</p>
 </div><div class="column" style="width:45%;">
 <ul>
 <li>Each sweep only talks to <strong>neighbours</strong>: wiggly error is averaged away fast, <strong>smooth</strong> error barely moves.</li>
@@ -717,12 +708,12 @@ Numerical analysis for biologists
 <h2>Flow through the chamber: <span class="math inline">A</span> is not symmetric</h2>
 
 <img data-src="fig06-gmres.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:80.0%"><ul>
-<li>Perfused chamber: medium flows left to right, <span class="math inline">u = 100</span> µm/s, Péclet number <span class="math inline">uL/D = 50</span>; upwind differences as in <a href="../advection-diffusion/lec.html"><em>Flow plus diffusion</em></a>. Now <span class="math inline">A \ne A^T</span>.</li>
+<li>Perfused chamber: medium flows left to right, <span class="math inline">u = 100</span> µm/s, Péclet number <span class="math inline">uL/D = 50</span>; upwind differences as in <a href="../advection-diffusion/lec.html"><em>Flow plus diffusion</em></a>, but now the whole 2D system at once (no marching). <span class="math inline">A \ne A^T</span>.</li>
 <li><strong>CG fails silently:</strong> the true residual grows to 314 after 300 iterations. <strong>Check:</strong> <code>isSymmetric(A)</code> before using CG.</li>
 <li><strong>GMRES</strong> converges in <strong>116</strong> iterations; restarted GMRES(20) in 187.</li>
 </ul>
 <aside class="notes">
-<p>Advection-diffusion with the upwind scheme of <a href="../advection-diffusion/lec.html"><em>Flow plus diffusion</em></a>: the advection term adds Pe h to the diagonal and -Pe h to the upstream neighbour only, so the matrix is no longer symmetric (Pe h = 0.78 at m = 63). The fixed concentration on the outflow wall is a simplification to keep the matrix small; the matrix structure, not the boundary details, is the point. CG’s derivation needs symmetry (the minimisation of x^T A x / 2 - b^T x only gives Ax = b for symmetric A); here it does not converge and nothing in the algorithm warns you. Nonsymmetric matrices also arise from Newton’s method on reaction-diffusion systems (the Jacobian) and from implicit time steps with flow. The perfused gel is better oxygenated (minimum 0.88) because the flow brings oxygen in.</p>
+<p>Advection-diffusion with the upwind scheme of <a href="../advection-diffusion/lec.html"><em>Flow plus diffusion</em></a>. There the T-sensor was marched downstream because diffusion along the flow could be dropped (Pe = 100 over a long channel); in a square chamber at Pe = 50 it cannot, and the steady problem is one 2D system. The advection term adds Pe h to the diagonal and -Pe h to the upstream neighbour only, so the matrix is no longer symmetric (Pe h = 0.78 at m = 63). The fixed concentration on the outflow wall is a simplification to keep the matrix small; the matrix structure, not the boundary details, is the point. CG’s derivation needs symmetry (the minimisation of x^T A x / 2 - b^T x only gives Ax = b for symmetric A); here it does not converge and nothing in the algorithm warns you. Nonsymmetric matrices also arise from Newton’s method on reaction-diffusion systems (the Jacobian) and from implicit time steps with flow. The perfused gel is better oxygenated (minimum 0.88) because the flow brings oxygen in.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -755,7 +746,95 @@ Numerical analysis for biologists
 <li>Residual never increases. Price: <strong>stores all <span class="math inline">k</span> basis vectors</strong>, work per step grows with <span class="math inline">k</span>. Restart after 20–50 steps (GMRES(<span class="math inline">k</span>)); restarting can <strong>stall</strong>. On the symmetric chamber: GMRES 99, CG 100 (CG is the cheap version).</li>
 </ul>
 <aside class="notes">
-<p>The least-squares problem is the QR approach of <a href="../least-squares-qr/lec.html"><em>Least squares: normal equations vs QR</em></a> (Part 4), at size (j+1) x j; qr.solve does it. Production codes update a QR of H with Givens rotations instead of re-solving. Memory: k vectors of length n; for n = 1e6 and k = 300 that is 2.4 GB, which is why restarts are used. GMRES(20) needed 187 iterations instead of 116 here; on harder problems restarted GMRES can stall completely (the residual stops decreasing), and the cure is a better preconditioner rather than a longer restart. Alternatives with short recurrences for nonsymmetric matrices: BiCGSTAB, IDR(s). Arnoldi is also what eigs/ARPACK runs for eigenvalues (<a href="../eigen-algorithms/lec.html"><em>How <code>eigen()</code> works, and big problems</em></a>).</p>
+<p>The least-squares problem is the QR approach of <a href="../least-squares-qr/lec.html"><em>Least squares: normal equations vs QR</em></a> (Part 4), at size (j+1) x j; qr.solve does it. Production codes update a QR of H with Givens rotations instead of re-solving. Memory: k vectors of length n; for n = 1e6 and k = 300 that is 2.4 GB, which is why restarts are used. GMRES(20) needed 187 iterations instead of 116 here; on harder problems restarted GMRES can stall completely (the residual stops decreasing), and the cure is a better preconditioner rather than a longer restart. Alternatives with short recurrences (BiCGSTAB) come two slides later. Arnoldi is also what eigs/ARPACK runs for eigenvalues (<a href="../eigen-algorithms/lec.html"><em>How <code>eigen()</code> works, and big problems</em></a>).</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="restarted-gmres-can-stall" class="slide level2 smaller">
+<h2>Restarted GMRES can stall</h2>
+<div class="columns">
+<div class="column" style="width:55%;">
+<p><img data-src="fig07-stall.svg" style="width:100.0%"></p>
+</div><div class="column" style="width:45%;">
+<ul>
+<li>Perfused chamber, GMRES(10), (20), (50), full: <strong>147, 187, 284, 116</strong> iterations. Longer is not always better.</li>
+<li><strong>Signal chamber:</strong> positive feedback (cells release more signal where it is high) adds <span class="math inline">-\sigma h^2 I</span>, <span class="math inline">\sigma = 100</span>. GMRES(10) and (20) <strong>stall</strong> at 0.97.</li>
+<li>Why: the smooth bump <span class="math inline">\mathbf{v}</span> has <span class="math inline">\mathbf{v}^TA\mathbf{v} &lt; 0</span>. GMRES(<span class="math inline">k</span>) is only safe if <span class="math inline">\mathbf{v}^TA\mathbf{v} &gt; 0</span> for every <span class="math inline">\mathbf{v}</span>.</li>
+<li><strong>Check:</strong> a flat residual curve.</li>
+</ul>
+</div></div>
+<aside class="notes">
+<p>The signal chamber: dimensionless -Laplace(s) + Pe ds/dx - sigma s = Phi, s = 0 on the walls (the signal is washed out there). The feedback term is a linearised self-induction, as in quorum sensing where the signal induces its own synthase; sigma = k L^2 / D = 100 is chosen for illustration. Without flow sigma = 100 would exceed the smallest eigenvalue of the Laplacian (2 pi^2 = 19.7) and there would be no positive steady state; with Pe = 50 the flow removes the signal fast enough: all eigenvalues of A - sigma h^2 I still have positive real part (smallest 0.093, h^2-scaled) and the direct solution is positive (0.002 to 0.66). But A is far from normal, and its symmetric part (A + A^T)/2 has a negative eigenvalue: for the bump v = sin(pi x) sin(pi y) the Rayleigh quotient v^T A v / v^T v is 0.0058 for the perfused chamber and 0.0058 - 100 h^2 = -0.0187 here (exercise C6). A classical result says that GMRES(k) converges for every k when the symmetric part is positive definite; when it is not, a restart can throw away exactly the directions needed, and the next cycle starts from the same place. Full GMRES keeps them all: 123 iterations. GMRES(50) needs 800. The by-hand version: exercise B8, where restarted GMRES on a pure loop never moves at all. The fix in practice is a preconditioner, not a longer restart.</p>
+<style type="text/css">
+        span.MJX_Assistive_MathML {
+          position:absolute!important;
+          clip: rect(1px, 1px, 1px, 1px);
+          padding: 1px 0 0 0!important;
+          border: 0!important;
+          height: 1px!important;
+          width: 1px!important;
+          overflow: hidden!important;
+          display:block!important;
+      }</style></aside>
+</section>
+<section id="bicgstab-short-recurrences" class="slide level2 smaller">
+<h2>BiCGSTAB: short recurrences</h2>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a aria-hidden="true" tabindex="-1"></a>bicgstab <span class="ot">&lt;-</span> <span class="cf">function</span>(A, b, <span class="at">tol =</span> <span class="fl">1e-6</span>, <span class="at">maxit =</span> <span class="dv">5000</span>) {</span>
+<span id="cb8-2"><a aria-hidden="true" tabindex="-1"></a>  x <span class="ot">&lt;-</span> v <span class="ot">&lt;-</span> p <span class="ot">&lt;-</span> <span class="fu">numeric</span>(<span class="fu">length</span>(b)); r <span class="ot">&lt;-</span> rh <span class="ot">&lt;-</span> b; rho <span class="ot">&lt;-</span> alpha <span class="ot">&lt;-</span> omega <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb8-3"><a aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (it <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>maxit) {</span>
+<span id="cb8-4"><a aria-hidden="true" tabindex="-1"></a>    rho_new <span class="ot">&lt;-</span> <span class="fu">sum</span>(rh <span class="sc">*</span> r); beta <span class="ot">&lt;-</span> (rho_new <span class="sc">/</span> rho) <span class="sc">*</span> (alpha <span class="sc">/</span> omega); rho <span class="ot">&lt;-</span> rho_new</span>
+<span id="cb8-5"><a aria-hidden="true" tabindex="-1"></a>    p <span class="ot">&lt;-</span> r <span class="sc">+</span> beta <span class="sc">*</span> (p <span class="sc">-</span> omega <span class="sc">*</span> v)</span>
+<span id="cb8-6"><a aria-hidden="true" tabindex="-1"></a>    v <span class="ot">&lt;-</span> (A <span class="sc">%*%</span> p)[, <span class="dv">1</span>]; alpha <span class="ot">&lt;-</span> rho <span class="sc">/</span> <span class="fu">sum</span>(rh <span class="sc">*</span> v); s <span class="ot">&lt;-</span> r <span class="sc">-</span> alpha <span class="sc">*</span> v</span>
+<span id="cb8-7"><a aria-hidden="true" tabindex="-1"></a>    t <span class="ot">&lt;-</span> (A <span class="sc">%*%</span> s)[, <span class="dv">1</span>]; omega <span class="ot">&lt;-</span> <span class="fu">sum</span>(t <span class="sc">*</span> s) <span class="sc">/</span> <span class="fu">sum</span>(t <span class="sc">*</span> t)      <span class="co"># a GMRES(1) step</span></span>
+<span id="cb8-8"><a aria-hidden="true" tabindex="-1"></a>    x <span class="ot">&lt;-</span> x <span class="sc">+</span> alpha <span class="sc">*</span> p <span class="sc">+</span> omega <span class="sc">*</span> s; r <span class="ot">&lt;-</span> s <span class="sc">-</span> omega <span class="sc">*</span> t</span>
+<span id="cb8-9"><a aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="fu">sqrt</span>(<span class="fu">sum</span>(r<span class="sc">^</span><span class="dv">2</span>)) <span class="sc">&lt;</span> tol <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">sum</span>(b<span class="sc">^</span><span class="dv">2</span>))) <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">x =</span> x, <span class="at">it =</span> it))</span>
+<span id="cb8-10"><a aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb8-11"><a aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">x =</span> x, <span class="at">it =</span> <span class="cn">NA</span>)</span>
+<span id="cb8-12"><a aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<table class="caption-top">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>to <span class="math inline">10^{-6}</span></th>
+<th>perfused</th>
+<th>signal, <span class="math inline">\sigma = 100</span></th>
+<th>signal, <span class="math inline">\sigma = 200</span></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>full GMRES (vectors stored)</td>
+<td>116</td>
+<td>123</td>
+<td>133</td>
+</tr>
+<tr class="even">
+<td>BiCGSTAB steps (products with <span class="math inline">A</span>)</td>
+<td>88 (176)</td>
+<td>103 (206)</td>
+<td><strong>fails</strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Fixed memory (7 vectors), 2 products per step, an erratic residual. Its <span class="math inline">\omega</span> step is a GMRES(1) step, so it shares the weakness of short restarts.</li>
+</ul>
+<aside class="notes">
+<p>BiCGSTAB (van der Vorst, 1992) combines two ideas: the bi-conjugate gradient method, which builds a second Krylov space with A^T and gets CG-like short recurrences for nonsymmetric A (but an erratic residual and, in its plain form, products with A^T), and a one-step minimal-residual “stabilisation” (the omega line), which is exactly GMRES(1). Memory is fixed (x, r, rh, p, v, s, t), so it is the usual first choice when GMRES’s basis does not fit in memory. The price: no minimisation property, so the residual jumps around (on the perfused chamber it is above its starting value for the first 65 steps and peaks at 560 times the start, step 35, before it drops to 1e-6 by step 88), and it can break down (division by a tiny rho or omega) or stagnate. At sigma = 200 it stagnates at a residual of order 1 after 5000 steps; when the symmetric part is indefinite, the omega step can do nothing, as for GMRES(1). Iteration counts near the tolerance are sensitive to rounding: Python’s hand-written version needs 86 and 100 steps, Rust 88 and 101 (exercise C7). Python: scipy.sparse.linalg.bicgstab. Variants that repair the weakness: BiCGstab(l), IDR(s). And, as always, a preconditioner (ILU for nonsymmetric matrices) changes the picture more than the choice of Krylov method.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -771,7 +850,7 @@ Numerical analysis for biologists
 <section id="multigrid-in-one-picture" class="slide level2 smaller">
 <h2>Multigrid in one picture</h2>
 
-<img data-src="fig07-multigrid.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:85.0%"><ul>
+<img data-src="fig08-multigrid.svg" class="quarto-figure quarto-figure-center r-stretch" style="width:85.0%"><ul>
 <li>A few Gauss–Seidel sweeps make the error <strong>smooth</strong>. Smooth error on a fine grid is <strong>wiggly on a coarser grid</strong>, where sweeps are cheap and effective again. Recurse down to a tiny grid, solve, interpolate back up.</li>
 <li>One V-cycle costs a few fine-grid sweeps; <strong>5 cycles</strong> to <span class="math inline">10^{-6}</span> for every <span class="math inline">m</span> from 15 to 511: <span class="math inline">O(n)</span> work.</li>
 </ul>
@@ -814,6 +893,12 @@ Numerical analysis for biologists
 <td>hand-written</td>
 </tr>
 <tr class="odd">
+<td>BiCGSTAB</td>
+<td>hand-written; <code>Rlinsolve</code></td>
+<td><code>scipy.sparse.linalg.bicgstab</code></td>
+<td>hand-written</td>
+</tr>
+<tr class="even">
 <td>multigrid</td>
 <td>—</td>
 <td><code>pyamg</code></td>
@@ -843,13 +928,13 @@ Numerical analysis for biologists
 </tr>
 <tr class="odd">
 <td>large, nonsymmetric</td>
-<td>GMRES(<span class="math inline">k</span>) or BiCGSTAB + preconditioner (ILU)</td>
+<td>full GMRES if memory allows, else GMRES(<span class="math inline">k</span>) or BiCGSTAB; + preconditioner (ILU)</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Checks:</strong> <code>isSymmetric(A)</code>; report iterations and the final <strong>relative residual</strong>; did it hit <code>maxit</code>? Compare with a direct solve on a small grid.</p>
+<p><strong>Checks:</strong> <code>isSymmetric(A)</code>; report iterations and the final <strong>relative residual</strong>; did it hit <code>maxit</code>? Flat residual = stall. Compare with a direct solve on a small grid.</p>
 <aside class="notes">
-<p>R has no iterative solvers in base or Matrix; the packages listed exist on CRAN but are not needed for this unit and are not on the install page. In Python, scipy’s cg and gmres take a callback (cg: called with the current iterate; gmres: with callback_type=“pr_norm”, called with the residual norm at every inner step), which is the way to count iterations; their info return value is 0 on success and positive when the iteration limit was hit. Large-scale codes (PETSc, Trilinos, hypre) offer all of these with many preconditioners. A practical rule: start with a sparse direct solver; when memory runs out or 3D grids appear, switch to preconditioned CG or GMRES, and keep the direct solver on a small grid as the test.</p>
+<p>R has no iterative solvers in base or Matrix; Rlinsolve and cPCG exist on CRAN but are not installed for this course and not needed (everything here is hand-written in a dozen lines); pracma::gmres works on dense matrices only. pyamg is a separate Python package, also not needed. In Rust, sprs and nalgebra provide the matrices; every solver in the exercise is hand-written. In Python, scipy’s cg and gmres take a callback (cg: called with the current iterate; gmres: with callback_type=“pr_norm”, called with the residual norm at every inner step), which is the way to count iterations; their info return value is 0 on success and positive when the iteration limit was hit. Large-scale codes (PETSc, Trilinos, hypre) offer all of these with many preconditioners. A practical rule: start with a sparse direct solver; when memory runs out or 3D grids appear, switch to preconditioned CG or GMRES, and keep the direct solver on a small grid as the test.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;
@@ -869,11 +954,12 @@ Numerical analysis for biologists
 <li><strong>Splittings</strong> <span class="math inline">\mathbf{x} \leftarrow \mathbf{x} + M^{-1}(\mathbf{b} - A\mathbf{x})</span>: Jacobi (<span class="math inline">M = D</span>), Gauss–Seidel (<span class="math inline">M</span> = lower triangle). Error <span class="math inline">\sim\rho(T)^k</span>, <span class="math inline">T = I - M^{-1}A</span>; converge iff <span class="math inline">\rho &lt; 1</span>.</li>
 <li>On a diffusion grid <span class="math inline">\rho = \cos\pi h</span>, <span class="math inline">\kappa \approx 4/(\pi^2h^2)</span>: smooth error decays slowly, <strong>iterations ×4</strong> per refinement.</li>
 <li><strong>CG</strong> (SPD): best point in the Krylov space, iterations <span class="math inline">\sim\sqrt\kappa \sim 1/h</span>. <strong>Preconditioning</strong> shrinks <span class="math inline">\kappa</span> (Jacobi: fixes scaling only; incomplete Cholesky: 2–4×). <strong>Multigrid</strong>: constant.</li>
-<li><strong>GMRES</strong> for nonsymmetric <span class="math inline">A</span> (flow); stores its basis, restart with care. CG on a nonsymmetric matrix fails without a warning.</li>
-<li><strong>Checks:</strong> relative residual, not step size; <code>isSymmetric</code>; <code>maxit</code> reached?; compare with a direct solve on a small grid.</li>
+<li><strong>GMRES</strong> for nonsymmetric <span class="math inline">A</span> (flow); restarts save memory but can <strong>stall</strong> (<span class="math inline">\mathbf{v}^TA\mathbf{v} &lt; 0</span>). <strong>BiCGSTAB</strong>: fixed memory, erratic. CG on nonsymmetric <span class="math inline">A</span> fails silently.</li>
+<li><strong>Checks:</strong> relative residual, not step size; <code>isSymmetric</code>; <code>maxit</code> reached? flat residual?; compare with a direct solve on a small grid.</li>
 </ul>
+<p><strong>Next:</strong> <a href="../reaction-diffusion/lec.html"><em>Reaction–diffusion and pattern formation</em></a>.</p>
 <aside class="notes">
-<p>The one-line version: the cost of an iterative solve is (cost per iteration) x (number of iterations), the first is O(nnz), the second is set by the condition number, and the condition number of a diffusion problem grows like 1/h^2. Preconditioners and multigrid exist to break that growth. Where this connects: <a href="../steady-state-2d/lec.html"><em>Steady state in two dimensions</em></a> (Part 10) produces such matrices (its Newton steps too, and its browser demo already uses SOR, a Gauss–Seidel variant); <a href="../reaction-diffusion/lec.html"><em>Reaction–diffusion and pattern formation</em></a> would, with walls instead of its periodic FFT box; <a href="../fem-outlook/lec.html"><em>Beyond rectangles: finite elements and flow</em></a> (Part 11) produces bigger and less regular ones, for which algebraic multigrid and Krylov methods are the standard tools inside COMSOL, FEniCS and friends.</p>
+<p>The one-line version: the cost of an iterative solve is (cost per iteration) x (number of iterations), the first is O(nnz), the second is set by the condition number (and, for nonsymmetric matrices, by more than that), and the condition number of a diffusion problem grows like 1/h^2. Preconditioners and multigrid exist to break that growth. Where this connects: <a href="../steady-state-2d/lec.html"><em>Steady state in two dimensions</em></a> produces such matrices, and every Newton step there is a linear solve with an SPD Jacobian, for which preconditioned CG is the large-scale choice. The next unit, <a href="../reaction-diffusion/lec.html"><em>Reaction–diffusion and pattern formation</em></a>, adds reactions to diffusion; with self-activation the Jacobian gets the -sigma I term of the signal chamber, and on a large grid with walls (instead of its periodic FFT box) its implicit steps would need exactly these solvers. <a href="../fem-outlook/lec.html"><em>Beyond rectangles: finite elements and flow</em></a> (Part 11, optional) produces bigger and less regular matrices, for which algebraic multigrid and Krylov methods are the standard tools inside COMSOL, FEniCS and friends.</p>
 <style type="text/css">
         span.MJX_Assistive_MathML {
           position:absolute!important;

@@ -15,10 +15,12 @@ By the end of this exercise you should be able to:
 - write **Jacobi** and **Gauss–Seidel** as splittings $\mathbf{x} \leftarrow \mathbf{x} + M^{-1}(\mathbf{b} - A\mathbf{x})$ and run them by hand on a tiny grid,
 - predict their speed from the **spectral radius** of the iteration matrix, and explain why they slow down by a factor 4 each time the grid is refined,
 - count **conjugate gradient** iterations as the grid grows and relate them to $\sqrt{\kappa}$,
+- run **CG by hand** on a small system and see the Krylov space and the minimisation at work; estimate CG iteration counts from $\sqrt{\kappa}$,
 - use a **preconditioner** (diagonal, incomplete Cholesky) and say when it helps,
-- recognise a **nonsymmetric** system, see CG fail on it, and solve it with **GMRES**.
+- recognise a **nonsymmetric** system, see CG fail on it, and solve it with **GMRES**,
+- see **restarted GMRES** stall, detect it, and try **BiCGSTAB**, the short-recurrence alternative.
 
-This is an optional further-reading unit, so the exercise is shorter than usual. The by-hand part needs pen and paper (and a calculator for B2–B4). The code part builds on the `jacobi` and `cg` functions you wrote in C8 of [*Structure: symmetric, banded, sparse*](../structured-sparse/exercise.qmd) (there they stopped on an absolute residual of $10^{-10}$; here on a relative one, fact 7). The solutions define every function they use.
+The by-hand part needs pen and paper (and a calculator for B2–B4 and B7). The code part builds on the `jacobi` and `cg` functions you wrote in C8 of [*Structure: symmetric, banded, sparse*](../structured-sparse/exercise.qmd) (there they stopped on an absolute residual of $10^{-10}$; here on a relative one, fact 7). The solutions define every function they use.
 
 ## Background
 
@@ -35,6 +37,8 @@ a sparse SPD system $A\mathbf{u} = \mathbf{b}$ with $n = m^2$ unknowns and five 
 5. **Preconditioned CG** replaces $\mathbf{z} = \mathbf{r}$ by $\mathbf{z} = M^{-1}\mathbf{r}$ with $M \approx A$ SPD. Jacobi: $M = D$. Incomplete Cholesky IC(0): $M = LL^T$ where $L$ has the pattern of the lower triangle of $A$ (fill-in dropped).
 6. **GMRES** finds the $\mathbf{x}_k$ in the Krylov space $\text{span}\{\mathbf{b}, A\mathbf{b}, \dots, A^{k-1}\mathbf{b}\}$ with the smallest residual; it works for nonsymmetric $A$ but stores all $k$ basis vectors.
 7. **Stopping:** in this exercise every method stops when the relative residual $\|\mathbf{b} - A\mathbf{x}\| / \|\mathbf{b}\| < 10^{-6}$.
+8. **Restarted GMRES($k$)** keeps at most $k$ basis vectors, then starts again from the current iterate. It converges for every $k$ if $\mathbf{v}^TA\mathbf{v} > 0$ for all $\mathbf{v} \ne \mathbf{0}$ (the symmetric part $(A + A^T)/2$ is positive definite); otherwise it can **stall**: the residual stops decreasing.
+9. **BiCGSTAB** handles nonsymmetric $A$ with short recurrences: fixed memory (seven vectors), two products with $A$ per step. Its residual is not monotone, and it can stagnate or break down.
 
 Building the matrix and solving directly:
 
@@ -138,6 +142,24 @@ R's `solve` on a sparse SPD matrix runs a sparse Cholesky with a fill-reducing o
 (a) $A = \begin{pmatrix}100&1\\1&1\end{pmatrix}$. Compute its eigenvalues and $\kappa(A)$. Then compute $\kappa$ of $D^{-1/2}AD^{-1/2}$, $D = \text{diag}(100, 1)$. (For CG, preconditioning with $D$ is equivalent to running CG on $D^{-1/2}AD^{-1/2}$.)
 (b) For the chamber matrix, $D = 4I$. What does Jacobi preconditioning change?
 
+**B6. CG by hand on three cells.** The row of three cells of B2, now with a source in every cell: $A = \begin{pmatrix}2&-1&0\\-1&2&-1\\0&-1&2\end{pmatrix}$, $\mathbf{b} = (1, 1, 1)$. CG from $\mathbf{x}_0 = \mathbf{0}$: $\mathbf{r}_0 = \mathbf{p}_0 = \mathbf{b}$, and in every step
+$$\alpha_k = \frac{\mathbf{r}_k^T\mathbf{r}_k}{\mathbf{p}_k^TA\mathbf{p}_k},\quad \mathbf{x}_{k+1} = \mathbf{x}_k + \alpha_k\mathbf{p}_k,\quad \mathbf{r}_{k+1} = \mathbf{r}_k - \alpha_kA\mathbf{p}_k,\quad \beta_k = \frac{\mathbf{r}_{k+1}^T\mathbf{r}_{k+1}}{\mathbf{r}_k^T\mathbf{r}_k},\quad \mathbf{p}_{k+1} = \mathbf{r}_{k+1} + \beta_k\mathbf{p}_k.$$
+(a) Do two steps. Check that $A\mathbf{x}_2 = \mathbf{b}$.
+(b) Check that $\mathbf{r}_1 \perp \mathbf{r}_0$ and that $\mathbf{p}_1^TA\mathbf{p}_0 = 0$ (the directions are $A$-conjugate).
+(c) Show that $\mathbf{x}_1 \in \text{span}\{\mathbf{b}\}$ and $\mathbf{x}_2 \in \text{span}\{\mathbf{b}, A\mathbf{b}\}$. Show that $\mathbf{x}_1$ minimises $f(\mathbf{x}) = \tfrac12\mathbf{x}^TA\mathbf{x} - \mathbf{b}^T\mathbf{x}$ on the line $\mathbf{x} = t\mathbf{b}$, and compute $f(\mathbf{x}_0)$, $f(\mathbf{x}_1)$, $f(\mathbf{x}_2)$.
+(d) CG finishes an $n \times n$ SPD system in at most $n$ steps (in exact arithmetic). Why did it need only two here? Use the eigenvectors of B2. How many steps would CG need for B1, and why?
+
+**B7. The $\sqrt{\kappa}$ estimate.** The CG error bound is $2q^k$ with $q = (\sqrt\kappa - 1)/(\sqrt\kappa + 1)$.
+(a) The chamber at $m = 63$ has $\kappa = 1659$. Compute $q$ and the number of iterations $k$ for which $2q^k = 10^{-6}$. Compare with Jacobi's $\ln(10^{-6})/\ln(\cos\pi h)$ and with the 100 CG iterations measured in C3.
+(b) Show that $\ln q \approx -2/\sqrt\kappa$ for large $\kappa$, and hence $k \approx \tfrac12\sqrt\kappa\,\ln(2/\text{tol})$ (fact 4).
+(c) In C4 the aggregate makes the diagonal range from 0.4 to 4. If that made $\kappa$ ten times larger, by what factor should the CG count grow? (Measured: 100 → 197.) IC(0) needs 40 iterations instead of 100: if counts scale like $\sqrt\kappa$, roughly what is $\kappa(M^{-1}A)$?
+
+**B8. Flow around a loop: when restarts stall.** The most extreme nonsymmetric matrix is pure transport without diffusion: three compartments in a closed loop, each receiving from the previous one, $(A\mathbf{x})_i = x_{i-1}$ (with $x_0 = x_3$):
+$$A = \begin{pmatrix}0&0&1\\1&0&0\\0&1&0\end{pmatrix}, \qquad \mathbf{b} = (1, 0, 0).$$
+(a) Compute $A\mathbf{b}$ and $A^2\mathbf{b}$. Solve $A\mathbf{x} = \mathbf{b}$. In which Krylov spaces $\mathcal{K}_1, \mathcal{K}_2, \mathcal{K}_3$ does the solution lie?
+(b) GMRES picks $\mathbf{x}_k \in \mathcal{K}_k$ with the smallest $\|\mathbf{b} - A\mathbf{x}_k\|$. Show that for $k = 1$ and $k = 2$ the best choice is $\mathbf{x}_k = \mathbf{0}$, with residual 1. What do GMRES(1) and GMRES(2) do after a restart? And full GMRES?
+(c) Compute $\mathbf{v}^TA\mathbf{v}$ for $\mathbf{v} = (1, 0, 0)$ and $\mathbf{v} = (1, 1, 1)$. The symmetric part $(A + A^T)/2$ has eigenvalues $1, -\tfrac12, -\tfrac12$. Connect to fact 8.
+
 ## In code
 
 **C1. Jacobi and Gauss–Seidel as splittings.** Write `splitting(A, b, M, tol, maxit)` that iterates $\mathbf{x} \leftarrow \mathbf{x} + M^{-1}\mathbf{r}$ and returns the solution, the number of iterations and the history of relative residuals. Run it with $M = D$ and $M$ = lower triangle (R: [`tril`](https://rdrr.io/cran/Matrix/man/band-methods.html); Python: [`scipy.sparse.tril`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.tril.html) and [`spsolve_triangular`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.spsolve_triangular.html)) for $m = 7, 15, 31$. Compare with the predictions $\ln(10^{-6})/\ln(\cos\pi h)$ and half of that. For $m = 31$, print the ratio of the last few successive residuals.
@@ -222,6 +244,13 @@ IC(0) for the five-point matrix: row $k$ of $L$ has entries only at $k-1$ (west 
 (c) Solve with GMRES (R: hand-written as on the slide; [`pracma::gmres`](https://rdrr.io/cran/pracma/man/gmres.html) exists but needs a dense matrix. Python: [`scipy.sparse.linalg.gmres`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.gmres.html) with `restart=300` and a `callback` with `callback_type="pr_norm"`). Report iterations and relative residual. In Python, also run with the default `restart=20`.
 (d) Run GMRES on the symmetric chamber and compare the count with C3.
 
+**C6. Restarted GMRES, and when it stalls.**
+(a) Write `gmres_k(A, b, k, tol, maxit)`: restarted GMRES($k$). Each cycle runs the GMRES of C5 for at most $k$ steps on the current residual and adds the correction to $\mathbf{x}$; stop at the tolerance or after `maxit` = 3000 steps in total. (Python: `scipy.sparse.linalg.gmres` with `restart=k` and `maxiter=3000 // k`; `maxiter` counts cycles.) On the perfused chamber of C5, count the iterations for $k = 10, 20, 50$ and 300 (full GMRES).
+(b) **The signal chamber.** Cells in the perfused chamber release a signalling molecule and, through positive feedback, release more where the signal is high (linearised: an extra source $\sigma u$ with $\sigma = 100$ in scaled units). The matrix becomes $A - \sigma h^2 I$; the right-hand side stays the same. Repeat (a) and print the final relative residual.
+(c) For the smooth bump $v_{ij} = \sin(\pi x_i)\sin(\pi y_j)$ compute $\mathbf{v}^TA\mathbf{v}/\mathbf{v}^T\mathbf{v}$ for both matrices. What does the sign tell you (fact 8, B8)?
+
+**C7. BiCGSTAB.** Write BiCGSTAB as on the slide (12 lines). R and Rust have no ready-made sparse BiCGSTAB in our setup (the CRAN package `Rlinsolve` has one but is not installed; [`pracma::gmres`](https://rdrr.io/cran/pracma/man/gmres.html) is for dense matrices), so hand-write it; in Python, also compare with [`scipy.sparse.linalg.bicgstab`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.bicgstab.html). On the perfused chamber with feedback $\sigma = 0, 100, 200$, print the number of BiCGSTAB steps, the number of products with $A$, the true relative residual of the result, and the iterations of full GMRES. Which method would you choose when $n = 10^6$?
+
 ## Hints
 
 ::: {.callout-tip collapse="true" title="Hint 1 — Jacobi and Gauss–Seidel by hand (B1)"}
@@ -256,6 +285,26 @@ Jacobi: `Minv = function(r) r / d` with `d <- diag(A)`. IC(0): with `L <- ic0(A,
 Add `Pe * h` times a lower bidiagonal matrix (1 on the diagonal, $-1$ below it) to the 1D operator in $x$ only, then combine with the $y$ operator by `kronecker` as in `lap2`. Symmetric? `isSymmetric(A)` (R), `abs(A - A.T).max() == 0` (Python). To see CG fail, compute the residual $\|\mathbf{b} - A\mathbf{x}\|$ from the returned $\mathbf{x}$, not CG's internal residual.
 :::
 
+::: {.callout-tip collapse="true" title="Hint 9 — CG by hand (B6)"}
+Compute $A\mathbf{p}_k$ first; everything else is dot products. $A\mathbf{b} = (1, 0, 1)$. At the solution, $f(\mathbf{x}^*) = -\tfrac12\mathbf{b}^T\mathbf{x}^*$. For (d): write $\mathbf{b}$ in the eigenvectors of $A$ (the same as those of $T_J$ in B2) and look at its component along $(1, 0, -1)$; in B1, compute $A\mathbf{b}$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 10 — the bound (B7)"}
+With $\varepsilon = 1/\sqrt\kappa$, $q = (1 - \varepsilon)/(1 + \varepsilon)$ and $\ln(1 \pm \varepsilon) \approx \pm\varepsilon$. Solve $2q^k = \text{tol}$ for $k$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 11 — the loop (B8)"}
+$A$ moves entry 1 to position 2, 2 to 3, 3 to 1. If $\mathbf{x} \in \text{span}\{\mathbf{e}_1, \mathbf{e}_2\}$, where can $A\mathbf{x}$ have non-zeros? Then $\|\mathbf{b} - A\mathbf{x}\|^2 = 1 + \|A\mathbf{x}\|^2$. A restart throws the Krylov space away and starts from the same residual.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 12 — restarts (C6)"}
+One cycle: `r <- b - A x`; `g <- gmres(A, r, k, tol * norm(b) / norm(r))`; `x <- x + g$x`. The tolerance is rescaled because C5's `gmres` measures its residual relative to its own right-hand side, here $\mathbf{r}$. The bump: `v <- as.vector(outer(s, s))` with `s <- sin(pi * (1:m) * h)` (Python: `np.outer(s, s).ravel()`; the ordering does not matter for a symmetric bump); then `sum(v * (A %*% v)) / sum(v^2)`.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 13 — BiCGSTAB (C7)"}
+Each step has two products with $A$ (`v` and `t`). Return `NA` (Python `None`) when `maxit` is reached, and compute the true residual $\|\mathbf{b} - A\mathbf{x}\|/\|\mathbf{b}\|$ from the returned $\mathbf{x}$. scipy's `bicgstab` calls `callback(xk)` once per step and also tests the residual halfway through a step, so its count can differ by one or two.
+:::
+
 ## Solutions
 
 ::: {.callout-note collapse="true" title="Solution"}
@@ -285,6 +334,23 @@ Add `Pe * h` times a lower bidiagonal matrix (1 on the diagonal, $-1$ below it) 
 **B5.**
 (a) Trace 101, determinant 99: $\lambda = (101 \pm \sqrt{101^2 - 4\cdot99})/2 = (101 \pm 99.02)/2$, so $100.01$ and $0.990$, $\kappa \approx 101$. $D^{-1/2}AD^{-1/2} = \begin{pmatrix}1&0.1\\0.1&1\end{pmatrix}$, eigenvalues $1.1$ and $0.9$, $\kappa = 1.22$. The diagonal scaling removes the bad scaling of the first unknown.
 (b) $D^{-1/2}AD^{-1/2} = A/4$: same eigenvectors, same $\kappa$. Nothing changes; CG takes exactly the same steps (C4 confirms).
+
+**B6.**
+(a) Step 1: $A\mathbf{p}_0 = (1, 0, 1)$, $\mathbf{r}_0^T\mathbf{r}_0 = 3$, $\mathbf{p}_0^TA\mathbf{p}_0 = 2$, so $\alpha_0 = \tfrac32$, $\mathbf{x}_1 = (1.5, 1.5, 1.5)$, $\mathbf{r}_1 = (1, 1, 1) - 1.5(1, 0, 1) = (-0.5, 1, -0.5)$. $\beta_0 = 1.5/3 = 0.5$, $\mathbf{p}_1 = (-0.5, 1, -0.5) + 0.5(1, 1, 1) = (0, 1.5, 0)$.
+Step 2: $A\mathbf{p}_1 = (-1.5, 3, -1.5)$, $\mathbf{p}_1^TA\mathbf{p}_1 = 4.5$, $\alpha_1 = 1.5/4.5 = \tfrac13$, $\mathbf{x}_2 = (1.5, 2, 1.5)$, $\mathbf{r}_2 = (-0.5, 1, -0.5) - \tfrac13(-1.5, 3, -1.5) = \mathbf{0}$. Check: $A\mathbf{x}_2 = (3 - 2,\ -1.5 + 4 - 1.5,\ -2 + 3) = (1, 1, 1)$ ✓.
+(b) $\mathbf{r}_1^T\mathbf{r}_0 = -0.5 + 1 - 0.5 = 0$ ✓. $\mathbf{p}_1^TA\mathbf{p}_0 = (0, 1.5, 0)\cdot(1, 0, 1) = 0$ ✓.
+(c) $\mathbf{x}_1 = 1.5\,\mathbf{b}$. $\mathbf{x}_2 = 2\mathbf{b} - 0.5A\mathbf{b} = (2, 2, 2) - (0.5, 0, 0.5) = (1.5, 2, 1.5)$ ✓. On the line, $f(t\mathbf{b}) = \tfrac12t^2\,\mathbf{b}^TA\mathbf{b} - t\,\mathbf{b}^T\mathbf{b} = t^2 - 3t$, smallest at $t = 1.5$: that is $\mathbf{x}_1$. $f(\mathbf{x}_0) = 0$, $f(\mathbf{x}_1) = 2.25 - 4.5 = -2.25$, $f(\mathbf{x}_2) = -\tfrac12\mathbf{b}^T\mathbf{x}_2 = -2.5$, the minimum. Each step minimises $f$ over a larger space.
+(d) $\mathbf{b} = (1, 1, 1)$ is orthogonal to the eigenvector $(1, 0, -1)$, so it is a combination of only two eigenvectors, $(1, \sqrt2, 1)$ and $(1, -\sqrt2, 1)$. Then $\mathcal{K}_2$ already contains $A^{-1}\mathbf{b}$, and CG, which finds the best point of $\mathcal{K}_k$, finds it exactly. In general CG needs at most as many steps as there are distinct eigenvalues among the components of $\mathbf{b}$. In B1, $A\mathbf{b} = 2\mathbf{b}$: $\mathbf{b}$ is an eigenvector, and CG finishes in **one** step ($\alpha_0 = \tfrac12$, $\mathbf{x}_1 = (0.5, 0.5, 0.5, 0.5)$), while Jacobi only halves the error in every step.
+
+**B7.**
+(a) $\sqrt{1659} = 40.73$, $q = 39.73/41.73 = 0.95207$, $\ln q = -0.04911$. $k = \ln(2\times10^6)/0.04911 = 14.51/0.04911 \approx 295$. Jacobi: $\ln(10^{-6})/\ln\cos(\pi/64) \approx 11\,460$. The bound is three times the measured 100, but forty times better than Jacobi; and it has the right scaling.
+(b) $\ln q = \ln(1 - \varepsilon) - \ln(1 + \varepsilon) \approx -2\varepsilon = -2/\sqrt\kappa$. From $2q^k = \text{tol}$: $k = \ln(2/\text{tol}) / (-\ln q) \approx \tfrac12\sqrt\kappa\ln(2/\text{tol})$; here $\tfrac12 \times 40.73 \times 14.51 = 295.5$, the same as (a).
+(c) $\sqrt{10} = 3.2$: about 320 instead of 100. Measured 197: the bound is a worst case, and only a part of the spectrum moves (the aggregate covers a quarter of the chamber). IC(0): $100/40 = 2.5$, so $\kappa$ is about $2.5^2 = 6.25$ times smaller, $\kappa(M^{-1}A) \approx 1659/6.25 \approx 270$. (A rough estimate: CG counts also depend on how the eigenvalues are spread, not only on $\kappa$.)
+
+**B8.**
+(a) $A\mathbf{b} = (0, 1, 0)$, $A^2\mathbf{b} = (0, 0, 1)$. $\mathbf{x} = (0, 0, 1)$: $A\mathbf{x}$ is the third column, $(1, 0, 0)$ ✓. $\mathcal{K}_1 = \text{span}\{\mathbf{e}_1\}$ and $\mathcal{K}_2 = \text{span}\{\mathbf{e}_1, \mathbf{e}_2\}$ do not contain $\mathbf{e}_3$; $\mathcal{K}_3$ is all of $\mathbb{R}^3$ and does.
+(b) For $\mathbf{x} \in \text{span}\{\mathbf{e}_1, \mathbf{e}_2\}$, $A\mathbf{x} \in \text{span}\{\mathbf{e}_2, \mathbf{e}_3\}$, orthogonal to $\mathbf{b} = \mathbf{e}_1$, so $\|\mathbf{b} - A\mathbf{x}\|^2 = 1 + \|A\mathbf{x}\|^2 \ge 1$, smallest for $\mathbf{x} = \mathbf{0}$. So after one or two steps GMRES has made no progress at all; a restart begins again from $\mathbf{x} = \mathbf{0}$ with the same residual $\mathbf{e}_1$, and GMRES(1) and GMRES(2) **stall forever**. Full GMRES finds the exact solution at step 3.
+(c) $\mathbf{e}_1^TA\mathbf{e}_1 = a_{11} = 0$; $(1, 1, 1)A(1, 1, 1)^T = 3$. The symmetric part is indefinite, so fact 8's guarantee does not hold, and (b) shows it failing. A GMRES(1) step from residual $\mathbf{r}$ moves by $t = \mathbf{r}^TA\mathbf{r}/\|A\mathbf{r}\|^2$, which is 0 here. Diffusion makes $\mathbf{v}^TA\mathbf{v}$ positive; flow alone does not, and anything that subtracts from the diagonal (C6) can make it negative.
 
 **C1.**
 
@@ -560,8 +626,8 @@ print(np.polyfit(np.log(np.array(ms) + 1), np.log(its), 1)[0])   # slope
 # Output:
 # 31 50 414 20 0.11662316507538717 0
 # 63 100 1659 41 0.11611379757785456 0
-# 127 203 6640 81 0.11598628740221861 0
-# 255 409 26560 163 0.11595439924028761 0
+# 127 203 6640 81 0.11598628740221895 0
+# 255 409 26560 163 0.11595439924028783 0
 # 1.0117782256911525
 ```
 
@@ -991,10 +1057,358 @@ fn main() {
 
 (a) Not symmetric. (b) CG does not converge: the true relative residual is 53 after 50 iterations and 314 after 300, and grows. Nothing in CG's own arithmetic signals the problem; only the check of symmetry, or of the true residual, does. (c) Full GMRES converges in 116 iterations to a relative residual of $9.6\times10^{-7}$, and agrees with the direct solve to $6\times10^{-8}$. Restarted GMRES(20) needs 187 iterations: restarting saves memory (20 basis vectors instead of 116) at the price of more iterations. (d) On the symmetric chamber GMRES takes 99 iterations, CG 100: for SPD matrices the two minimise different norms over the same Krylov space and need about the same count, but CG does it with four vectors instead of a growing basis. The perfused chamber is much better oxygenated: 0.880 in the centre instead of 0.116. (Rust prints the centre from the GMRES solution, which agrees with the direct solve to 7 digits.)
 
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# continues C5 (lap1, lap2, chamber_rhs, adv2, gmres, relres)
+gmres_k <- function(A, b, k, tol = 1e-6, maxit = 3000) {   # restarted GMRES(k)
+  x <- numeric(length(b)); nb <- sqrt(sum(b^2)); it <- 0
+  repeat {
+    r <- b - (A %*% x)[, 1]; nr <- sqrt(sum(r^2))
+    if (nr < tol * nb || it >= maxit) break
+    g <- gmres(A, r, k = min(k, maxit - it), tol = tol * nb / nr)   # one cycle
+    x <- x + g$x; it <- it + g$it
+  }
+  list(x = x, it = it, relres = nr / nb)
+}
+m <- 63; b <- chamber_rhs(m); h <- 1 / (m + 1)
+A <- adv2(m, Pe = 50)                          # perfused chamber
+S <- A - 100 * h^2 * Diagonal(m^2)             # signal with positive feedback
+for (k in c(10, 20, 50, 300)) {
+  g1 <- gmres_k(A, b, k); g2 <- gmres_k(S, b, k)
+  cat(k, g1$it, g2$it, signif(g2$relres, 3), "\n")
+}
+v <- as.vector(outer(sin(pi * (1:m) * h), sin(pi * (1:m) * h)))   # smooth bump
+c(sum(v * (A %*% v)), sum(v * (S %*% v))) / sum(v^2)              # v'Av / v'v
+# Output:
+# 10 147 3000 0.976 
+# 20 187 3000 0.973 
+# 50 284 800 8.44e-07 
+# 300 116 123 5.53e-07 
+# [1]  0.005759225 -0.018654837
+```
+
+### Python
+
+```python
+# continues C5 (imports, lap1, lap2, chamber_rhs, adv2, relres)
+from scipy.sparse.linalg import gmres
+
+def gmres_k(A, b, k, maxit=3000):             # restarted GMRES(k), at most maxit steps
+    count = [0]
+    def callback(pr_norm): count[0] += 1
+    x, info = gmres(A, b, rtol=1e-6, restart=k, maxiter=maxit // k,
+                    callback=callback, callback_type="pr_norm")
+    return x, count[0], relres(A, b, x)
+
+m = 63; b = chamber_rhs(m); h = 1 / (m + 1)
+A = adv2(m, Pe=50)                            # perfused chamber
+S = (A - 100 * h ** 2 * sparse.identity(m * m)).tocsr()   # signal with positive feedback
+for k in [10, 20, 50, 300]:
+    x1, it1, _ = gmres_k(A, b, k); x2, it2, r2 = gmres_k(S, b, k)
+    print(k, it1, it2, float(f"{r2:.3g}"))
+s = np.sin(np.pi * np.arange(1, m + 1) * h)
+v = np.outer(s, s).ravel()                    # smooth bump
+print(v @ (A @ v) / (v @ v), v @ (S @ v) / (v @ v))       # v'Av / v'v
+# Output:
+# 10 147 3000 0.976
+# 20 187 3000 0.973
+# 50 284 800 8.44e-07
+# 300 116 123 5.53e-07
+# 0.005759225019019523 -0.018654837480980496
+```
+
+### Rust
+
+```rust
+// rust/examples/iterative_solvers_c6.rs  —  cargo run --release --example iterative_solvers_c6
+// C6: restarted GMRES(k) on the perfused chamber and on the signal chamber
+// (positive feedback, sigma = 100), where short restarts stall. Hand-written
+// GMRES as in C5, plus a restart loop; the smooth bump v tests v'Av > 0.
+include!("iterative_solvers_shared/defs.rs");
+use nalgebra::{DMatrix, DVector};
+
+fn adv2(m: usize, pe: f64, sigma: f64) -> CsMat<f64> {   // flow in +x, upwind; minus sigma h^2 I
+    let (n, h) = (m * m, 1.0 / (m + 1) as f64);
+    let ph = pe * h;
+    let mut t = TriMat::new((n, n));
+    for j in 0..m {
+        for i in 0..m {
+            let k = i + m * j;
+            t.add_triplet(k, k, 4.0 + ph - sigma * h * h);
+            if i > 0 { t.add_triplet(k, k - 1, -1.0 - ph); }
+            if i < m - 1 { t.add_triplet(k, k + 1, -1.0); }
+            if j > 0 { t.add_triplet(k, k - m, -1.0); }
+            if j < m - 1 { t.add_triplet(k, k + m, -1.0); }
+        }
+    }
+    t.to_csr()
+}
+fn residual(a: &CsMat<f64>, b: &[f64], x: &[f64]) -> Vec<f64> {
+    let ax = matvec(a, x);
+    b.iter().zip(&ax).map(|(p, q)| p - q).collect()
+}
+// one GMRES cycle of at most k steps from x = 0; stops when ||b - A x|| < tol ||b||
+fn gmres(a: &CsMat<f64>, b: &[f64], k: usize, tol: f64) -> (Vec<f64>, usize) {
+    let beta = norm(b);
+    let mut q: Vec<Vec<f64>> = vec![b.iter().map(|v| v / beta).collect()];
+    let mut h = DMatrix::<f64>::zeros(k + 1, k);
+    let mut y = DVector::<f64>::zeros(0);
+    let mut jlast = 0;
+    for j in 0..k {
+        let mut w = matvec(a, &q[j]);                   // one product with A
+        for i in 0..=j {
+            h[(i, j)] = dot(&q[i], &w);
+            for (wl, ql) in w.iter_mut().zip(&q[i]) { *wl -= h[(i, j)] * ql; }
+        }
+        h[(j + 1, j)] = norm(&w);
+        q.push(w.iter().map(|v| v / h[(j + 1, j)]).collect());
+        let hj = h.view((0, 0), (j + 2, j + 1)).into_owned();
+        let mut e1 = DVector::<f64>::zeros(j + 2);
+        e1[0] = beta;
+        let qr = hj.clone().qr();
+        y = qr.r().solve_upper_triangular(&(qr.q().transpose() * &e1)).unwrap();
+        jlast = j + 1;
+        if (&e1 - &hj * &y).norm() < tol * beta { break; }
+    }
+    let mut x = vec![0.0; b.len()];
+    for (l, yl) in y.iter().enumerate() {
+        for (xi, qi) in x.iter_mut().zip(&q[l]) { *xi += yl * qi; }
+    }
+    (x, jlast)
+}
+// restarted GMRES(k): at most maxit steps in total; returns iterations and relative residual
+fn gmres_k(a: &CsMat<f64>, b: &[f64], k: usize, tol: f64, maxit: usize) -> (usize, f64) {
+    let (mut x, nb, mut it) = (vec![0.0; b.len()], norm(b), 0);
+    loop {
+        let r = residual(a, b, &x);
+        let nr = norm(&r);
+        if nr < tol * nb || it >= maxit { return (it, nr / nb); }
+        let (dx, j) = gmres(a, &r, k.min(maxit - it), tol * nb / nr);   // one cycle
+        for (xi, d) in x.iter_mut().zip(&dx) { *xi += d; }
+        it += j;
+    }
+}
+fn sig3(v: f64) -> f64 {                                // round to 3 significant digits
+    let e = 10f64.powi(2 - v.abs().log10().floor() as i32);
+    (v * e).round() / e
+}
+
+fn main() {
+    let m = 63;
+    let h = 1.0 / (m + 1) as f64;
+    let b = chamber_rhs(m, 12.0);
+    let a = adv2(m, 50.0, 0.0);                         // perfused chamber
+    let s = adv2(m, 50.0, 100.0);                       // signal with positive feedback
+    for k in [10, 20, 50, 300] {
+        let (it1, _) = gmres_k(&a, &b, k, 1e-6, 3000);
+        let (it2, r2) = gmres_k(&s, &b, k, 1e-6, 3000);
+        if r2 > 1e-3 { println!("{} {} {} {}", k, it1, it2, sig3(r2)); }
+        else { println!("{} {} {} {:e}", k, it1, it2, sig3(r2)); }
+    }
+    let sv: Vec<f64> = (1..=m).map(|i| (std::f64::consts::PI * i as f64 * h).sin()).collect();
+    let v: Vec<f64> = (0..m * m).map(|k| sv[k % m] * sv[k / m]).collect();   // smooth bump
+    let vv = dot(&v, &v);
+    println!("{} {}", dot(&v, &matvec(&a, &v)) / vv, dot(&v, &matvec(&s, &v)) / vv);
+}
+
+// Output:
+// 10 147 3000 0.976
+// 20 187 3000 0.973
+// 50 284 800 8.44e-7
+// 300 116 123 5.53e-7
+// 0.005759225019019527 -0.018654837480980534
+```
+
+:::
+
+| iterations to $10^{-6}$ | GMRES(10) | GMRES(20) | GMRES(50) | full GMRES |
+|---|---|---|---|---|
+| perfused chamber | 147 | 187 | 284 | 116 |
+| signal chamber, $\sigma = 100$ | stalls (0.976) | stalls (0.973) | 800 | 123 |
+
+On the perfused chamber every restart length converges, but not in the order you might expect: GMRES(10) beats GMRES(50). With positive feedback, GMRES(10) and GMRES(20) are still at a relative residual of 0.97 after 3000 iterations: they **stall**. The residual curve is flat, which is the check (fig. on the slide "Restarted GMRES can stall"). Full GMRES needs only 123 iterations, but stores 123 vectors. (c) The bump gives $\mathbf{v}^TA\mathbf{v}/\mathbf{v}^T\mathbf{v} = 0.0058 > 0$ for the perfused chamber and $0.0058 - 100h^2 = -0.0187 < 0$ for the signal chamber: its symmetric part is indefinite, and fact 8's guarantee is lost, as for the loop of B8. The matrix itself is fine: its eigenvalues still have positive real parts and the steady signal is positive everywhere (check with a direct solve); the trouble is only for short restarts.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+# continues C6 (A, S, b, h, m, gmres, relres)
+bicgstab <- function(A, b, tol = 1e-6, maxit = 5000) {
+  x <- v <- p <- numeric(length(b)); r <- rh <- b; rho <- alpha <- omega <- 1
+  for (it in 1:maxit) {
+    rho_new <- sum(rh * r); beta <- (rho_new / rho) * (alpha / omega); rho <- rho_new
+    p <- r + beta * (p - omega * v)
+    v <- (A %*% p)[, 1]; alpha <- rho / sum(rh * v); s <- r - alpha * v
+    t <- (A %*% s)[, 1]; omega <- sum(t * s) / sum(t * t)      # a GMRES(1) step
+    x <- x + alpha * p + omega * s; r <- s - omega * t
+    if (sqrt(sum(r^2)) < tol * sqrt(sum(b^2))) return(list(x = x, it = it))
+  }
+  list(x = x, it = NA)
+}
+for (sigma in c(0, 100, 200)) {
+  B <- A - sigma * h^2 * Diagonal(m^2)
+  bs <- bicgstab(B, b); gf <- gmres(B, b, k = 300)
+  cat(sigma, bs$it, 2 * bs$it, signif(relres(B, b, bs$x), 3), gf$it, "\n")
+}
+# Output:
+# 0 88 176 4.68e-07 116 
+# 100 103 206 7.57e-08 123 
+# 200 NA NA 3.29 133 
+```
+
+### Python
+
+```python
+# continues C6 (A, b, h, m, gmres_k, relres)
+from scipy.sparse.linalg import bicgstab as scipy_bicgstab
+
+def bicgstab(A, b, tol=1e-6, maxit=5000):
+    x = np.zeros(len(b)); v = np.zeros(len(b)); p = np.zeros(len(b))
+    r = b.copy(); rh = b.copy(); rho = alpha = omega = 1.0
+    for it in range(1, maxit + 1):
+        rho_new = rh @ r; beta = (rho_new / rho) * (alpha / omega); rho = rho_new
+        p = r + beta * (p - omega * v)
+        v = A @ p; alpha = rho / (rh @ v); s = r - alpha * v
+        t = A @ s; omega = (t @ s) / (t @ t)          # a GMRES(1) step
+        x = x + alpha * p + omega * s; r = s - omega * t
+        if np.linalg.norm(r) < tol * np.linalg.norm(b):
+            return x, it
+    return x, None
+
+for sigma in [0, 100, 200]:
+    B = (A - sigma * h ** 2 * sparse.identity(m * m)).tocsr()
+    x, it = bicgstab(B, b)
+    print(sigma, it, 2 * it if it else None, float(f"{relres(B, b, x):.3g}"), gmres_k(B, b, 300)[1])
+    count = [0]
+    def cb(xk): count[0] += 1
+    xs, info = scipy_bicgstab(B, b, rtol=1e-6, maxiter=5000, callback=cb)
+    print("  scipy:", count[0], info)
+# Output:
+# 0 86 172 5.99e-07 116
+#   scipy: 85 0
+# 100 100 200 7.92e-07 123
+#   scipy: 100 0
+# 200 None None 99.4 133
+#   scipy: 5000 5000
+```
+
+### Rust
+
+```rust
+// rust/examples/iterative_solvers_c7.rs  —  cargo run --release --example iterative_solvers_c7
+// C7: hand-written BiCGSTAB (short recurrences, two products with A per step)
+// against full GMRES on the perfused chamber with feedback sigma = 0, 100, 200.
+include!("iterative_solvers_shared/defs.rs");
+use nalgebra::{DMatrix, DVector};
+
+fn adv2(m: usize, pe: f64, sigma: f64) -> CsMat<f64> {   // flow in +x, upwind; minus sigma h^2 I
+    let (n, h) = (m * m, 1.0 / (m + 1) as f64);
+    let ph = pe * h;
+    let mut t = TriMat::new((n, n));
+    for j in 0..m {
+        for i in 0..m {
+            let k = i + m * j;
+            t.add_triplet(k, k, 4.0 + ph - sigma * h * h);
+            if i > 0 { t.add_triplet(k, k - 1, -1.0 - ph); }
+            if i < m - 1 { t.add_triplet(k, k + 1, -1.0); }
+            if j > 0 { t.add_triplet(k, k - m, -1.0); }
+            if j < m - 1 { t.add_triplet(k, k + m, -1.0); }
+        }
+    }
+    t.to_csr()
+}
+fn relres(a: &CsMat<f64>, b: &[f64], x: &[f64]) -> f64 {
+    let ax = matvec(a, x);
+    norm(&b.iter().zip(&ax).map(|(p, q)| p - q).collect::<Vec<_>>()) / norm(b)
+}
+fn bicgstab(a: &CsMat<f64>, b: &[f64], tol: f64, maxit: usize) -> (Vec<f64>, Option<usize>) {
+    let n = b.len();
+    let (mut x, mut r, rh) = (vec![0.0; n], b.to_vec(), b.to_vec());
+    let nb = norm(b);
+    let (mut rho, mut alpha, mut omega) = (1.0, 1.0, 1.0);
+    let (mut v, mut p) = (vec![0.0; n], vec![0.0; n]);
+    for it in 1..=maxit {
+        let rho_new = dot(&rh, &r);
+        let beta = (rho_new / rho) * (alpha / omega);
+        rho = rho_new;
+        for i in 0..n { p[i] = r[i] + beta * (p[i] - omega * v[i]); }
+        v = matvec(a, &p);
+        alpha = rho / dot(&rh, &v);
+        let s: Vec<f64> = (0..n).map(|i| r[i] - alpha * v[i]).collect();
+        let t = matvec(a, &s);
+        omega = dot(&t, &s) / dot(&t, &t);                 // a GMRES(1) step
+        for i in 0..n {
+            x[i] += alpha * p[i] + omega * s[i];
+            r[i] = s[i] - omega * t[i];
+        }
+        if norm(&r) < tol * nb { return (x, Some(it)); }
+    }
+    (x, None)
+}
+// full GMRES (no restart), as in C5; returns the number of iterations
+fn gmres_its(a: &CsMat<f64>, b: &[f64], k: usize, tol: f64) -> usize {
+    let beta = norm(b);
+    let mut q: Vec<Vec<f64>> = vec![b.iter().map(|v| v / beta).collect()];
+    let mut h = DMatrix::<f64>::zeros(k + 1, k);
+    for j in 0..k {
+        let mut w = matvec(a, &q[j]);
+        for i in 0..=j {
+            h[(i, j)] = dot(&q[i], &w);
+            for (wl, ql) in w.iter_mut().zip(&q[i]) { *wl -= h[(i, j)] * ql; }
+        }
+        h[(j + 1, j)] = norm(&w);
+        q.push(w.iter().map(|v| v / h[(j + 1, j)]).collect());
+        let hj = h.view((0, 0), (j + 2, j + 1)).into_owned();
+        let mut e1 = DVector::<f64>::zeros(j + 2);
+        e1[0] = beta;
+        let qr = hj.clone().qr();
+        let y = qr.r().solve_upper_triangular(&(qr.q().transpose() * &e1)).unwrap();
+        if (&e1 - &hj * &y).norm() < tol * beta { return j + 1; }
+    }
+    k
+}
+
+fn main() {
+    let m = 63;
+    let b = chamber_rhs(m, 12.0);
+    for sigma in [0.0, 100.0, 200.0] {
+        let a = adv2(m, 50.0, sigma);
+        let (x, it) = bicgstab(&a, &b, 1e-6, 5000);
+        let its = match it { Some(i) => format!("{} {}", i, 2 * i), None => "NA NA".to_string() };
+        println!("{} {} {:.2e} {}", sigma, its, relres(&a, &b, &x), gmres_its(&a, &b, 300, 1e-6));
+    }
+}
+
+// Output:
+// 0 88 176 9.91e-7 116
+// 100 101 202 9.55e-7 123
+// 200 NA NA 2.96e0 133
+```
+
+:::
+
+| | perfused ($\sigma = 0$) | $\sigma = 100$ | $\sigma = 200$ |
+|---|---|---|---|
+| BiCGSTAB steps, R / Python / Rust | 88 / 86 / 88 | 103 / 100 / 101 | fails in all three |
+| products with $A$ (R) | 176 | 206 | — |
+| full GMRES | 116 | 123 | 133 |
+
+BiCGSTAB converges where GMRES(10) and GMRES(20) stalled ($\sigma = 100$), with fixed memory, at the price of two products per step. At $\sigma = 200$ it stagnates: after 5000 steps the residual is still of order 1 to 100, and the value it ends on depends on rounding (R 3.29, Python 99.4, Rust 2.96). Its $\omega$ step is a GMRES(1) step, which gets no grip when $\mathbf{v}^TA\mathbf{v} \le 0$ for the current residual. Full GMRES converges in 133 iterations. The step counts differ by up to three between R, Python and Rust (and scipy's version, which also tests halfway through a step, needs 85 and 100): BiCGSTAB's residual jumps up and down by orders of magnitude, so tiny rounding differences in $A\mathbf{x}$ shift the step at which it first falls below the tolerance. For $n = 10^6$, full GMRES with 133 vectors needs about 1 GB for the basis; BiCGSTAB needs 56 MB. In practice: try BiCGSTAB or GMRES($k$) **with a preconditioner**, watch the residual, and keep full GMRES (or a direct solve on a small grid) as the reference.
+
 :::
 
 ## Where this leads
 
-- [*Steady state in two dimensions*](../steady-state-2d/lec.qmd) (Part 10) produces these matrices, and so would [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd) with walls instead of its periodic FFT box; with Newton's method for nonlinear uptake, every Newton step is a linear solve, and inside a large 3D model that solve is a preconditioned Krylov method.
-- [*Beyond rectangles: finite elements and flow*](../fem-outlook/lec.qmd) (Part 11): finite-element meshes give sparse matrices without a grid structure; there, algebraic multigrid and ILU replace the hand-written IC(0) for the five-point pattern used here.
+- [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd), the next unit, adds reactions to diffusion. Self-activation puts a $-\sigma I$ term into the Jacobian, as in the signal chamber of C6; with walls instead of its periodic FFT box, and on a large grid, every implicit or Newton step would be a preconditioned Krylov solve.
+- [*Steady state in two dimensions*](../steady-state-2d/lec.qmd) produces these matrices; with Newton's method for nonlinear uptake, every Newton step is a linear solve with an SPD Jacobian, and inside a large 3D model that solve is preconditioned CG.
+- [*Beyond rectangles: finite elements and flow*](../fem-outlook/lec.qmd) (Part 11, optional): finite-element meshes give sparse matrices without a grid structure; there, algebraic multigrid and ILU replace the hand-written IC(0) for the five-point pattern used here.
 - [*How `eigen()` works, and big problems*](../eigen-algorithms/lec.qmd) (Part 5): Lanczos and Arnoldi, the eigenvalue versions of the Krylov recurrences in CG and GMRES.

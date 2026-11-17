@@ -19,12 +19,16 @@
 # Makes:
 #   fig01-chamber.svg     the oxygen field and the hypoxic core (m = 127)
 #   fig02-fillin.svg      non-zeros of the Cholesky factor vs unknowns, 2D and 3D
-#   fig03-smooth.svg      Gauss-Seidel error after 0, 10, 200 sweeps: it becomes smooth
+#   fig03-smooth.png      Gauss-Seidel error after 0, 10, 200 sweeps: it becomes smooth
+#                         (PNG: three dense image maps)
 #   fig04-residuals.svg   residual vs iteration, m = 63: Jacobi, GS, CG, IC-CG
 #   fig05-counts.svg      iterations vs grid size, log-log, with multigrid
 #   fig06-gmres.svg       perfused chamber (advection-diffusion): field, and
 #                         residuals of CG, GMRES and GMRES(20)
-#   fig07-multigrid.svg   multigrid in one picture: smooth on the fine grid,
+#   fig07-stall.svg       signal chamber (flow + positive feedback, sigma = 100):
+#                         restarted GMRES(10), (20) stall; GMRES(50), full GMRES
+#                         and BiCGSTAB converge
+#   fig08-multigrid.svg   multigrid in one picture: smooth on the fine grid,
 #                         correct on coarse grids (V-cycle)
 
 library(Matrix)
@@ -43,6 +47,7 @@ lap2 <- function(m) { I <- Diagonal(m); T <- lap1(m); kronecker(I, T) + kronecke
 lap3 <- function(m) { I <- Diagonal(m); T <- lap1(m)
   kronecker(kronecker(I, I), T) + kronecker(kronecker(I, T), I) + kronecker(kronecker(T, I), I) }
 # perfused chamber: flow in +x with Peclet number Pe, upwind differences
+# (signal chamber: subtract sigma h^2 I for positive feedback, see fig07)
 adv2 <- function(m, Pe) { h <- 1 / (m + 1)
   Tx <- lap1(m) + Pe * h * bandSparse(m, k = c(0, -1), diagonals = list(rep(1, m), rep(-1, m - 1)))
   kronecker(Diagonal(m), Tx) + kronecker(lap1(m), Diagonal(m)) }
@@ -133,7 +138,7 @@ gmres <- function(A, b, k = 200, tol = 1e-6, x0 = numeric(length(b))) {
 }
 gmres_restart <- function(A, b, k = 20, tol = 1e-6, maxcycle = 100) {
   x <- numeric(length(b)); res <- 1
-  for (cyc in 1:maxcycle) {
+  for (cyc in seq_len(maxcycle)) {
     g <- gmres(A, b, k = k, tol = tol, x0 = x); x <- g$x
     res <- c(res, g$res)                  # g$res is relative to ||b||
     if (tail(res, 1) < tol) break
@@ -242,7 +247,7 @@ for (it in 0:200) {
   if (it %in% c(0, 10, 200)) errs[[as.character(it)]] <- matrix(x - xs, m, m)
   x <- x + as.vector(solve(M, b - (A %*% x)[, 1]))
 }
-svg("fig03-smooth.svg", width = 13, height = 4.6)
+png("fig03-smooth.png", width = 13, height = 4.6, units = "in", res = 150)
 par(mfrow = c(1, 3)); par_big(mar = c(2, 2, 3.5, 1))
 div <- colorRampPalette(c(oi["blue"], "white", oi["red"]))(101)
 for (nm in names(errs)) {
@@ -347,9 +352,9 @@ legend("bottomright", bty = "n", cex = 1.25, lwd = 3, col = oi[c("red", "blue", 
                   sprintf("GMRES(20), restarted (%d)", length(rgr$res) - 1)))
 dev.off()
 
-## ---- fig07: multigrid in one picture -------------------------------------------------
+## ---- fig08: multigrid in one picture -------------------------------------------------
 
-svg("fig07-multigrid.svg", width = 13, height = 5.2)
+svg("fig08-multigrid.svg", width = 13, height = 5.2)
 layout(matrix(1:2, 1), widths = c(1, 1.2))
 # left: 1D error before / after smoothing, and on the coarse grid
 par_big(mar = c(4.5, 4.5, 3, 1))
@@ -378,6 +383,51 @@ text(0.3, lvl, labs, cex = 1.15, adj = 1, xpd = NA)
 text(2.2, 4.9, "smooth, restrict", cex = 1.2, col = oi["blue"])
 text(5.3, 0.2, "solve directly (tiny)", cex = 1.2, col = oi["red"])
 text(8.4, 4.9, "interpolate, smooth", cex = 1.2, col = oi["green"])
+dev.off()
+
+## ---- fig07: restarted GMRES stalls, BiCGSTAB ------------------------------------------
+
+bicgstab <- function(A, b, tol = 1e-6, maxit = 5000) {
+  x <- numeric(length(b)); r <- rh <- b; nb <- sqrt(sum(b^2)); res <- 1
+  rho <- alpha <- omega <- 1; v <- p <- numeric(length(b))
+  for (it in 1:maxit) {
+    rho_new <- sum(rh * r); beta <- (rho_new / rho) * (alpha / omega); rho <- rho_new
+    p <- r + beta * (p - omega * v)
+    v <- (A %*% p)[, 1]; alpha <- rho / sum(rh * v); s <- r - alpha * v
+    t <- (A %*% s)[, 1]; omega <- sum(t * s) / sum(t * t)
+    x <- x + alpha * p + omega * s; r <- s - omega * t
+    res <- c(res, sqrt(sum(r^2)) / nb)
+    if (tail(res, 1) < tol) break
+  }
+  list(x = x, it = it, res = res)
+}
+m <- 63; h <- 1 / (m + 1); b <- rhs(m)
+A <- adv2(m, 50); S <- A - 100 * h^2 * Diagonal(m^2)
+v <- as.vector(outer(sin(pi * (1:m) * h), sin(pi * (1:m) * h)))
+cat("v'Av/v'v: perfused", sum(v * (A %*% v)) / sum(v^2), " signal", sum(v * (S %*% v)) / sum(v^2), "\n")
+runs <- list(g10 = gmres_restart(S, b, k = 10, maxcycle = 80)$res,
+             g20 = gmres_restart(S, b, k = 20, maxcycle = 40)$res,
+             g50 = gmres_restart(S, b, k = 50, maxcycle = 20)$res,
+             full = c(1, gmres(S, b, k = 300)$res))
+bs <- bicgstab(S, b)
+cat("signal chamber: GMRES(50)", length(runs$g50) - 1, " full", length(runs$full) - 1,
+    " BiCGSTAB", bs$it, "steps; GMRES(10) residual after 800:", tail(runs$g10, 1), "\n")
+svg("fig07-stall.svg", width = 11, height = 5.2)
+par_big(mar = c(5, 7, 1, 1), mgp = c(5, 1, 0))
+plot(NA, log = "y", xlim = c(0, 820), ylim = c(1e-6, 2e3), yaxt = "n",
+     xlab = "", ylab = "relative residual")
+mtext("products with A", side = 1, line = 3.2, cex = 1.5)
+axis(2, at = 10^c(-6, -4, -2, 0, 2), labels = c("1e-6", "1e-4", "0.01", "1", "100"), las = 1)
+lines(seq_along(runs$g10) - 1, runs$g10, lwd = 5, col = oi["red"])
+lines(seq_along(runs$g20) - 1, runs$g20, lwd = 3, lty = 2, col = oi["orange"])
+lines(seq_along(runs$g50) - 1, runs$g50, lwd = 3, col = oi["sky"])
+lines(seq_along(runs$full) - 1, runs$full, lwd = 3, col = oi["blue"])
+lines(2 * (seq_along(bs$res) - 1), bs$res, lwd = 3, col = oi["green"])
+legend(250, 2e-2, bty = "n", cex = 1.25, lwd = c(5, 3, 3, 3, 3), lty = c(1, 2, 1, 1, 1),
+       col = oi[c("red", "orange", "sky", "blue", "green")],
+       legend = c("GMRES(10): stalls", "GMRES(20): stalls", sprintf("GMRES(50) (%d)", length(runs$g50) - 1),
+                  sprintf("full GMRES (%d)", length(runs$full) - 1),
+                  sprintf("BiCGSTAB (%d steps, 2 products each)", bs$it)))
 dev.off()
 
 cat("done\n")

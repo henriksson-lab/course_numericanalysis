@@ -12,6 +12,9 @@
 **Incomplete Cholesky (IC(0))** — Cholesky factorisation in which every fill-in entry is dropped, so L keeps the sparsity pattern of A and LL^T only approximates A.
 **GMRES** — generalised minimal residual method: the Krylov method for nonsymmetric matrices that minimises the residual; stores one basis vector per iteration.
 **Restarted GMRES, GMRES(k)** — GMRES restarted from the current iterate every k steps to limit memory; can converge more slowly or stall.
+**Stall (of restarted GMRES)** — the residual stops decreasing because each restart throws away the directions that were needed; possible when v^T A v <= 0 for some v.
+**Symmetric part** — (A + A^T)/2; v^T A v = v^T (symmetric part) v. If it is positive definite, GMRES(k) converges for every k.
+**BiCGSTAB** — bi-conjugate gradient stabilised: Krylov method for nonsymmetric matrices with short recurrences (fixed memory, two products with A per step) and an erratic residual; can stagnate or break down.
 **Arnoldi process** — Gram–Schmidt orthogonalisation of the Krylov vectors; produces the basis and the small Hessenberg matrix used by GMRES.
 **Smoother** — a few sweeps of Gauss–Seidel or damped Jacobi, which remove high-frequency (wiggly) error quickly but smooth error slowly.
 **Multigrid** — solver that smooths on the fine grid and corrects the remaining smooth error on coarser grids (V-cycle); iteration count independent of the grid spacing.
@@ -20,4 +23,4 @@
 
 ## Install
 
-None for the exercise (R: Matrix; Python: numpy/scipy; Rust: sprs, nalgebra). Mentioned but not needed: R packages `Rlinsolve`, `cPCG` (iterative solvers), `pracma` (`gmres`, dense only); Python `pyamg` (algebraic multigrid).
+None for the exercise (R: Matrix; Python: numpy/scipy; Rust: sprs, nalgebra). Mentioned but not needed (and not installed): R packages `Rlinsolve`, `cPCG` (iterative solvers, incl. BiCGSTAB); Python `pyamg` (algebraic multigrid). `pracma` (installed; `gmres`, dense only). Python's `scipy.sparse.linalg.bicgstab` is used in C7.
