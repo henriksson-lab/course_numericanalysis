@@ -1,6 +1,6 @@
 ---
 title: "Steady state in two dimensions"
-subtitle: "Part 10 — Diffusion and heat: finite-difference PDEs"
+subtitle: "Part 11 — Diffusion and heat: finite-difference PDEs"
 author: "Numerical analysis for biologists"
 format:
   revealjs:
@@ -31,7 +31,7 @@ The last two units followed a concentration in **time** until it settled. Often 
 - Biology: **oxygen under a lid** over a cell layer. Where do the cells go hypoxic, and at what cell density?
 
 ::: notes
-This is the third unit of Part 10. The pieces are all old: the second-difference stencil ([*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd)), tridiagonal and sparse solves with fill-in ([*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd)), and Newton with a Jacobian ([*Newton for systems of equations*](../newton-systems/lec.qmd)). New today: going from one to two space dimensions, which means turning a 2D grid into one vector, and doing that consistently. Grid: nodes x_i = i h as in The diffusion (heat) equation by finite differences (h is its Δx; here the same h in x and y), unknowns at the interior nodes, a ghost point for a wall (exercise), and in 2D the numbering k = i + (j − 1) n_x. Two deliberate differences from the two earlier diffusion units: the matrix is written as minus the second difference, (D/h²) tridiag(−1, 2, −1) instead of tridiag(1, −2, 1), so that it is symmetric positive definite and Cholesky and CG apply; and oxygen is in µM rather than scaled to 0..1, because the hypoxia threshold and K_m are absolute concentrations. Units µm and s as before.
+This is the third unit of Part 11. The pieces are all old: the second-difference stencil ([*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd)), tridiagonal and sparse solves with fill-in ([*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd)), and Newton with a Jacobian ([*Newton for systems of equations*](../newton-systems/lec.qmd)). New today: going from one to two space dimensions, which means turning a 2D grid into one vector, and doing that consistently. Grid: nodes x_i = i h as in The diffusion (heat) equation by finite differences (h is its Δx; here the same h in x and y), unknowns at the interior nodes, a ghost point for a wall (exercise), and in 2D the numbering k = i + (j − 1) n_x. Two deliberate differences from the two earlier diffusion units: the matrix is written as minus the second difference, (D/h²) tridiag(−1, 2, −1) instead of tridiag(1, −2, 1), so that it is symmetric positive definite and Cholesky and CG apply; and oxygen is in µM rather than scaled to 0..1, because the hypoxia threshold and K_m are absolute concentrations. Units µm and s as before.
 :::
 
 ## Biology: oxygen under a lid {.smaller}
@@ -328,7 +328,7 @@ Right panel: the same solve with the Kronecker factors in the order that matches
 - Python: [`scipy.sparse.linalg.spsolve`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.spsolve.html). Rust: `sprs` has **no direct solver**; the exercise uses a hand-written conjugate gradient.
 
 ::: notes
-Natural order: nnz(L) is about (number of unknowns) x nx, because everything inside the band fills in; refining h by 2 multiplies it by 8. Reordering (approximate minimum degree / nested dissection, chosen automatically by Cholesky(A, perm = TRUE) and by solve on a dsCMatrix) cuts it by a factor 5 to 11 here, and the gap grows with the grid. This is the 2D case of the fill-in discussion in [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd). Timings are from one run on one machine and vary; the factor matters, not the seconds. Matrix caches the factorisation inside the matrix object, so repeated solves with the same A are almost free: time a fresh matrix. sprs-ldl (a separate crate, not in our Cargo.toml) would give a sparse Cholesky in Rust; CG needs only matrix-vector products and works because A is SPD. Full treatment of CG and preconditioning: [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (Part 10).
+Natural order: nnz(L) is about (number of unknowns) x nx, because everything inside the band fills in; refining h by 2 multiplies it by 8. Reordering (approximate minimum degree / nested dissection, chosen automatically by Cholesky(A, perm = TRUE) and by solve on a dsCMatrix) cuts it by a factor 5 to 11 here, and the gap grows with the grid. This is the 2D case of the fill-in discussion in [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd). Timings are from one run on one machine and vary; the factor matters, not the seconds. Matrix caches the factorisation inside the matrix object, so repeated solves with the same A are almost free: time a fresh matrix. sprs-ldl (a separate crate, not in our Cargo.toml) would give a sparse Cholesky in Rust; CG needs only matrix-vector products and works because A is SPD. Full treatment of CG and preconditioning: [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (Part 11).
 :::
 
 ## Oxygen under the lid: constant uptake {.smaller}
@@ -462,5 +462,5 @@ The six checks of this unit. The maximum principle (third bullet) holds for diff
 **Next:** [*Flow plus diffusion*](../advection-diffusion/lec.qmd): what changes when the medium moves.
 
 ::: notes
-Recap the modelling step (steady state, uptake law), the discretisation (stencil, Kronecker assembly, ordering), the solver (sparse direct, Newton) and the failures (negative oxygen from the model, wrong ordering, spurious Newton root). Flow plus diffusion adds an advection term, which makes the matrix non-symmetric; [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd) adds production and decay terms and returns to time-dependent problems. Iterative solvers for grids too large for a direct solve (3D) are in [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (Part 10).
+Recap the modelling step (steady state, uptake law), the discretisation (stencil, Kronecker assembly, ordering), the solver (sparse direct, Newton) and the failures (negative oxygen from the model, wrong ordering, spurious Newton root). Flow plus diffusion adds an advection term, which makes the matrix non-symmetric; [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd) adds production and decay terms and returns to time-dependent problems. Iterative solvers for grids too large for a direct solve (3D) are in [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (Part 11).
 :::

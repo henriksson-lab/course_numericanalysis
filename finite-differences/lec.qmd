@@ -150,12 +150,12 @@ $$N(t+h) + N(t-h) = 2N + h^2 N'' + \tfrac{2h^4}{24} N'''' + \dots
 
 - Second order. At $t = 3$: error $\approx -0.00514\,h^2$.
 - Biology: $N''$ is the **acceleration** of growth. It changes sign at the **inflection point**, the time of fastest growth ($t = 3.92$ h here).
-- This $(1, -2, 1)/h^2$ stencil is the **workhorse of Part 10**: in space it becomes the diffusion term $D\,\partial^2 c/\partial x^2$, in [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd).
+- This $(1, -2, 1)/h^2$ stencil is the **workhorse of Part 11**: in space it becomes the diffusion term $D\,\partial^2 c/\partial x^2$, in [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd).
 
 ![](fig02-stencils.svg){width="46%" fig-align="center"}
 
 ::: notes
-The picture summarises the four stencils so far: dots are the points used, numbers the weights, right column the divisor. Filled dots only. For the second derivative the weights must sum to zero (a constant has no curvature) and the stencil is symmetric. Flag the forward reference clearly: the diffusion equation replaces t by a space coordinate x, and the second difference of concentrations on a grid of channels is exactly this formula. Its error, h^2/12 times the fourth derivative, is the spatial accuracy of every scheme in Part 10.
+The picture summarises the four stencils so far: dots are the points used, numbers the weights, right column the divisor. Filled dots only. For the second derivative the weights must sum to zero (a constant has no curvature) and the stencil is symmetric. Flag the forward reference clearly: the diffusion equation replaces t by a space coordinate x, and the second difference of concentrations on a grid of channels is exactly this formula. Its error, h^2/12 times the fourth derivative, is the spatial accuracy of every scheme in Part 11.
 :::
 
 ## All four in R {.smaller}
@@ -334,10 +334,10 @@ c(max(d), t[which.max(d)])                 # max growth rate and when
 
 - rms error $0.0047$, and a value at **every** time point, ends included. Maximum growth rate $0.237$ OD/h at 4.0 h (true: $0.240$ at 3.92 h); raw central differences gave $0.270$.
 - Python: [`scipy.interpolate.make_smoothing_spline`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.make_smoothing_spline.html), then `.derivative()`.
-- Alternatives: a local polynomial fit (Savitzky–Golay), or fit a growth **model** and differentiate it (Part 9).
+- Alternatives: a local polynomial fit (Savitzky–Golay), or fit a growth **model** and differentiate it (Part 10).
 
 ::: notes
-smooth.spline chooses its smoothing parameter by generalised cross-validation, which balances fit against roughness, the same bias-variance trade-off as the stencil width, made automatically. predict with deriv = 1 differentiates the fitted cubic pieces exactly. How smoothing splines work is the topic of Splines. Fitting a parametric model (logistic, Gompertz) and differentiating it is the most accurate option when the model is right, and the most misleading when it is wrong; the fitting methods are in Part 9 (Nonlinear least squares and ODE fitting, whose example is a drug-concentration model rather than a growth curve, but the method is the same).
+smooth.spline chooses its smoothing parameter by generalised cross-validation, which balances fit against roughness, the same bias-variance trade-off as the stencil width, made automatically. predict with deriv = 1 differentiates the fitted cubic pieces exactly. How smoothing splines work is the topic of Splines. Fitting a parametric model (logistic, Gompertz) and differentiating it is the most accurate option when the model is right, and the most misleading when it is wrong; the fitting methods are in Part 10 (Nonlinear least squares and ODE fitting, whose example is a drug-concentration model rather than a growth curve, but the method is the same).
 :::
 
 ## Comparing the three {.smaller}
@@ -397,7 +397,7 @@ grad(loglik, fit1$par)                    # should be ~0 at the maximum
 - **Check:** evaluate an accurate gradient at the returned optimum. **Fix:** pass `gr`, or set `parscale`/`ndeps` to the parameter sizes.
 
 ::: notes
-fnscale = -1 makes optim maximise. The default-gradient run stops after 16 gradient evaluations at a point where the true gradient is (48, 7, -8), compared with below 1e-3 for the run with the numDeriv gradient. The parameter differences (6e-4 in r, 1e-4 in N0) are about 0.17 standard errors (standard errors 0.0035 and 0.0006 from the Hessian), so the conclusions here do not change. But it is a silent wrong answer, and it gets worse the further parameters are from size 1. scipy.optimize.minimize uses a relative forward step instead, so it fails differently (fewer digits, not a biased gradient). Identifiability and uncertainty of fitted parameters (Part 9) uses the Hessian, again by finite differences.
+fnscale = -1 makes optim maximise. The default-gradient run stops after 16 gradient evaluations at a point where the true gradient is (48, 7, -8), compared with below 1e-3 for the run with the numDeriv gradient. The parameter differences (6e-4 in r, 1e-4 in N0) are about 0.17 standard errors (standard errors 0.0035 and 0.0006 from the Hessian), so the conclusions here do not change. But it is a silent wrong answer, and it gets worse the further parameters are from size 1. scipy.optimize.minimize uses a relative forward step instead, so it fails differently (fewer digits, not a biased gradient). Identifiability and uncertainty of fitted parameters (Part 10) uses the Hessian, again by finite differences.
 :::
 
 ## Optional: the complex step {.smaller}
@@ -461,5 +461,5 @@ Every item corresponds to a failure shown in this lecture or the exercise. The g
 **Next:** [*Numerical integration*](../quadrature/lec.qmd), the opposite operation: integrating **averages** the noise away, and Richardson returns as Romberg.
 
 ::: notes
-The single idea of the unit: every derivative estimate divides a difference by a small number, and that amplifies whatever error is in the values, rounding or measurement noise. The stencils tell us how fast truncation falls; the balance tells us where to stop. The second-derivative stencil returns in Part 10 as the diffusion term. Numerical integration is the friendly counterpart: errors average out instead of being amplified.
+The single idea of the unit: every derivative estimate divides a difference by a small number, and that amplifies whatever error is in the values, rounding or measurement noise. The stencils tell us how fast truncation falls; the balance tells us where to stop. The second-derivative stencil returns in Part 11 as the diffusion term. Numerical integration is the friendly counterpart: errors average out instead of being amplified.
 :::

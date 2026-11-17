@@ -342,7 +342,7 @@ Morphogens and embryos
 Related (boundary conditions, Part 10 exercises)
 - Grant et al. (2021). Predicting/simulating drug concentrations in PDMS microfluidic organ chips: drug absorption into PDMS as a partition-coefficient boundary condition. *Lab on a Chip*. <https://www.biorxiv.org/content/10.1101/2021.05.01.442248.full.pdf>
 
-### Part 11 — Further reading (optional)
+### Part 11 — Finite elements and flow
 
 36. **`fem-outlook` — Beyond rectangles: finite elements and flow.** What
     finite volume / finite element methods do differently, meshes, why real

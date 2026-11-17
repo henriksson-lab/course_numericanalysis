@@ -65,7 +65,7 @@ This is the hook for the whole course. The data are simulated from a logistic cu
 - **"Converged" means "stopped improving", not "found the answer".**
 
 ::: notes
-The blue curve starts from r = 0.01 per minute, which is the right order of magnitude (0.5 per hour is 0.0083 per minute). The orange curve is the fit from the previous slide: it jumps to K immediately and is flat, a horizontal line at the mean of the data. Its SSE is 2.23, about 700 times larger than the good fit's 0.003. We come back at the end of the lecture to why the optimiser stopped there, and what checks would have caught it. The proper treatment of model fitting is Part 9; *Gradient descent, Newton and quasi-Newton* comes back to this very fit.
+The blue curve starts from r = 0.01 per minute, which is the right order of magnitude (0.5 per hour is 0.0083 per minute). The orange curve is the fit from the previous slide: it jumps to K immediately and is flat, a horizontal line at the mean of the data. Its SSE is 2.23, about 700 times larger than the good fit's 0.003. We come back at the end of the lecture to why the optimiser stopped there, and what checks would have caught it. The proper treatment of model fitting is Part 10; *Gradient descent, Newton and quasi-Newton* comes back to this very fit.
 :::
 
 ## What is a numerical method?
@@ -358,12 +358,12 @@ Derivatives: f = log(1+x), f' = 1/(1+x), f'' = -1/(1+x)^2, f''' = 2/(1+x)^3; at 
 | [Conditioning](../error-conditioning/lec.qmd) (unit 3) | $f(x + \delta) - f(x) \approx f'(x)\,\delta$ | how errors in data propagate |
 | [Finite differences](../finite-differences/lec.qmd) (Part 7) | $\dfrac{f(x+h) - f(x)}{h} = f'(x) + \dfrac{h}{2}f''(\xi)$ | derivative, error $O(h)$ |
 | [Euler](../euler/lec.qmd) / [Runge–Kutta](../runge-kutta/lec.qmd) (Part 8) | $y(t+h) \approx y(t) + h\,y'(t)$ | one ODE step |
-| [Optimisation](../optimisation-1d/lec.qmd) (Part 9) | $f(x+h) \approx f(x) + f'(x)h + \tfrac12 f''(x)h^2$ | minimise the parabola |
+| [Optimisation](../optimisation-1d/lec.qmd) (Part 10) | $f(x+h) \approx f(x) + f'(x)h + \tfrac12 f''(x)h^2$ | minimise the parabola |
 
 - Every time: **replace the function by its Taylor polynomial, solve the easy problem, use the remainder to bound the error.**
 
 ::: notes
-This slide is the reason for the Taylor recap. Each row is a method we derive later, and each derivation is one line of Taylor. The error of each method comes from the remainder term, and its order (how fast the error shrinks with h) is the power in the remainder. In Parts 2 and 9 we extend this to several variables, which brings in the Jacobian, gradient and Hessian; those are introduced where they are first needed.
+This slide is the reason for the Taylor recap. Each row is a method we derive later, and each derivation is one line of Taylor. The error of each method comes from the remainder term, and its order (how fast the error shrinks with h) is the power in the remainder. In Parts 2 and 10 we extend this to several variables, which brings in the Jacobian, gradient and Hessian; those are introduced where they are first needed.
 :::
 
 ## Back to the growth curve: why did `optim` stop?
@@ -374,7 +374,7 @@ This slide is the reason for the Taylor recap. Each row is a method we derive la
 - The optimiser sees no slope, makes no progress, and stops. "Converged."
 
 ::: notes
-This is the SSE as a function of r with K and N0 held at their best values. The good minimum is at r = 0.0087 per minute (0.52 per hour). At r = 0.5 per minute, e^(-r t) is e^(-60) at the first measurement after zero, so the model predicts K at every time point except t = 0, whatever the exact value of r. A local method only sees the neighbourhood of where it is; on a plateau there is nothing to follow. The root cause is scaling: time in minutes made the natural guess wrong by a factor of 60. Part 9 discusses scaling and starting values (Gradient descent, Newton and quasi-Newton, which returns to this fit) and multistart (Nonlinear least squares and ODE fitting) in depth.
+This is the SSE as a function of r with K and N0 held at their best values. The good minimum is at r = 0.0087 per minute (0.52 per hour). At r = 0.5 per minute, e^(-r t) is e^(-60) at the first measurement after zero, so the model predicts K at every time point except t = 0, whatever the exact value of r. A local method only sees the neighbourhood of where it is; on a plateau there is nothing to follow. The root cause is scaling: time in minutes made the natural guess wrong by a factor of 60. Part 10 discusses scaling and starting values (Gradient descent, Newton and quasi-Newton, which returns to this fit) and multistart (Nonlinear least squares and ODE fitting) in depth.
 :::
 
 ## Checks that would have caught it {.smaller}
@@ -393,7 +393,7 @@ for (r0 in c(0.001, 0.01, 0.1, 1)) {        # several starting values
 
 - **Plot the fit over the data**, and **try several starts**: keep the lowest SSE; different answers mean a hard problem.
 - **Check units and scale**: is a 1-minute doubling time plausible? Use units where parameters are near 1 (hours, not minutes).
-- `convergence == 0` is **necessary, not sufficient**. Fitting in depth: [*Gradient descent, Newton and quasi-Newton*](../gradient-methods/lec.qmd) (scaling, this fit) and [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd) (multistart), Part 9.
+- `convergence == 0` is **necessary, not sufficient**. Fitting in depth: [*Gradient descent, Newton and quasi-Newton*](../gradient-methods/lec.qmd) (scaling, this fit) and [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd) (multistart), Part 10.
 
 ::: notes
 Only one of four starts finds the good fit, and the SSE makes the difference unmistakable: 0.003 versus 2.23. Each check here is generic: plot, multistart, sanity-check the parameters, and treat the convergence code as the least you check. These checks recur in every Part: for each method we ask how it fails and what check a student runs to detect it. Note that nls from the same bad start fails loudly with a "singular gradient" error, which is better than failing silently.
@@ -408,13 +408,14 @@ Only one of four starts finds the good fit, and the SSE makes the difference unm
 5. **Eigenvalues**: power iteration, QR algorithm, Lanczos. *Leslie matrices, PCA.*
 6. **Interpolation**: polynomials, splines, FFT. *Smoothing time courses, circadian rhythms.*
 7. **Differentiation and integration**: finite differences, quadrature, Monte Carlo. *Growth rates, AUC.*
-8. **ODEs**: Euler to Runge–Kutta, stiffness, Gillespie, SDEs. *Epidemics, gene circuits.*
-9. **Optimisation and fitting**: gradient methods, nonlinear least squares, identifiability. *Today's growth curve.*
-10. **Diffusion and heat**: finite-difference PDEs in microfluidic chips, iterative solvers.
-11. **Further reading**: finite elements, flow solvers.
+8. **ODEs**: Euler to Runge–Kutta, stiffness, Gillespie. *Epidemics, gene circuits.*
+9. **SDEs**: Brownian motion, Euler–Maruyama. *Particle tracking, noisy growth.*
+10. **Optimisation and fitting**: gradient methods, nonlinear least squares, identifiability. *Today's growth curve.*
+11. **Diffusion and heat**: finite-difference PDEs in microfluidic chips, iterative solvers.
+12. **Finite elements and flow**: meshes beyond rectangles, flow solvers.
 
 ::: notes
-The course is self-paced; work down the sidebar. Each Part pairs methods with a biological problem that needs them, shown in italics. Parts 1 to 9 are the core; Part 10 builds on Parts 3, 7 and 8; Part 11 is an optional outlook. The growth curve returns in unit 4 (Convergence and cost: growth rate from an OD curve), Parts 6 and 7 (Splines, Numerical differentiation: growth rate as a derivative of noisy data) and Part 9 (Gradient descent, Newton and quasi-Newton: why this fit failed).
+The course is self-paced; work down the sidebar. Each Part pairs methods with a biological problem that needs them, shown in italics. Part 11 builds on Parts 3, 7 and 8, and Part 12 on Part 11. The growth curve returns in unit 4 (Convergence and cost: growth rate from an OD curve), Parts 6 and 7 (Splines, Numerical differentiation: growth rate as a derivative of noisy data) and Part 10 (Gradient descent, Newton and quasi-Newton: why this fit failed).
 :::
 
 ## Next in Part 1

@@ -1,6 +1,6 @@
 ---
 title: "Beyond rectangles: finite elements and flow"
-subtitle: "Part 11 — Further reading (optional)"
+subtitle: "Part 12 — Finite elements and flow"
 author: "Numerical analysis for biologists"
 format:
   revealjs:
@@ -21,7 +21,7 @@ format:
 
 ## About this lecture {.smaller}
 
-Part 10 ([*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd) to [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd)) put every chip on a **rectangular grid**. Real chips have round pillars, curved channels and cells of any shape. This lecture is an **outlook**: what the tools used for real chip design do differently, with one small piece done by hand.
+Part 11 ([*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd) to [*Reaction–diffusion and pattern formation*](../reaction-diffusion/lec.qmd)) put every chip on a **rectangular grid**. Real chips have round pillars, curved channels and cells of any shape. This lecture is an **outlook**: what the tools used for real chip design do differently, with one small piece done by hand.
 
 - Why finite differences **struggle** with curved and irregular geometry: staircase walls, refinement that spreads everywhere.
 - **Finite volumes** in one picture: conservation in every cell, whatever its shape.
@@ -30,7 +30,7 @@ Part 10 ([*The diffusion (heat) equation by finite differences*](../diffusion-ex
 - What **COMSOL**, **FEniCS / Firedrake**, **scikit-fem** and **deal.II** do, and when to reach for them instead of our own codes.
 
 ::: notes
-This is optional further reading after Part 10. It assumes the diffusion units of Part 10 (the grid, the second difference, the Thomas algorithm, grid refinement as a check) and does not teach any of the big packages: the aim is that students know what they are doing when they open COMSOL or FEniCS, and can check it. The only new hand-written method is a 1D finite element code of about 15 lines, which turns out to need nothing beyond the tridiagonal solve of [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd).
+This unit closes the course. It assumes the diffusion units of Part 11 (the grid, the second difference, the Thomas algorithm, grid refinement as a check) and does not teach any of the big packages: the aim is that students know what they are doing when they open COMSOL or FEniCS, and can check it. The only new hand-written method is a 1D finite element code of about 15 lines, which turns out to need nothing beyond the tridiagonal solve of [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd).
 :::
 
 ## A chamber with pillars {.smaller}
@@ -110,7 +110,7 @@ S$di * 100;  S$off * 100;  S$b          # K times h, and b
 - With uptake, FEM gives $\tfrac{kh}{6}(u_{i-1} + 4u_i + u_{i+1})$ where FD has $k h\,u_i$: a weighted average. Lumping it onto the diagonal gives FD exactly.
 
 ::: notes
-So on a rectangle with a uniform grid, finite elements bring nothing new: the matrix is the one from Part 10, row by row, up to a factor h. The last row is (D/h)(u_N - u_{N-1}) = f h / 2; the ghost-point row from [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd) is D (2u_{N-1} - 2u_N)/h^2 = -f, i.e. the same equation times 2/h. Mass lumping (replacing the h/6, h/3 weights by a diagonal h/2) is a common trick; we will see on the failure slide why it can matter. The gain from finite elements comes when the mesh is not uniform, which the exercise B2 shows also reproduces the non-uniform finite-difference formula in 1D.
+So on a rectangle with a uniform grid, finite elements bring nothing new: the matrix is the one from Part 11, row by row, up to a factor h. The last row is (D/h)(u_N - u_{N-1}) = f h / 2; the ghost-point row from [*The diffusion (heat) equation by finite differences*](../diffusion-explicit/lec.qmd) is D (2u_{N-1} - 2u_N)/h^2 = -f, i.e. the same equation times 2/h. Mass lumping (replacing the h/6, h/3 weights by a diagonal h/2) is a common trick; we will see on the failure slide why it can matter. The gain from finite elements comes when the mesh is not uniform, which the exercise B2 shows also reproduces the non-uniform finite-difference formula in 1D.
 :::
 
 ## The 1D example: drug into a hydrogel slab {.smaller}
@@ -171,7 +171,7 @@ max(abs(fem1d(xg, D, k) - exact(xg)))
 - Same 10 elements, 4.6 times smaller error, by moving nodes to where $u$ changes. The uniform mesh needs 20 elements (error 0.0169) to come close.
 
 ::: notes
-thomas() is the tridiagonal solver from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd), with the convention used in [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd): a, b, c, d all of length m, a[1] and c[m] unused. The Dirichlet value at x = 0 is removed from the unknowns and its column moved to the right-hand side, exactly as boundary values were handled in Part 10. The graded mesh x_i = L (i/N)^2 has its first element 10 um long and its last 190 um. The error is measured at the nodes against the exact cosh solution.
+thomas() is the tridiagonal solver from [*Structure: symmetric, banded, sparse*](../structured-sparse/lec.qmd), with the convention used in [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd): a, b, c, d all of length m, a[1] and c[m] unused. The Dirichlet value at x = 0 is removed from the unknowns and its column moved to the right-hand side, exactly as boundary values were handled in Part 11. The graded mesh x_i = L (i/N)^2 has its first element 10 um long and its last 190 um. The error is measured at the nodes against the exact cosh solution.
 :::
 
 ## Refine where the solution changes
@@ -189,7 +189,7 @@ The right panel zooms in on the top 300 um. The uniform mesh misses the curvatur
 ![](fig06-error.svg){width="62%" fig-align="center"}
 
 - Both meshes are **second order**: doubling $N$ divides the error by 4. Grading changes the constant, not the order.
-- The check is the one from Part 10: refine and watch the error fall at the expected rate. Real codes **adapt** the mesh automatically, refining where an error estimate is large.
+- The check is the one from Part 11: refine and watch the error fall at the expected rate. Real codes **adapt** the mesh automatically, refining where an error estimate is large.
 
 ::: notes
 Slope -2 on log-log axes, as for the second difference: piecewise linear elements have error of order h^2 in the values. On the graded mesh the first element is L/N^2 long, N times shorter than on the uniform mesh, and the error constant drops by a factor of about 4.5 at every N. Adaptive refinement (deal.II, COMSOL, FEniCS with error estimators) automates "put nodes where the error is": solve, estimate the error per element, split the worst elements, solve again. Without an exact solution, compare successive refinements, as in the grid refinement slide of [*Implicit schemes and the method of lines*](../diffusion-implicit/lec.qmd).
@@ -263,10 +263,10 @@ Mention, do not teach. COMSOL is what most microfluidics papers report for chip 
 
 ## When to reach for which {.smaller}
 
-**Our finite-difference codes (Part 10)** are enough when:
+**Our finite-difference codes (Part 11)** are enough when:
 
 - the geometry is a slab, channel or rectangle, or can be reduced to one by symmetry;
-- you need many solves (parameter scans, fitting a model to data as in Part 9, [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd)) and want to know every line.
+- you need many solves (parameter scans, fitting a model to data as in Part 10, [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd)) and want to know every line.
 
 **A finite element / finite volume tool** when:
 
@@ -277,7 +277,7 @@ Mention, do not teach. COMSOL is what most microfluidics papers report for chip 
 **Either way, the same checks**: refine the mesh and see the answer settle; check conservation (flux in = uptake); compare with an exact or 1D special case (a straight channel must give Poiseuille).
 
 ::: notes
-A useful habit: before trusting a COMSOL simulation of a chip, reproduce one 1D slice or a straight-channel special case with a 20-line script from Part 10. If they disagree, one of them is wrong, and it is usually a boundary condition or a mesh that is too coarse in a layer. Also remember the question behind the model (exercise C3 of [*Steady state in two dimensions*](../steady-state-2d/exercise.qmd): does a model of nutrient in a mother-machine trench answer the right question?): a more accurate solution of the wrong model does not help.
+A useful habit: before trusting a COMSOL simulation of a chip, reproduce one 1D slice or a straight-channel special case with a 20-line script from Part 11. If they disagree, one of them is wrong, and it is usually a boundary condition or a mesh that is too coarse in a layer. Also remember the question behind the model (exercise C3 of [*Steady state in two dimensions*](../steady-state-2d/exercise.qmd): does a model of nutrient in a mother-machine trench answer the right question?): a more accurate solution of the wrong model does not help.
 :::
 
 ## Summary {.smaller}
@@ -289,7 +289,7 @@ A useful habit: before trusting a COMSOL simulation of a chip, reproduce one 1D 
 - At low Reynolds number the flow obeys the linear **Stokes** equations; in a straight channel the answer is the **Poiseuille** parabola. Around pillars it must be computed.
 - COMSOL, FEniCS / Firedrake, scikit-fem and deal.II do mesh → assemble → solve; check them with mesh refinement, conservation and a 1D special case.
 
-**See also:** [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (Part 10), for the large sparse systems that 2D and 3D meshes produce.
+**See also:** [*Iterative linear solvers in depth*](../iterative-solvers/lec.qmd) (Part 11), for the large sparse systems that 2D and 3D meshes produce.
 
 ::: notes
 The one idea to keep: finite elements are not a different kind of mathematics, they are the same sparse linear algebra on a mesh that follows the geometry and the solution. Everything students learned about checking a finite-difference solution applies unchanged. The next further-reading unit is about how such systems are solved when they are too big for a direct solve.
