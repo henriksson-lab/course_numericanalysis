@@ -1,0 +1,1190 @@
+---
+title: "Exercise: stochastic differential equations"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## Goal
+
+By the end of this exercise you should be able to:
+
+- explain why Brownian increments have standard deviation $\sqrt h$, and estimate a **diffusion coefficient** from particle tracks with the **mean squared displacement** (MSD),
+- carry out **Euler–Maruyama** (EM) and **Milstein** steps by hand and hand-write both in code,
+- measure the **strong** (path) and **weak** (average) order of a method on a log–log plot, with the **same Brownian path** at every step size, and recognise the **fresh-noise bug**,
+- explain the **Itô correction** $-\sigma^2/2$: why the mean of a population can grow while the typical population dies out,
+- detect **negative values**, **variance errors** and **mean-square instability**, and fix the last with **drift-implicit EM**,
+- solve the **Fokker–Planck** equation of a small SDE with the advection–diffusion scheme and compare it with a histogram of paths.
+
+The by-hand part uses pen, paper and a pocket calculator (for $\sqrt{\ }$, `exp` and `log`). The code part needs only normal random numbers; no SDE package is used.
+
+## Background
+
+**Facts used below:**
+
+1. **Brownian motion** $W(t)$: $W(0) = 0$, and the increment over a step $h$, $\Delta W = W(t + h) - W(t)$, is $N(0, h)$ and independent of everything before $t$. Variances of independent increments add. In code: $\Delta W = \sqrt h\, Z$ with $Z \sim N(0, 1)$.
+2. **Diffusing particle.** Each coordinate moves by $\sqrt{2D\,\Delta t}\, Z$ per frame. Mean squared displacement $\text{MSD}(t) = 2dDt$ in $d$ dimensions. **Stokes–Einstein** for a sphere of radius $a$ in a liquid of viscosity $\eta$: $D = k_BT/(6\pi\eta a)$; a bead of radius 0.5 µm in water at 20 °C has $D \approx 0.43$ µm²/s.
+3. **SDE and Euler–Maruyama.** $dX = f(X)\,dt + g(X)\,dW$:
+   $$X_{n+1} = X_n + f(X_n)\,h + g(X_n)\,\Delta W_n.$$
+   **Milstein** adds $\tfrac12\,g(X_n)\,g'(X_n)\,\big((\Delta W_n)^2 - h\big)$. With additive noise ($g$ constant) the two are the same.
+4. **Test problems with exact solutions.**
+   - **Ornstein–Uhlenbeck (OU)**, bead in an optical trap: $dX = -\theta X\,dt + \sigma\,dW$. Mean $x_0 e^{-\theta t}$, variance $\frac{\sigma^2}{2\theta}(1 - e^{-2\theta t})$ (plus $s_0^2 e^{-2\theta t}$ if $X(0)$ has variance $s_0^2$), stationary variance $\sigma^2/(2\theta)$. Trap: $\theta = 1$ per ms, $D = \sigma^2/2 = 430$ nm²/ms (positions in nm, time in ms).
+   - **Geometric Brownian motion (GBM)**, a population with a noisy growth rate: $dN = rN\,dt + \sigma N\,dW$, $N(T) = N_0\exp\!\big((r - \sigma^2/2)T + \sigma W(T)\big)$. Mean $N_0 e^{rT}$, median $N_0 e^{(r - \sigma^2/2)T}$.
+5. **Errors.** Strong: $\mathrm E\,|X_n - X(T)|$ on the **same** Brownian path. Weak: $|\mathrm E\,X_n - \mathrm E\,X(T)|$. For multiplicative noise EM has strong order ½ and weak order 1; Milstein strong order 1.
+6. **Fokker–Planck.** The density $p(x, t)$ of many paths solves
+   $$\frac{\partial p}{\partial t} = -\frac{\partial}{\partial x}\Big(f\,p - \frac{\partial}{\partial x}\big(\tfrac{g^2}{2}\,p\big)\Big),$$
+   advection–diffusion with velocity $u = f$ and $D = g^2/2$. For constant $D$, the explicit flux scheme on cells of width $\Delta x$:
+   $$F_{i+1/2} = u_{i+1/2}\,\frac{p_i + p_{i+1}}{2} - D\,\frac{p_{i+1} - p_i}{\Delta x}, \qquad p_i^{n+1} = p_i^n - \frac{\Delta t}{\Delta x}\big(F_{i+1/2} - F_{i-1/2}\big).$$
+
+The three languages use **different random number generators** (R: Mersenne Twister; numpy: PCG64; Rust: ChaCha12), so the same seed gives different paths: compare **statistics** between languages, never single paths.
+
+Euler–Maruyama for 2000 beads released at 60 nm in the trap, 100 steps of $h = 0.01$ ms, against the exact mean and variance at $t = 1$ ms:
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+theta <- 1; D <- 430; sigma <- sqrt(2 * D)      # trap: per ms, nm^2/ms, nm/sqrt(ms)
+set.seed(1)
+h <- 0.01; x <- rep(60, 2000)                    # 2000 beads, all at 60 nm
+for (i in 1:100)                                 # 100 EM steps to t = 1 ms
+  x <- x - theta * x * h + sigma * sqrt(h) * rnorm(2000)
+c(mean = mean(x), var = var(x))
+#     mean      var
+#  21.8825 389.4054
+c(mean = 60 * exp(-theta), var = D / theta * (1 - exp(-2 * theta)))   # exact OU
+#      mean       var
+#  22.07277 371.80583
+```
+
+### Python
+
+```python
+import numpy as np
+
+theta, D = 1.0, 430.0                         # trap: per ms, nm^2/ms
+sigma = np.sqrt(2 * D)                        # nm/sqrt(ms)
+rng = np.random.default_rng(1)
+h, x = 0.01, np.full(2000, 60.0)              # 2000 beads, all at 60 nm
+for i in range(100):                          # 100 EM steps to t = 1 ms
+    x = x - theta * x * h + sigma * np.sqrt(h) * rng.standard_normal(2000)
+print("mean", x.mean(), "var", x.var(ddof=1))
+# mean 21.593339516105058 var 389.6759686168349
+print("exact mean", 60 * np.exp(-theta), "var", D / theta * (1 - np.exp(-2 * theta)))
+# exact mean 22.07276647028654 var 371.8058282082565
+```
+
+### Rust
+
+```rust
+// rust/examples/sde_background.rs  —  cargo run --example sde_background
+// Background: Euler-Maruyama for a bead in an optical trap (Ornstein-Uhlenbeck), 2000 beads.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+use rand_distr::StandardNormal;
+
+fn main() {
+    let (theta, d) = (1.0f64, 430.0f64); // trap: per ms, nm^2/ms
+    let sigma = (2.0 * d).sqrt(); // nm/sqrt(ms)
+    let mut rng = StdRng::seed_from_u64(1);
+    let h = 0.01;
+    let mut x = vec![60.0f64; 2000]; // 2000 beads, all at 60 nm
+    for _ in 0..100 {
+        // 100 EM steps to t = 1 ms
+        for xi in x.iter_mut() {
+            let z: f64 = rng.sample(StandardNormal);
+            *xi += -theta * *xi * h + sigma * h.sqrt() * z;
+        }
+    }
+    let n = x.len() as f64;
+    let mean = x.iter().sum::<f64>() / n;
+    let var = x.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1.0);
+    println!("mean {:.4}  var {:.4}", mean, var);
+    println!("exact mean {:.4}  var {:.4}", 60.0 * (-theta).exp(), d / theta * (1.0 - (-2.0 * theta).exp()));
+}
+
+// Output:
+// mean 22.9555  var 380.1516
+// exact mean 22.0728  var 371.8058
+```
+
+:::
+
+The mean has a standard error of $\sqrt{372/2000} = 0.43$ nm and the variance one of about $372\sqrt{2/2000} = 12$ nm²; all three languages agree with the exact values within about 2 standard errors. EM with $\theta h = 0.01$ itself makes the variance about 0.7% too large (374.3 instead of 371.8; compare B3).
+
+## By hand
+
+**B1. Brownian increments.** Brownian motion on $[0, 1]$ is built from four increments of $h = 0.25$.
+(a) What are the distribution and standard deviation of each increment? Of $W(1)$? Of $W(0.5)$, and of $W(1) - W(0.5)$?
+(b) A random walk takes $1/h$ steps of $\pm h$ (instead of $\pm\sqrt h$). What is the variance of its position at $t = 1$ for $h = 0.25$ and $h = 0.01$? What happens as $h \to 0$?
+(c) The "slope" of a Brownian path over one step is $\Delta W/h$. Using $\mathrm E\,|Z| = 0.80$, what is its typical size $\mathrm E\,|\Delta W|/h$ for $h = 0.01$ and $h = 10^{-4}$? What does this say about $dW/dt$?
+(d) A bead moves by $\sqrt{2D\,\Delta t}\,Z$ in $x$ per frame. Show that after $n$ frames ($t = n\Delta t$) the variance of $x$ is $2Dt$, and that the 2D MSD is $4Dt$.
+
+**B2. One step of EM and of Milstein.**
+(a) Bead in the trap: $\theta = 1$ per ms, $\sigma = 30$ nm/$\sqrt{\text{ms}}$, $x_0 = 40$ nm, $h = 0.01$ ms. Do two EM steps with $Z_0 = -1.2$, $Z_1 = 0.5$. Compare the size of the drift step and of the kick.
+(b) Population: $dN = 0.8\,N\,dt + 0.5\,N\,dW$, $N_0 = 100$, $h = 0.04$ h, $Z_0 = 1.5$ (so $\Delta W = 0.3$). Do one EM step and one Milstein step.
+(c) The exact solution on the same path is $N = 100\,\exp\!\big((0.8 - 0.125)\,0.04 + 0.5 \cdot 0.3\big)$. Compute it and the errors of (b). Why is the Milstein term the same for the trap with any $Z$?
+
+**B3. Stationary variance of the OU recursion.** EM for the trap is $x_{n+1} = (1 - \theta h)\,x_n + \sigma\sqrt h\,Z_n$.
+(a) For which $h$ does the **mean** $\mathrm E\,x_n$ decay to 0? (Take the expectation of the recursion.)
+(b) Let $v = \mathrm{Var}\,x_n$ in the long run. Using that $x_n$ and $Z_n$ are independent, show $v = (1 - \theta h)^2 v + \sigma^2 h$ and solve: $v = \dfrac{\sigma^2}{\theta(2 - \theta h)}$.
+(c) With $\theta = 1$, $\sigma^2 = 860$: compute $v$ for $h = 0.1, 1, 1.5$ and compare with the exact $\sigma^2/(2\theta) = 430$. What is the relative error for small $h$?
+(d) The exact recursion is $x_{n+1} = e^{-\theta h}x_n + b\,Z_n$ with $b^2 = \frac{\sigma^2}{2\theta}(1 - e^{-2\theta h})$. Repeat (b) for it.
+
+**B4. Mean up, median down.** A population follows $dN = rN\,dt + \sigma N\,dW$ with $r = 0.1$ per year, $\sigma = 0.6$ per $\sqrt{\text{year}}$, $N_0 = 1000$.
+(a) Compute the mean and the median after 10 and 50 years.
+(b) After how many years has the median halved?
+(c) For which $\sigma$ does the median stay constant? Is $\sigma = 0.4$ below or above that?
+(d) A cartoon with $h = 1$ year: each year multiplies $N$ by $1 + r + \sigma Z$, and suppose $Z = +1$ and $Z = -1$ come in turn. Compute the two factors, their mean, and the factor over two years. Which one describes a single population?
+
+**B5. Mean-square stability.** Drug clearance with a noisy rate: $dC = -kC\,dt + \mu C\,dW$, $k = 0.8$ per hour, $\mu = 1$ per $\sqrt{\text{hour}}$.
+(a) EM: $C_{n+1} = C_n(1 - kh + \mu\,\Delta W_n)$. Using $\mathrm E\,\Delta W = 0$, $\mathrm E\,\Delta W^2 = h$ and independence, show $\mathrm E\,C_{n+1}^2 = \big((1 - kh)^2 + \mu^2 h\big)\,\mathrm E\,C_n^2$.
+(b) Compute this factor for $h = 0.5, 1, 2$. What does Euler for the ODE $C' = -0.8\,C$ do at these steps?
+(c) For which $h$ is EM mean-square stable?
+(d) Drift-implicit EM: $C_{n+1} = C_n - khC_{n+1} + \mu C_n\,\Delta W_n$. Solve for $C_{n+1}$, find its mean-square factor and show that it is below 1 for every $h > 0$.
+
+**B6. $D$ from an MSD by hand.** A 2D bead track gives MSD values 0.18, 0.33 and 0.52 µm² at lags 0.1, 0.2 and 0.3 s.
+(a) Fit a line through the origin, $\text{MSD} = b\,t$: the least-squares slope is $b = \sum t_k m_k / \sum t_k^2$. Compute $b$ and $D$.
+(b) By Stokes–Einstein, what is the bead radius if a bead of radius 0.5 µm has $D = 0.43$ µm²/s in the same liquid?
+(c) The same bead in a channel with flow $u = 5$ µm/s along $x$. By how much does the flow change the 2D MSD at lags 0.1 and 0.3 s ($+u^2t^2$)? What would you fit instead?
+
+## In code
+
+**C1. $D$ from particle tracks.** Simulate 2D tracks of a bead ($D = 0.43$ µm²/s, 10 frames per second) as cumulative sums of normal steps with sd $\sqrt{2D\Delta t}$ per coordinate ([`cumsum`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/cumsum.html); Python [`np.cumsum`](https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html)).
+(a) Write `msd(track, K)` (time-averaged MSD at lags $1, \dots, K$) and `Dhat(track, K)` (slope of a line through the origin, divided by $2d$). Estimate $D$ from one track of 100 frames with $K = 4$ and $K = 50$.
+(b) Over 1000 tracks: mean and sd of $\hat D$ for 100 frames with $K = 4$ and $K = 50$, and for 1000 frames with $K = 4$.
+(c) Add a flow $u = 5$ µm/s along $x$. Compare the mean of $\hat D$ from both coordinates with that from $y$ only.
+
+**C2. Strong and weak order of EM.** GBM with $r = 0.8$, $\sigma = 0.5$, $N_0 = 1$, $T = 1$. Draw $M = 10\,000$ fine Brownian paths with $2^{10}$ steps and compute the exact $N(T)$ on each. For $h = 2^{-10}, \dots, 2^{-2}$, run EM on every path with increments made by **summing** the fine ones ([`rowsum`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/rowsum.html); Python `dWf.reshape(nf // R, R, M).sum(axis=1)`).
+(a) Print the strong error $\text{mean}\,|N_n - N(T)|$ and the weak error $|\text{mean}(N_n - N(T))|$ for each $h$, and fit the slopes on a log–log scale ([`lm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html); Python [`np.polyfit`](https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html)).
+(b) For $h = 1/4$, compare the plain mean of $N_n$ with the exact $e^{rT}$, and with twice the standard error of a mean of $M$ values of $N(T)$. Why could this comparison not show the weak error at $h = 1/256$?
+
+**C3. The fresh-noise bug.** Repeat C2(a), but give each step size **new** normal increments of variance $h$ instead of summing the fine ones. What happens to the strong error? Is the weak error still meaningful?
+
+**C4. The Itô surprise.** GBM with $r = 0.1$ per year, $N_0 = 1000$, EM with $h = 0.05$ year, 10 000 populations, 50 years.
+(a) With $\sigma = 0.6$: the sample mean, median and fraction of populations below 10 after 10 and 50 years, against the exact values (mean, median, and $P(N(t) < 10) = \Phi\big((\ln(10/1000) - (r - \sigma^2/2)t)/(\sigma\sqrt t)\big)$; [`pnorm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Normal.html), Python [`scipy.stats.norm.cdf`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.norm.html)).
+(b) Repeat with $\sigma = 0.4$.
+(c) Why is the sample mean after 50 years so far from the exact mean, although the median is close?
+
+**C5. Milstein against EM.** With the paths of C2, add the Milstein term for GBM ($g = \sigma N$, $g' = \sigma$) and print the strong errors of both methods with their fitted slopes.
+
+**C6. Fokker–Planck against a histogram.** The trap ($\theta = 1$ per ms, $D = 430$ nm²/ms) is moved at $t = 0$ so that the beads start at $N(60, 5^2)$ nm.
+(a) Solve the Fokker–Planck equation (Fact 6) on $x \in [-100, 160]$ nm with $\Delta x = 2$ nm, $\Delta t = 0.002$ ms and zero flux at both ends, up to $t = 1$ and $t = 3$ ms. Print the mass $\sum p\,\Delta x$, the mean and the variance. Check $C + 2r \le 1$ and the cell Péclet number $P = |u|\Delta x/D < 2$ first.
+(b) Replace the central average $(p_i + p_{i+1})/2$ in the drift flux by the **upwind** value ($p_i$ if $u > 0$, else $p_{i+1}$). How do the variances change, and why?
+(c) Run EM for 10 000 beads with $h = 0.01$ ms and compare the sample mean and variance with (a) and with the exact OU values (Fact 4).
+
+**C7. Stable for the ODE, unstable for the SDE.** For the noisy drug clearance of B5 ($C_0 = 10$ mg/L, 10 000 patients, 48 h), run EM and drift-implicit EM with $h = 0.5, 1, 2$ h, using the same increments for both. Print the mean-square factors of B5, the largest $|C|$ over the patients at 48 h and, for EM, the sample mean of $C^2$. Compare with the exact $\mathrm E\,C(48)^2 = C_0^2\,e^{(-2k + \mu^2)\,48}$.
+
+## Explore {#explore}
+
+The demo simulates the trap (Ornstein–Uhlenbeck, $dX = \theta(\mu - X)\,dt + \sigma\,dW$ with $\mu = 0$, $x_0 = 3$, up to $t = 5$) or geometric Brownian motion ($dX = rX\,dt + \sigma X\,dW$, up to $t = 1$) in your browser. Panel (a) shows 20 numerical paths and, for path 1, the exact solution driven by the **same** Brownian path; the gap is the strong error. All step sizes are built by summing increments of one fine Brownian path ($2^{16}$ steps), so **same path, finer step** halves $h$ the right way (C2), and **new noise** draws a new path. Panel (b) is the histogram of many paths at the chosen time with the exact density on top: the solution of the Fokker–Planck equation (C6). The readout gives the mean over the 20 paths of each path's largest error, and its ratio from one step size to the next.
+
+```{=html}
+<link rel="stylesheet" href="../demos/dist/demo.css">
+<div data-demo="sdepaths"></div>
+<script src="../demos/dist/sdepaths.js"></script>
+```
+
+**E1. (relaxation)** Choose the preset **OU relaxes** ($\theta = 1$, $\sigma = 1$) and press **▶ play**. How do the mean and variance of the histogram change with time? What are the limits, by the formulas of Fact 4?
+
+::: {.callout-note collapse="true" title="Answer E1"}
+The mean decays like $3e^{-t}$ and the variance grows like $\frac{\sigma^2}{2\theta}(1 - e^{-2\theta t})$ towards the stationary $\sigma^2/(2\theta) = 0.5$, with mean 0. By $t = 5$ the histogram sits on the exact normal $N(0, 0.5)$, up to Monte Carlo noise of a few per cent.
+:::
+
+**E2. (weak error you can see)** Stay with OU, set the time to the end and move the step slider to its largest value, $h = 1.25$. Compare the variance in the readout with the exact one and with B3. Then press **same path, finer step** twice.
+
+::: {.callout-note collapse="true" title="Answer E2"}
+At $h = 1.25$ ($\theta h = 1.25$) the EM variance tends to $\sigma^2/(\theta(2 - \theta h)) = 1/0.75 = 1.33$, not 0.5: the histogram is far too wide. At $h = 0.625$ it is $1/1.375 = 0.73$, at $h = 0.3125$ $1/1.6875 = 0.59$. The relative excess $\theta h/(2 - \theta h)$ is about $\theta h/2$: the error in the distribution shrinks like $h$, weak order 1 (B3(c)).
+:::
+
+**E3. (strong order)** With OU, start at the coarsest step and press **same path, finer step** several times; read the ratios ÷ in the second readout line. Then choose the preset **GBM: EM vs Milstein**, do the same with Euler–Maruyama and with Milstein. Finally press **new noise**: what changes?
+
+::: {.callout-note collapse="true" title="Answer E3"}
+For OU the error falls by about 2 per halving: with additive noise ($g$ constant) EM **is** Milstein, strong order 1. For GBM with EM it falls by only about $\sqrt 2 \approx 1.4$ (strong order ½, between 1.1 and 1.6 for 20 paths); with Milstein by about 2 (order 1), as in C2 and C5. New noise changes the single numbers but not the pattern; with only 20 paths the ratios scatter, which is why C2 averages over 10 000.
+:::
+
+**E4. (mean-square stability)** Choose the preset **OU, θh = 2.5 (unstable)** ($\theta = 8$, $h = 0.3125$). What happens to the paths? What is the largest stable step, and what happens after one press of **same path, finer step**?
+
+::: {.callout-note collapse="true" title="Answer E4"}
+Each step multiplies the deviation by $1 - \theta h = -1.5$ and adds noise, so the paths flip sign and grow without bound; the variance recursion of B3 has factor $(1 - \theta h)^2 = 2.25 > 1$. The limit is $\theta h < 2$, $h < 0.25$. After halving, $h = 0.156$ and $\theta h = 1.25$: the paths stay bounded (they still overshoot, factor $-0.25$ per step), and the long-run variance is $1/(8 \cdot 0.75) = 0.17$ against the exact $1/16 = 0.0625$. Stable is not the same as accurate.
+:::
+
+## Hints
+
+::: {.callout-tip collapse="true" title="Hint 1 — increments and variances (B1, B3, B5)"}
+For independent $X$, $Y$: $\mathrm{Var}(X + Y) = \mathrm{Var}\,X + \mathrm{Var}\,Y$ and $\mathrm{Var}(aX) = a^2\,\mathrm{Var}\,X$. The increment $\Delta W_n$ is independent of $x_n$, because $x_n$ depends only on earlier increments. In a long run the variance stops changing: set $\mathrm{Var}\,x_{n+1} = \mathrm{Var}\,x_n = v$. For B5, expand $(1 - kh + \mu\Delta W)^2$ and take expectations term by term.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 2 — Milstein and the exact GBM (B2, C5)"}
+For $g(N) = \sigma N$: $g\,g' = \sigma N \cdot \sigma = \sigma^2 N$, so the Milstein term is $\frac12\sigma^2 N\big((\Delta W)^2 - h\big)$. For the trap $g = \sigma$ is constant, so $g' = 0$. The exact GBM solution on a path needs $W(T)$, the sum of all increments of that path.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 3 — MSD and least squares (B6, C1)"}
+For lag $k$ frames, average $|\mathbf r_{i+k} - \mathbf r_i|^2$ over all $i$. A line through the origin minimises $\sum (m_k - b\,t_k)^2$, giving $b = \sum t_k m_k/\sum t_k^2$; in R `lm(m ~ 0 + t)`, in Python compute the formula directly or use [`np.linalg.lstsq`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.lstsq.html) with one column. Normal numbers: R [`rnorm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Normal.html); Python [`rng.normal`](https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.normal.html) / [`rng.standard_normal`](https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.standard_normal.html) with `rng = np.random.default_rng(1)`; Rust `rng.sample(StandardNormal)` or `rand_distr::Normal::new(mean, sd)` from [`rand_distr`](https://docs.rs/rand_distr/), with `StdRng::seed_from_u64(1)` from [`rand`](https://docs.rs/rand/0.10/rand/).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 4 — same path at every step size (C2, C3, C5)"}
+Store the fine increments as a matrix with one row per fine step and one column per path. For a coarse step of $R$ fine steps, the coarse increments are sums of $R$ consecutive rows: in R `rowsum(dWf, rep(1:(nf / R), each = R))`, in Python `dWf.reshape(nf // R, R, M).sum(axis=1)`, in Rust `dwf.chunks(R)` per path. Loop over time steps and update all paths at once (vectorised) in R and Python. A slope is the coefficient of $\log h$ in a straight-line fit of $\log(\text{error})$.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 5 — heavy tails and medians (C4)"}
+The median is [`median`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/median.html) in R and [`np.median`](https://numpy.org/doc/stable/reference/generated/numpy.median.html) in Python. The standard deviation of $N(t)$ for GBM is $N_0e^{rt}\sqrt{e^{\sigma^2 t} - 1}$; compare it with the mean, and ask how many of 10 000 populations account for most of the total.
+:::
+
+::: {.callout-tip collapse="true" title="Hint 6 — the Fokker–Planck scheme (C6)"}
+Put the velocity at the faces $x_{i+1/2} = x_i + \Delta x/2$: $u = -\theta x_{i+1/2}$. Compute all fluxes from the old $p$ first, then update ([`diff`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/diff.html); Python [`np.diff`](https://numpy.org/doc/stable/reference/generated/numpy.diff.html)). Zero flux at the ends: pad the flux vector with a 0 on each side, so that the update of cell $i$ uses $F_{i+1/2} - F_{i-1/2}$ for all cells. Then the total mass stays exactly 1, a cheap check. The start density is [`dnorm`](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/Normal.html)`(x, 60, 5)`. Upwind adds a numerical diffusion $\approx |u|\Delta x/2$ ([*Flow plus diffusion*](../advection-diffusion/lec.qmd)).
+:::
+
+::: {.callout-tip collapse="true" title="Hint 7 — mean-square stability in code (C7)"}
+Draw one vector of increments per step and use it for both methods, so that the comparison is fair. The sample mean of $C^2$ over 10 000 patients is dominated by the few largest values; compare it with the factor$^{n}$ prediction only for the unstable case, where it is large. Print large and small numbers in scientific notation (`%.1e`).
+:::
+
+## Solutions
+
+::: {.callout-note collapse="true" title="Solution"}
+
+**B1.**
+(a) Each increment is $N(0, 0.25)$, sd 0.5. $W(1)$ is the sum of four: variance 1, sd 1. $W(0.5)$: two increments, variance 0.5, sd 0.71. $W(1) - W(0.5)$: the other two, also variance 0.5, sd 0.71, independent of $W(0.5)$.
+(b) $\frac1h$ steps of variance $h^2$: variance $h$. $h = 0.25$: 0.25; $h = 0.01$: 0.01. As $h \to 0$ the walk stops moving: steps of size $h$ give no noise in the limit, only steps of size $\sqrt h$ keep the variance at $t$.
+(c) $\mathrm E\,|\Delta W|/h = 0.80\sqrt h/h = 0.80/\sqrt h$: 8.0 for $h = 0.01$, 80 for $h = 10^{-4}$. It grows without bound as $h \to 0$: Brownian paths have no derivative, which is why an SDE is written with $dW$ and not $dW/dt$.
+(d) After $n$ frames $x = \sum_{j=1}^n \sqrt{2D\Delta t}\,Z_j$, a sum of $n$ independent terms of variance $2D\Delta t$: variance $2Dn\Delta t = 2Dt$. In 2D the squared displacement is $x^2 + y^2$, with mean $2Dt + 2Dt = 4Dt$.
+
+**B2.**
+(a) $x_1 = 40 - 40 \cdot 0.01 + 30 \cdot 0.1 \cdot (-1.2) = 40 - 0.4 - 3.6 = 36.0$ nm. $x_2 = 36 - 0.36 + 3 \cdot 0.5 = 37.14$ nm. The drift steps (0.4 and 0.36 nm) are about ten times smaller than the kicks (3.6 and 1.5 nm): the kick scales with $\sqrt h = 0.1$, the drift with $h = 0.01$.
+(b) EM: $100 + 0.8 \cdot 100 \cdot 0.04 + 0.5 \cdot 100 \cdot 0.3 = 100 + 3.2 + 15 = 118.2$. Milstein adds $\frac12 \cdot 0.25 \cdot 100 \cdot (0.09 - 0.04) = 0.625$: 118.825.
+(c) $100\,e^{0.027 + 0.15} = 100\,e^{0.177} = 119.36$. Errors: EM 1.16, Milstein 0.54. For the trap $g = \sigma$ is constant, $g' = 0$, so the Milstein term is zero: EM is already the Milstein method there (and has strong order 1).
+
+**B3.**
+(a) $\mathrm E\,x_{n+1} = (1 - \theta h)\,\mathrm E\,x_n$, so $\mathrm E\,x_n = (1 - \theta h)^n x_0$: decays if $|1 - \theta h| < 1$, i.e. $0 < h < 2/\theta$. Euler's stability limit for $x' = -\theta x$.
+(b) $x_n$ and $Z_n$ are independent, so $\mathrm{Var}\,x_{n+1} = (1 - \theta h)^2\,\mathrm{Var}\,x_n + \sigma^2 h$. In the long run both variances equal $v$: $v\big(1 - (1 - \theta h)^2\big) = \sigma^2 h$, and $1 - (1 - \theta h)^2 = 2\theta h - \theta^2h^2 = \theta h(2 - \theta h)$, so $v = \sigma^2/(\theta(2 - \theta h))$.
+(c) $h = 0.1$: $860/1.9 = 452.6$; $h = 1$: $860/1 = 860$; $h = 1.5$: $860/0.5 = 1720$. Exact 430. For small $h$, $v/430 = 2/(2 - \theta h) \approx 1 + \theta h/2$: a relative error of $\theta h/2$ (5% at $h = 0.1$), first order in $h$, as the weak order 1 predicts.
+(d) $v = e^{-2\theta h}v + \frac{\sigma^2}{2\theta}(1 - e^{-2\theta h})$, so $v(1 - e^{-2\theta h}) = \frac{\sigma^2}{2\theta}(1 - e^{-2\theta h})$ and $v = \sigma^2/(2\theta)$ for every $h$: no error.
+
+**B4.**
+(a) Mean $1000\,e^{0.1t}$: 2718 after 10 years, 148 413 after 50. Median $1000\,e^{(0.1 - 0.18)t} = 1000\,e^{-0.08t}$: 449 after 10 years, 18.3 after 50.
+(b) $e^{-0.08t} = 0.5$: $t = \ln 2/0.08 = 8.7$ years.
+(c) $r - \sigma^2/2 = 0$: $\sigma = \sqrt{2r} = 0.447$. $\sigma = 0.4$ is below: the median grows at $0.1 - 0.08 = 0.02$ per year.
+(d) Factors $1 + 0.1 + 0.6 = 1.7$ and $1 + 0.1 - 0.6 = 0.5$. Their mean is 1.1 $= 1 + r$: the mean grows by 10% per year. But a single population gets both in turn: $1.7 \cdot 0.5 = 0.85$ over two years, a decline of 8% per year ($\sqrt{0.85} = 0.92$). The **product** (geometric mean) describes one population; the arithmetic mean describes an average over many populations, carried by the lucky ones.
+
+**B5.**
+(a) $\mathrm E\,(1 - kh + \mu\Delta W)^2 = (1 - kh)^2 + 2(1 - kh)\mu\,\mathrm E\,\Delta W + \mu^2\,\mathrm E\,\Delta W^2 = (1 - kh)^2 + \mu^2h$, and $\Delta W_n$ is independent of $C_n$, so the expectations multiply.
+(b) $h = 0.5$: $0.36 + 0.5 = 0.86$; $h = 1$: $0.04 + 1 = 1.04$; $h = 2$: $0.36 + 2 = 2.36$. Euler for the ODE multiplies by $1 - 0.8h = 0.6, 0.2, -0.6$: stable at all three steps (it needs $h < 2.5$).
+(c) $(1 - 0.8h)^2 + h < 1 \iff 0.64h^2 - 1.6h + h < 0 \iff h < 0.6/0.64 = 0.9375$ h.
+(d) $C_{n+1}(1 + kh) = C_n(1 + \mu\Delta W_n)$, so $C_{n+1} = C_n(1 + \mu\Delta W_n)/(1 + kh)$. Mean-square factor $(1 + \mu^2h)/(1 + kh)^2 = (1 + h)/(1 + 0.8h)^2$. Below 1 when $1 + h < 1 + 1.6h + 0.64h^2$, i.e. $0 < 0.6h + 0.64h^2$: true for every $h > 0$. At $h = 2$: $3/6.76 = 0.44$.
+
+**B6.**
+(a) $\sum t_k m_k = 0.1 \cdot 0.18 + 0.2 \cdot 0.33 + 0.3 \cdot 0.52 = 0.018 + 0.066 + 0.156 = 0.240$; $\sum t_k^2 = 0.01 + 0.04 + 0.09 = 0.14$. $b = 1.714$ µm²/s, and in 2D $D = b/4 = 0.43$ µm²/s.
+(b) $D \propto 1/a$, so the same $D$ means the same radius: 0.5 µm. (A bead with half this $D$ would have radius 1 µm.)
+(c) $u^2t^2 = 25 \cdot 0.01 = 0.25$ µm² at 0.1 s (more than the MSD of 0.18 itself) and $25 \cdot 0.09 = 2.25$ µm² at 0.3 s. The MSD curves upward. Fit the coordinate across the flow ($\text{MSD}_y = 2Dt$), or subtract the mean displacement per lag before squaring.
+
+**C1.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+D <- 0.43; dt <- 0.1                              # µm^2/s, s per frame
+track <- function(n, u = 0) {                     # n frames, flow u along x (µm/s)
+  xy <- apply(matrix(rnorm(2 * n, sd = sqrt(2 * D * dt)), n), 2, cumsum)
+  xy[, 1] <- xy[, 1] + u * dt * (1:n)
+  xy
+}
+msd <- function(xy, K) sapply(1:K, function(k)    # time-averaged MSD at lags 1..K
+  mean(rowSums((xy[-(1:k), , drop = FALSE] - xy[1:(nrow(xy) - k), , drop = FALSE])^2)))
+Dhat <- function(xy, K) {                         # slope of a line through 0, / (2 d)
+  lag <- (1:K) * dt
+  unname(coef(lm(msd(xy, K) ~ 0 + lag))) / (2 * ncol(xy))
+}
+set.seed(1)
+xy <- track(100)
+c(K4 = Dhat(xy, 4), K50 = Dhat(xy, 50))
+#        K4       K50
+# 0.3620504 0.4861956
+for (nK in list(c(100, 4), c(100, 50), c(1000, 4))) {
+  d <- replicate(1000, Dhat(track(nK[1]), nK[2]))
+  cat(sprintf("n = %4d  K = %2d  mean %.3f  sd %.3f\n", nK[1], nK[2], mean(d), sd(d)))
+}
+# n =  100  K =  4  mean 0.431  sd 0.064
+# n =  100  K = 50  mean 0.428  sd 0.236
+# n = 1000  K =  4  mean 0.430  sd 0.020
+d2 <- replicate(1000, { xy <- track(100, u = 5); c(Dhat(xy, 4), Dhat(xy[, 2, drop = FALSE], 4)) })
+rowMeans(d2)                                      # 2D with flow, y only
+# [1] 2.5045858 0.4332751
+```
+
+### Python
+
+```python
+import numpy as np
+
+D, dt = 0.43, 0.1                             # µm^2/s, s per frame
+rng = np.random.default_rng(1)
+
+def track(n, u=0.0):                          # n frames, flow u along x (µm/s)
+    xy = np.cumsum(rng.normal(0, np.sqrt(2 * D * dt), (n, 2)), axis=0)
+    xy[:, 0] += u * dt * np.arange(1, n + 1)
+    return xy
+
+def msd(xy, K):                               # time-averaged MSD at lags 1..K
+    return np.array([np.mean(np.sum((xy[k:] - xy[:-k])**2, axis=1)) for k in range(1, K + 1)])
+
+def Dhat(xy, K):                              # slope of a line through 0, / (2 d)
+    lag = np.arange(1, K + 1) * dt
+    slope = np.sum(lag * msd(xy, K)) / np.sum(lag**2)
+    return slope / (2 * xy.shape[1])
+
+xy = track(100)
+print("K4", Dhat(xy, 4), "K50", Dhat(xy, 50))
+# K4 0.2754877285270579 K50 0.21774765918437075
+for n, K in [(100, 4), (100, 50), (1000, 4)]:
+    d = np.array([Dhat(track(n), K) for _ in range(1000)])
+    print(f"n = {n:4d}  K = {K:2d}  mean {d.mean():.3f}  sd {d.std(ddof=1):.3f}")
+# n =  100  K =  4  mean 0.426  sd 0.065
+# n =  100  K = 50  mean 0.435  sd 0.246
+# n = 1000  K =  4  mean 0.431  sd 0.020
+d2 = np.array([(Dhat(xy, 4), Dhat(xy[:, 1:], 4)) for xy in (track(100, u=5) for _ in range(1000))])
+print("2D with flow, y only:", d2.mean(axis=0))
+# 2D with flow, y only: [2.50555195 0.42896496]
+```
+
+### Rust
+
+```rust
+// rust/examples/sde_c1.rs  —  cargo run --example sde_c1
+// C1: diffusion coefficient of a bead from the mean squared displacement (MSD) of its track.
+use rand::{rngs::StdRng, SeedableRng};
+use rand_distr::{Distribution, Normal};
+
+const D: f64 = 0.43; // µm^2/s
+const DT: f64 = 0.1; // s per frame
+
+// n frames of a 2D track (columns x, y), flow u along x in µm/s
+fn track(n: usize, u: f64, rng: &mut StdRng) -> Vec<[f64; 2]> {
+    let step = Normal::new(0.0, (2.0 * D * DT).sqrt()).unwrap();
+    let (mut x, mut y) = (0.0, 0.0);
+    (1..=n)
+        .map(|i| {
+            x += step.sample(rng);
+            y += step.sample(rng);
+            [x + u * DT * i as f64, y]
+        })
+        .collect()
+}
+
+// D from a line through 0 fitted to MSD at lags 1..K; dims = 2 (x, y) or 1 (y only)
+fn dhat(xy: &[[f64; 2]], k_max: usize, dims: usize) -> f64 {
+    let (mut stm, mut stt) = (0.0, 0.0);
+    for k in 1..=k_max {
+        let n = xy.len() - k;
+        let mut msd = 0.0;
+        for i in 0..n {
+            let dy = xy[i + k][1] - xy[i][1];
+            let dx = if dims == 2 { xy[i + k][0] - xy[i][0] } else { 0.0 };
+            msd += dx * dx + dy * dy;
+        }
+        msd /= n as f64;
+        let lag = k as f64 * DT;
+        stm += lag * msd;
+        stt += lag * lag;
+    }
+    stm / stt / (2.0 * dims as f64) // slope / (2 d)
+}
+
+fn mean_sd(v: &[f64]) -> (f64, f64) {
+    let n = v.len() as f64;
+    let m = v.iter().sum::<f64>() / n;
+    (m, (v.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (n - 1.0)).sqrt())
+}
+
+fn main() {
+    let mut rng = StdRng::seed_from_u64(1);
+    let xy = track(100, 0.0, &mut rng);
+    println!("K4 {:.4}  K50 {:.4}", dhat(&xy, 4, 2), dhat(&xy, 50, 2));
+    for (n, k) in [(100, 4), (100, 50), (1000, 4)] {
+        let d: Vec<f64> = (0..1000).map(|_| dhat(&track(n, 0.0, &mut rng), k, 2)).collect();
+        let (m, s) = mean_sd(&d);
+        println!("n = {:4}  K = {:2}  mean {:.3}  sd {:.3}", n, k, m, s);
+    }
+    let (mut d2, mut dy) = (Vec::new(), Vec::new());
+    for _ in 0..1000 {
+        let xy = track(100, 5.0, &mut rng);
+        d2.push(dhat(&xy, 4, 2));
+        dy.push(dhat(&xy, 4, 1));
+    }
+    println!("2D with flow {:.4}  y only {:.4}", mean_sd(&d2).0, mean_sd(&dy).0);
+}
+
+// Output:
+// K4 0.4663  K50 0.5703
+// n =  100  K =  4  mean 0.429  sd 0.064
+// n =  100  K = 50  mean 0.415  sd 0.232
+// n = 1000  K =  4  mean 0.431  sd 0.020
+// 2D with flow 2.5178  y only 0.4290
+```
+
+:::
+
+(a) A single track of 100 frames gives anything from about 0.2 to 0.6 µm²/s, depending on the language's random stream: one track is a small sample. (b) All three settings are unbiased on average (0.42–0.44), but the sd is 0.064 with $K = 4$, 0.23–0.25 with $K = 50$ and 0.020 with 1000 frames. Fit the first few lags; use long tracks (or many tracks) for precision. Fitting to half the track length makes the estimate four times noisier. (c) With flow, the 2D estimate is 2.5 µm²/s, six times too large, without any warning; the $y$ coordinate (across the flow) gives 0.43.
+
+**C2.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+r <- 0.8; s <- 0.5; N0 <- 1; T <- 1
+set.seed(1); M <- 10000; nf <- 2^10; hf <- T / nf
+dWf <- matrix(sqrt(hf) * rnorm(nf * M), nf)            # fine increments, one column per path
+NT <- N0 * exp((r - s^2 / 2) * T + s * colSums(dWf))   # exact N(T) on each path
+em_gbm <- function(dW, h) {
+  N <- rep(N0, ncol(dW))
+  for (i in 1:nrow(dW)) N <- N + r * N * h + s * N * dW[i, ]
+  N
+}
+Rs <- 2^(0:8); h <- Rs * hf
+err <- t(sapply(Rs, function(R) {
+  N <- em_gbm(rowsum(dWf, rep(1:(nf / R), each = R)), R * hf)   # same path, coarser
+  c(strong = mean(abs(N - NT)), weak = abs(mean(N - NT)))
+}))
+for (j in seq_along(h)) cat(sprintf("h = %.7f  strong %.4g  weak %.4g\n", h[j], err[j, 1], err[j, 2]))
+# h = 0.0009766  strong 0.009867  weak 0.0009653
+# h = 0.0019531  strong 0.01386  weak 0.00148
+# h = 0.0039062  strong 0.0199  weak 0.002956
+# h = 0.0078125  strong 0.02791  weak 0.005552
+# h = 0.0156250  strong 0.04001  weak 0.0106
+# h = 0.0312500  strong 0.05873  weak 0.02137
+# h = 0.0625000  strong 0.08772  weak 0.04384
+# h = 0.1250000  strong 0.1319  weak 0.08299
+# h = 0.2500000  strong 0.2068  weak 0.1553
+cat("slopes: strong", coef(lm(log(err[, 1]) ~ log(h)))[2], " weak", coef(lm(log(err[, 2]) ~ log(h)))[2], "\n")
+# slopes: strong 0.5443728  weak 0.9412013
+N <- em_gbm(rowsum(dWf, rep(1:4, each = 256)), 0.25)
+cat("h = 1/4 vs exact mean:", mean(N) - exp(r * T), " 2 SE:", 2 * sd(NT) / sqrt(M), "\n")
+# h = 1/4 vs exact mean: -0.1423553  2 SE: 0.02374628
+```
+
+### Python
+
+```python
+import numpy as np
+
+r, s, N0, T = 0.8, 0.5, 1.0, 1.0
+rng = np.random.default_rng(1)
+M, nf = 10000, 2**10
+hf = T / nf
+dWf = np.sqrt(hf) * rng.standard_normal((nf, M))        # fine increments, one column per path
+NT = N0 * np.exp((r - s**2 / 2) * T + s * dWf.sum(axis=0))   # exact N(T) on each path
+
+def em_gbm(dW, h):
+    N = np.full(dW.shape[1], N0)
+    for dw in dW:
+        N = N + r * N * h + s * N * dw
+    return N
+
+Rs = 2**np.arange(9)
+h = Rs * hf
+err = []
+for R in Rs:
+    N = em_gbm(dWf.reshape(nf // R, R, M).sum(axis=1), R * hf)   # same path, coarser
+    err.append([np.mean(np.abs(N - NT)), abs(np.mean(N - NT))])
+err = np.array(err)
+for hi, (st, wk) in zip(h, err):
+    print(f"h = {hi:.7f}  strong {st:.4g}  weak {wk:.4g}")
+# h = 0.0009766  strong 0.00974  weak 0.0005065
+# h = 0.0019531  strong 0.01402  weak 0.001188
+# h = 0.0039062  strong 0.01996  weak 0.002231
+# h = 0.0078125  strong 0.02772  weak 0.004902
+# h = 0.0156250  strong 0.03949  weak 0.01027
+# h = 0.0312500  strong 0.05696  weak 0.02056
+# h = 0.0625000  strong 0.08511  weak 0.04203
+# h = 0.1250000  strong 0.1301  weak 0.08127
+# h = 0.2500000  strong 0.2041  weak 0.1519
+print("slopes: strong", np.polyfit(np.log(h), np.log(err[:, 0]), 1)[0],
+      "weak", np.polyfit(np.log(h), np.log(err[:, 1]), 1)[0])
+# slopes: strong 0.5403184376234036 weak 1.0290269194574255
+N = em_gbm(dWf.reshape(4, 256, M).sum(axis=1), 0.25)
+print("h = 1/4 vs exact mean:", N.mean() - np.exp(r * T), " 2 SE:", 2 * NT.std(ddof=1) / np.sqrt(M))
+# h = 1/4 vs exact mean: -0.1357568298427414  2 SE: 0.023308772452022043
+```
+
+### Rust
+
+```rust
+// rust/examples/sde_c2.rs  —  cargo run --example sde_c2
+// C2: strong and weak error of Euler-Maruyama on geometric Brownian motion, same Brownian path.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+use rand_distr::StandardNormal;
+
+// least-squares slope of log(err) against log(h)
+fn slope(h: &[f64], e: &[f64]) -> f64 {
+    let (x, y): (Vec<f64>, Vec<f64>) = h.iter().zip(e).map(|(a, b)| (a.ln(), b.ln())).unzip();
+    let n = x.len() as f64;
+    let (mx, my) = (x.iter().sum::<f64>() / n, y.iter().sum::<f64>() / n);
+    let sxy: f64 = x.iter().zip(&y).map(|(a, b)| (a - mx) * (b - my)).sum();
+    sxy / x.iter().map(|a| (a - mx).powi(2)).sum::<f64>()
+}
+
+fn main() {
+    let (r, s, n0, t) = (0.8f64, 0.5f64, 1.0f64, 1.0f64);
+    let (m, nf) = (10000usize, 1024usize);
+    let hf = t / nf as f64;
+    let rs: Vec<usize> = (0..9).map(|k| 1usize << k).collect(); // coarse step h = R hf
+    let mut rng = StdRng::seed_from_u64(1);
+    let (mut strong, mut diff) = (vec![0.0; rs.len()], vec![0.0; rs.len()]);
+    let mut dwf = vec![0.0f64; nf];
+    for _ in 0..m {
+        for w in dwf.iter_mut() {
+            *w = hf.sqrt() * rng.sample::<f64, _>(StandardNormal); // fine increments
+        }
+        let nt = n0 * ((r - s * s / 2.0) * t + s * dwf.iter().sum::<f64>()).exp(); // exact N(T)
+        for (j, &rr) in rs.iter().enumerate() {
+            let h = rr as f64 * hf;
+            let mut n = n0;
+            for chunk in dwf.chunks(rr) {
+                let dw: f64 = chunk.iter().sum(); // sum R fine increments
+                n += r * n * h + s * n * dw;
+            }
+            strong[j] += (n - nt).abs() / m as f64;
+            diff[j] += (n - nt) / m as f64;
+        }
+    }
+    let h: Vec<f64> = rs.iter().map(|&rr| rr as f64 * hf).collect();
+    let weak: Vec<f64> = diff.iter().map(|d| d.abs()).collect();
+    for j in 0..rs.len() {
+        println!("h = {:.7}  strong {:.5}  weak {:.6}", h[j], strong[j], weak[j]);
+    }
+    println!("slopes: strong {:.4}  weak {:.4}", slope(&h, &strong), slope(&h, &weak));
+}
+
+// Output:
+// h = 0.0009766  strong 0.01001  weak 0.000834
+// h = 0.0019531  strong 0.01426  weak 0.001697
+// h = 0.0039062  strong 0.01999  weak 0.002941
+// h = 0.0078125  strong 0.02854  weak 0.005783
+// h = 0.0156250  strong 0.04103  weak 0.011681
+// h = 0.0312500  strong 0.05980  weak 0.023166
+// h = 0.0625000  strong 0.08859  weak 0.045644
+// h = 0.1250000  strong 0.13615  weak 0.087231
+// h = 0.2500000  strong 0.21460  weak 0.162360
+// slopes: strong 0.5470  weak 0.9564
+```
+
+:::
+
+(a) The strong error falls by $\sqrt 2$ per halving of $h$ (slope 0.54–0.55), the weak error by about 2 (slope 0.94–1.03): order ½ and order 1. The weak error is computed as the mean of $N_n - N(T)$ over the same paths, so the large path-to-path variation of $N(T)$ cancels; its own Monte Carlo error is about (strong error)$/\sqrt M$, which is why the smallest weak errors wobble a little. (b) At $h = 1/4$ the weak error (about $-0.14$) is six times the 2 SE of a plain mean (0.024) and is visible. At $h = 1/256$ the weak error is 0.002–0.003, ten times smaller than 2 SE: comparing a plain mean of 10 000 paths with $e^{rT}$ would see only noise. To see it you would need about $(2 \cdot 1.19/0.0015)^2 \approx 2.5$ million paths.
+
+**C3.** (continues C2: same `dWf`, `NT`, `em_gbm`)
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+set.seed(2)
+for (R in Rs) {
+  dW <- matrix(sqrt(R * hf) * rnorm(nf / R * M), nf / R)   # BUG: fresh increments
+  N <- em_gbm(dW, R * hf)
+  cat(sprintf("h = 1/%-4d strong %.4f  weak %.4f\n", nf / R, mean(abs(N - NT)), abs(mean(N - NT))))
+}
+# h = 1/1024 strong 1.2348  weak 0.0232
+# h = 1/512  strong 1.2333  weak 0.0139
+# h = 1/256  strong 1.2475  weak 0.0026
+# h = 1/128  strong 1.2399  weak 0.0089
+# h = 1/64   strong 1.2247  weak 0.0260
+# h = 1/32   strong 1.2199  weak 0.0344
+# h = 1/16   strong 1.2045  weak 0.0470
+# h = 1/8    strong 1.1765  weak 0.1016
+# h = 1/4    strong 1.1151  weak 0.1644
+```
+
+### Python
+
+```python
+rng2 = np.random.default_rng(2)
+for R in Rs:
+    dW = np.sqrt(R * hf) * rng2.standard_normal((nf // R, M))   # BUG: fresh increments
+    N = em_gbm(dW, R * hf)
+    print(f"h = 1/{nf // R:<4d} strong {np.mean(np.abs(N - NT)):.4f}  weak {abs(np.mean(N - NT)):.4f}")
+# h = 1/1024 strong 1.2204  weak 0.0062
+# h = 1/512  strong 1.2267  weak 0.0168
+# h = 1/256  strong 1.2213  weak 0.0228
+# h = 1/128  strong 1.2131  weak 0.0140
+# h = 1/64   strong 1.2206  weak 0.0182
+# h = 1/32   strong 1.2121  weak 0.0330
+# h = 1/16   strong 1.1985  weak 0.0594
+# h = 1/8    strong 1.1554  weak 0.0865
+# h = 1/4    strong 1.0985  weak 0.1767
+```
+
+### Rust
+
+```rust
+// rust/examples/sde_c3.rs  —  cargo run --example sde_c3
+// C3: the fresh-noise bug: each step size gets its own new Brownian path.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+use rand_distr::StandardNormal;
+
+fn main() {
+    let (r, s, n0, t) = (0.8f64, 0.5f64, 1.0f64, 1.0f64);
+    let (m, nf) = (10000usize, 1024usize);
+    let hf = t / nf as f64;
+    let rs: Vec<usize> = (0..9).map(|k| 1usize << k).collect();
+    let mut rng = StdRng::seed_from_u64(1);
+    let (mut strong, mut diff) = (vec![0.0; rs.len()], vec![0.0; rs.len()]);
+    for _ in 0..m {
+        let w: f64 = (0..nf).map(|_| hf.sqrt() * rng.sample::<f64, _>(StandardNormal)).sum();
+        let nt = n0 * ((r - s * s / 2.0) * t + s * w).exp(); // exact N(T) on the fine path
+        for (j, &rr) in rs.iter().enumerate() {
+            let h = rr as f64 * hf;
+            let mut n = n0;
+            for _ in 0..nf / rr {
+                let dw = h.sqrt() * rng.sample::<f64, _>(StandardNormal); // BUG: fresh increment
+                n += r * n * h + s * n * dw;
+            }
+            strong[j] += (n - nt).abs() / m as f64;
+            diff[j] += (n - nt) / m as f64;
+        }
+    }
+    for j in 0..rs.len() {
+        println!("h = 1/{:<4}  strong {:.4}  weak {:.4}", nf / rs[j], strong[j], diff[j].abs());
+    }
+}
+
+// Output:
+// h = 1/1024  strong 1.2296  weak 0.0382
+// h = 1/512   strong 1.2527  weak 0.0025
+// h = 1/256   strong 1.2328  weak 0.0094
+// h = 1/128   strong 1.2312  weak 0.0207
+// h = 1/64    strong 1.2255  weak 0.0306
+// h = 1/32    strong 1.2085  weak 0.0511
+// h = 1/16    strong 1.1941  weak 0.0739
+// h = 1/8     strong 1.1601  weak 0.0979
+// h = 1/4     strong 1.1276  weak 0.1577
+```
+
+:::
+
+The strong error stays at about 1.2 for every $h$: it measures the distance between two **independent** populations, not a discretisation error, and does not converge. The weak error is still an estimate of $\mathrm E N_n - \mathrm E N(T)$, but now with the full Monte Carlo noise of two independent means (sd about $1.19\sqrt{2/M} = 0.017$): visible at $h = 1/4$ (0.16), drowned in noise below $h \approx 1/32$. The method is fine; the test is broken. Check: a strong error that does not fall with $h$ means the paths are not the same.
+
+**C4.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+gbm_em <- function(r, s, N0 = 1000, h = 0.05, years = 50, M = 10000) {
+  N <- rep(N0, M); at10 <- NULL
+  for (i in 1:round(years / h)) {
+    N <- N + r * N * h + s * N * sqrt(h) * rnorm(M)
+    if (i == round(10 / h)) at10 <- N
+  }
+  list(at10 = at10, at50 = N)
+}
+set.seed(1)
+for (sig in c(0.6, 0.4)) {
+  res <- gbm_em(r = 0.1, s = sig)
+  cat(sprintf("sigma = %.1f\n", sig))
+  for (yr in c(10, 50)) {
+    N <- if (yr == 10) res$at10 else res$at50
+    cat(sprintf("  t = %2d  mean %9.0f (exact %9.0f)  median %6.1f (exact %6.1f)  P(N < 10) %.4f (exact %.4f)\n",
+        yr, mean(N), 1000 * exp(0.1 * yr), median(N), 1000 * exp((0.1 - sig^2 / 2) * yr),
+        mean(N < 10), pnorm((log(10 / 1000) - (0.1 - sig^2 / 2) * yr) / (sig * sqrt(yr)))))
+  }
+}
+# sigma = 0.6
+#   t = 10  mean      2619 (exact      2718)  median  442.2 (exact  449.3)  P(N < 10) 0.0264 (exact 0.0225)
+#   t = 50  mean     41367 (exact    148413)  median   17.6 (exact   18.3)  P(N < 10) 0.4498 (exact 0.4433)
+# sigma = 0.4
+#   t = 10  mean      2733 (exact      2718)  median 1217.2 (exact 1221.4)  P(N < 10) 0.0002 (exact 0.0001)
+#   t = 50  mean    117016 (exact    148413)  median 2532.9 (exact 2718.3)  P(N < 10) 0.0253 (exact 0.0238)
+```
+
+### Python
+
+```python
+import numpy as np
+from scipy.stats import norm
+
+rng = np.random.default_rng(1)
+
+def gbm_em(r, s, N0=1000.0, h=0.05, years=50, M=10000):
+    N = np.full(M, N0)
+    for i in range(1, round(years / h) + 1):
+        N = N + r * N * h + s * N * np.sqrt(h) * rng.standard_normal(M)
+        if i == round(10 / h):
+            at10 = N.copy()
+    return at10, N
+
+for sig in (0.6, 0.4):
+    at10, at50 = gbm_em(0.1, sig)
+    print(f"sigma = {sig:.1f}")
+    for yr, N in ((10, at10), (50, at50)):
+        p_ex = norm.cdf((np.log(10 / 1000) - (0.1 - sig**2 / 2) * yr) / (sig * np.sqrt(yr)))
+        print(f"  t = {yr:2d}  mean {N.mean():9.0f} (exact {1000 * np.exp(0.1 * yr):9.0f})"
+              f"  median {np.median(N):6.1f} (exact {1000 * np.exp((0.1 - sig**2 / 2) * yr):6.1f})"
+              f"  P(N < 10) {np.mean(N < 10):.4f} (exact {p_ex:.4f})")
+# sigma = 0.6
+#   t = 10  mean      2849 (exact      2718)  median  445.3 (exact  449.3)  P(N < 10) 0.0237 (exact 0.0225)
+#   t = 50  mean     47244 (exact    148413)  median   16.5 (exact   18.3)  P(N < 10) 0.4553 (exact 0.4433)
+# sigma = 0.4
+#   t = 10  mean      2770 (exact      2718)  median 1219.3 (exact 1221.4)  P(N < 10) 0.0002 (exact 0.0001)
+#   t = 50  mean    121569 (exact    148413)  median 2613.9 (exact 2718.3)  P(N < 10) 0.0246 (exact 0.0238)
+```
+
+### Rust
+
+```rust
+// rust/examples/sde_c4.rs  —  cargo run --example sde_c4
+// C4: geometric Brownian motion: the mean grows, the median (typical population) shrinks.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+use rand_distr::StandardNormal;
+use statrs::distribution::{ContinuousCDF, Normal};
+
+fn median(v: &[f64]) -> f64 {
+    let mut w = v.to_vec();
+    w.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let n = w.len();
+    if n % 2 == 0 { (w[n / 2 - 1] + w[n / 2]) / 2.0 } else { w[n / 2] }
+}
+
+fn main() {
+    let (r, n0, h, m) = (0.1f64, 1000.0f64, 0.05f64, 10000usize);
+    let phi = Normal::new(0.0, 1.0).unwrap();
+    let mut rng = StdRng::seed_from_u64(1);
+    for s in [0.6f64, 0.4] {
+        println!("sigma = {:.1}", s);
+        let mut n = vec![n0; m];
+        let mut at10 = Vec::new();
+        for i in 1..=(50.0 / h).round() as usize {
+            for x in n.iter_mut() {
+                let z: f64 = rng.sample(StandardNormal);
+                *x += r * *x * h + s * *x * h.sqrt() * z;
+            }
+            if i == (10.0 / h).round() as usize {
+                at10 = n.clone();
+            }
+        }
+        for (yr, v) in [(10.0f64, &at10), (50.0, &n)] {
+            let mean = v.iter().sum::<f64>() / m as f64;
+            let low = v.iter().filter(|&&x| x < 10.0).count() as f64 / m as f64;
+            let p_ex = phi.cdf(((10.0f64 / 1000.0).ln() - (r - s * s / 2.0) * yr) / (s * yr.sqrt()));
+            println!("  t = {:2}  mean {:9.0} (exact {:9.0})  median {:6.1} (exact {:6.1})  P(N < 10) {:.4} (exact {:.4})",
+                     yr, mean, n0 * (r * yr).exp(), median(v), n0 * ((r - s * s / 2.0) * yr).exp(), low, p_ex);
+        }
+    }
+}
+
+// Output:
+// sigma = 0.6
+//   t = 10  mean      2673 (exact      2718)  median  458.8 (exact  449.3)  P(N < 10) 0.0255 (exact 0.0225)
+//   t = 50  mean     37856 (exact    148413)  median   16.7 (exact   18.3)  P(N < 10) 0.4564 (exact 0.4433)
+// sigma = 0.4
+//   t = 10  mean      2725 (exact      2718)  median 1234.4 (exact 1221.4)  P(N < 10) 0.0001 (exact 0.0001)
+//   t = 50  mean    119826 (exact    148413)  median 2577.3 (exact 2718.3)  P(N < 10) 0.0253 (exact 0.0238)
+```
+
+:::
+
+(a) With $\sigma = 0.6$ the exact mean grows to 148 000 while the median falls to 18; after 50 years 45% of the populations are below 10 individuals (quasi-extinct), although every one of them has expected growth rate $r = 0.1 > 0$. EM with $h = 0.05$ reproduces the medians and probabilities: the effect is in the model, not in the numerics. (b) With $\sigma = 0.4$, $r - \sigma^2/2 = 0.02 > 0$: the median grows (to 2718 at 50 years) and only 2.5% fall below 10. (c) After 50 years the sd of $N$ is $148\,413\sqrt{e^{18} - 1} \approx 1.2 \times 10^9$, 8000 times the mean: the mean is carried by a handful of populations in a million, which 10 000 paths almost never contain. The sample mean (38 000–47 000) is a confident wrong answer, and its own SE is meaningless. Report medians and quantiles for multiplicative noise.
+
+**C5.** (continues C2: same `dWf`, `NT`, `em_gbm`, `Rs`, `h`)
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+mil_gbm <- function(dW, h) {                           # g = s N, g' = s: (1/2) s^2 N (dW^2 - h)
+  N <- rep(N0, ncol(dW))
+  for (i in 1:nrow(dW)) N <- N + r * N * h + s * N * dW[i, ] + 0.5 * s^2 * N * (dW[i, ]^2 - h)
+  N
+}
+err <- t(sapply(Rs, function(R) {
+  dW <- rowsum(dWf, rep(1:(nf / R), each = R))
+  c(em = mean(abs(em_gbm(dW, R * hf) - NT)), milstein = mean(abs(mil_gbm(dW, R * hf) - NT)))
+}))
+for (j in seq_along(h)) cat(sprintf("h = %.7f  EM %.4g  Milstein %.4g\n", h[j], err[j, 1], err[j, 2]))
+# h = 0.0009766  EM 0.009867  Milstein 0.0009217
+# h = 0.0019531  EM 0.01386  Milstein 0.001841
+# h = 0.0039062  EM 0.0199  Milstein 0.003685
+# h = 0.0078125  EM 0.02791  Milstein 0.007363
+# h = 0.0156250  EM 0.04001  Milstein 0.01462
+# h = 0.0312500  EM 0.05873  Milstein 0.02888
+# h = 0.0625000  EM 0.08772  Milstein 0.05654
+# h = 0.1250000  EM 0.1319  Milstein 0.1086
+# h = 0.2500000  EM 0.2068  Milstein 0.2
+cat("slopes: EM", coef(lm(log(err[, 1]) ~ log(h)))[2], " Milstein", coef(lm(log(err[, 2]) ~ log(h)))[2], "\n")
+# slopes: EM 0.5443728  Milstein 0.9757907
+```
+
+### Python
+
+```python
+def mil_gbm(dW, h):                           # g = s N, g' = s: (1/2) s^2 N (dW^2 - h)
+    N = np.full(dW.shape[1], N0)
+    for dw in dW:
+        N = N + r * N * h + s * N * dw + 0.5 * s**2 * N * (dw**2 - h)
+    return N
+
+err = []
+for R in Rs:
+    dW = dWf.reshape(nf // R, R, M).sum(axis=1)
+    err.append([np.mean(np.abs(em_gbm(dW, R * hf) - NT)), np.mean(np.abs(mil_gbm(dW, R * hf) - NT))])
+err = np.array(err)
+for hi, (e, m) in zip(h, err):
+    print(f"h = {hi:.7f}  EM {e:.4g}  Milstein {m:.4g}")
+# h = 0.0009766  EM 0.00974  Milstein 0.0009095
+# h = 0.0019531  EM 0.01402  Milstein 0.001817
+# h = 0.0039062  EM 0.01996  Milstein 0.003633
+# h = 0.0078125  EM 0.02772  Milstein 0.007251
+# h = 0.0156250  EM 0.03949  Milstein 0.01444
+# h = 0.0312500  EM 0.05696  Milstein 0.02857
+# h = 0.0625000  EM 0.08511  Milstein 0.05587
+# h = 0.1250000  EM 0.1301  Milstein 0.1071
+# h = 0.2500000  EM 0.2041  Milstein 0.1975
+print("slopes: EM", np.polyfit(np.log(h), np.log(err[:, 0]), 1)[0],
+      "Milstein", np.polyfit(np.log(h), np.log(err[:, 1]), 1)[0])
+# slopes: EM 0.5403184376234036 Milstein 0.9759892420760989
+```
+
+### Rust
+
+```rust
+// rust/examples/sde_c5.rs  —  cargo run --example sde_c5
+// C5: Milstein against Euler-Maruyama on geometric Brownian motion: strong error, same path.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+use rand_distr::StandardNormal;
+
+fn slope(h: &[f64], e: &[f64]) -> f64 {
+    let (x, y): (Vec<f64>, Vec<f64>) = h.iter().zip(e).map(|(a, b)| (a.ln(), b.ln())).unzip();
+    let n = x.len() as f64;
+    let (mx, my) = (x.iter().sum::<f64>() / n, y.iter().sum::<f64>() / n);
+    let sxy: f64 = x.iter().zip(&y).map(|(a, b)| (a - mx) * (b - my)).sum();
+    sxy / x.iter().map(|a| (a - mx).powi(2)).sum::<f64>()
+}
+
+fn main() {
+    let (r, s, n0, t) = (0.8f64, 0.5f64, 1.0f64, 1.0f64);
+    let (m, nf) = (10000usize, 1024usize);
+    let hf = t / nf as f64;
+    let rs: Vec<usize> = (0..9).map(|k| 1usize << k).collect();
+    let mut rng = StdRng::seed_from_u64(1);
+    let (mut e_em, mut e_mil) = (vec![0.0; rs.len()], vec![0.0; rs.len()]);
+    let mut dwf = vec![0.0f64; nf];
+    for _ in 0..m {
+        for w in dwf.iter_mut() {
+            *w = hf.sqrt() * rng.sample::<f64, _>(StandardNormal);
+        }
+        let nt = n0 * ((r - s * s / 2.0) * t + s * dwf.iter().sum::<f64>()).exp();
+        for (j, &rr) in rs.iter().enumerate() {
+            let h = rr as f64 * hf;
+            let (mut ne, mut nm) = (n0, n0);
+            for chunk in dwf.chunks(rr) {
+                let dw: f64 = chunk.iter().sum();
+                ne += r * ne * h + s * ne * dw;
+                nm += r * nm * h + s * nm * dw + 0.5 * s * s * nm * (dw * dw - h); // + (1/2) g g' (dW^2 - h)
+            }
+            e_em[j] += (ne - nt).abs() / m as f64;
+            e_mil[j] += (nm - nt).abs() / m as f64;
+        }
+    }
+    let h: Vec<f64> = rs.iter().map(|&rr| rr as f64 * hf).collect();
+    for j in 0..rs.len() {
+        println!("h = {:.7}  EM {:.5}  Milstein {:.6}", h[j], e_em[j], e_mil[j]);
+    }
+    println!("slopes: EM {:.4}  Milstein {:.4}", slope(&h, &e_em), slope(&h, &e_mil));
+}
+
+// Output:
+// h = 0.0009766  EM 0.01001  Milstein 0.000946
+// h = 0.0019531  EM 0.01426  Milstein 0.001887
+// h = 0.0039062  EM 0.01999  Milstein 0.003769
+// h = 0.0078125  EM 0.02854  Milstein 0.007520
+// h = 0.0156250  EM 0.04103  Milstein 0.014977
+// h = 0.0312500  EM 0.05980  Milstein 0.029629
+// h = 0.0625000  EM 0.08859  Milstein 0.057921
+// h = 0.1250000  EM 0.13615  Milstein 0.110915
+// h = 0.2500000  EM 0.21460  Milstein 0.203939
+// slopes: EM 0.5470  Milstein 0.9751
+```
+
+:::
+
+Milstein's strong error halves with every halving of $h$ (slope 0.98): order 1, against EM's ½. At $h = 1/1024$ it is ten times smaller than EM's, for one extra term. At the largest steps the two are close: there the drift error, which both share, dominates.
+
+**C6.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+theta <- 1; D <- 430; sigma <- sqrt(2 * D)
+fp <- function(t_end, dx = 2, dt = 0.002, scheme = "central") {
+  x <- seq(-100, 160, by = dx); xf <- x[-1] - dx / 2; u <- -theta * xf
+  p <- dnorm(x, 60, 5)
+  for (k in 1:round(t_end / dt)) {
+    pf <- if (scheme == "central") (head(p, -1) + p[-1]) / 2 else ifelse(u > 0, head(p, -1), p[-1])
+    F <- u * pf - D * diff(p) / dx                 # flux at the faces
+    p <- p - dt / dx * (c(F, 0) - c(0, F))
+  }
+  m <- sum(x * p) * dx
+  c(mass = sum(p) * dx, mean = m, var = sum((x - m)^2 * p) * dx)
+}
+c(C = 160 * 0.002 / 2, r = D * 0.002 / 2^2, P = 160 * 2 / D)   # largest |u| about 160 nm/ms
+#        C        r        P
+# 0.160000 0.215000 0.744186
+exact <- function(t) c(mass = 1, mean = 60 * exp(-theta * t),
+  var = D / theta * (1 - exp(-2 * theta * t)) + 25 * exp(-2 * theta * t))
+set.seed(1)
+X <- rnorm(10000, 60, 5); h <- 0.01; out <- NULL
+for (i in 1:300) {
+  X <- X - theta * X * h + sigma * sqrt(h) * rnorm(10000)
+  if (i %in% c(100, 300)) out <- rbind(out, c(t = i * h, mass = 1, mean = mean(X), var = var(X)))
+}
+for (t in c(1, 3))
+  print(rbind(pde = fp(t), upwind = fp(t, scheme = "upwind"),
+              em = out[out[, "t"] == t, -1], exact = exact(t)))
+#        mass     mean      var
+# pde       1 22.05068 373.5680
+# upwind    1 22.62471 406.2866
+# em        1 22.08071 377.8662
+# exact     1 22.07277 375.1892
+#        mass     mean      var
+# pde       1 2.978275 427.9556
+# upwind    1 3.284377 462.0069
+# em        1 2.978524 432.3487
+# exact     1 2.987224 428.9961
+```
+
+### Python
+
+```python
+import numpy as np
+
+theta, D = 1.0, 430.0
+sigma = np.sqrt(2 * D)
+
+def fp(t_end, dx=2.0, dt=0.002, scheme="central"):
+    x = np.arange(-100, 160 + dx / 2, dx)
+    u = -theta * (x[1:] - dx / 2)                    # drift velocity at the faces
+    p = np.exp(-(x - 60)**2 / (2 * 25)) / np.sqrt(2 * np.pi * 25)
+    for k in range(round(t_end / dt)):
+        pf = (p[:-1] + p[1:]) / 2 if scheme == "central" else np.where(u > 0, p[:-1], p[1:])
+        F = u * pf - D * np.diff(p) / dx             # flux at the faces
+        p = p - dt / dx * (np.append(F, 0) - np.insert(F, 0, 0))
+    m = np.sum(x * p) * dx
+    return np.array([np.sum(p) * dx, m, np.sum((x - m)**2 * p) * dx])
+
+def exact(t):
+    return np.array([1, 60 * np.exp(-theta * t),
+                     D / theta * (1 - np.exp(-2 * theta * t)) + 25 * np.exp(-2 * theta * t)])
+
+rng = np.random.default_rng(1)
+X = rng.normal(60, 5, 10000)
+h, em = 0.01, {}
+for i in range(1, 301):
+    X = X - theta * X * h + sigma * np.sqrt(h) * rng.standard_normal(10000)
+    if i in (100, 300):
+        em[i * h] = np.array([1, X.mean(), X.var(ddof=1)])
+np.set_printoptions(precision=4, suppress=True)
+for t in (1.0, 3.0):
+    print(f"t = {t}: mass, mean, var")
+    for name, v in (("pde", fp(t)), ("upwind", fp(t, scheme="upwind")), ("em", em[t]), ("exact", exact(t))):
+        print(f"  {name:7s}", v)
+# t = 1.0: mass, mean, var
+#   pde     [  1.      22.0507 373.568 ]
+#   upwind  [  1.      22.6247 406.2866]
+#   em      [  1.      22.0445 378.6405]
+#   exact   [  1.      22.0728 375.1892]
+# t = 3.0: mass, mean, var
+#   pde     [  1.       2.9783 427.9556]
+#   upwind  [  1.       3.2844 462.0069]
+#   em      [  1.       3.3801 425.6592]
+#   exact   [  1.       2.9872 428.9961]
+```
+
+### Rust
+
+```rust
+// rust/examples/sde_c6.rs  —  cargo run --example sde_c6
+// C6: Fokker-Planck PDE (flux form, explicit Euler) against a histogram's moments of EM paths.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+use rand_distr::{Distribution, Normal, StandardNormal};
+
+const THETA: f64 = 1.0; // per ms
+const D: f64 = 430.0; // nm^2/ms
+
+// mass, mean and variance of the PDE solution at t_end
+fn fp(t_end: f64, dx: f64, dt: f64, upwind: bool) -> [f64; 3] {
+    let n = ((260.0 / dx).round() as usize) + 1;
+    let x: Vec<f64> = (0..n).map(|i| -100.0 + i as f64 * dx).collect();
+    let u: Vec<f64> = (0..n - 1).map(|i| -THETA * (x[i + 1] - dx / 2.0)).collect(); // at the faces
+    let mut p: Vec<f64> = x.iter()
+        .map(|&xi| (-(xi - 60.0).powi(2) / 50.0).exp() / (2.0 * std::f64::consts::PI * 25.0).sqrt())
+        .collect();
+    for _ in 0..(t_end / dt).round() as usize {
+        let f: Vec<f64> = (0..n - 1).map(|i| {
+            let pf = if upwind { if u[i] > 0.0 { p[i] } else { p[i + 1] } } else { (p[i] + p[i + 1]) / 2.0 };
+            u[i] * pf - D * (p[i + 1] - p[i]) / dx // drift + Fick
+        }).collect();
+        for i in 0..n {
+            let fr = if i < n - 1 { f[i] } else { 0.0 }; // no flux through the ends
+            let fl = if i > 0 { f[i - 1] } else { 0.0 };
+            p[i] -= dt / dx * (fr - fl);
+        }
+    }
+    let mass: f64 = p.iter().sum::<f64>() * dx;
+    let mean: f64 = x.iter().zip(&p).map(|(a, b)| a * b).sum::<f64>() * dx;
+    let var: f64 = x.iter().zip(&p).map(|(a, b)| (a - mean).powi(2) * b).sum::<f64>() * dx;
+    [mass, mean, var]
+}
+
+fn main() {
+    let sigma = (2.0 * D).sqrt();
+    let mut rng = StdRng::seed_from_u64(1);
+    let start = Normal::new(60.0, 5.0).unwrap();
+    let mut x: Vec<f64> = (0..10000).map(|_| start.sample(&mut rng)).collect();
+    let h = 0.01;
+    for i in 1..=300 {
+        for xi in x.iter_mut() {
+            let z: f64 = rng.sample(StandardNormal);
+            *xi += -THETA * *xi * h + sigma * h.sqrt() * z;
+        }
+        if i == 100 || i == 300 {
+            let t = i as f64 * h;
+            let n = x.len() as f64;
+            let m = x.iter().sum::<f64>() / n;
+            let v = x.iter().map(|a| (a - m).powi(2)).sum::<f64>() / (n - 1.0);
+            let ex = [1.0, 60.0 * (-THETA * t).exp(),
+                      D / THETA * (1.0 - (-2.0 * THETA * t).exp()) + 25.0 * (-2.0 * THETA * t).exp()];
+            println!("t = {}: mass, mean, var", t);
+            println!("  pde     {:?}", fp(t, 2.0, 0.002, false).map(|v| (v * 1e4).round() / 1e4));
+            println!("  upwind  {:?}", fp(t, 2.0, 0.002, true).map(|v| (v * 1e4).round() / 1e4));
+            println!("  em      {:?}", [1.0, (m * 1e4).round() / 1e4, (v * 1e4).round() / 1e4]);
+            println!("  exact   {:?}", ex.map(|v| (v * 1e4).round() / 1e4));
+        }
+    }
+}
+
+// Output:
+// t = 1: mass, mean, var
+//   pde     [1.0, 22.0507, 373.568]
+//   upwind  [1.0, 22.6247, 406.2866]
+//   em      [1.0, 21.993, 371.3529]
+//   exact   [1.0, 22.0728, 375.1892]
+// t = 3: mass, mean, var
+//   pde     [1.0, 2.9783, 427.9556]
+//   upwind  [1.0, 3.2844, 462.0069]
+//   em      [1.0, 2.9467, 432.0394]
+//   exact   [1.0, 2.9872, 428.9961]
+```
+
+:::
+
+(a) $C \approx 0.16$, $r = 0.215$, so $C + 2r = 0.59 \le 1$; $P \approx 0.74 < 2$, so the central drift flux is safe. The mass stays exactly 1. The PDE mean and variance agree with the exact OU values to 0.5% (the remaining error is the grid). (b) Upwind gives variances of 406 and 462 instead of 375 and 429: 8% too wide. It adds a numerical diffusion of about $|u|\Delta x/2$ (20 nm²/ms at $x = 20$ nm, against $D = 430$), exactly as in *Flow plus diffusion*, and its mean lags behind. Here the cell Péclet number is small, so central is both safe and more accurate. (c) The EM sample means and variances agree with the exact values within about 2 Monte Carlo standard errors (sd of a variance from 10 000 samples: $375\sqrt{2/10^4} = 5$ nm²; of the mean: 0.2 nm). One PDE gives the whole density without noise; paths are noisy but work in any dimension.
+
+**C7.**
+
+::: {.panel-tabset group="language"}
+
+### R
+
+```r
+k <- 0.8; mu <- 1; C0 <- 10; P <- 10000             # per hour; 10 000 patients, 48 h
+set.seed(1)
+for (h in c(0.5, 1, 2)) {
+  Ce <- rep(C0, P); Ci <- rep(C0, P)
+  for (i in 1:(48 / h)) {
+    dW <- sqrt(h) * rnorm(P)
+    Ce <- Ce - k * Ce * h + mu * Ce * dW                 # Euler-Maruyama
+    Ci <- (Ci + mu * Ci * dW) / (1 + k * h)              # drift-implicit EM
+  }
+  cat(sprintf("h = %-3g EM: factor %.3f max %.1e  mean C^2 %.1e | implicit: factor %.3f max %.1e\n",
+      h, (1 - k * h)^2 + mu^2 * h, max(abs(Ce)), mean(Ce^2),
+      (1 + mu^2 * h) / (1 + k * h)^2, max(abs(Ci))))
+}
+# h = 0.5 EM: factor 0.860 max 8.2e-11  mean C^2 7.2e-25 | implicit: factor 0.765 max 7.5e-09
+# h = 1   EM: factor 1.040 max 1.1e-01  mean C^2 2.5e-06 | implicit: factor 0.617 max 1.7e-06
+# h = 2   EM: factor 2.360 max 8.2e+05  mean C^2 2.0e+08 | implicit: factor 0.444 max 1.5e-02
+c(exact_mean_C2 = C0^2 * exp((-2 * k + mu^2) * 48))
+# exact_mean_C2
+#   3.10684e-11
+```
+
+### Python
+
+```python
+import numpy as np
+
+k, mu, C0, P = 0.8, 1.0, 10.0, 10000              # per hour; 10 000 patients, 48 h
+rng = np.random.default_rng(1)
+for h in (0.5, 1.0, 2.0):
+    Ce = np.full(P, C0); Ci = np.full(P, C0)
+    for i in range(round(48 / h)):
+        dW = np.sqrt(h) * rng.standard_normal(P)
+        Ce = Ce - k * Ce * h + mu * Ce * dW            # Euler-Maruyama
+        Ci = (Ci + mu * Ci * dW) / (1 + k * h)         # drift-implicit EM
+    print(f"h = {h:<3g} EM: factor {(1 - k * h)**2 + mu**2 * h:.3f} max {np.abs(Ce).max():.1e}"
+          f"  mean C^2 {np.mean(Ce**2):.1e} | implicit: factor {(1 + mu**2 * h) / (1 + k * h)**2:.3f}"
+          f" max {np.abs(Ci).max():.1e}")
+print("exact mean C^2", C0**2 * np.exp((-2 * k + mu**2) * 48))
+# h = 0.5 EM: factor 0.860 max 9.0e-12  mean C^2 1.7e-26 | implicit: factor 0.765 max 7.1e-11
+# h = 1   EM: factor 1.040 max 1.1e-01  mean C^2 1.3e-06 | implicit: factor 0.617 max 4.2e-06
+# h = 2   EM: factor 2.360 max 5.9e+06  mean C^2 5.0e+09 | implicit: factor 0.444 max 3.2e-03
+# exact mean C^2 3.106840237543434e-11
+```
+
+### Rust
+
+```rust
+// rust/examples/sde_c7.rs  —  cargo run --example sde_c7
+// C7: mean-square stability: Euler-Maruyama vs drift-implicit EM for noisy drug clearance.
+use rand::{rngs::StdRng, RngExt, SeedableRng};
+use rand_distr::StandardNormal;
+
+fn main() {
+    let (k, mu, c0, p) = (0.8f64, 1.0f64, 10.0f64, 10000usize); // per hour; 10 000 patients, 48 h
+    let mut rng = StdRng::seed_from_u64(1);
+    for h in [0.5f64, 1.0, 2.0] {
+        let (mut ce, mut ci) = (vec![c0; p], vec![c0; p]);
+        for _ in 0..(48.0 / h).round() as usize {
+            for j in 0..p {
+                let dw = h.sqrt() * rng.sample::<f64, _>(StandardNormal);
+                ce[j] += -k * ce[j] * h + mu * ce[j] * dw; // Euler-Maruyama
+                ci[j] = (ci[j] + mu * ci[j] * dw) / (1.0 + k * h); // drift-implicit EM
+            }
+        }
+        let max = |v: &Vec<f64>| v.iter().fold(0.0f64, |a, &b| a.max(b.abs()));
+        let m2 = ce.iter().map(|c| c * c).sum::<f64>() / p as f64;
+        println!("h = {:<3} EM: factor {:.3} max {:.1e}  mean C^2 {:.1e} | implicit: factor {:.3} max {:.1e}",
+                 h, (1.0 - k * h).powi(2) + mu * mu * h, max(&ce), m2,
+                 (1.0 + mu * mu * h) / (1.0 + k * h).powi(2), max(&ci));
+    }
+    println!("exact mean C^2 {:.5e}", c0 * c0 * ((-2.0 * k + mu * mu) * 48.0).exp());
+}
+
+// Output:
+// h = 0.5 EM: factor 0.860 max 4.5e-12  mean C^2 3.0e-27 | implicit: factor 0.765 max 1.7e-10
+// h = 1   EM: factor 1.040 max 1.2e-1  mean C^2 1.7e-6 | implicit: factor 0.617 max 4.2e-6
+// h = 2   EM: factor 2.360 max 3.0e7  mean C^2 9.3e10 | implicit: factor 0.444 max 2.0e-3
+// exact mean C^2 3.10684e-11
+```
+
+:::
+
+At $h = 2$ h, a step at which Euler for the ODE is perfectly stable (factor $-0.6$), EM sends some patients from 10 mg/L to between $10^5$ and $10^7$ mg/L, and the sample mean of $C^2$ is $10^8$–$10^{11}$ instead of $3 \times 10^{-11}$. At $h = 1$ (factor 1.04) the growth is slow and hidden: the largest value (0.1) still looks harmless, but the mean square of the method decays no longer. The drift-implicit method decays at every $h$ (largest value 0.002–0.015 at $h = 2$). At $h = 0.5$ both are stable; the sample means of $C^2$ there are far below the factor prediction $100 \cdot 0.86^{96} \approx 5 \times 10^{-5}$, because a mean square that decays on average is still carried by rare paths that 10 000 samples do not contain. Mean-square stability is a property you check with the factor (B5), not with a sample.
+:::
+
+## Where this leads
+
+- **[*Optimisation in one dimension*](../optimisation-1d/lec.qmd) and [*Nonlinear least squares and ODE fitting*](../nonlinear-least-squares/lec.qmd) (Part 9):** fitting model parameters to data. The MSD fit of C1 was a first example; fitting $\theta$ and $\sigma$ of an OU process to a trap recording, or the parameters of an SDE model to single-cell time courses, uses the likelihood of the exact recursion (B3(d)) or simulation-based methods, which this course does not cover.
+- **[*Random numbers and Monte Carlo*](../monte-carlo/lec.qmd):** the Monte Carlo half of the total error; variance reduction (comparing on the same paths, as in C2) and importance sampling for rare events such as noise-induced switching between the stable states of a toggle switch.
+- **[*Flow plus diffusion*](../advection-diffusion/lec.qmd) (Part 10):** the scheme used here for the Fokker–Planck equation, and its numerical diffusion.
+- **Not covered in this course:** proofs of Itô's formula and of the convergence orders, Stratonovich calculus, weak order 2 schemes, multilevel Monte Carlo, SDEs with several noise sources (Lévy areas), jump processes, adaptive step sizes for SDEs, and stochastic PDEs.

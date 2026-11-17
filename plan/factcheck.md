@@ -22,3 +22,4 @@ Claims that workers wrote from memory or without reading the source. Needs web a
 ## Part 10 literature
 
 - [ ] Check every number attributed to [G1]–[M4] in units 31–35 against the papers listed in contentplan.md (only [M2] and [H1] were read in full).
+- [ ] sde: from memory — water viscosity 1.0 mPa s at 20 °C and k_BT = 4.05e-21 J (Stokes–Einstein bead D = 0.43 µm²/s); optical-trap stiffness ~0.01 pN/nm giving theta ≈ 1/ms; OU trait evolution (Hansen 1997; Butler & King 2004); Lewontin & Cohen 1969 (random-environment growth); packages sde, Sim.DiffProc (R), sdeint (Python). Slides with figures not screenshotted (headless Chrome did not load images; r-stretch should fit them).

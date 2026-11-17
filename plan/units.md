@@ -29,15 +29,16 @@ Use these exact titles when referring to units. Folder = slug.
 | 23 | `stiffness` | Stiffness and implicit methods | Part 8: Ordinary differential equations |
 | 24 | `phase-plane` | Equilibria, stability and the phase plane | Part 8: Ordinary differential equations |
 | 25 | `gillespie` | Stochastic simulation | Part 8: Ordinary differential equations |
-| 26 | `optimisation-1d` | Optimisation in one dimension | Part 9: Optimisation and model fitting |
-| 27 | `gradient-methods` | Gradient descent, Newton and quasi-Newton | Part 9: Optimisation and model fitting |
-| 28 | `nonlinear-least-squares` | Nonlinear least squares and ODE fitting | Part 9: Optimisation and model fitting |
-| 29 | `identifiability` | Identifiability and uncertainty of fitted parameters | Part 9: Optimisation and model fitting |
-| 30 | `constrained-lp` | Constraints and linear programming | Part 9: Optimisation and model fitting |
-| 31 | `diffusion-explicit` | The diffusion (heat) equation by finite differences | Part 10: Diffusion and heat: finite-difference PDEs |
-| 32 | `diffusion-implicit` | Implicit schemes and the method of lines | Part 10: Diffusion and heat: finite-difference PDEs |
-| 33 | `steady-state-2d` | Steady state in two dimensions | Part 10: Diffusion and heat: finite-difference PDEs |
-| 34 | `advection-diffusion` | Flow plus diffusion | Part 10: Diffusion and heat: finite-difference PDEs |
-| 35 | `reaction-diffusion` | Reaction–diffusion and pattern formation | Part 10: Diffusion and heat: finite-difference PDEs |
-| 36 | `fem-outlook` | Beyond rectangles: finite elements and flow | Part 11: Further reading (optional) |
-| 37 | `iterative-solvers` | Iterative linear solvers in depth | Part 11: Further reading (optional) |
+| 26 | `sde` | Stochastic differential equations | Part 8: Ordinary differential equations |
+| 27 | `optimisation-1d` | Optimisation in one dimension | Part 9: Optimisation and model fitting |
+| 28 | `gradient-methods` | Gradient descent, Newton and quasi-Newton | Part 9: Optimisation and model fitting |
+| 29 | `nonlinear-least-squares` | Nonlinear least squares and ODE fitting | Part 9: Optimisation and model fitting |
+| 30 | `identifiability` | Identifiability and uncertainty of fitted parameters | Part 9: Optimisation and model fitting |
+| 31 | `constrained-lp` | Constraints and linear programming | Part 9: Optimisation and model fitting |
+| 32 | `diffusion-explicit` | The diffusion (heat) equation by finite differences | Part 10: Diffusion and heat: finite-difference PDEs |
+| 33 | `diffusion-implicit` | Implicit schemes and the method of lines | Part 10: Diffusion and heat: finite-difference PDEs |
+| 34 | `steady-state-2d` | Steady state in two dimensions | Part 10: Diffusion and heat: finite-difference PDEs |
+| 35 | `advection-diffusion` | Flow plus diffusion | Part 10: Diffusion and heat: finite-difference PDEs |
+| 36 | `reaction-diffusion` | Reaction–diffusion and pattern formation | Part 10: Diffusion and heat: finite-difference PDEs |
+| 37 | `fem-outlook` | Beyond rectangles: finite elements and flow | Part 11: Further reading (optional) |
+| 38 | `iterative-solvers` | Iterative linear solvers in depth | Part 11: Further reading (optional) |
