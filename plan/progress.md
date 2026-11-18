@@ -133,3 +133,28 @@ Left for the course lead:
    and any /tmp/tmp.* dirs created before the no-/tmp rule.
 6. Optional style decision: some units show code output interleaved as comments,
    others as a trailing `# Output:` block — both are used consistently within a unit.
+
+## Handover (2026-11-18)
+
+State: everything committed and pushed (main == origin/main); GitHub Pages serves the latest build.
+38 units in 12 Parts. Part order lives only in plan/units.md (row numbers are just ordering);
+`python3 plan/sidebar.py` regenerates the sidebar, `python3 plan/glossary.py` the dictionary.
+
+Done since the end of the autonomous run:
+- Push fix: dense figures as PNG (rule in plan/unit-brief.md and designprinciples.md §7b); 237 MB blob removed from unpushed history.
+- New unit `sde` (Stochastic differential equations), now its own Part 9; demo `sdepaths`; linked from gillespie, stiffness, advection-diffusion, monte-carlo.
+- `iterative-solvers` made a regular unit in Part 11 (Diffusion and heat), between advection-diffusion and reaction-diffusion; exercise expanded (B1–B8, C1–C7), new slides on restarted-GMRES stall and BiCGSTAB.
+- No optional parts any more: Part 12 "Finite elements and flow" (fem-outlook) is regular; banner file removed. Parts renumbered (Optimisation 10, Diffusion 11, FEM 12) in all pages.
+- Course lead decisions: FEM stays 1D (no 2D unit); no Python on slides; no "(optional)" sections (self-study).
+
+Pushing: SSH needs the user's passphrase. Non-interactive push that works:
+  U=https://github.com/henriksson-lab/course_numericanalysis.git
+  git -c credential.helper='!gh auth git-credential' push -q $U main && git fetch -q $U main:refs/remotes/origin/main
+
+Still open (in addition to items 2–6 above):
+7. Look at slide fit: intro "The course map" (now 12 lines) and the 7 figure slides in sde/lec.qmd.
+   The headless overflow probe (scratchpad probe.sh) returned NO RESULT this time; needs fixing or a manual check.
+8. Fact-check the new sde line in plan/factcheck.md (viscosity, k_BT, trap stiffness, OU in phylogenetics, Lewontin & Cohen).
+9. One slide in finite-differences is titled "Optional: the complex step" — rename if no "optional" wording is wanted at all.
+10. Cholesky timing on the iterative-solvers fill-in slide says 11 s (8.7 s now; machine-dependent, noted).
+11. Item 1 above (push) is done.
